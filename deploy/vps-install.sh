@@ -17,8 +17,13 @@ log "python venv"
 [ -x venv/bin/python ] || python3 -m venv venv
 venv/bin/pip install -q -U pip
 venv/bin/pip install -q -r agent/api/requirements.txt
-# The package declares requires-python <3.14; it runs on 3.14 (verified on the dev machine).
-venv/bin/pip install -q --ignore-requires-python -e "$MCP_ROOT"
+# electron-playwright-mcp declares fastmcp>=3.2.0 with no upper bound; fastmcp 4.x pulls mcp 2.x,
+# which breaks strands-agents' mcp<2.2 pin and removes fastmcp.tools.tool. Pin the versions the
+# dev machine runs, then install the package itself without re-resolving its dependencies.
+# It also declares requires-python <3.14; it runs on 3.14 (verified on the dev machine).
+venv/bin/pip install -q 'fastmcp==3.4.0' 'mcp==1.26.0' 'pyyaml>=6.0.3' 'httpx>=0.28.1'
+venv/bin/pip install -q --ignore-requires-python --no-deps -e "$MCP_ROOT"
+venv/bin/pip check
 test -x venv/bin/electron-playwright-mcp
 
 npm_install() {
