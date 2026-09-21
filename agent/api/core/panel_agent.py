@@ -726,12 +726,11 @@ def create_panel_agent(
     user_id: str,
     system_prompt: str,
     extra_tools: list[Any],
-    hooks: Sequence[HookProvider] = (),
-    hooks: Sequence[HookProvider] = (),
-    browser: str | None = None,
     reasoning_effort: str | None = None,
     options: dict | None = None,
     runtime_options: dict | None = None,
+    hooks: Sequence[HookProvider] = (),
+    browser: str | None = None,
 ) -> Agent:
     """Compose a native 1.56 agent; callers offload this synchronous constructor.
 
