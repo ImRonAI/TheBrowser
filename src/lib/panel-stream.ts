@@ -84,6 +84,17 @@ export function resolveBrowserSelection(value: unknown): BrowserSelection | null
   return value === 'user' || value === 'cloud' ? value : null
 }
 
+/**
+ * True for the BrowserAvailabilityHook's `browser_unavailable:<n>` interrupt. Detection uses
+ * the reason payload (`browser` + `question`), never the id: ids are opaque
+ * `v1:before_tool_call:<toolUseId>:<uuid5>` strings.
+ */
+export function isBrowserUnavailable(reason: unknown): boolean {
+  if (!reason || typeof reason !== 'object' || Array.isArray(reason)) return false
+  const { browser, question } = reason as { browser?: unknown; question?: unknown }
+  return resolveBrowserSelection(browser) !== null && typeof question === 'string' && question.length > 0
+}
+
 export function emptyPanelState(sessionId: string): PanelState {
   return { sessionId, messages: [], sequence: 0, status: 'idle', interrupts: [] }
 }

@@ -10,7 +10,7 @@ import { MessageResponse } from '@/components/ai-elements/response'
 import { Tool, ToolHeader, ToolContent, ToolInput, ToolOutput } from '@/components/ai-elements/tool'
 import { ChainOfThought, ChainOfThoughtContent, ChainOfThoughtHeader, ChainOfThoughtStep } from '@/components/ai-elements/chain-of-thought'
 import { detectPreviewUrl, fileFromToolCall, filesFromListDir, getToolView, toolOutputText } from '@/components/ai-elements/ide-tool-mapping'
-import { displayValue, groupThinkParts, type BrowserSelection, type PanelInterrupt, type PanelMessage, type PanelPart, type RunStatus, type RuntimeOptions, type ThinkStep, type ToolPart } from '@/lib/panel-stream'
+import { displayValue, groupThinkParts, isBrowserUnavailable, type BrowserSelection, type PanelInterrupt, type PanelMessage, type PanelPart, type RunStatus, type RuntimeOptions, type ThinkStep, type ToolPart } from '@/lib/panel-stream'
 import { ContextPicker, SelectedContexts, type ContextItem } from './ContextPicker'
 import { DEFAULT_AGENT_MODEL, ModelSelector, useAgentModels, type AgentModelSelection } from './ModelSelector'
 import { usePanelChat } from './usePanelChat'
@@ -21,6 +21,8 @@ import { ArticleAttachmentCard } from '@/components/interests/ArticleAttachmentC
 
 const compactInput = 'w-full rounded-lg border border-surface-200 bg-white/70 px-2 py-1.5 text-xs dark:border-surface-700 dark:bg-surface-850 focus:outline-none focus:ring-2 focus:ring-indigo-500/30'
 const smallButton = 'rounded-lg border border-surface-200 px-3 py-1.5 text-xs font-medium hover:bg-indigo-50 disabled:opacity-50 dark:border-surface-700 dark:hover:bg-surface-800'
+/** JSON-mode text for a sibling interrupt during a quick reply; malformed text is sent as-is so the server reports it. */
+const safeJson = (text: string | undefined): unknown => { try { return JSON.parse(text ?? '') as unknown } catch { return text ?? '' } }
 const focusComposer = (element: HTMLTextAreaElement | null) => {
   if (document.activeElement?.id !== 'main-search-bar') element?.focus()
 }
@@ -302,26 +304,39 @@ function RuntimeSettings({ options, onChange, disabled }: {
   </details>
 }
 
-function InterruptForm({ interrupts, onSubmit }: {
+export function InterruptForm({ interrupts, onSubmit }: {
   interrupts: PanelInterrupt[]; onSubmit: (responses: { interruptId: string; response: unknown }[]) => Promise<boolean>
 }) {
   const [values, setValues] = useState<Record<string, string>>({})
   const [jsonMode, setJsonMode] = useState<Record<string, boolean>>({})
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+  const submit = (responses: { interruptId: string; response: unknown }[]) => {
+    setError(''); setBusy(true)
+    void onSubmit(responses).finally(() => setBusy(false))
+  }
+  // browser_unavailable (BrowserAvailabilityHook): one-click continue / cancel for that interrupt,
+  // any others in the same batch keep their typed answers.
+  const quickReply = (target: PanelInterrupt, response: 'continue' | 'cancel') => submit(interrupts.map((interrupt) => ({
+    interruptId: interrupt.id,
+    response: interrupt.id === target.id ? response : (jsonMode[interrupt.id] ? safeJson(values[interrupt.id]) : values[interrupt.id] ?? ''),
+  })))
   return <form className="mx-4 mb-3 max-h-64 overflow-y-auto rounded-xl border border-amber-200 dark:border-amber-900 bg-amber-50/60 dark:bg-amber-950/20 p-3 text-xs" onSubmit={(event) => {
     event.preventDefault()
     try {
-      const responses = interrupts.map((interrupt) => ({ interruptId: interrupt.id,
+      submit(interrupts.map((interrupt) => ({ interruptId: interrupt.id,
         response: jsonMode[interrupt.id] ? JSON.parse(values[interrupt.id] ?? '') as unknown : values[interrupt.id] ?? '',
-      }))
-      setError(''); setBusy(true)
-      void onSubmit(responses).finally(() => setBusy(false))
+      })))
     } catch { setError('Enter valid JSON for each response marked JSON.') }
   }}>
     <p className="font-semibold">The agent needs your input</p>
     {!interrupts.length && <p className="mt-2">No pending input details were returned. Reconnect to refresh the session.</p>}
     {interrupts.map((interrupt) => <div key={interrupt.id} className="mt-3 space-y-2">
+      {isBrowserUnavailable(interrupt.reason) && <div className="flex flex-wrap items-center gap-2" data-browser-unavailable>
+        <span className="font-semibold">{(interrupt.reason as { question: string }).question}</span>
+        <button type="button" className={smallButton} disabled={busy} onClick={() => quickReply(interrupt, 'continue')}>Continue</button>
+        <button type="button" className={smallButton} disabled={busy} onClick={() => quickReply(interrupt, 'cancel')}>Cancel action</button>
+      </div>}
       <label className="block"><span className="block whitespace-pre-wrap break-words mb-2">{displayValue(interrupt.reason) || interrupt.id}</span>
         <textarea aria-label={`Response to ${interrupt.id}`} rows={2} className={compactInput} value={values[interrupt.id] ?? ''} onChange={(event) => setValues({ ...values, [interrupt.id]: event.target.value })} />
       </label>

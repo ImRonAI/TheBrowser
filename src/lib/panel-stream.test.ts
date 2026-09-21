@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import {
-  PanelReplayOverflow, PanelSSEParser, emptyPanelState, groupThinkParts, hydratePanelSession, parsePanelEvent, readPanelStream, reconcilePanelSession, reducePanelEvent, resolveBrowserSelection, shouldFollowPanel,
+  PanelReplayOverflow, PanelSSEParser, emptyPanelState, groupThinkParts, hydratePanelSession, parsePanelEvent, readPanelStream, reconcilePanelSession, isBrowserUnavailable, reducePanelEvent, resolveBrowserSelection, shouldFollowPanel,
   type PanelEvent, type PanelPart, type ToolPart,
 } from './panel-stream.ts'
 
@@ -489,5 +489,14 @@ test('resolveBrowserSelection accepts only the two browser targets and rejects e
   assert.equal(resolveBrowserSelection('cloud'), 'cloud')
   for (const invalid of ['laptop', 'USER', '', null, undefined, 0, true, {}, [], { browser: 'cloud' }]) {
     assert.equal(resolveBrowserSelection(invalid), null, `rejects ${JSON.stringify(invalid)}`)
+  }
+})
+
+test('isBrowserUnavailable detects the availability-hook interrupt by reason.browser, never by id', () => {
+  const reason = { browser: 'user', tool: 'user_browser_playwright_List_tabs', url: 'http://127.0.0.1:13000/electron', question: 'Your browser is offline.' }
+  assert.equal(isBrowserUnavailable(reason), true)
+  assert.equal(isBrowserUnavailable({ ...reason, browser: 'cloud' }), true)
+  for (const other of [{ question: 'Pick one' }, { browser: 'laptop', question: 'x' }, { browser: 'user' }, 'browser_unavailable:1', null, undefined, 42, [], {}]) {
+    assert.equal(isBrowserUnavailable(other), false, `rejects ${JSON.stringify(other)}`)
   }
 })
