@@ -140,7 +140,7 @@ def test_native_chat_snapshot_replay_context_and_configuration(monkeypatch):
             assert snap["status"] == "completed"
             assert snap["replay_after"] == snap["sequence"]
             assert snap["input"] is None
-            assert snap["selection"] == {"provider": "openai", "model_id": "offline", "reasoning_effort": None}
+            assert snap["selection"] == {"provider": "openai", "model_id": "offline", "reasoning_effort": None, "browser": "user"}
             # Browser context reaches the MODEL (ephemeral input middleware) but never
             # message history: the persisted/hydrated user turn is just the user's text.
             assert "https://first.test" in json.dumps(model.calls[0])
@@ -373,4 +373,58 @@ def test_opt_in_a2a_native_factory_mount_and_cleanup(monkeypatch):
                 assert models[1] is not models[2] and tools[0] is not tools[1]
         assert integrations[0]._closed
         assert not any(getattr(route, "path", None) == "/a2a" for route in app.routes)
+    asyncio.run(scenario())
+
+
+# --- browser target selection (todo 14) ---------------------------------------------------
+
+def test_browser_defaults_to_user_and_is_pinned_per_session(monkeypatch):
+    monkeypatch.delenv("RON_BROWSER_DEFAULT", raising=False)
+
+    async def scenario():
+        async with offline_api(monkeypatch) as (client, manager, builds, agents, shell, threads):
+            body = {"session_id": "b-default", "message": "hi", "provider": "openai", "model": "offline"}
+            events(await client.post("/chat", json=body))
+            assert builds[0]["browser"] == "user"
+            assert 'tool_catalog(action="load", name="user_browser")' in builds[0]["system_prompt"]
+            assert "cloud_browser_" not in builds[0]["system_prompt"]
+            snap = (await client.get("/sessions/b-default")).json()
+            assert snap["selection"]["browser"] == "user"
+            # Same browser again (explicit) is fine; a different one is a 409 selection change.
+            events(await client.post("/chat", json={**body, "message": "again", "browser": "user"}))
+            rejected = await client.post("/chat", json={**body, "message": "switch", "browser": "cloud"})
+            assert rejected.status_code == 409
+            assert "Session selection cannot change" in rejected.text
+            assert len(builds) == 1
+
+    asyncio.run(scenario())
+
+
+def test_browser_cloud_selection_reaches_factory_and_prompt(monkeypatch):
+    async def scenario():
+        async with offline_api(monkeypatch) as (client, manager, builds, agents, shell, threads):
+            body = {"session_id": "b-cloud", "message": "hi", "provider": "openai", "model": "offline",
+                    "browser": "cloud"}
+            events(await client.post("/chat", json=body))
+            assert builds[0]["browser"] == "cloud"
+            assert 'tool_catalog(action="load", name="cloud_browser")' in builds[0]["system_prompt"]
+            assert "user_browser_" not in builds[0]["system_prompt"]
+            snap = (await client.get("/sessions/b-cloud")).json()
+            assert snap["selection"] == {"provider": "openai", "model_id": "offline",
+                                         "reasoning_effort": None, "browser": "cloud"}
+            # Omitting browser on a later turn keeps the pinned selection (no 409).
+            events(await client.post("/chat", json={k: v for k, v in body.items() if k != "browser"} | {"message": "more"}))
+            assert (await client.get("/sessions/b-cloud")).json()["selection"]["browser"] == "cloud"
+
+    asyncio.run(scenario())
+
+
+def test_browser_invalid_value_is_422(monkeypatch):
+    async def scenario():
+        async with offline_api(monkeypatch) as (client, manager, builds, agents, shell, threads):
+            response = await client.post("/chat", json={"session_id": "b-bad", "message": "hi", "provider": "openai",
+                                                        "model": "offline", "browser": "laptop"})
+            assert response.status_code == 422
+            assert builds == []
+
     asyncio.run(scenario())

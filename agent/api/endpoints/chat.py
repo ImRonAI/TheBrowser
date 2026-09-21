@@ -247,6 +247,9 @@ class ChatRequest(BaseModel):
     model: str = ""
     provider: str = ""
     reasoning_effort: str | None = None
+    #: Browser target for this chat. Pinned into the immutable session selection on the
+    #: first turn (None -> default_browser()); a different value later is a 409.
+    browser: Literal["user", "cloud"] | None = None
     options: RuntimeOptions | None = None
     action: Literal["message", "checkpoint_resume", "interrupt_response"] = "message"
     interrupt_responses: list[InterruptResponse] | None = None
@@ -284,13 +287,15 @@ async def _create_runtime_agent(*, user_id, session_id, selection, options, runt
     return await asyncio.to_thread(
         create_panel_agent,
         provider=selection["provider"], model_id=selection["model_id"],
-        session_id=session_id, user_id=user_id, system_prompt=system_prompt_for(selection["provider"]) + {
+        session_id=session_id, user_id=user_id,
+        system_prompt=system_prompt_for(selection["provider"], browser=selection.get("browser", default_browser())) + {
             "panel": "",
             "search": "\nYou are Search Agent. Research the user's question, verify claims with search tools, and cite original sources.",
             "build": "\nYou are Build Agent. Turn the user's request and reference material into working implementations; inspect before editing and validate your work.",
         }[selection.get("destination", "panel")],
         extra_tools=[], reasoning_effort=selection.get("reasoning_effort"),
         options=options, runtime_options=runtime_options,
+        browser=selection.get("browser", default_browser()),
     )
 
 
@@ -409,6 +414,10 @@ async def chat(request: ChatRequest, http_request: Request) -> StreamingResponse
             selection.update(provider=provider, model_id=request.model or provider_default_model(provider))
         if "reasoning_effort" in request.model_fields_set or not existing:
             selection["reasoning_effort"] = request.reasoning_effort
+        # The renderer always sends `browser`; an omitted field never changes a pinned
+        # selection, an explicit different value is rejected by the runtime (409).
+        if "browser" in request.model_fields_set or not existing:
+            selection["browser"] = request.browser or default_browser()
         options = request.options.model_dump() if request.options is not None else (
             existing.options if existing else RuntimeOptions().model_dump()
         )
