@@ -1,0 +1,43 @@
+[project]
+name = "datacommons-mcp"
+version = "1.1.3"
+description = "Data Commons MCP server."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.115.0",
+    "uvicorn",
+    "fastmcp",
+    "requests",
+    "datacommons-client",
+    "pydantic>=2.11.7",
+    "pydantic-settings",
+    "python-dateutil>=2.9.0.post0",
+    "python-dotenv>=1.1.1",
+]
+urls = {Homepage = "https://github.com/datacommonsorg/agent-toolkit"}
+license = {file = "LICENSE"}
+classifiers = [
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+]
+
+[project.scripts]
+datacommons-mcp = "datacommons_mcp.cli:cli"
+
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["datacommons_mcp*"]
+
+[tool.setuptools.package-data]
+datacommons_mcp = ["**/*.json"]

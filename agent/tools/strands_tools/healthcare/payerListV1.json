@@ -1,0 +1,1532 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Medical Network Payer List v1",
+    "description": "Payer network information for all available transcations",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://sandbox-apigw.optum.com/medicalnetwork/payerlist/v1",
+      "description": "Optum"
+    }
+  ],
+  "tags": [
+    {
+      "name": "PayerList",
+      "description": "PayerList"
+    }
+  ],
+  "paths": {
+    "/healthcheck": {
+      "get": {
+        "tags": [
+          "Health Check"
+        ],
+        "summary": "Health Check",
+        "operationId": "health_check_payerlist_v1_healthcheck_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthCheck"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/payers": {
+      "get": {
+        "tags": [
+          "PayerList"
+        ],
+        "summary": "Get Payers",
+        "operationId": "go_payerlist_v1_payers_get",
+        "parameters": [
+          {
+            "name": "system",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "System"
+            }
+          },
+          {
+            "name": "payerPlanName",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "Payerplanname"
+            }
+          },
+          {
+            "name": "payerPlanAlias",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "Payerplanalias"
+            }
+          },
+          {
+            "name": "setupAdditionalPayerId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "Setupadditionalpayerid"
+            }
+          },
+          {
+            "name": "secondaryClaims",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "Secondaryclaims"
+            }
+          },
+          {
+            "name": "chiPayer",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "Chipayer"
+            }
+          },
+          {
+            "name": "assurancePayer",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "Assurancepayer"
+            }
+          },
+          {
+            "name": "lchcPayer",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "Lchcpayer"
+            }
+          },
+          {
+            "name": "allowsDualClearinghouseEnrollment",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "Allowsdualclearinghouseenrollment"
+            }
+          },
+          {
+            "name": "stateDoingBusiness",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "title": "Statedoingbusiness"
+            }
+          },
+          {
+            "name": "deactivationDate",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date",
+              "title": "Deactivationdate"
+            }
+          },
+          {
+            "name": "reportType",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "title": "Reporttype"
+            }
+          },
+          {
+            "name": "attachmentType",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "title": "Attachmenttype"
+            }
+          },
+          {
+            "name": "parPayer",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "Parpayer"
+            }
+          },
+          {
+            "name": "rpaPayerId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "Rpapayerid"
+            }
+          },
+          {
+            "name": "workersCompensation",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "Workerscompensation"
+            }
+          },
+          {
+            "name": "imnPayerId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "Imnpayerid"
+            }
+          },
+          {
+            "name": "dentalPayerId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "Dentalpayerid"
+            }
+          },
+          {
+            "name": "payerId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "Payerid"
+            }
+          },
+          {
+            "name": "industryPayerId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "Industrypayerid"
+            }
+          },
+          {
+            "name": "transactionType",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "title": "Transactiontype"
+            }
+          },
+          {
+            "name": "enrollmentRequired",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "Enrollmentrequired"
+            }
+          },
+          {
+            "name": "exchangeInstitutionalCPID",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "Exchangeinstitutionalcpid"
+            }
+          },
+          {
+            "name": "exchangeProfessionalCPID",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "Exchangeprofessionalcpid"
+            }
+          },
+          {
+            "name": "iediInstClaimPayerId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "Iediinstclaimpayerid"
+            }
+          },
+          {
+            "name": "iediProfClaimPayerId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "Iediprofclaimpayerid"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "Status"
+            }
+          },
+          {
+            "name": "payerNotes",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "Payernotes"
+            }
+          },
+          {
+            "name": "enrollmentNotes",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "Enrollmentnotes"
+            }
+          },
+          {
+            "name": "additionalPayerIDs",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "Additionalpayerids"
+            }
+          },
+          {
+            "name": "activationDate",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date",
+              "title": "Activationdate"
+            }
+          },
+          {
+            "name": "standInIndicator",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "Standinindicator"
+            }
+          },
+          {
+            "name": "serviceRestored",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "Servicerestored"
+            }
+          },
+          {
+            "name": "connectionType",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "title": "Connectiontype"
+            }
+          },
+          {
+            "name": "lastUpdatedAfter",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date",
+              "title": "Lastupdatedafter"
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "default": [
+                "payerPlanName,asc"
+              ],
+              "title": "Sort"
+            }
+          },
+          {
+            "name": "wildcardSearch",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "Yes",
+              "title": "Wildcardsearch"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 50,
+              "title": "Pagesize"
+            }
+          },
+          {
+            "name": "exportFields",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "Exportfields"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Payers"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/payers/export": {
+      "get": {
+        "tags": [
+          "PayerList"
+        ],
+        "summary": "Export PayerList",
+        "operationId": "go_payerlist_v1_payers_export_get",
+        "parameters": [
+          {
+            "name": "system",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "System"
+            }
+          },
+          {
+            "name": "payerPlanName",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "Payerplanname"
+            }
+          },
+          {
+            "name": "payerPlanAlias",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "Payerplanalias"
+            }
+          },
+          {
+            "name": "setupAdditionalPayerId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "Setupadditionalpayerid"
+            }
+          },
+          {
+            "name": "secondaryClaims",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "Secondaryclaims"
+            }
+          },
+          {
+            "name": "chiPayer",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "Chipayer"
+            }
+          },
+          {
+            "name": "assurancePayer",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "Assurancepayer"
+            }
+          },
+          {
+            "name": "lchcPayer",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "Lchcpayer"
+            }
+          },
+          {
+            "name": "allowsDualClearinghouseEnrollment",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "Allowsdualclearinghouseenrollment"
+            }
+          },
+          {
+            "name": "stateDoingBusiness",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "title": "Statedoingbusiness"
+            }
+          },
+          {
+            "name": "deactivationDate",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date",
+              "title": "Deactivationdate"
+            }
+          },
+          {
+            "name": "reportType",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "title": "Reporttype"
+            }
+          },
+          {
+            "name": "attachmentType",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "title": "Attachmenttype"
+            }
+          },
+          {
+            "name": "parPayer",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "Parpayer"
+            }
+          },
+          {
+            "name": "rpaPayerId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "Rpapayerid"
+            }
+          },
+          {
+            "name": "workersCompensation",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "Workerscompensation"
+            }
+          },
+          {
+            "name": "imnPayerId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "Imnpayerid"
+            }
+          },
+          {
+            "name": "dentalPayerId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "Dentalpayerid"
+            }
+          },
+          {
+            "name": "payerId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "Payerid"
+            }
+          },
+          {
+            "name": "industryPayerId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "Industrypayerid"
+            }
+          },
+          {
+            "name": "transactionType",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "title": "Transactiontype"
+            }
+          },
+          {
+            "name": "enrollmentRequired",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "Enrollmentrequired"
+            }
+          },
+          {
+            "name": "exchangeInstitutionalCPID",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "Exchangeinstitutionalcpid"
+            }
+          },
+          {
+            "name": "exchangeProfessionalCPID",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "Exchangeprofessionalcpid"
+            }
+          },
+          {
+            "name": "iediInstClaimPayerId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "Iediinstclaimpayerid"
+            }
+          },
+          {
+            "name": "iediProfClaimPayerId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "Iediprofclaimpayerid"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "Status"
+            }
+          },
+          {
+            "name": "payerNotes",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "Payernotes"
+            }
+          },
+          {
+            "name": "enrollmentNotes",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "Enrollmentnotes"
+            }
+          },
+          {
+            "name": "additionalPayerIDs",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "Additionalpayerids"
+            }
+          },
+          {
+            "name": "activationDate",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date",
+              "title": "Activationdate"
+            }
+          },
+          {
+            "name": "standInIndicator",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "Standinindicator"
+            }
+          },
+          {
+            "name": "serviceRestored",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "Servicerestored"
+            }
+          },
+          {
+            "name": "connectionType",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "title": "Connectiontype"
+            }
+          },
+          {
+            "name": "lastUpdatedAfter",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date",
+              "title": "Lastupdatedafter"
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "default": [
+                "payerPlanName,asc"
+              ],
+              "title": "Sort"
+            }
+          },
+          {
+            "name": "wildcardSearch",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "Yes",
+              "title": "Wildcardsearch"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 50,
+              "title": "Pagesize"
+            }
+          },
+          {
+            "name": "exportFields",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "Exportfields"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/fields": {
+      "get": {
+        "tags": [
+          "PayerList"
+        ],
+        "summary": "Get Fields",
+        "operationId": "get_fields_payerlist_v1_fields_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Fields"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AdditionalInfoItem": {
+        "properties": {
+          "key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Key"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          }
+        },
+        "type": "object",
+        "title": "AdditionalInfoItem"
+      },
+      "Enrollment": {
+        "properties": {
+          "required": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Required"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          }
+        },
+        "type": "object",
+        "title": "Enrollment"
+      },
+      "Fields": {
+        "properties": {
+          "system": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "System"
+          },
+          "transactionType": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Transactiontype"
+          }
+        },
+        "type": "object",
+        "title": "Fields"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "HealthCheck": {
+        "properties": {
+          "version": {
+            "type": "string",
+            "title": "Version",
+            "default": "v1"
+          },
+          "status": {
+            "type": "string",
+            "title": "Health Check",
+            "description": "Health Check"
+          },
+          "loadPayersLastChecked": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Loadpayerslastchecked"
+          },
+          "loadPayersTimestamp": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Loadpayerstimestamp"
+          }
+        },
+        "type": "object",
+        "title": "HealthCheck"
+      },
+      "LinkedPayerIds": {
+        "properties": {
+          "exchangeInstitutionalCPID": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Exchangeinstitutionalcpid"
+          },
+          "exchangeProfessionalCPID": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Exchangeprofessionalcpid"
+          },
+          "iediDentalCPID": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Iedidentalcpid"
+          },
+          "iediInstitutionalCPID": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Iediinstitutionalcpid"
+          },
+          "iediProfessionalCPID": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Iediprofessionalcpid"
+          },
+          "additionalPayerIDs": {
+            "anyOf": [
+              {
+                "items": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Additionalpayerids"
+          }
+        },
+        "type": "object",
+        "title": "LinkedPayerIds"
+      },
+      "Payer": {
+        "properties": {
+          "payerPlanName": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Payerplanname"
+          },
+          "system": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "System"
+          },
+          "payerId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Payerid"
+          },
+          "industryPayerId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Industrypayerid"
+          },
+          "linkedPayerIds": {
+            "$ref": "#/components/schemas/LinkedPayerIds"
+          },
+          "secondaryClaims": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Secondaryclaims"
+          },
+          "payerNotes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Payernotes"
+          },
+          "transactionType": {
+            "$ref": "#/components/schemas/TransactionType"
+          },
+          "status": {
+            "$ref": "#/components/schemas/Status"
+          },
+          "reportType": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reporttype"
+          },
+          "enrollment": {
+            "$ref": "#/components/schemas/Enrollment"
+          },
+          "payerStandIn": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Payerstandin"
+          },
+          "additionalInfo": {
+            "items": {
+              "$ref": "#/components/schemas/AdditionalInfoItem"
+            },
+            "type": "array",
+            "title": "Additionalinfo"
+          },
+          "connectionType": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Connectiontype"
+          },
+          "activationDate": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Activationdate"
+          },
+          "setupAdditionalPayerId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Setupadditionalpayerid"
+          },
+          "chiPayer": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chipayer"
+          },
+          "assurancePayer": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assurancepayer"
+          },
+          "lchcPayer": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lchcpayer"
+          },
+          "allowsDualClearinghouseEnrollment": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Allowsdualclearinghouseenrollment"
+          },
+          "stateDoingBusiness": {
+            "items": {
+              "$ref": "#/components/schemas/StateDoingBusinessItems"
+            },
+            "type": "array",
+            "title": "Statedoingbusiness"
+          },
+          "deactivationDate": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deactivationdate"
+          },
+          "attachmentType": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attachmenttype"
+          },
+          "parPayer": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parpayer"
+          },
+          "rpaPayerId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rpapayerid"
+          },
+          "workersCompensation": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workerscompensation"
+          },
+          "imnPayerId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Imnpayerid"
+          },
+          "dentalPayerId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dentalpayerid"
+          },
+          "payerPlanAlias": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Payerplanalias"
+          }
+        },
+        "type": "object",
+        "title": "Payer"
+      },
+      "Payers": {
+        "properties": {
+          "page": {
+            "type": "integer",
+            "title": "Page"
+          },
+          "pageSize": {
+            "type": "integer",
+            "title": "Pagesize"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "payers": {
+            "items": {
+              "$ref": "#/components/schemas/Payer"
+            },
+            "type": "array",
+            "title": "Payers",
+            "default": []
+          }
+        },
+        "type": "object",
+        "title": "Payers"
+      },
+      "StateDoingBusinessItems": {
+        "properties": {
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          }
+        },
+        "type": "object",
+        "title": "StateDoingBusinessItems"
+      },
+      "Status": {
+        "type": "string",
+        "enum": [
+          "Active",
+          "Inactive",
+          "Standby",
+          "Unknown"
+        ],
+        "title": "Status"
+      },
+      "TransactionType": {
+        "type": "string",
+        "enum": [
+          "Advanced Notification",
+          "Auth Inquiry",
+          "Auth Referral",
+          "Claim Status",
+          "Claims Attachments",
+          "Claims Institutional",
+          "Claims Professional",
+          "Dental Claims",
+          "Dental Claim Attachments",
+          "Dental ERA",
+          "Eligibility",
+          "ERA Institutional",
+          "ERA Professional"
+        ],
+        "title": "TransactionType"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    },
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
+    }
+  },
+  "x-readme": {
+    "explorer-enabled": true,
+    "proxy-enabled": true
+  }
+}

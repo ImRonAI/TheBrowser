@@ -1,0 +1,1354 @@
+{
+  "type": "search",
+  "query": {
+    "original": "Upcoming Events in Salt Lake City",
+    "show_strict_warning": false,
+    "is_navigational": true,
+    "is_geolocal": true,
+    "local_decision": "mix",
+    "local_locations_idx": 2,
+    "is_news_breaking": false,
+    "spellcheck_off": true,
+    "country": "us",
+    "bad_results": false,
+    "should_fallback": false,
+    "postal_code": "",
+    "city": "Salt Lake City",
+    "header_country": "",
+    "more_results_available": true,
+    "state": "Utah"
+  },
+  "faq": {
+    "type": "faq",
+    "results": [
+      {
+        "question": "What events are happening in Salt Lake City ?",
+        "answer": "<strong>Salt</strong> <strong>Lake</strong> <strong>City</strong> has a number of <strong>events</strong> happening throughout the year. Scroll up to check out all the <strong>events</strong> <strong>in</strong> <strong>Salt</strong> <strong>Lake</strong> <strong>City</strong> including concerts, sporting <strong>events</strong>, comedy shows and theater.",
+        "title": "Salt Lake City Event Calendar & Tickets 2026 | SeatGeek",
+        "url": "https://seatgeek.com/cities/salt-lake-city",
+        "meta_url": {
+          "scheme": "https",
+          "netloc": "seatgeek.com",
+          "hostname": "seatgeek.com",
+          "favicon": "https://imgs.search.brave.com/4a0H1IzZ9sBwtQuJOjI6URRgaTlCQGvjkYTdMBzGtVI/rs:fit:32:32:1:0/g:ce/aHR0cDovL2Zhdmlj/b25zLnNlYXJjaC5i/cmF2ZS5jb20vaWNv/bnMvOWEzZTRlODVl/M2JiODQ2MTQ4N2Ix/OTRlZGUyZWFmZTk2/ZDA1ZTViOTM4ODIz/N2JjZjA3MjdlMGY4/ZTkzODM4My9zZWF0/Z2Vlay5jb20v",
+          "path": "  › home  › cities  › 🎟 salt lake city"
+        }
+      },
+      {
+        "question": "Where can I find events in Salt Lake City ?",
+        "answer": "You can find tickets to a variety of <strong>events</strong> on SeatGeek, from concerts to sporting <strong>events</strong> to Broadway shows and more.",
+        "title": "Salt Lake City Event Calendar & Tickets 2026 | SeatGeek",
+        "url": "https://seatgeek.com/cities/salt-lake-city",
+        "meta_url": {
+          "scheme": "https",
+          "netloc": "seatgeek.com",
+          "hostname": "seatgeek.com",
+          "favicon": "https://imgs.search.brave.com/4a0H1IzZ9sBwtQuJOjI6URRgaTlCQGvjkYTdMBzGtVI/rs:fit:32:32:1:0/g:ce/aHR0cDovL2Zhdmlj/b25zLnNlYXJjaC5i/cmF2ZS5jb20vaWNv/bnMvOWEzZTRlODVl/M2JiODQ2MTQ4N2Ix/OTRlZGUyZWFmZTk2/ZDA1ZTViOTM4ODIz/N2JjZjA3MjdlMGY4/ZTkzODM4My9zZWF0/Z2Vlay5jb20v",
+          "path": "  › home  › cities  › 🎟 salt lake city"
+        }
+      },
+      {
+        "question": "What are things to do in Salt Lake City ?",
+        "answer": "Catch your favorite artist at your local venue, watch your favorite <strong>Salt</strong> <strong>Lake</strong> <strong>City</strong> sports team and see a show all in the <strong>city</strong> <strong>of</strong> <strong>Salt</strong> <strong>Lake</strong> <strong>City</strong>. If you’re looking for things to do this week, make sure to utilize our date filters at the top to check out <strong>events</strong> today, tomorrow, this weekend and next weekend",
+        "title": "Salt Lake City Event Calendar & Tickets 2026 | SeatGeek",
+        "url": "https://seatgeek.com/cities/salt-lake-city",
+        "meta_url": {
+          "scheme": "https",
+          "netloc": "seatgeek.com",
+          "hostname": "seatgeek.com",
+          "favicon": "https://imgs.search.brave.com/4a0H1IzZ9sBwtQuJOjI6URRgaTlCQGvjkYTdMBzGtVI/rs:fit:32:32:1:0/g:ce/aHR0cDovL2Zhdmlj/b25zLnNlYXJjaC5i/cmF2ZS5jb20vaWNv/bnMvOWEzZTRlODVl/M2JiODQ2MTQ4N2Ix/OTRlZGUyZWFmZTk2/ZDA1ZTViOTM4ODIz/N2JjZjA3MjdlMGY4/ZTkzODM4My9zZWF0/Z2Vlay5jb20v",
+          "path": "  › home  › cities  › 🎟 salt lake city"
+        }
+      }
+    ]
+  },
+  "locations": {
+    "type": "locations",
+    "results": [
+      {
+        "title": "The Complex",
+        "url": "https://thecomplexslc.com/",
+        "is_source_local": false,
+        "is_source_both": false,
+        "family_friendly": true,
+        "type": "location_result",
+        "provider_url": "",
+        "coordinates": [
+          40.767692499999995,
+          -111.9066226
+        ],
+        "zoom_level": 7,
+        "postal_address": {
+          "type": "PostalAddress",
+          "displayAddress": "536 W 100 S, Salt Lake City, UT 84101"
+        },
+        "contact": {
+          "telephone": "+18015289197"
+        },
+        "profiles": [],
+        "categories": [],
+        "icon_category": "event",
+        "timezone": "America/Denver",
+        "timezone_offset": -420,
+        "id": "loc4GZYXFP2DMJCEAIJUZQNAN6S3YDHZ4RFXYRWZEAQ="
+      },
+      {
+        "title": "The Union Event Center",
+        "url": "https://theunioneventcenter.com/",
+        "is_source_local": false,
+        "is_source_both": false,
+        "family_friendly": true,
+        "type": "location_result",
+        "provider_url": "",
+        "coordinates": [
+          40.7746167,
+          -111.9063833
+        ],
+        "zoom_level": 7,
+        "postal_address": {
+          "type": "PostalAddress",
+          "displayAddress": "235 N 500 W, Salt Lake City, UT 84116"
+        },
+        "contact": {
+          "telephone": "+13858317771"
+        },
+        "profiles": [],
+        "categories": [],
+        "icon_category": "event",
+        "timezone": "America/Denver",
+        "timezone_offset": -420,
+        "id": "loc4XW35RIZGMNCEB76IDEXQF6S3YDBSGQQCAAAAAAA="
+      },
+      {
+        "title": "Metro Music Hall",
+        "url": "https://metromusichall.com/",
+        "is_source_local": false,
+        "is_source_both": false,
+        "family_friendly": true,
+        "type": "location_result",
+        "provider_url": "",
+        "coordinates": [
+          40.766952499999995,
+          -111.9089641
+        ],
+        "zoom_level": 7,
+        "postal_address": {
+          "type": "PostalAddress",
+          "displayAddress": "615 W 100 S, Salt Lake City, UT 84101"
+        },
+        "opening_hours": {
+          "current_day": [
+            {
+              "abbr_name": "Thu",
+              "full_name": "Thursday",
+              "opens": "20:00",
+              "closes": "02:00"
+            }
+          ],
+          "days": [
+            [
+              {
+                "abbr_name": "Tue",
+                "full_name": "Tuesday",
+                "opens": "20:00",
+                "closes": "02:00"
+              }
+            ],
+            [
+              {
+                "abbr_name": "Wed",
+                "full_name": "Wednesday",
+                "opens": "20:00",
+                "closes": "02:00"
+              }
+            ],
+            [
+              {
+                "abbr_name": "Fri",
+                "full_name": "Friday",
+                "opens": "18:30",
+                "closes": "01:00"
+              }
+            ],
+            [
+              {
+                "abbr_name": "Sat",
+                "full_name": "Saturday",
+                "opens": "18:30",
+                "closes": "01:00"
+              }
+            ],
+            [
+              {
+                "abbr_name": "Sun",
+                "full_name": "Sunday",
+                "opens": "20:00",
+                "closes": "02:00"
+              }
+            ],
+            [
+              {
+                "abbr_name": "Mon",
+                "full_name": "Monday",
+                "opens": "20:00",
+                "closes": "02:00"
+              }
+            ]
+          ]
+        },
+        "contact": {
+          "telephone": "+13855280952"
+        },
+        "profiles": [],
+        "categories": [],
+        "icon_category": "music",
+        "timezone": "America/Denver",
+        "timezone_offset": -420,
+        "id": "loc456FOA7ZLMJCEAPNPYJ3SZ6S3YBIPOM26AAAAAAA="
+      },
+      {
+        "title": "The Core Event Center",
+        "url": "https://thecoreeventcenter.com/",
+        "is_source_local": false,
+        "is_source_both": false,
+        "family_friendly": true,
+        "type": "location_result",
+        "provider_url": "",
+        "coordinates": [
+          40.738391799999995,
+          -111.9118652
+        ],
+        "zoom_level": 7,
+        "postal_address": {
+          "type": "PostalAddress",
+          "displayAddress": "1444 S 700 W, Salt Lake City, UT 84104"
+        },
+        "contact": {
+          "telephone": "+18019069257"
+        },
+        "profiles": [],
+        "categories": [],
+        "icon_category": "event",
+        "timezone": "America/Denver",
+        "timezone_offset": -420,
+        "id": "loc4HFIVZH4DLZCEAEQX3P7VX6S3YC3MSXDTAAAAAAA="
+      },
+      {
+        "title": "Premier Event Services",
+        "url": "https://premiereventsutah.com/",
+        "is_source_local": false,
+        "is_source_both": false,
+        "family_friendly": true,
+        "type": "location_result",
+        "provider_url": "",
+        "coordinates": [
+          40.763574,
+          -111.8960209
+        ],
+        "zoom_level": 7,
+        "postal_address": {
+          "type": "PostalAddress",
+          "displayAddress": "163 Pierpont Ave, Salt Lake City, UT 84101"
+        },
+        "opening_hours": {
+          "current_day": [
+            {
+              "abbr_name": "Thu",
+              "full_name": "Thursday",
+              "opens": "09:00",
+              "closes": "17:00"
+            }
+          ],
+          "days": [
+            [
+              {
+                "abbr_name": "Mon",
+                "full_name": "Monday",
+                "opens": "09:00",
+                "closes": "17:00"
+              }
+            ],
+            [
+              {
+                "abbr_name": "Tue",
+                "full_name": "Tuesday",
+                "opens": "09:00",
+                "closes": "17:00"
+              }
+            ],
+            [
+              {
+                "abbr_name": "Wed",
+                "full_name": "Wednesday",
+                "opens": "09:00",
+                "closes": "17:00"
+              }
+            ],
+            [
+              {
+                "abbr_name": "Fri",
+                "full_name": "Friday",
+                "opens": "09:00",
+                "closes": "17:00"
+              }
+            ],
+            [
+              {
+                "abbr_name": "Sat",
+                "full_name": "Saturday",
+                "opens": "09:00",
+                "closes": "17:00"
+              }
+            ],
+            [
+              {
+                "abbr_name": "Sun",
+                "full_name": "Sunday",
+                "opens": "09:00",
+                "closes": "17:00"
+              }
+            ]
+          ]
+        },
+        "contact": {
+          "telephone": "+18019300852"
+        },
+        "profiles": [],
+        "categories": [],
+        "icon_category": "event",
+        "timezone": "America/Denver",
+        "timezone_offset": -420,
+        "id": "loc4W4E7PSV4MFCEAFECBNUFR6K3YBKRCD76AAAAAAA="
+      },
+      {
+        "title": "U of U Stadium & Arena Event Services",
+        "url": "https://stadium.utah.edu/",
+        "is_source_local": false,
+        "is_source_both": false,
+        "family_friendly": true,
+        "type": "location_result",
+        "provider_url": "",
+        "coordinates": [
+          40.7593045,
+          -111.8481368
+        ],
+        "zoom_level": 7,
+        "postal_address": {
+          "type": "PostalAddress",
+          "displayAddress": "451 S 1400 E, Salt Lake City, UT 84112"
+        },
+        "contact": {
+          "telephone": "+18015815445"
+        },
+        "profiles": [],
+        "categories": [],
+        "icon_category": "event",
+        "timezone": "America/Denver",
+        "timezone_offset": -420,
+        "id": "loc4KKNM3YZQMFCEAL5CSLPUP5S3YD5POQU7AAAAAAA="
+      },
+      {
+        "title": "Eventz Utah",
+        "url": "https://eventzutah.com/",
+        "is_source_local": false,
+        "is_source_both": false,
+        "family_friendly": true,
+        "type": "location_result",
+        "provider_url": "",
+        "coordinates": [
+          40.7689358,
+          -111.887092
+        ],
+        "zoom_level": 7,
+        "postal_address": {
+          "type": "PostalAddress",
+          "displayAddress": "136 E S Temple St #2400, Salt Lake City, UT 84111"
+        },
+        "opening_hours": {
+          "current_day": [
+            {
+              "abbr_name": "Thu",
+              "full_name": "Thursday",
+              "opens": "08:00",
+              "closes": "19:00"
+            }
+          ],
+          "days": [
+            [
+              {
+                "abbr_name": "Mon",
+                "full_name": "Monday",
+                "opens": "08:00",
+                "closes": "19:00"
+              }
+            ],
+            [
+              {
+                "abbr_name": "Tue",
+                "full_name": "Tuesday",
+                "opens": "08:00",
+                "closes": "19:00"
+              }
+            ],
+            [
+              {
+                "abbr_name": "Wed",
+                "full_name": "Wednesday",
+                "opens": "08:00",
+                "closes": "19:00"
+              }
+            ],
+            [
+              {
+                "abbr_name": "Fri",
+                "full_name": "Friday",
+                "opens": "08:00",
+                "closes": "19:00"
+              }
+            ],
+            [
+              {
+                "abbr_name": "Sat",
+                "full_name": "Saturday",
+                "opens": "08:00",
+                "closes": "19:00"
+              }
+            ]
+          ]
+        },
+        "contact": {
+          "telephone": "+18013726773"
+        },
+        "profiles": [],
+        "categories": [],
+        "icon_category": "event",
+        "timezone": "America/Denver",
+        "timezone_offset": -420,
+        "id": "loc4T7OAA7LMMJCEBRBCQYO4N6C3YAQTSJG6AAAAAAA="
+      }
+    ]
+  },
+  "mixed": {
+    "type": "mixed",
+    "main": [
+      {
+        "type": "web",
+        "index": 0,
+        "all": false
+      },
+      {
+        "type": "web",
+        "index": 1,
+        "all": false
+      },
+      {
+        "type": "locations",
+        "all": true
+      },
+      {
+        "type": "web",
+        "index": 2,
+        "all": false
+      },
+      {
+        "type": "faq",
+        "all": true
+      },
+      {
+        "type": "web",
+        "index": 3,
+        "all": false
+      },
+      {
+        "type": "web",
+        "index": 4,
+        "all": false
+      },
+      {
+        "type": "videos",
+        "all": true
+      },
+      {
+        "type": "web",
+        "index": 5,
+        "all": false
+      },
+      {
+        "type": "web",
+        "index": 6,
+        "all": false
+      },
+      {
+        "type": "web",
+        "index": 7,
+        "all": false
+      },
+      {
+        "type": "web",
+        "index": 8,
+        "all": false
+      },
+      {
+        "type": "web",
+        "index": 9,
+        "all": false
+      },
+      {
+        "type": "web",
+        "index": 10,
+        "all": false
+      },
+      {
+        "type": "web",
+        "index": 11,
+        "all": false
+      },
+      {
+        "type": "web",
+        "index": 12,
+        "all": false
+      },
+      {
+        "type": "web",
+        "index": 13,
+        "all": false
+      },
+      {
+        "type": "web",
+        "index": 14,
+        "all": false
+      },
+      {
+        "type": "web",
+        "index": 15,
+        "all": false
+      },
+      {
+        "type": "web",
+        "index": 16,
+        "all": false
+      },
+      {
+        "type": "web",
+        "index": 17,
+        "all": false
+      },
+      {
+        "type": "web",
+        "index": 18,
+        "all": false
+      },
+      {
+        "type": "web",
+        "index": 19,
+        "all": false
+      }
+    ],
+    "top": [],
+    "side": []
+  },
+  "videos": {
+    "type": "videos",
+    "results": [
+      {
+        "type": "video_result",
+        "url": "https://www.facebook.com/queenofslc/videos/what-to-do-in-salt-lake-city-this-weekendneed-plans-dont-worry-i-got-youheres-a-/1815291355727611/",
+        "title": "What to do in Salt Lake City this weekend! Need plans? Don’t ...",
+        "description": "",
+        "video": {},
+        "meta_url": {
+          "scheme": "https",
+          "netloc": "facebook.com",
+          "hostname": "www.facebook.com",
+          "favicon": "https://imgs.search.brave.com/UPSLokJBKWPdNzHbqH5o3CgD13zMvR3pUTn8bk7hmPM/rs:fit:32:32:1:0/g:ce/aHR0cDovL2Zhdmlj/b25zLnNlYXJjaC5i/cmF2ZS5jb20vaWNv/bnMvOWM3NjZkMmE4/MTU1MTk4ZDU5YzU3/NjUxY2ExZTdjNWQx/NjJlNTY1Y2VlODM4/MmRmMDgzZDBiMmI3/YzU4NmU4ZS93d3cu/ZmFjZWJvb2suY29t/Lw",
+          "path": "› queenofslc  › videos  › what-to-do-in-salt-lake-city-this-weekendneed-plans-dont-worry-i-got-youheres-a-  › 1815291355727611"
+        }
+      },
+      {
+        "type": "video_result",
+        "url": "https://www.instagram.com/reel/DPC_yeqD5ms/",
+        "title": "Top 3 Local Events to Attend in Utah This Weekend",
+        "description": "",
+        "video": {},
+        "meta_url": {
+          "scheme": "https",
+          "netloc": "instagram.com",
+          "hostname": "www.instagram.com",
+          "favicon": "https://imgs.search.brave.com/kgdtgqUZQdNYzMKhbVXC5vthlFLPMJ0IOJAdFjEIRuk/rs:fit:32:32:1:0/g:ce/aHR0cDovL2Zhdmlj/b25zLnNlYXJjaC5i/cmF2ZS5jb20vaWNv/bnMvN2RiYmJiZDA4/NTBkNWQ0ZmQ3NDE5/OGUxOGI4NzE5ZDI0/Zjk0M2ExMDkzZmJm/ODA0MmJiMzkwZjMy/ZDM4YWVkOS93d3cu/aW5zdGFncmFtLmNv/bS8",
+          "path": "› reel  › DPC_yeqD5ms"
+        }
+      }
+    ],
+    "mutated_by_goggles": false
+  },
+  "web": {
+    "type": "search",
+    "results": [
+      {
+        "title": "Salt Lake City Events | Things to Do In Salt Lake City, UT",
+        "url": "https://www.visitsaltlake.com/events/",
+        "is_source_local": false,
+        "is_source_both": false,
+        "description": "Make your next visit an adventure you&#x27;ll never forget. Browse all the events below. View All ... Jan. 15, 2026 · Be a part of the action as the Utah Mammoth play at the Delta Center in Salt Lake City.This calendar listing is brought to you by NowPlayingUtah.com, Utah&#x27;s one-stop, online…",
+        "page_age": "2025-12-02T03:31:04",
+        "profile": {
+          "name": "Visit Salt Lake",
+          "url": "https://www.visitsaltlake.com/events/",
+          "long_name": "visitsaltlake.com",
+          "img": "https://imgs.search.brave.com/AFAzzhsvZEEfQBPTUgBbHbUEdpLDAFK6LzTUxRLZ0bs/rs:fit:32:32:1:0/g:ce/aHR0cDovL2Zhdmlj/b25zLnNlYXJjaC5i/cmF2ZS5jb20vaWNv/bnMvNzFjY2NkYWEw/ODk1MGE5ZWM3NTUw/ZTBhYjI0NTRiMDE3/ODE0NDI0ZmZiZmU3/ZjgyNjZmODAwOGEz/MjkyNTA5OS93d3cu/dmlzaXRzYWx0bGFr/ZS5jb20v"
+        },
+        "language": "en",
+        "family_friendly": true,
+        "type": "search_result",
+        "subtype": "generic",
+        "is_live": false,
+        "meta_url": {
+          "scheme": "https",
+          "netloc": "visitsaltlake.com",
+          "hostname": "www.visitsaltlake.com",
+          "favicon": "https://imgs.search.brave.com/AFAzzhsvZEEfQBPTUgBbHbUEdpLDAFK6LzTUxRLZ0bs/rs:fit:32:32:1:0/g:ce/aHR0cDovL2Zhdmlj/b25zLnNlYXJjaC5i/cmF2ZS5jb20vaWNv/bnMvNzFjY2NkYWEw/ODk1MGE5ZWM3NTUw/ZTBhYjI0NTRiMDE3/ODE0NDI0ZmZiZmU3/ZjgyNjZmODAwOGEz/MjkyNTA5OS93d3cu/dmlzaXRzYWx0bGFr/ZS5jb20v",
+          "path": "› events"
+        },
+        "thumbnail": {
+          "src": "https://imgs.search.brave.com/5shxZT3UkuWsQy4ojctTncnuYAAyhpNO13uNPVY2CFU/rs:fit:200:200:1:0/g:ce/aHR0cHM6Ly9hc3Nl/dHMuc2ltcGxldmll/d2luYy5jb20vc2lt/cGxldmlldy9pbWFn/ZS91cGxvYWQvY19s/aW1pdCxoXzEyMDAs/cV83NSx3XzEyMDAv/djEvY2xpZW50cy9z/YWx0bGFrZS9WU0xf/U3RvY2tfSW1hZ2Vz/X0ZpbmFsX0F1c3Rl/bl9EaWFtb25kX1Bo/b3RvZ3JhcGh5XzI1/Xzc5NjFhZGY4LTZj/MDgtNDdjNy1hMjQ0/LWE2OWQyMmI1MzNk/NC5qcGc",
+          "original": "https://assets.simpleviewinc.com/simpleview/image/upload/c_limit,h_1200,q_75,w_1200/v1/clients/saltlake/VSL_Stock_Images_Final_Austen_Diamond_Photography_25_7961adf8-6c08-47c7-a244-a69d22b533d4.jpg",
+          "logo": false
+        },
+        "age": "December 2, 2025",
+        "cluster_type": "generic",
+        "cluster": [
+          {
+            "title": "Things To Do",
+            "url": "https://www.visitsaltlake.com/things-to-do/",
+            "is_source_local": false,
+            "is_source_both": false,
+            "description": "<strong>Salt</strong> <strong>Lake</strong> <strong>City</strong> is very diverse and friendly with the LGBTQ community. View <strong>events</strong> and resources.",
+            "family_friendly": true
+          },
+          {
+            "title": "Attractions",
+            "url": "https://www.visitsaltlake.com/things-to-do/attractions/",
+            "is_source_local": false,
+            "is_source_both": false,
+            "description": "Discover the wide assortment of attractions <strong>in</strong> <strong>Salt</strong> <strong>Lake</strong>, varying from theme and water parks to national parks, monuments, and other historic sites.",
+            "family_friendly": true
+          },
+          {
+            "title": "Ski Super Pass",
+            "url": "https://www.visitsaltlake.com/things-to-do/skiing-snowboarding/super-pass/",
+            "is_source_local": false,
+            "is_source_both": false,
+            "description": "Find the best ski deals of the season with the <strong>Salt</strong> <strong>Lake</strong> Ski Super Pass. Enjoy discounts on transportation &amp; ski rentals <strong>in</strong> <strong>Salt</strong> <strong>Lake</strong> <strong>City</strong>.",
+            "family_friendly": true
+          },
+          {
+            "title": "The Great Salt Lake",
+            "url": "https://www.visitsaltlake.com/things-to-do/attractions/the-great-salt-lake/",
+            "is_source_local": false,
+            "is_source_both": false,
+            "description": "Things to do Skiing Restaurants Places to Stay Plan <strong>Events</strong> ... As the largest natural <strong>lake</strong> west of the Mississippi River and the largest <strong>salt</strong> water <strong>lake</strong> <strong>in</strong> the western hemisphere, the Great <strong>Salt</strong> <strong>Lake</strong> is perhaps the best known geologic feature in the area. The <strong>city</strong> even takes its name from the ...",
+            "family_friendly": true
+          }
+        ],
+        "extra_snippets": [
+          "Want to promote your event? Submit it here by creating an account and following the instructions. Salt Lake's music scene strikes the perfect chord between big-city venues and mountain town…",
+          "Make your next visit an adventure you'll never forget. Browse all the events below. View All ... Jan. 15, 2026 · Be a part of the action as the Utah Mammoth play at the Delta Center in Salt Lake City.This calendar listing is brought to you by NowPlayingUtah.com, Utah's one-stop, online…",
+          "Things to do Skiing Restaurants Places to Stay Plan Events ... Keep your calendar open. We keep ours full. From live music to children’s theatre. Festivals to ballet. Hands-on science to fascinating nature. It’s a cultural anything-goes palette of possibilities, with fun stuff for every inclination – every day and night of the week. Planning a trip to Salt Lake?",
+          "Visit Salt Lake partners with NowPlayingUtah.com for the most comprehensive events calendar in Utah."
+        ]
+      },
+      {
+        "title": "Salt Lake City Weekly events calendar",
+        "url": "https://events.cityweekly.net/",
+        "is_source_local": false,
+        "is_source_both": false,
+        "description": "All Events Calendar",
+        "profile": {
+          "name": "City Weekly",
+          "url": "https://events.cityweekly.net/",
+          "long_name": "events.cityweekly.net",
+          "img": "https://imgs.search.brave.com/cqrsBiSzfnR8fVZbESEmDlTbuLDWGV6f72Qlrgs2jGI/rs:fit:32:32:1:0/g:ce/aHR0cDovL2Zhdmlj/b25zLnNlYXJjaC5i/cmF2ZS5jb20vaWNv/bnMvMTNjOGM2Mzgw/YWE3OWNmY2EwMGFi/NWQ0NDg4NmM2Njg4/YTg0OTNjOGM1MDNl/ZGQ0OTY3MWFjNzY5/ZjQxMDZmYy9ldmVu/dHMuY2l0eXdlZWts/eS5uZXQv"
+        },
+        "language": "en",
+        "family_friendly": true,
+        "type": "search_result",
+        "subtype": "generic",
+        "is_live": false,
+        "meta_url": {
+          "scheme": "https",
+          "netloc": "events.cityweekly.net",
+          "hostname": "events.cityweekly.net",
+          "favicon": "https://imgs.search.brave.com/cqrsBiSzfnR8fVZbESEmDlTbuLDWGV6f72Qlrgs2jGI/rs:fit:32:32:1:0/g:ce/aHR0cDovL2Zhdmlj/b25zLnNlYXJjaC5i/cmF2ZS5jb20vaWNv/bnMvMTNjOGM2Mzgw/YWE3OWNmY2EwMGFi/NWQ0NDg4NmM2Njg4/YTg0OTNjOGM1MDNl/ZGQ0OTY3MWFjNzY5/ZjQxMDZmYy9ldmVu/dHMuY2l0eXdlZWts/eS5uZXQv",
+          "path": ""
+        },
+        "thumbnail": {
+          "src": "https://imgs.search.brave.com/v4LL7ecUpUzNc6kYNeiaFF2GPGvAss9wGvDJRBtZQ64/rs:fit:200:200:1:0/g:ce/aHR0cHM6Ly91Y2Fy/ZWNkbi5jb20vYTZj/YmFkOWUtOTVmZi00/ZjFmLTllMzgtNmJl/MWZkZGJjMDE3Lw",
+          "original": "https://ucarecdn.com/a6cbad9e-95ff-4f1f-9e38-6be1fddbc017/",
+          "logo": false
+        }
+      },
+      {
+        "title": "Festivals & Special Events in Salt Lake City, Utah",
+        "url": "https://www.visitsaltlake.com/events/festivals-special-events/",
+        "is_source_local": false,
+        "is_source_both": false,
+        "description": "Check out the individual listings below to find the inside scoop of some of our favorite annual festivals and special events coming soon, and use the calendar and search tool to look ahead for events in future months. Salt Lake brings Americana to life with a vibrant mix of urban festivities, picturesque landscapes…",
+        "page_age": "2025-11-28T00:39:29",
+        "profile": {
+          "name": "Visit Salt Lake",
+          "url": "https://www.visitsaltlake.com/events/festivals-special-events/",
+          "long_name": "visitsaltlake.com",
+          "img": "https://imgs.search.brave.com/AFAzzhsvZEEfQBPTUgBbHbUEdpLDAFK6LzTUxRLZ0bs/rs:fit:32:32:1:0/g:ce/aHR0cDovL2Zhdmlj/b25zLnNlYXJjaC5i/cmF2ZS5jb20vaWNv/bnMvNzFjY2NkYWEw/ODk1MGE5ZWM3NTUw/ZTBhYjI0NTRiMDE3/ODE0NDI0ZmZiZmU3/ZjgyNjZmODAwOGEz/MjkyNTA5OS93d3cu/dmlzaXRzYWx0bGFr/ZS5jb20v"
+        },
+        "language": "en",
+        "family_friendly": true,
+        "type": "search_result",
+        "subtype": "generic",
+        "is_live": false,
+        "meta_url": {
+          "scheme": "https",
+          "netloc": "visitsaltlake.com",
+          "hostname": "www.visitsaltlake.com",
+          "favicon": "https://imgs.search.brave.com/AFAzzhsvZEEfQBPTUgBbHbUEdpLDAFK6LzTUxRLZ0bs/rs:fit:32:32:1:0/g:ce/aHR0cDovL2Zhdmlj/b25zLnNlYXJjaC5i/cmF2ZS5jb20vaWNv/bnMvNzFjY2NkYWEw/ODk1MGE5ZWM3NTUw/ZTBhYjI0NTRiMDE3/ODE0NDI0ZmZiZmU3/ZjgyNjZmODAwOGEz/MjkyNTA5OS93d3cu/dmlzaXRzYWx0bGFr/ZS5jb20v",
+          "path": "› events  › festivals-special-events"
+        },
+        "thumbnail": {
+          "src": "https://imgs.search.brave.com/jq4juT9FSnRHHqVbOz9MFOBgzPeV0gi0JG7HiIwlU6E/rs:fit:200:200:1:0/g:ce/aHR0cHM6Ly9hc3Nl/dHMuc2ltcGxldmll/d2luYy5jb20vc2lt/cGxldmlldy9pbWFn/ZS91cGxvYWQvY19s/aW1pdCxoXzEyMDAs/cV83NSx3XzEyMDAv/djEvY2xpZW50cy9z/YWx0bGFrZS83YWE0/ZTE5ZF81NGFiXzQz/MWRfOTYwNl9hMWQ0/ZDFmNTcxNzRfMmFi/Njg2YWUtZTU3Zi00/NWM1LWIwZmMtMDQz/MjQxYTJhODQzLmpw/Zw",
+          "original": "https://assets.simpleviewinc.com/simpleview/image/upload/c_limit,h_1200,q_75,w_1200/v1/clients/saltlake/7aa4e19d_54ab_431d_9606_a1d4d1f57174_2ab686ae-e57f-45c5-b0fc-043241a2a843.jpg",
+          "logo": false
+        },
+        "age": "November 28, 2025",
+        "extra_snippets": [
+          "Things to do Skiing Restaurants Places to Stay Plan Events ... Salt Lake has no shortage of festivals and special events throughout the year to help make your next visit an adventure you’ll never forget.",
+          "Check out the individual listings below to find the inside scoop of some of our favorite annual festivals and special events coming soon, and use the calendar and search tool to look ahead for events in future months. Salt Lake brings Americana to life with a vibrant mix of urban festivities, picturesque landscapes…"
+        ]
+      },
+      {
+        "title": "Salt Lake City, UT Events, Calendar & Tickets | Eventbrite",
+        "url": "https://www.eventbrite.com/d/ut--salt-lake-city/events/",
+        "is_source_local": false,
+        "is_source_both": false,
+        "description": "Save this event: <strong>2025 Salt Lake Realtors® Holiday Social</strong>Share this event: <strong>2025 Salt Lake Realtors® Holiday Social</strong> ... Save this event: Vivaldi by Candlelight Concert: From Discord to HarmonyShare this event: Vivaldi by Candlelight Concert: ...",
+        "page_age": "2025-11-22T04:38:59",
+        "profile": {
+          "name": "Eventbrite",
+          "url": "https://www.eventbrite.com/d/ut--salt-lake-city/events/",
+          "long_name": "eventbrite.com",
+          "img": "https://imgs.search.brave.com/V6HhIbcDRuDH0HdGUGCVpMvPm8VUhv_Zc9LAmc-MsEY/rs:fit:32:32:1:0/g:ce/aHR0cDovL2Zhdmlj/b25zLnNlYXJjaC5i/cmF2ZS5jb20vaWNv/bnMvNzc4OGE0Yjc5/MzFkZjljYWMxMGYw/N2U0ZWJlNGQ0OGE3/NzM5NThlMjljMGFk/NjQxOTQ2ZjQ5Yjdm/OWU5Mzc4MC93d3cu/ZXZlbnRicml0ZS5j/b20v"
+        },
+        "language": "en",
+        "family_friendly": true,
+        "type": "search_result",
+        "subtype": "event",
+        "is_live": false,
+        "meta_url": {
+          "scheme": "https",
+          "netloc": "eventbrite.com",
+          "hostname": "www.eventbrite.com",
+          "favicon": "https://imgs.search.brave.com/V6HhIbcDRuDH0HdGUGCVpMvPm8VUhv_Zc9LAmc-MsEY/rs:fit:32:32:1:0/g:ce/aHR0cDovL2Zhdmlj/b25zLnNlYXJjaC5i/cmF2ZS5jb20vaWNv/bnMvNzc4OGE0Yjc5/MzFkZjljYWMxMGYw/N2U0ZWJlNGQ0OGE3/NzM5NThlMjljMGFk/NjQxOTQ2ZjQ5Yjdm/OWU5Mzc4MC93d3cu/ZXZlbnRicml0ZS5j/b20v",
+          "path": "› d  › ut--salt-lake-city  › events"
+        },
+        "thumbnail": {
+          "src": "https://imgs.search.brave.com/6haq33eAIAIRrzwDgK4R46NYshig4ehSF0J9UxJc9Ks/rs:fit:200:200:1:0/g:ce/aHR0cHM6Ly9pbWcu/ZXZidWMuY29tL2h0/dHBzJTNBJTJGJTJG/Y2RuLmV2YnVjLmNv/bSUyRmltYWdlcyUy/RjM2NTg4Mzg1JTJG/MTA4OTE5NzU1MzE5/JTJGMSUyRm9yaWdp/bmFsLmpwZz93PTUx/MiZhbXA7YXV0bz1m/b3JtYXQlMkNjb21w/cmVzcyZhbXA7cT03/NSZhbXA7c2hhcnA9/MTAmYW1wO3M9ZGU1/ZjNhZWM0MWM0MDA3/MjY0YzEzOTYwNjBm/NmIyZmE",
+          "original": "https://img.evbuc.com/https%3A%2F%2Fcdn.evbuc.com%2Fimages%2F36588385%2F108919755319%2F1%2Foriginal.jpg?w=512&amp;auto=format%2Ccompress&amp;q=75&amp;sharp=10&amp;s=de5f3aec41c4007264c1396060f6b2fa",
+          "logo": false
+        },
+        "age": "November 22, 2025",
+        "extra_snippets": [
+          "Your version of Internet Explorer is not longer supported. Please upgrade your browser. ... Salt Lake City, Utah, is a hip, active, nature-oriented place. The arts are important here, which means tourists find world-class ballets, symphonies, art galleries, festivals, and attractions such as the Natural History Museum of Utah and the Tower Theatre. ... Save this event: Eureka O'Hara at MILK - Salt Lake CityShare this event: Eureka O'Hara at MILK - Salt Lake City",
+          "Save this event: 2025 Salt Lake Realtors® Holiday SocialShare this event: 2025 Salt Lake Realtors® Holiday Social ... Save this event: Vivaldi by Candlelight Concert: From Discord to HarmonyShare this event: Vivaldi by Candlelight Concert: From Discord to Harmony ... Save this event: RON JAMES STAND UP SPECIAL LIVESTREAM 'THE VIEW FROM HERE'Share this event: RON JAMES STAND UP SPECIAL LIVESTREAM 'THE VIEW FROM HERE' ... Save this event: Future Ready: Dive into Tech, Cyber & AI Careers at LloydsShare this event: Future Ready: Dive into Tech, Cyber & AI Careers at Lloyds",
+          "Save this event: 2025 Salt Lake Realtors® Holiday SocialShare this event: 2025 Salt Lake Realtors® Holiday Social ... Save this event: Vivaldi by Candlelight Concert: From Discord to HarmonyShare this event: Vivaldi by Candlelight Concert: From Discord to Harmony ... Save this event: UWC/Ai/Digital Marketting & JV Summit - Las Vegas, NVShare this event: UWC/Ai/Digital Marketting & JV Summit - Las Vegas, NV",
+          "Save this event: Salt Lake Valley 1st (Deaf) Ward Meeting ScheduleShare this event: Salt Lake Valley 1st (Deaf) Ward Meeting Schedule"
+        ]
+      },
+      {
+        "title": "Salt Lake City Concert Tickets - Upcoming event tickets in Salt Lake City | Ticketmaster",
+        "url": "https://www.ticketmaster.com/discover/salt-lake-city?categoryId=KZFzniwnSyZfZ7v7nJ",
+        "is_source_local": false,
+        "is_source_both": false,
+        "description": "Friday 07:00 PMFri7:00 PMOpen additional information for <strong>Aleman &amp; Gera MX - Rich Mafia Tour US 2026</strong>, Salt Lake City, UT The Depot1/30/26, 7:00 PM<strong>Aleman &amp; Gera MX - Rich Mafia Tour US 2026</strong>Salt Lake City, UTThe Depot",
+        "profile": {
+          "name": "Ticketmaster",
+          "url": "https://www.ticketmaster.com/discover/salt-lake-city?categoryId=KZFzniwnSyZfZ7v7nJ",
+          "long_name": "ticketmaster.com",
+          "img": "https://imgs.search.brave.com/8iCv6pd-MjppLj9JD64i1FJUWaSIx6bJ84j-6xFDRr4/rs:fit:32:32:1:0/g:ce/aHR0cDovL2Zhdmlj/b25zLnNlYXJjaC5i/cmF2ZS5jb20vaWNv/bnMvMzYwMjkwYjc2/YWI2MDlkMGQ3YTlh/MWZjNjNlODIyZDYz/ZDMyNWU3ZjM4N2Ji/Nzk5ZDA4ZGYyNTBm/OTM1MTE0OC93d3cu/dGlja2V0bWFzdGVy/LmNvbS8"
+        },
+        "language": "en",
+        "family_friendly": true,
+        "type": "search_result",
+        "subtype": "event",
+        "is_live": false,
+        "meta_url": {
+          "scheme": "https",
+          "netloc": "ticketmaster.com",
+          "hostname": "www.ticketmaster.com",
+          "favicon": "https://imgs.search.brave.com/8iCv6pd-MjppLj9JD64i1FJUWaSIx6bJ84j-6xFDRr4/rs:fit:32:32:1:0/g:ce/aHR0cDovL2Zhdmlj/b25zLnNlYXJjaC5i/cmF2ZS5jb20vaWNv/bnMvMzYwMjkwYjc2/YWI2MDlkMGQ3YTlh/MWZjNjNlODIyZDYz/ZDMyNWU3ZjM4N2Ji/Nzk5ZDA4ZGYyNTBm/OTM1MTE0OC93d3cu/dGlja2V0bWFzdGVy/LmNvbS8",
+          "path": "  › home  › cities  › salt lake city  › concerts"
+        },
+        "thumbnail": {
+          "src": "https://imgs.search.brave.com/DGPLLX_dzxvqK9Y-7XnGqIVQavMVp3vMXzvQ6GobWIE/rs:fit:200:200:1:0/g:ce/aHR0cHM6Ly9wcmlz/bWljLWltYWdlcy50/bW9sLmlvL3RpY2tl/dG1hc3Rlci10bS1n/bG9iYWwvYUs0b3VX/R05IVmZUT1Y1TF9T/YWx0TGFrZUNpdHku/anBnP2F1dG89Zm9y/bWF0LGNvbXByZXNz/JmFtcDtyZWN0PTAs/NDczLDM4NjQsMTYz/MCZhbXA7dz0yMDQ4/JmFtcDtoPTg2NA",
+          "original": "https://prismic-images.tmol.io/ticketmaster-tm-global/aK4ouWGNHVfTOV5L_SaltLakeCity.jpg?auto=format,compress&amp;rect=0,473,3864,1630&amp;w=2048&amp;h=864",
+          "logo": false
+        },
+        "extra_snippets": [
+          "Discover family-friendly shows, concerts and festivals throughout Salt Lake City and the valley, like the Utah Arts Festival, the Living Traditions Festival and the Salt Lake Winter Roundup. Other popular Salt Lake City events include the Kilby Court Block Party and the Twilight Concert Series.",
+          "Saturday 08:00 PMSat8:00 PMOpen additional information for Club 90s Presents Heated RivalRave (18+), Salt Lake City, UT The Depot1/24/26, 8:00 PMClub 90s Presents Heated RivalRave (18+)Salt Lake City, UTThe Depot",
+          "Friday 07:00 PMFri7:00 PMOpen additional information for Aleman & Gera MX - Rich Mafia Tour US 2026, Salt Lake City, UT The Depot1/30/26, 7:00 PMAleman & Gera MX - Rich Mafia Tour US 2026Salt Lake City, UTThe Depot",
+          "Saturday 07:00 PMSat7:00 PMOpen additional information for United We Dance: The Ultimate Rave Experience, Salt Lake City, UT The Depot1/31/26, 7:00 PMUnited We Dance: The Ultimate Rave ExperienceSalt Lake City, UTThe Depot"
+        ]
+      },
+      {
+        "title": "ArtTix Events | Salt Lake County Arts & Culture",
+        "url": "https://www.saltlakecountyarts.org/events/",
+        "is_source_local": false,
+        "is_source_both": false,
+        "description": "<strong>Live at the Eccles presents Blippi: Be Like Blippi on Friday, May 1, 2026</strong> at the Eccles Theater in downtown Salt Lake City. ArtTix is the official source for tickets for Live at the Eccles events.",
+        "page_age": "2025-12-09T23:56:48",
+        "profile": {
+          "name": "Salt Lake County Arts & Culture",
+          "url": "https://www.saltlakecountyarts.org/events/",
+          "long_name": "saltlakecountyarts.org",
+          "img": "https://imgs.search.brave.com/DYpGJLHUzXjdkG1JizXh8Vce99fT13TNfh8LwMWHTaE/rs:fit:32:32:1:0/g:ce/aHR0cDovL2Zhdmlj/b25zLnNlYXJjaC5i/cmF2ZS5jb20vaWNv/bnMvMTMxODJmNTMx/NDBmMGU1MDY2OWM3/N2NkMzI5ZjU0MDAz/OTYzZmE2MWUxYmQ3/NTIwZTBmYTZhYmQ1/N2Q0OTMwMy93d3cu/c2FsdGxha2Vjb3Vu/dHlhcnRzLm9yZy8"
+        },
+        "language": "en",
+        "family_friendly": true,
+        "type": "search_result",
+        "subtype": "generic",
+        "is_live": false,
+        "meta_url": {
+          "scheme": "https",
+          "netloc": "saltlakecountyarts.org",
+          "hostname": "www.saltlakecountyarts.org",
+          "favicon": "https://imgs.search.brave.com/DYpGJLHUzXjdkG1JizXh8Vce99fT13TNfh8LwMWHTaE/rs:fit:32:32:1:0/g:ce/aHR0cDovL2Zhdmlj/b25zLnNlYXJjaC5i/cmF2ZS5jb20vaWNv/bnMvMTMxODJmNTMx/NDBmMGU1MDY2OWM3/N2NkMzI5ZjU0MDAz/OTYzZmE2MWUxYmQ3/NTIwZTBmYTZhYmQ1/N2Q0OTMwMy93d3cu/c2FsdGxha2Vjb3Vu/dHlhcnRzLm9yZy8",
+          "path": "› events"
+        },
+        "age": "December 9, 2025",
+        "extra_snippets": [
+          "Live at the Eccles presents JOHN MULANEY on Saturday, March 21, 2026 at the Eccles Theater on Main Street in downtown Salt Lake City. ArtTix is the official source for tickets for Live at the Eccles events.",
+          "Live at the Eccles presents Blippi: Be Like Blippi on Friday, May 1, 2026 at the Eccles Theater in downtown Salt Lake City. ArtTix is the official source for tickets for Live at the Eccles events.",
+          "Gold medal winner of the 2024 Guitar Foundation of America's \"International Concert Artist Competition\", Ms. Alejandro makes her debut in Salt Lake City.",
+          "Follow five friends as they visit their past, celebrate their present, and look to the future on a wild and hilarious night out ... and you'll recognize yourself in each of them! Described as “Desperate Housewives meets Mamma Mia” (Applause Magazine), and “As funny and outrageous as Sex and the City!”(The Advocate)."
+        ]
+      },
+      {
+        "title": "TODAY’S UTAH EVENTS | Utah Agenda",
+        "url": "https://utahagenda.com/todays-utah-events/",
+        "is_source_local": false,
+        "is_source_both": false,
+        "description": "Sandy Senior Center Activities Free Lunch Socials, Fitness Classes, Crafts, Learning, Dances Monday–Friday, Multiple Events ... Ice Skate “The Fastest Ice On Earth” Monday–Saturday, Multiple Times Utah Olympic Oval, Kearns · Ice Skating Peaks Indoor Ice Arena Monday–Saturday, 6 am–Midnight Peaks Ice Arena, Provo · Salt Lake Indoor Ice Skating Daily, Multiple Times Salt Lake City Sports Complex, UoU, Salt Lake",
+        "page_age": "2026-01-13T15:45:57",
+        "profile": {
+          "name": "Utah Agenda",
+          "url": "https://utahagenda.com/todays-utah-events/",
+          "long_name": "utahagenda.com",
+          "img": "https://imgs.search.brave.com/OtEIP3MXeWrIyq0C6m6Ti57jJvNBpKu-phkCIK171fI/rs:fit:32:32:1:0/g:ce/aHR0cDovL2Zhdmlj/b25zLnNlYXJjaC5i/cmF2ZS5jb20vaWNv/bnMvYTE0ZGRjZTc3/ZTg1YjFjZDFjZGJi/YWUzZjI4N2ZkMzVm/YTZhMjcwNmExOTFj/YWQ3MTgzY2UxOTJm/N2M5NjFkYy91dGFo/YWdlbmRhLmNvbS8"
+        },
+        "language": "en",
+        "family_friendly": true,
+        "type": "search_result",
+        "subtype": "generic",
+        "is_live": false,
+        "meta_url": {
+          "scheme": "https",
+          "netloc": "utahagenda.com",
+          "hostname": "utahagenda.com",
+          "favicon": "https://imgs.search.brave.com/OtEIP3MXeWrIyq0C6m6Ti57jJvNBpKu-phkCIK171fI/rs:fit:32:32:1:0/g:ce/aHR0cDovL2Zhdmlj/b25zLnNlYXJjaC5i/cmF2ZS5jb20vaWNv/bnMvYTE0ZGRjZTc3/ZTg1YjFjZDFjZGJi/YWUzZjI4N2ZkMzVm/YTZhMjcwNmExOTFj/YWQ3MTgzY2UxOTJm/N2M5NjFkYy91dGFo/YWdlbmRhLmNvbS8",
+          "path": "› todays-utah-events"
+        },
+        "thumbnail": {
+          "src": "https://imgs.search.brave.com/8ZIq-zgWI9TPUaulUVo9MNwvo-xY76SscAQWr1AUPnE/rs:fit:200:200:1:0/g:ce/aHR0cHM6Ly9pMC53/cC5jb20vdXRhaGFn/ZW5kYS5jb20vd3At/Y29udGVudC91cGxv/YWRzLzIwMjMvMDIv/d2VsbHN2aWxsZS11/dGFoLWhlcml0YWdl/LWNlbnRlci1jYWNo/ZS12YWxsZXktbG9n/YW4tZmVicnVhcnkt/c25vdy1tb3VudGFp/bnMtMTkxODA4ODkz/LTIuanBnP2ZpdD0x/MDM4JTJDNTg0JiMw/Mzg7c3NsPTE",
+          "original": "https://i0.wp.com/utahagenda.com/wp-content/uploads/2023/02/wellsville-utah-heritage-center-cache-valley-logan-february-snow-mountains-191808893-2.jpg?fit=1038%2C584&#038;ssl=1",
+          "logo": false
+        },
+        "age": "2 days ago",
+        "extra_snippets": [
+          "Utah Events and Activities: What's happening today in Utah? Things to Do & Places to Go. Music, Dance, Theatre, Live Performances, Art, Local Talent, Open Mics, Event Calendars, Sports, and Fitness Classes. Photo: Winter In Wellsville, Utah Heritage Center, Cache Valley Logan Utah Area--Utah Agenda Utah Live Web Cams Music Concerts Theatre & Dance Night…",
+          "American West Heritage Center Farm, Petting Zoo, Holiday Events, Pioneer Wellsville ... Fun Date Salsa, Country Swing, Ballroom November 2025, M-S, Multiple Times DF Dance Studio, Salt Lake ... New Climbing, Yoga, Fitness, Weight Room, Sauna, Cafe Daily, 6 am–11 pm, Multiple Hours Granary District, Downtown, Salt Lake · Park City Ghost Tours Scary Fun Nightly, 7 pm 415 Main Street, Park City",
+          "Sandy Senior Center Activities Free Lunch Socials, Fitness Classes, Crafts, Learning, Dances Monday–Friday, Multiple Events ... Ice Skate “The Fastest Ice On Earth” Monday–Saturday, Multiple Times Utah Olympic Oval, Kearns · Ice Skating Peaks Indoor Ice Arena Monday–Saturday, 6 am–Midnight Peaks Ice Arena, Provo · Salt Lake Indoor Ice Skating Daily, Multiple Times Salt Lake City Sports Complex, UoU, Salt Lake",
+          "Murray City Library Free Teen & Youth Events & Activities 166 E 5300 S, Murray ... South Salt Lake Art Classes Weekday Art Classes & Workshops South Salt Lake Community Center, South Salt Lake"
+        ]
+      },
+      {
+        "title": "Events | SLCityEvents@slc.gov",
+        "url": "https://www.slc.gov/events/",
+        "is_source_local": false,
+        "is_source_both": false,
+        "description": "<strong>December 1 – 31 Pioneer Park</strong> Event Details Pioneer Park is lighting up the season! From December 1–31, stroll through the south end of the park and enjoy sparkling holiday lights, glowing trees, and dazzling light installations – including ...",
+        "profile": {
+          "name": "SLC.gov",
+          "url": "https://www.slc.gov/events/",
+          "long_name": "slc.gov",
+          "img": "https://imgs.search.brave.com/v1Nl3nKKBFbPYlLNXqngTmdan-frRHm2IOUoUzukV00/rs:fit:32:32:1:0/g:ce/aHR0cDovL2Zhdmlj/b25zLnNlYXJjaC5i/cmF2ZS5jb20vaWNv/bnMvOGMyOTRmMmQw/MTIzZGFkM2JkY2Yz/MGYyZjc5NDNjMzZl/N2ZkMDUxMTUzNjA0/M2Q3NWE3NzEzYmQy/MTZkODU4YS93d3cu/c2xjLmdvdi8"
+        },
+        "language": "en",
+        "family_friendly": true,
+        "type": "search_result",
+        "subtype": "generic",
+        "is_live": false,
+        "meta_url": {
+          "scheme": "https",
+          "netloc": "slc.gov",
+          "hostname": "www.slc.gov",
+          "favicon": "https://imgs.search.brave.com/v1Nl3nKKBFbPYlLNXqngTmdan-frRHm2IOUoUzukV00/rs:fit:32:32:1:0/g:ce/aHR0cDovL2Zhdmlj/b25zLnNlYXJjaC5i/cmF2ZS5jb20vaWNv/bnMvOGMyOTRmMmQw/MTIzZGFkM2JkY2Yz/MGYyZjc5NDNjMzZl/N2ZkMDUxMTUzNjA0/M2Q3NWE3NzEzYmQy/MTZkODU4YS93d3cu/c2xjLmdvdi8",
+          "path": "› events"
+        },
+        "thumbnail": {
+          "src": "https://imgs.search.brave.com/Hlu5PlWpa_euIFKYB_NlWjQfvsRvw42TnQD_a1b_0Ow/rs:fit:200:200:1:0/g:ce/aHR0cHM6Ly93d3cu/c2xjLmdvdi9ldmVu/dHMvd3AtY29udGVu/dC91cGxvYWRzL3Np/dGVzLzI4LzIwMTgv/MDMvWWFwcHktSG91/ci1QaG90by5qcGc",
+          "original": "https://www.slc.gov/events/wp-content/uploads/sites/28/2018/03/Yappy-Hour-Photo.jpg",
+          "logo": false
+        }
+      },
+      {
+        "title": "Salt Lake City Event Calendar & Tickets 2026 | SeatGeek",
+        "url": "https://seatgeek.com/cities/salt-lake-city",
+        "is_source_local": false,
+        "is_source_both": false,
+        "description": "(opens in new tab) Find tickets to Cousin Curtiss on Sunday January 11 at 7:00 pm at Urban Lounge - Salt Lake City in Salt Lake City, UT ... (opens in new tab) Find tickets to Les Olson IT Best of Utah Womens Gymnastics on Monday January 12 at 7:00 pm at Maverik Center in West Valley City, UT ... (opens in new tab) Find tickets to Disney&#x27;s Frozen - The Musical - Sandy on Monday January 12 at 7:30 pm at Young Living Centre Stage at Hale Centre Theater in Sandy, UT ... You can find tickets to a variety of events on SeatGeek, from concerts to sporting events to Broadway shows and more.",
+        "page_age": "2025-11-05T08:37:07",
+        "profile": {
+          "name": "SeatGeek",
+          "url": "https://seatgeek.com/cities/salt-lake-city",
+          "long_name": "seatgeek.com",
+          "img": "https://imgs.search.brave.com/4a0H1IzZ9sBwtQuJOjI6URRgaTlCQGvjkYTdMBzGtVI/rs:fit:32:32:1:0/g:ce/aHR0cDovL2Zhdmlj/b25zLnNlYXJjaC5i/cmF2ZS5jb20vaWNv/bnMvOWEzZTRlODVl/M2JiODQ2MTQ4N2Ix/OTRlZGUyZWFmZTk2/ZDA1ZTViOTM4ODIz/N2JjZjA3MjdlMGY4/ZTkzODM4My9zZWF0/Z2Vlay5jb20v"
+        },
+        "language": "en",
+        "family_friendly": true,
+        "type": "search_result",
+        "subtype": "faq",
+        "is_live": false,
+        "meta_url": {
+          "scheme": "https",
+          "netloc": "seatgeek.com",
+          "hostname": "seatgeek.com",
+          "favicon": "https://imgs.search.brave.com/4a0H1IzZ9sBwtQuJOjI6URRgaTlCQGvjkYTdMBzGtVI/rs:fit:32:32:1:0/g:ce/aHR0cDovL2Zhdmlj/b25zLnNlYXJjaC5i/cmF2ZS5jb20vaWNv/bnMvOWEzZTRlODVl/M2JiODQ2MTQ4N2Ix/OTRlZGUyZWFmZTk2/ZDA1ZTViOTM4ODIz/N2JjZjA3MjdlMGY4/ZTkzODM4My9zZWF0/Z2Vlay5jb20v",
+          "path": "  › home  › cities  › 🎟 salt lake city"
+        },
+        "thumbnail": {
+          "src": "https://imgs.search.brave.com/9yzaqClEpX5V-1j_lEVIGeZGYNNbCjwp0FHtgYq0TTc/rs:fit:200:200:1:0/g:ce/aHR0cHM6Ly9zZWF0/Z2Vla2ltYWdlcy5j/b20vcGVyZm9ybWVy/cy1sYW5kc2NhcGUv/ZGlzbmV5LXMtZnJv/emVuLXRoZS1tdXNp/Y2FsLTc1NWE0ZS8y/MjA2NDkvMTI3Mzcv/NzIweDQ1MC5qcGc",
+          "original": "https://seatgeekimages.com/performers-landscape/disney-s-frozen-the-musical-755a4e/220649/12737/720x450.jpg",
+          "logo": false
+        },
+        "age": "November 5, 2025",
+        "faq": {
+          "items": [
+            {
+              "question": "Where can I find events in Salt Lake City ?",
+              "answer": "You can find tickets to a variety of events on SeatGeek, from concerts to sporting events to Broadway shows and more.",
+              "title": "Salt Lake City Event Calendar & Tickets 2026 | SeatGeek",
+              "url": "https://seatgeek.com/cities/salt-lake-city",
+              "meta_url": {
+                "scheme": "https",
+                "netloc": "seatgeek.com",
+                "hostname": "seatgeek.com",
+                "favicon": "https://imgs.search.brave.com/4a0H1IzZ9sBwtQuJOjI6URRgaTlCQGvjkYTdMBzGtVI/rs:fit:32:32:1:0/g:ce/aHR0cDovL2Zhdmlj/b25zLnNlYXJjaC5i/cmF2ZS5jb20vaWNv/bnMvOWEzZTRlODVl/M2JiODQ2MTQ4N2Ix/OTRlZGUyZWFmZTk2/ZDA1ZTViOTM4ODIz/N2JjZjA3MjdlMGY4/ZTkzODM4My9zZWF0/Z2Vlay5jb20v",
+                "path": "  › home  › cities  › 🎟 salt lake city"
+              }
+            },
+            {
+              "question": "What events are happening in Salt Lake City ?",
+              "answer": "Salt Lake City has a number of events happening throughout the year. Scroll up to check out all the events in Salt Lake City including concerts, sporting events, comedy shows and theater.",
+              "title": "Salt Lake City Event Calendar & Tickets 2026 | SeatGeek",
+              "url": "https://seatgeek.com/cities/salt-lake-city",
+              "meta_url": {
+                "scheme": "https",
+                "netloc": "seatgeek.com",
+                "hostname": "seatgeek.com",
+                "favicon": "https://imgs.search.brave.com/4a0H1IzZ9sBwtQuJOjI6URRgaTlCQGvjkYTdMBzGtVI/rs:fit:32:32:1:0/g:ce/aHR0cDovL2Zhdmlj/b25zLnNlYXJjaC5i/cmF2ZS5jb20vaWNv/bnMvOWEzZTRlODVl/M2JiODQ2MTQ4N2Ix/OTRlZGUyZWFmZTk2/ZDA1ZTViOTM4ODIz/N2JjZjA3MjdlMGY4/ZTkzODM4My9zZWF0/Z2Vlay5jb20v",
+                "path": "  › home  › cities  › 🎟 salt lake city"
+              }
+            },
+            {
+              "question": "What are things to do in Salt Lake City ?",
+              "answer": "Catch your favorite artist at your local venue, watch your favorite Salt Lake City sports team and see a show all in the city of Salt Lake City. If you’re looking for things to do this week, make sure to utilize our date filters at the top to check out events today, tomorrow, this weekend and next weekend",
+              "title": "Salt Lake City Event Calendar & Tickets 2026 | SeatGeek",
+              "url": "https://seatgeek.com/cities/salt-lake-city",
+              "meta_url": {
+                "scheme": "https",
+                "netloc": "seatgeek.com",
+                "hostname": "seatgeek.com",
+                "favicon": "https://imgs.search.brave.com/4a0H1IzZ9sBwtQuJOjI6URRgaTlCQGvjkYTdMBzGtVI/rs:fit:32:32:1:0/g:ce/aHR0cDovL2Zhdmlj/b25zLnNlYXJjaC5i/cmF2ZS5jb20vaWNv/bnMvOWEzZTRlODVl/M2JiODQ2MTQ4N2Ix/OTRlZGUyZWFmZTk2/ZDA1ZTViOTM4ODIz/N2JjZjA3MjdlMGY4/ZTkzODM4My9zZWF0/Z2Vlay5jb20v",
+                "path": "  › home  › cities  › 🎟 salt lake city"
+              }
+            }
+          ]
+        },
+        "organization": {
+          "type": "organization",
+          "name": "SeatGeek",
+          "contact_points": []
+        },
+        "extra_snippets": [
+          "Catch your favorite artist at your local venue, watch your favorite Salt Lake City sports team and see a show all in the city of Salt Lake City. If you’re looking for things to do this week, make sure to utilize our date filters at the top to check out events today, tomorrow, this weekend and next weekend",
+          "Salt Lake City has a number of events happening throughout the year. Scroll up to check out all the events in Salt Lake City including concerts, sporting events, comedy shows and theater.",
+          "Jon M. Huntsman Center·Salt Lake City, UT · (opens in new tab) Find tickets to DJ Diggabeatz (18+) on Saturday January 10 at 8:00 pm at The Depot - Salt Lake City in Salt Lake City, UT",
+          "(opens in new tab) Find tickets to Cousin Curtiss on Sunday January 11 at 7:00 pm at Urban Lounge - Salt Lake City in Salt Lake City, UT ... (opens in new tab) Find tickets to Les Olson IT Best of Utah Womens Gymnastics on Monday January 12 at 7:00 pm at Maverik Center in West Valley City, UT ... (opens in new tab) Find tickets to Disney's Frozen - The Musical - Sandy on Monday January 12 at 7:30 pm at Young Living Centre Stage at Hale Centre Theater in Sandy, UT ... You can find tickets to a variety of events on SeatGeek, from concerts to sporting events to Broadway shows and more."
+        ]
+      },
+      {
+        "title": "The Complex Salt Lake City, Utah Events",
+        "url": "https://thecomplexslc.com/",
+        "is_source_local": false,
+        "is_source_both": false,
+        "description": "The Complex is a live music venue in Downtown Salt Lake City, established in 2010 · 536 West 100 South Salt Lake City, UT",
+        "profile": {
+          "name": "The Complex",
+          "url": "https://thecomplexslc.com/",
+          "long_name": "thecomplexslc.com",
+          "img": "https://imgs.search.brave.com/YWK0xL21S2T2TyRee8NBIEy20igD5zmIrAvc0xWJidE/rs:fit:32:32:1:0/g:ce/aHR0cDovL2Zhdmlj/b25zLnNlYXJjaC5i/cmF2ZS5jb20vaWNv/bnMvOGJkOWI5M2Zk/ZGVmMzBlODcxMTI5/MmIxNmMyMDkzZTQ3/MjM1Zjg4MWE2OWRh/ZDVlNjk4YWY2OGM2/MjZlMGZkZS90aGVj/b21wbGV4c2xjLmNv/bS8"
+        },
+        "language": "en",
+        "family_friendly": true,
+        "type": "search_result",
+        "subtype": "generic",
+        "is_live": false,
+        "meta_url": {
+          "scheme": "https",
+          "netloc": "thecomplexslc.com",
+          "hostname": "thecomplexslc.com",
+          "favicon": "https://imgs.search.brave.com/YWK0xL21S2T2TyRee8NBIEy20igD5zmIrAvc0xWJidE/rs:fit:32:32:1:0/g:ce/aHR0cDovL2Zhdmlj/b25zLnNlYXJjaC5i/cmF2ZS5jb20vaWNv/bnMvOGJkOWI5M2Zk/ZGVmMzBlODcxMTI5/MmIxNmMyMDkzZTQ3/MjM1Zjg4MWE2OWRh/ZDVlNjk4YWY2OGM2/MjZlMGZkZS90aGVj/b21wbGV4c2xjLmNv/bS8",
+          "path": ""
+        }
+      },
+      {
+        "title": "The Union Event Center",
+        "url": "https://theunioneventcenter.com",
+        "is_source_local": false,
+        "is_source_both": false,
+        "description": "Back Upcoming Shows Premium Tables Plan Your Visit &amp; FAQ Parking &amp; Directions Concert Gallery Private Events Join Our Newsletter · Salt Lake City best event center for Corporate, Non-Profit, Business events and Concerts.",
+        "profile": {
+          "name": "Theunioneventcenter",
+          "url": "https://theunioneventcenter.com",
+          "long_name": "theunioneventcenter.com",
+          "img": "https://imgs.search.brave.com/68Raa4kxO7LdV3CH-wMT0TlWGkCGjKsgTx_6YwfTfo0/rs:fit:32:32:1:0/g:ce/aHR0cDovL2Zhdmlj/b25zLnNlYXJjaC5i/cmF2ZS5jb20vaWNv/bnMvZDg2MzY5N2My/MmMwOWM5NzNkMDBi/NTA1Y2FmZWQ1MGE0/NzBmY2JmNDM4MWJl/NzFjYzQ1OWMyMTU3/MWE5M2VmNC90aGV1/bmlvbmV2ZW50Y2Vu/dGVyLmNvbS8"
+        },
+        "language": "en",
+        "family_friendly": true,
+        "type": "search_result",
+        "subtype": "generic",
+        "is_live": false,
+        "meta_url": {
+          "scheme": "https",
+          "netloc": "theunioneventcenter.com",
+          "hostname": "theunioneventcenter.com",
+          "favicon": "https://imgs.search.brave.com/68Raa4kxO7LdV3CH-wMT0TlWGkCGjKsgTx_6YwfTfo0/rs:fit:32:32:1:0/g:ce/aHR0cDovL2Zhdmlj/b25zLnNlYXJjaC5i/cmF2ZS5jb20vaWNv/bnMvZDg2MzY5N2My/MmMwOWM5NzNkMDBi/NTA1Y2FmZWQ1MGE0/NzBmY2JmNDM4MWJl/NzFjYzQ1OWMyMTU3/MWE5M2VmNC90aGV1/bmlvbmV2ZW50Y2Vu/dGVyLmNvbS8",
+          "path": ""
+        },
+        "thumbnail": {
+          "src": "https://imgs.search.brave.com/2-P9j7GZGxBXqPHJQZ9yO5rxk0_LXH0g9fkLGAefXio/rs:fit:200:200:1:0/g:ce/aHR0cHM6Ly9zdGF0/aWMxLnNxdWFyZXNw/YWNlLmNvbS9zdGF0/aWMvNWE0ODc1MjEz/MjYwMWVhMmMwODkw/ZWQ4L3QvNWE0YjI3/YWRlMmM0ODMyMzZj/MjZjMmZhLzE3Njc2/NTgzNzUyNDUv",
+          "original": "https://static1.squarespace.com/static/5a48752132601ea2c0890ed8/t/5a4b27ade2c483236c26c2fa/1767658375245/",
+          "logo": false
+        },
+        "extra_snippets": [
+          "The Union Event Center is Salt Lake City’s premiere venue for corporate and non-profit events, concerts, business parties, and more. Let’s make your next event memorable."
+        ]
+      },
+      {
+        "title": "Campus Events",
+        "url": "https://events.utah.edu/",
+        "is_source_local": false,
+        "is_source_both": false,
+        "description": "Campus News and Events The latest news from @theU and more See more campus news &amp; events Social Media See what&#x27;s being discussed and shared...",
+        "profile": {
+          "name": "Utah",
+          "url": "https://events.utah.edu/",
+          "long_name": "events.utah.edu",
+          "img": "https://imgs.search.brave.com/P5okX9ZlPeTuIOUWh2W_qin9h2Ua8T7CBLbmd4xWMOA/rs:fit:32:32:1:0/g:ce/aHR0cDovL2Zhdmlj/b25zLnNlYXJjaC5i/cmF2ZS5jb20vaWNv/bnMvYzM3MmY5MDc4/MjUzOTkxYjIwZDMz/ZTM0YmUzNTI1ZmRm/YTMyMTIzNjVkNzM4/NTk3ZTUwYmMyOTg5/MzE3ODQxNi9ldmVu/dHMudXRhaC5lZHUv"
+        },
+        "language": "en",
+        "family_friendly": true,
+        "type": "search_result",
+        "subtype": "generic",
+        "is_live": false,
+        "meta_url": {
+          "scheme": "https",
+          "netloc": "events.utah.edu",
+          "hostname": "events.utah.edu",
+          "favicon": "https://imgs.search.brave.com/P5okX9ZlPeTuIOUWh2W_qin9h2Ua8T7CBLbmd4xWMOA/rs:fit:32:32:1:0/g:ce/aHR0cDovL2Zhdmlj/b25zLnNlYXJjaC5i/cmF2ZS5jb20vaWNv/bnMvYzM3MmY5MDc4/MjUzOTkxYjIwZDMz/ZTM0YmUzNTI1ZmRm/YTMyMTIzNjVkNzM4/NTk3ZTUwYmMyOTg5/MzE3ODQxNi9ldmVu/dHMudXRhaC5lZHUv",
+          "path": ""
+        },
+        "thumbnail": {
+          "src": "https://imgs.search.brave.com/fVI0eINTdOI1kv74gMaU-0eC3NnyZCzvC6z7ERRTafA/rs:fit:200:200:1:0/g:ce/aHR0cHM6Ly9ldmVu/dHMudXRhaC5lZHUv/d3AtY29udGVudC90/aGVtZXMvdW1jdGhl/bWUzL2ltZy9vZy1p/bWFnZS1wbGFjZWhv/bGRlci5qcGc",
+          "original": "https://events.utah.edu/wp-content/themes/umctheme3/img/og-image-placeholder.jpg",
+          "logo": false
+        },
+        "extra_snippets": [
+          "University faculty, staff, and students may submit University sponsored events to the calendar. University Marketing and Communications approves all events within 2 working days of submission prior to posting to the calendar.",
+          "Read our Events Calendar Policies."
+        ]
+      },
+      {
+        "title": "Concerts in Salt Lake City",
+        "url": "https://www.songkick.com/metro-areas/13560-us-salt-lake-city",
+        "is_source_local": false,
+        "is_source_both": false,
+        "description": "Find live music near you. Buy tickets for every upcoming concert, festival, gig and tour date taking place in Salt Lake City in 2026 &amp; 2027",
+        "profile": {
+          "name": "Songkick",
+          "url": "https://www.songkick.com/metro-areas/13560-us-salt-lake-city",
+          "long_name": "songkick.com",
+          "img": "https://imgs.search.brave.com/oS50g2wfc0KT4PaGuQyhYnjIwOy311yOjf42lbfHXqY/rs:fit:32:32:1:0/g:ce/aHR0cDovL2Zhdmlj/b25zLnNlYXJjaC5i/cmF2ZS5jb20vaWNv/bnMvYTBmMmJkOTk3/NDdhYzhhZTQ1YjIw/OGM4MDMzNDkxOWNj/NDMwN2YwMjViZTE2/Y2NhZWExMTU0NGVl/ZTRkMDY3My93d3cu/c29uZ2tpY2suY29t/Lw"
+        },
+        "language": "en",
+        "family_friendly": true,
+        "type": "search_result",
+        "subtype": "event",
+        "is_live": false,
+        "meta_url": {
+          "scheme": "https",
+          "netloc": "songkick.com",
+          "hostname": "www.songkick.com",
+          "favicon": "https://imgs.search.brave.com/oS50g2wfc0KT4PaGuQyhYnjIwOy311yOjf42lbfHXqY/rs:fit:32:32:1:0/g:ce/aHR0cDovL2Zhdmlj/b25zLnNlYXJjaC5i/cmF2ZS5jb20vaWNv/bnMvYTBmMmJkOTk3/NDdhYzhhZTQ1YjIw/OGM4MDMzNDkxOWNj/NDMwN2YwMjViZTE2/Y2NhZWExMTU0NGVl/ZTRkMDY3My93d3cu/c29uZ2tpY2suY29t/Lw",
+          "path": "› metro-areas  › 13560-us-salt-lake-city"
+        },
+        "thumbnail": {
+          "src": "https://imgs.search.brave.com/aa1eHCRnoq_XmvEBDiqwvq21YQEm5sxnPezCG78p6uU/rs:fit:200:200:1:0/g:ce/aHR0cHM6Ly9pbWFn/ZXMuc2stc3RhdGlj/LmNvbS9pbWFnZXMv/bWVkaWEvcHJvZmls/ZV9pbWFnZXMvYXJ0/aXN0cy82NDAyMy9o/dWdlX2F2YXRhcg",
+          "original": "https://images.sk-static.com/images/media/profile_images/artists/64023/huge_avatar",
+          "logo": false
+        },
+        "extra_snippets": [
+          "Find live music near you. Buy tickets for every upcoming concert, festival, gig and tour date taking place in Salt Lake City in 2026 & 2027",
+          "Sego Velour Live Music Gallery See all Salt Lake City concerts (Change location) Today · Next 7 days ·"
+        ]
+      },
+      {
+        "title": "Events",
+        "url": "https://www.deltacenter.com/events/",
+        "is_source_local": false,
+        "is_source_both": false,
+        "description": "Event Type · Category · Concert · Jazz · Other · <strong>Utah Mammoth</strong> · Filter By Date · Month · January · February · March · April · May · June · July · August · September · October · November · December · Year · 2026 · 2027 · ...",
+        "page_age": "2025-11-22T18:51:14",
+        "profile": {
+          "name": "Delta Center",
+          "url": "https://www.deltacenter.com/events/",
+          "long_name": "deltacenter.com",
+          "img": "https://imgs.search.brave.com/-jfblA554zd0y3LuiOl9xZMG60dOOiMVvO9kJ7xCfrU/rs:fit:32:32:1:0/g:ce/aHR0cDovL2Zhdmlj/b25zLnNlYXJjaC5i/cmF2ZS5jb20vaWNv/bnMvNTI0NDk4YTA1/NTc0MGEyZTdhNjdl/NGE5MDJmY2M1OTU2/NTU2ODRmN2VmN2Fm/MmQ5ZjViMDJlODJk/NDAwYTU4Zi93d3cu/ZGVsdGFjZW50ZXIu/Y29tLw"
+        },
+        "language": "en",
+        "family_friendly": true,
+        "type": "search_result",
+        "subtype": "event",
+        "is_live": false,
+        "meta_url": {
+          "scheme": "https",
+          "netloc": "deltacenter.com",
+          "hostname": "www.deltacenter.com",
+          "favicon": "https://imgs.search.brave.com/-jfblA554zd0y3LuiOl9xZMG60dOOiMVvO9kJ7xCfrU/rs:fit:32:32:1:0/g:ce/aHR0cDovL2Zhdmlj/b25zLnNlYXJjaC5i/cmF2ZS5jb20vaWNv/bnMvNTI0NDk4YTA1/NTc0MGEyZTdhNjdl/NGE5MDJmY2M1OTU2/NTU2ODRmN2VmN2Fm/MmQ5ZjViMDJlODJk/NDAwYTU4Zi93d3cu/ZGVsdGFjZW50ZXIu/Y29tLw",
+          "path": "› events"
+        },
+        "thumbnail": {
+          "src": "https://imgs.search.brave.com/RMbOX1yuxUxdCe63ip97ubgTYTWPi5BshtE9WAK5DhQ/rs:fit:200:200:1:0/g:ce/aHR0cHM6Ly93d3cu/ZGVsdGFjZW50ZXIu/Y29tL3dwLWNvbnRl/bnQvdXBsb2Fkcy8y/MDI1LzA3LzAwOTMt/TWF0Y2h1cF9HcmFw/aGljcy1NYW1tb3Ro/XzkwMHg1MDBfREFM/LXNjYWxlZC5wbmc",
+          "original": "https://www.deltacenter.com/wp-content/uploads/2025/07/0093-Matchup_Graphics-Mammoth_900x500_DAL-scaled.png",
+          "logo": false
+        },
+        "age": "November 22, 2025",
+        "extra_snippets": [
+          "Event Type · Category · Concert · Jazz · Other · Utah Mammoth · Filter By Date · Month · January · February · March · April · May · June · July · August · September · October · November · December · Year · 2026 · 2027 · 2028 · 2029 · 2030 · 2031 · 2032 · 2033 · 2034 · Search By Name · 15 Jan 2026 · 7:00 pm · Delta Center, Salt Lake City, Utah ·",
+          "Delta Center, Salt Lake City, Utah · Buy Tickets · Details · No event found!"
+        ]
+      },
+      {
+        "title": "Events in Salt Lake City — Clubhouse",
+        "url": "https://www.clubhouseslc.com/public-events",
+        "is_source_local": false,
+        "is_source_both": false,
+        "description": "Upcoming events at Clubhouse on South Temple, the historic event venue located in Salt Lake City, Utah.",
+        "profile": {
+          "name": "Clubhouse",
+          "url": "https://www.clubhouseslc.com/public-events",
+          "long_name": "clubhouseslc.com",
+          "img": "https://imgs.search.brave.com/gCtwXWE924yAnPLAy8NM0RTmk_0QcI6KEDuqH_8nbmQ/rs:fit:32:32:1:0/g:ce/aHR0cDovL2Zhdmlj/b25zLnNlYXJjaC5i/cmF2ZS5jb20vaWNv/bnMvODM4MTEwNGYw/ZTRlYzhhNzM4NmVh/M2VkNDFlNWM2M2Rk/ODE3YmY1Y2FhZDhk/YzE4YTcwMGUwNzg0/Mzk0ZWEyOS93d3cu/Y2x1YmhvdXNlc2xj/LmNvbS8"
+        },
+        "language": "en",
+        "family_friendly": true,
+        "type": "search_result",
+        "subtype": "generic",
+        "is_live": false,
+        "meta_url": {
+          "scheme": "https",
+          "netloc": "clubhouseslc.com",
+          "hostname": "www.clubhouseslc.com",
+          "favicon": "https://imgs.search.brave.com/gCtwXWE924yAnPLAy8NM0RTmk_0QcI6KEDuqH_8nbmQ/rs:fit:32:32:1:0/g:ce/aHR0cDovL2Zhdmlj/b25zLnNlYXJjaC5i/cmF2ZS5jb20vaWNv/bnMvODM4MTEwNGYw/ZTRlYzhhNzM4NmVh/M2VkNDFlNWM2M2Rk/ODE3YmY1Y2FhZDhk/YzE4YTcwMGUwNzg0/Mzk0ZWEyOS93d3cu/Y2x1YmhvdXNlc2xj/LmNvbS8",
+          "path": "› public-events"
+        },
+        "thumbnail": {
+          "src": "https://imgs.search.brave.com/XOo_EWFtYH6AsjBCZ1fQ0IDGfK-9tZT-mtRXGqZ0umw/rs:fit:200:200:1:0/g:ce/aHR0cHM6Ly9zdGF0/aWMxLnNxdWFyZXNw/YWNlLmNvbS9zdGF0/aWMvNWE1MjcwMWI2/NGIwNWY2Y2FiODhl/YWIzL3QvNWI2MmEw/ZjYwZTJlNzJlYWY1/OWRkMmRkLzE3Njc5/ODYyNTg3MDUv",
+          "original": "https://static1.squarespace.com/static/5a52701b64b05f6cab88eab3/t/5b62a0f60e2e72eaf59dd2dd/1767986258705/",
+          "logo": false
+        }
+      },
+      {
+        "title": "Salt Lake City Arts Council - Twilight Concert Series 2025",
+        "url": "https://saltlakearts.org/programs/twilight-concert-series",
+        "is_source_local": false,
+        "is_source_both": false,
+        "description": "Make sure to reference your ticket for the correct venue. All events are held rain or shine. Artists subject to change. The <strong>2025 Twilight Concert Series</strong> is made possible by our generous sponsors.",
+        "profile": {
+          "name": "Saltlakearts",
+          "url": "https://saltlakearts.org/programs/twilight-concert-series",
+          "long_name": "saltlakearts.org",
+          "img": "https://imgs.search.brave.com/qHGUX2_QANAbDcm8F3dW4Fbya3BIpVWNQauo3s3juqY/rs:fit:32:32:1:0/g:ce/aHR0cDovL2Zhdmlj/b25zLnNlYXJjaC5i/cmF2ZS5jb20vaWNv/bnMvYzA5ODdiMzFl/MGZmMGFhM2RiYTc3/MGIzNjU5ZTM2MDQ2/OTdkODlhNjU3OGNk/Njc5YTdkZWVlMTFm/MGIxYmVkNC9zYWx0/bGFrZWFydHMub3Jn/Lw"
+        },
+        "language": "en",
+        "family_friendly": true,
+        "type": "search_result",
+        "subtype": "article",
+        "is_live": false,
+        "meta_url": {
+          "scheme": "https",
+          "netloc": "saltlakearts.org",
+          "hostname": "saltlakearts.org",
+          "favicon": "https://imgs.search.brave.com/qHGUX2_QANAbDcm8F3dW4Fbya3BIpVWNQauo3s3juqY/rs:fit:32:32:1:0/g:ce/aHR0cDovL2Zhdmlj/b25zLnNlYXJjaC5i/cmF2ZS5jb20vaWNv/bnMvYzA5ODdiMzFl/MGZmMGFhM2RiYTc3/MGIzNjU5ZTM2MDQ2/OTdkODlhNjU3OGNk/Njc5YTdkZWVlMTFm/MGIxYmVkNC9zYWx0/bGFrZWFydHMub3Jn/Lw",
+          "path": "› programs  › twilight-concert-series"
+        },
+        "thumbnail": {
+          "src": "https://imgs.search.brave.com/0RVFCcCfu8l4nfipXZn48Z0zbzoX46k4PbioxPuDVXQ/rs:fit:200:200:1:0/g:ce/aHR0cHM6Ly9zYWx0/bGFrZWFydHMub3Jn/L2ltYWdlcy9lY29u/YS1hcnRpY2xlLWlt/YWdlcy8yOTEvZnVs/bC8xNDAwL3R3aS0y/MDI0LTAyLmpwZWc",
+          "original": "https://saltlakearts.org/images/econa-article-images/291/full/1400/twi-2024-02.jpeg"
+        },
+        "organization": {
+          "type": "organization",
+          "name": "Salt Lake City Arts Council",
+          "contact_points": []
+        },
+        "extra_snippets": [
+          "All three TRAX lines will still be servicing Courthouse Station and there will be a train on average every 5 minutes in each direction. Visit rideuta.com for more details** Gates & Food Vendors open at 6:00pm for all events at The Gallivan Center and 5:00pm for all events at Library Square. Make sure to reference your ticket for the correct venue. All events are held rain or shine. Artists subject to change. The 2025 Twilight Concert Series is made possible by our generous sponsors. ... The Salt Lake City Arts Council is a division of Salt Lake City Corporation within the Department of Community and Neighborhoods and also maintains a nonprofit corporation, the Salt Lake City Arts Council Foundation with 501(c)(3) status.",
+          "In its 38th year, the Twilight Concert Series has presented a wide range of nationally recognized and upcoming recording artists paired with local musicians and performers. The highly anticipated summer concert series connects audiences through live music by presenting musically diverse artists to enliven culture and enhance the quality of life in Salt Lake City.",
+          "Thanks to our partner Utah Transit Authority, your ticket to the 2025 Salt Lake Twilight Concert Series also includes free UTA Fare. Ride UTA trains or local buses with your Salt Lake Twilight Concert ticket and enjoy free fare all day on the day of the event (Paratransit, Ski, and PC-SLC Connect Service not included).",
+          "Salt Lake City Arts Council, 54 Finch Lane, Salt Lake City, Utah 84102 Phone (801) 596-5000 Email info@saltlakearts.org"
+        ]
+      },
+      {
+        "title": "Utah Events [Festivals, Activities & More] | Visit Utah",
+        "url": "https://www.visitutah.com/things-to-do/events",
+        "is_source_local": false,
+        "is_source_both": false,
+        "description": "Skijoring, live music, arts and cultural performances take over downtown Salt Lake City. ... St. George Art Festival | St. George, Utah | April ... This is just a sampling of the annual events you&#x27;ll find across Utah. For more upcoming events, try our search tool below.",
+        "profile": {
+          "name": "Visit Utah",
+          "url": "https://www.visitutah.com/things-to-do/events",
+          "long_name": "visitutah.com",
+          "img": "https://imgs.search.brave.com/Hbx9Mpz8lpAqkd40nureJpkoWOX0SkchbaWcb_bQ24M/rs:fit:32:32:1:0/g:ce/aHR0cDovL2Zhdmlj/b25zLnNlYXJjaC5i/cmF2ZS5jb20vaWNv/bnMvMzE2NGNkNTlk/ZGYzOTg5OTllMDlj/NTBhMTNkYzNkNjgw/MmZhNzA0ODAxMWUx/Yjk4MzA3NDk0ZWJi/NDI0ZGU0MS93d3cu/dmlzaXR1dGFoLmNv/bS8"
+        },
+        "language": "en",
+        "family_friendly": true,
+        "type": "search_result",
+        "subtype": "generic",
+        "is_live": false,
+        "meta_url": {
+          "scheme": "https",
+          "netloc": "visitutah.com",
+          "hostname": "www.visitutah.com",
+          "favicon": "https://imgs.search.brave.com/Hbx9Mpz8lpAqkd40nureJpkoWOX0SkchbaWcb_bQ24M/rs:fit:32:32:1:0/g:ce/aHR0cDovL2Zhdmlj/b25zLnNlYXJjaC5i/cmF2ZS5jb20vaWNv/bnMvMzE2NGNkNTlk/ZGYzOTg5OTllMDlj/NTBhMTNkYzNkNjgw/MmZhNzA0ODAxMWUx/Yjk4MzA3NDk0ZWJi/NDI0ZGU0MS93d3cu/dmlzaXR1dGFoLmNv/bS8",
+          "path": "  › home  › things to do  › festivals & events"
+        },
+        "thumbnail": {
+          "src": "https://imgs.search.brave.com/n4N-KGIQ3YPfyY_Y4e6FARVwN31veHWsSzZ-0dvPxZc/rs:fit:200:200:1:0/g:ce/aHR0cHM6Ly93d3cu/dmlzaXR1dGFoLmNv/bS9henVyZS9jbXNy/b290L3Zpc2l0dXRh/aC9tZWRpYS9zaXRl/LWFzc2V0cy90aHJl/ZS1zZWFzb24tcGhv/dG9ncmFwaHkvbm9y/dGhlcm4tdXRhaC9u/b3J0aGVybiUyMDEv/aGVhZF9mZXN0aXZh/bHNldmVudHNfMTMw/MHg1ODYuanBn",
+          "original": "https://www.visitutah.com/azure/cmsroot/visitutah/media/site-assets/three-season-photography/northern-utah/northern%201/head_festivalsevents_1300x586.jpg",
+          "logo": false
+        },
+        "organization": {
+          "type": "organization",
+          "name": "Utah Events, Attractions, Hotels, Restaurants and Things to Do",
+          "contact_points": []
+        },
+        "extra_snippets": [
+          "Hosted in Park City at the end of January, Sundance Film Festival is one of the largest independent film festivals in the world. The Twilight Concert Series in Salt Lake City hosts some of the top concerts in town.",
+          "An annual celebration of diverse artistic traditions with music and dance performances, arts and culture demonstrations, food and more in downtown Salt Lake City.",
+          "If you’re looking for a great arts festival in June, Utah is your destination. Learn all about the Utah Arts Festival in Salt Lake City and plan your trip!",
+          "The Utah Shakespeare Festival, a Tony Award-winning festival, has brought The Bard’s plays to Cedar City stages from June-October for more than 60 years."
+        ]
+      },
+      {
+        "title": "Events & Tickets - Live at the Eccles",
+        "url": "https://live-at-the-eccles.com/events",
+        "is_source_local": false,
+        "is_source_both": false,
+        "description": "Online at saltlakecountyarts.org (801) 355-ARTS (2787) Toll Free: 1 (888) 451-ARTS (2787) · 131 S. Main St. Salt Lake City, UT 84111 Click here for directions",
+        "profile": {
+          "name": "Live-at-the-eccles",
+          "url": "https://live-at-the-eccles.com/events",
+          "long_name": "live-at-the-eccles.com",
+          "img": "https://imgs.search.brave.com/EwbrBTuOtTohYTE3sq1YJKFZD-L7RxDzdFFLmWZjshQ/rs:fit:32:32:1:0/g:ce/aHR0cDovL2Zhdmlj/b25zLnNlYXJjaC5i/cmF2ZS5jb20vaWNv/bnMvMjc0YTkyMzEw/NWI1MTcwOTczZGE5/ZGNlNjY5MTRkZTk1/N2U4YmQ4MTVhZTE0/YzM5OGYzNTc0ZjQw/MDUyZGFkNy9saXZl/LWF0LXRoZS1lY2Ns/ZXMuY29tLw"
+        },
+        "language": "en",
+        "family_friendly": true,
+        "type": "search_result",
+        "subtype": "generic",
+        "is_live": false,
+        "meta_url": {
+          "scheme": "https",
+          "netloc": "live-at-the-eccles.com",
+          "hostname": "live-at-the-eccles.com",
+          "favicon": "https://imgs.search.brave.com/EwbrBTuOtTohYTE3sq1YJKFZD-L7RxDzdFFLmWZjshQ/rs:fit:32:32:1:0/g:ce/aHR0cDovL2Zhdmlj/b25zLnNlYXJjaC5i/cmF2ZS5jb20vaWNv/bnMvMjc0YTkyMzEw/NWI1MTcwOTczZGE5/ZGNlNjY5MTRkZTk1/N2U4YmQ4MTVhZTE0/YzM5OGYzNTc0ZjQw/MDUyZGFkNy9saXZl/LWF0LXRoZS1lY2Ns/ZXMuY29tLw",
+          "path": "› events"
+        }
+      },
+      {
+        "title": "The Metro Music Hall",
+        "url": "https://www.metromusichall.com/",
+        "is_source_local": false,
+        "is_source_both": false,
+        "description": "Sign up with your email address to receive news and updates",
+        "page_age": "2025-12-19T20:40:49",
+        "profile": {
+          "name": "Metro Music Hall",
+          "url": "https://www.metromusichall.com/",
+          "long_name": "metromusichall.com",
+          "img": "https://imgs.search.brave.com/xAd9BU6ug2TFcPvuqEMZRKnHygQD7cAtovFLAfVkTs0/rs:fit:32:32:1:0/g:ce/aHR0cDovL2Zhdmlj/b25zLnNlYXJjaC5i/cmF2ZS5jb20vaWNv/bnMvYTljYWQ5MzU2/YjY3MDU3ZmQ5MTA0/YTA1OTRlNTY2NDg2/N2Q1M2UwNTQyOTc2/NzQyZTM0YTk4Yzdm/MjgwMDdlNi93d3cu/bWV0cm9tdXNpY2hh/bGwuY29tLw"
+        },
+        "language": "en",
+        "family_friendly": true,
+        "type": "search_result",
+        "subtype": "generic",
+        "is_live": false,
+        "meta_url": {
+          "scheme": "https",
+          "netloc": "metromusichall.com",
+          "hostname": "www.metromusichall.com",
+          "favicon": "https://imgs.search.brave.com/xAd9BU6ug2TFcPvuqEMZRKnHygQD7cAtovFLAfVkTs0/rs:fit:32:32:1:0/g:ce/aHR0cDovL2Zhdmlj/b25zLnNlYXJjaC5i/cmF2ZS5jb20vaWNv/bnMvYTljYWQ5MzU2/YjY3MDU3ZmQ5MTA0/YTA1OTRlNTY2NDg2/N2Q1M2UwNTQyOTc2/NzQyZTM0YTk4Yzdm/MjgwMDdlNi93d3cu/bWV0cm9tdXNpY2hh/bGwuY29tLw",
+          "path": ""
+        },
+        "thumbnail": {
+          "src": "https://imgs.search.brave.com/cbrCUGs6aHcyW7hKygWQ4Kz67K-XpccSG4Z1O5Mzkf0/rs:fit:200:200:1:0/g:ce/aHR0cHM6Ly9zdGF0/aWMxLnNxdWFyZXNw/YWNlLmNvbS9zdGF0/aWMvNWQ3NjZkMjY5/YThmNGE1NjFhZDI3/MjYyL3QvNWQ3NjZl/MzM0MmUxMmEzYmE1/NmI1ZDRmLzE3Njg0/MTY5OTg0MDYv",
+          "original": "https://static1.squarespace.com/static/5d766d269a8f4a561ad27262/t/5d766e3342e12a3ba56b5d4f/1768416998406/",
+          "logo": false
+        },
+        "age": "1 month ago",
+        "organization": {
+          "type": "organization",
+          "name": "Metro Music Hall",
+          "contact_points": []
+        }
+      },
+      {
+        "title": "City Events | North Salt Lake, UT - Official Website",
+        "url": "https://www.nslcity.org/250/City-Events",
+        "is_source_local": false,
+        "is_source_both": false,
+        "description": "Events are hosted by a variety of groups—including the Youth City Council, the Civic Events Committee, the Arts Committee, the Health &amp; Wellness Committee, and the City itself—at venues throughout North Salt Lake. Use the menu on this page to explore upcoming activities, and stay connected through social media, the City website, and the newsletter for the latest updates.",
+        "profile": {
+          "name": "North Salt Lake",
+          "url": "https://www.nslcity.org/250/City-Events",
+          "long_name": "nslcity.org",
+          "img": "https://imgs.search.brave.com/jOG3xjdkkcHjP0hyqbjnLLIVTMjFUznvZAcyVbelpvk/rs:fit:32:32:1:0/g:ce/aHR0cDovL2Zhdmlj/b25zLnNlYXJjaC5i/cmF2ZS5jb20vaWNv/bnMvZGNiNTMyZmEw/YWJlYmM1ZTgxMzM2/MDMzNjNlY2JiMThm/Njk4M2Q0NGUzNjE5/NjdjNWQxNjYyZWQ2/ODkxZDNlOC93d3cu/bnNsY2l0eS5vcmcv"
+        },
+        "language": "en",
+        "family_friendly": true,
+        "type": "search_result",
+        "subtype": "generic",
+        "is_live": false,
+        "meta_url": {
+          "scheme": "https",
+          "netloc": "nslcity.org",
+          "hostname": "www.nslcity.org",
+          "favicon": "https://imgs.search.brave.com/jOG3xjdkkcHjP0hyqbjnLLIVTMjFUznvZAcyVbelpvk/rs:fit:32:32:1:0/g:ce/aHR0cDovL2Zhdmlj/b25zLnNlYXJjaC5i/cmF2ZS5jb20vaWNv/bnMvZGNiNTMyZmEw/YWJlYmM1ZTgxMzM2/MDMzNjNlY2JiMThm/Njk4M2Q0NGUzNjE5/NjdjNWQxNjYyZWQ2/ODkxZDNlOC93d3cu/bnNsY2l0eS5vcmcv",
+          "path": "› 250  › City-Events"
+        },
+        "extra_snippets": [
+          "Events are hosted by a variety of groups—including the Youth City Council, the Civic Events Committee, the Arts Committee, the Health & Wellness Committee, and the City itself—at venues throughout North Salt Lake. Use the menu on this page to explore upcoming activities, and stay connected through social media, the City website, and the newsletter for the latest updates.",
+          "Discover the events and activities going on in and around the City of North Salt Lake."
+        ]
+      }
+    ],
+    "family_friendly": true
+  }
+}

@@ -1,0 +1,493 @@
+{
+  "openapi": "3.0.1",
+  "info": {
+    "title": "Medical Network Attachment Status v1",
+    "description": "Optum's Attachment Status API.",
+    "contact": {
+      "email": "pathfinders@optum.com"
+    },
+    "version": "1"
+  },
+  "servers": [
+    {
+      "url": "https://sandbox-apigw.optum.com/medicalnetwork/attachments/status/v1"
+    }
+  ],
+  "security": [
+    {
+      "bearerToken": []
+    }
+  ],
+  "paths": {
+    "/{traceId}": {
+      "get": {
+        "tags": [
+          "Attachment Status"
+        ],
+        "summary": "Endpoint to retrieve the attachment status based on traceId",
+        "description": "This endpoint used to retrieve the status of attachments submitted by submitter or payer.",
+        "parameters": [
+          {
+            "name": "traceId",
+            "in": "path",
+            "description": "attachment submitted traceId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "fieldset",
+            "in": "query",
+            "description": "It must be either 'summary' or 'detail'. Default value is 'summary'",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "summary",
+                "detail"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DetailedResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequest"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not Authorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotAuthorized"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/metadata": {
+      "post": {
+        "tags": [
+          "Attachment Status"
+        ],
+        "summary": "Endpoint to retrieve the attachment status based on metadata",
+        "description": "This endpoint used to retrieve the status of attachments submitted by submitter or payer.",
+        "requestBody": {
+          "description": "metadata json",
+          "content": {
+            "application/json": {
+              "schema": {
+                "required": [
+                  "transactionReceivedEndDate",
+                  "transactionReceivedStartDate"
+                ],
+                "type": "object",
+                "properties": {
+                  "submitterId": {
+                    "type": "string",
+                    "description": "Filter transaction status using Submitter ID"
+                  },
+                  "payerId": {
+                    "type": "string",
+                    "description": "Filter transaction status using Payer ID"
+                  },
+                  "claimStartDate": {
+                    "type": "string",
+                    "description": "Filter transaction status using Claim Start Date. Date should be YYYY-MM-DD",
+                    "example": "YYYY-MM-DD"
+                  },
+                  "claimEndDate": {
+                    "type": "string",
+                    "description": "Filter transaction status using Claim End Date. Date should be YYYY-MM-DD",
+                    "example": "YYYY-MM-DD"
+                  },
+                  "transactionReceivedStartDate": {
+                    "type": "string",
+                    "description": "Filter transaction status using Transaction Received Start Date. Date should be YYYY-MM-DD",
+                    "example": "YYYY-MM-DD"
+                  },
+                  "transactionReceivedEndDate": {
+                    "type": "string",
+                    "description": "Filter transaction status using Transaction Received End Date. Date should be YYYY-MM-DD",
+                    "example": "YYYY-MM-DD"
+                  },
+                  "controlNumber": {
+                    "type": "string",
+                    "description": "Filter transaction status using Claim Control Number"
+                  },
+                  "patientFirstName": {
+                    "type": "string",
+                    "description": "Filter transaction status using Patient First Name"
+                  },
+                  "patientLastName": {
+                    "type": "string",
+                    "description": "Filter transaction status using Patient Last Name"
+                  },
+                  "memberId": {
+                    "type": "string",
+                    "description": "Filter transaction status using Member ID"
+                  },
+                  "providerId": {
+                    "type": "string",
+                    "description": "Filter transaction status using Provider ID"
+                  },
+                  "providerFirstName": {
+                    "type": "string",
+                    "description": "Filter transaction status using Provider First Name"
+                  },
+                  "providerLastName": {
+                    "type": "string",
+                    "description": "Filter transaction status using Provider Last Name"
+                  },
+                  "payerName": {
+                    "type": "string",
+                    "description": "Filter transaction status using Payer Name"
+                  }
+                }
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MetadataResponses"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequest"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not Authorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotAuthorized"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-codegen-request-body-name": "data"
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ErrorResponse": {
+        "type": "object",
+        "properties": {
+          "statusCode": {
+            "type": "string"
+          },
+          "statusMessage": {
+            "type": "string"
+          }
+        },
+        "example": {
+          "statusCode": "ErrorResponseCode",
+          "statusMessage": "SystemErrors.INTERNAL_ERROR"
+        }
+      },
+      "BadRequest": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ErrorResponse"
+          }
+        ]
+      },
+      "UnAuthorized": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string"
+          },
+          "error_description": {
+            "type": "string"
+          }
+        },
+        "example": {
+          "error": "invalid_request",
+          "error_description": "The access token is missing"
+        }
+      },
+      "NotAuthorized": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/UnAuthorized"
+          }
+        ]
+      },
+      "TransactionDetails": {
+        "type": "object",
+        "properties": {
+          "submitterId": {
+            "type": "string"
+          },
+          "payerId": {
+            "type": "string"
+          },
+          "payerName": {
+            "type": "string"
+          },
+          "memberId": {
+            "type": "string"
+          },
+          "patientFirstName": {
+            "type": "string"
+          },
+          "patientLastName": {
+            "type": "string"
+          },
+          "providerId": {
+            "type": "string"
+          },
+          "providerFirstName": {
+            "type": "string"
+          },
+          "providerLastName": {
+            "type": "string"
+          },
+          "transactionSubmittedDate": {
+            "type": "string"
+          },
+          "rejectionInformation": {
+            "type": "string"
+          }
+        }
+      },
+      "DocumentDetails": {
+        "type": "object",
+        "properties": {
+          "documentName": {
+            "type": "string"
+          },
+          "controlNumber": {
+            "type": "string"
+          },
+          "statusCode": {
+            "type": "string",
+            "nullable": true
+          },
+          "statusMessage": {
+            "type": "string",
+            "nullable": true
+          },
+          "statusTimeStamp": {
+            "type": "string",
+            "nullable": true
+          },
+          "rejectionInformation": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "StatusDetails": {
+        "type": "object",
+        "properties": {
+          "statusMessage": {
+            "type": "string"
+          },
+          "statusCode": {
+            "type": "string"
+          },
+          "statusTimeStamp": {
+            "type": "string"
+          },
+          "documents": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DocumentDetails"
+            }
+          }
+        }
+      },
+      "SummaryResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/StatusDetails"
+          }
+        ]
+      },
+      "DetailedResponse": {
+        "type": "object",
+        "properties": {
+          "transactionDetails": {
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/TransactionDetails"
+              }
+            ]
+          },
+          "status": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StatusDetails"
+            }
+          }
+        }
+      },
+      "MetadataResponse": {
+        "type": "object",
+        "properties": {
+          "traceId": {
+            "type": "string"
+          },
+          "transactionDetails": {
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/TransactionDetails"
+              }
+            ]
+          },
+          "status": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StatusDetails"
+            }
+          }
+        }
+      },
+      "MetadataResponses": {
+        "type": "array",
+        "items": {
+          "$ref": "#/components/schemas/MetadataResponse"
+        }
+      },
+      "SummaryResponses": {
+        "type": "array",
+        "items": {
+          "$ref": "#/components/schemas/SummaryResponse"
+        }
+      }
+    },
+    "responses": {
+      "BadRequest": {
+        "description": "Bad Request",
+        "content": {
+          "*/*": {
+            "schema": {
+              "$ref": "#/components/schemas/BadRequest"
+            }
+          }
+        }
+      },
+      "DetailedResponse": {
+        "description": "Success",
+        "content": {
+          "*/*": {
+            "schema": {
+              "$ref": "#/components/schemas/DetailedResponse"
+            }
+          }
+        }
+      },
+      "InternalError": {
+        "description": "Internal Server Error",
+        "content": {
+          "*/*": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            }
+          }
+        }
+      },
+      "MetadataResponse": {
+        "description": "Success",
+        "content": {
+          "*/*": {
+            "schema": {
+              "$ref": "#/components/schemas/MetadataResponses"
+            }
+          }
+        }
+      },
+      "SummaryResponse": {
+        "description": "Success",
+        "content": {
+          "*/*": {
+            "schema": {
+              "$ref": "#/components/schemas/SummaryResponses"
+            }
+          }
+        }
+      },
+      "Unauthorized": {
+        "description": "Not Authorized",
+        "content": {
+          "*/*": {
+            "schema": {
+              "$ref": "#/components/schemas/NotAuthorized"
+            }
+          }
+        }
+      }
+    },
+    "securitySchemes": {
+      "bearerToken": {
+        "type": "apiKey",
+        "name": "Authorization",
+        "in": "header"
+      }
+    }
+  },
+  "x-readme": {
+    "explorer-enabled": true,
+    "proxy-enabled": true
+  }
+}

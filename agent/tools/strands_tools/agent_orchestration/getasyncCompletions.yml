@@ -1,0 +1,630 @@
+openapi: 3.1.0
+info:
+  title: Perplexity AI API
+  description: Perplexity AI API
+  version: 0.1.0
+servers: []
+security: []
+paths:
+  /async/chat/completions/{api_request}:
+    get:
+      summary: Get Async Chat Completion
+      description: Retrieve the response for a given asynchronous chat completion request.
+      operationId: >-
+        get_async_chat_completion_response_async_chat_completions__api_request__get
+      parameters:
+        - name: api_request
+          in: path
+          required: true
+          schema:
+            type: string
+            title: Api Request
+        - name: local_mode
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: false
+            title: Local Mode
+        - name: x-client-name
+          in: header
+          required: false
+          schema:
+            title: X-Client-Name
+            type: string
+        - name: x-client-env
+          in: header
+          required: false
+          schema:
+            title: X-Client-Env
+            type: string
+        - name: x-user-id
+          in: header
+          required: false
+          schema:
+            title: X-User-Id
+            type: string
+        - name: x-usage-tier
+          in: header
+          required: false
+          schema:
+            title: X-Usage-Tier
+            type: string
+        - name: x-request-time
+          in: header
+          required: false
+          schema:
+            title: X-Request-Time
+            type: string
+        - name: x-created-at-epoch-seconds
+          in: header
+          required: false
+          schema:
+            title: X-Created-At-Epoch-Seconds
+            type: string
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AsyncApiChatCompletionsResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+        - HTTPBearer: []
+components:
+  schemas:
+    AsyncApiChatCompletionsResponse:
+      properties:
+        id:
+          type: string
+          title: Id
+        model:
+          type: string
+          title: Model
+        created_at:
+          type: integer
+          title: Created At
+        started_at:
+          anyOf:
+            - type: integer
+            - type: 'null'
+          title: Started At
+        completed_at:
+          anyOf:
+            - type: integer
+            - type: 'null'
+          title: Completed At
+        response:
+          anyOf:
+            - $ref: '#/components/schemas/CompletionResponse'
+            - type: 'null'
+        failed_at:
+          anyOf:
+            - type: integer
+            - type: 'null'
+          title: Failed At
+        error_message:
+          anyOf:
+            - type: string
+            - type: 'null'
+          title: Error Message
+        status:
+          $ref: '#/components/schemas/AsyncProcessingStatus'
+      type: object
+      required:
+        - id
+        - model
+        - created_at
+        - status
+      title: AsyncApiChatCompletionsResponse
+    HTTPValidationError:
+      properties:
+        detail:
+          items:
+            $ref: '#/components/schemas/ValidationError'
+          type: array
+          title: Detail
+      type: object
+      title: HTTPValidationError
+    CompletionResponse:
+      properties:
+        id:
+          type: string
+          title: Id
+        model:
+          type: string
+          title: Model
+        created:
+          type: integer
+          title: Created
+        usage:
+          anyOf:
+            - $ref: '#/components/schemas/UsageInfo'
+            - type: 'null'
+        object:
+          type: string
+          title: Object
+          default: chat.completion
+        choices:
+          items:
+            $ref: '#/components/schemas/Choice'
+          type: array
+          title: Choices
+        citations:
+          anyOf:
+            - items:
+                type: string
+              type: array
+            - type: 'null'
+          title: Citations
+        search_results:
+          anyOf:
+            - items:
+                $ref: '#/components/schemas/ApiPublicSearchResult'
+              type: array
+            - type: 'null'
+          title: Search Results
+        type:
+          anyOf:
+            - $ref: '#/components/schemas/CompletionResponseType'
+            - type: 'null'
+        status:
+          anyOf:
+            - $ref: '#/components/schemas/CompletionResponseStatus'
+            - type: 'null'
+      type: object
+      required:
+        - id
+        - model
+        - created
+        - choices
+      title: CompletionResponse
+    AsyncProcessingStatus:
+      type: string
+      enum:
+        - CREATED
+        - IN_PROGRESS
+        - COMPLETED
+        - FAILED
+      title: AsyncProcessingStatus
+      description: Status enum for async processing.
+    ValidationError:
+      properties:
+        loc:
+          items:
+            anyOf:
+              - type: string
+              - type: integer
+          type: array
+          title: Location
+        msg:
+          type: string
+          title: Message
+        type:
+          type: string
+          title: Error Type
+      type: object
+      required:
+        - loc
+        - msg
+        - type
+      title: ValidationError
+    UsageInfo:
+      properties:
+        prompt_tokens:
+          type: integer
+          title: Prompt Tokens
+        completion_tokens:
+          type: integer
+          title: Completion Tokens
+        total_tokens:
+          type: integer
+          title: Total Tokens
+        search_context_size:
+          anyOf:
+            - type: string
+            - type: 'null'
+          title: Search Context Size
+        citation_tokens:
+          anyOf:
+            - type: integer
+            - type: 'null'
+          title: Citation Tokens
+        num_search_queries:
+          anyOf:
+            - type: integer
+            - type: 'null'
+          title: Num Search Queries
+        reasoning_tokens:
+          anyOf:
+            - type: integer
+            - type: 'null'
+          title: Reasoning Tokens
+        cost:
+          $ref: '#/components/schemas/Cost'
+      type: object
+      required:
+        - prompt_tokens
+        - completion_tokens
+        - total_tokens
+        - cost
+      title: UsageInfo
+    Choice:
+      properties:
+        index:
+          type: integer
+          title: Index
+        finish_reason:
+          anyOf:
+            - type: string
+              enum:
+                - stop
+                - length
+            - type: 'null'
+          title: Finish Reason
+        message:
+          $ref: '#/components/schemas/ChatMessage-Output'
+        delta:
+          $ref: '#/components/schemas/ChatMessage-Output'
+      type: object
+      required:
+        - index
+        - message
+        - delta
+      title: Choice
+    ApiPublicSearchResult:
+      properties:
+        title:
+          type: string
+          title: Title
+        url:
+          type: string
+          title: Url
+        date:
+          anyOf:
+            - type: string
+            - type: 'null'
+          title: Date
+        last_updated:
+          anyOf:
+            - type: string
+            - type: 'null'
+          title: Last Updated
+        snippet:
+          type: string
+          title: Snippet
+          default: ''
+        source:
+          type: string
+          enum:
+            - web
+            - attachment
+          title: Source
+          default: web
+      type: object
+      required:
+        - title
+        - url
+      title: ApiPublicSearchResult
+    CompletionResponseType:
+      type: string
+      enum:
+        - message
+        - info
+        - end_of_stream
+      title: CompletionResponseType
+    CompletionResponseStatus:
+      type: string
+      enum:
+        - PENDING
+        - COMPLETED
+      title: CompletionResponseStatus
+    Cost:
+      properties:
+        input_tokens_cost:
+          type: number
+          title: Input Tokens Cost
+        output_tokens_cost:
+          type: number
+          title: Output Tokens Cost
+        reasoning_tokens_cost:
+          anyOf:
+            - type: number
+            - type: 'null'
+          title: Reasoning Tokens Cost
+        request_cost:
+          anyOf:
+            - type: number
+            - type: 'null'
+          title: Request Cost
+        citation_tokens_cost:
+          anyOf:
+            - type: number
+            - type: 'null'
+          title: Citation Tokens Cost
+        search_queries_cost:
+          anyOf:
+            - type: number
+            - type: 'null'
+          title: Search Queries Cost
+        total_cost:
+          type: number
+          title: Total Cost
+      type: object
+      required:
+        - input_tokens_cost
+        - output_tokens_cost
+        - total_cost
+      title: Cost
+    ChatMessage-Output:
+      properties:
+        role:
+          $ref: '#/components/schemas/ChatMessageRole'
+        content:
+          anyOf:
+            - type: string
+            - items:
+                anyOf:
+                  - $ref: '#/components/schemas/ChatMessageContentTextChunk'
+                  - $ref: '#/components/schemas/ChatMessageContentImageChunk'
+                  - $ref: '#/components/schemas/ChatMessageContentFileChunk'
+                  - $ref: '#/components/schemas/ChatMessageContentPDFChunk'
+                  - $ref: '#/components/schemas/ChatMessageContentVideoChunk'
+              type: array
+              title: Structured Content
+            - type: 'null'
+          title: Content
+        reasoning_steps:
+          anyOf:
+            - items:
+                $ref: '#/components/schemas/ReasoningStep-Output'
+              type: array
+            - type: 'null'
+          title: Reasoning Steps
+        tool_calls:
+          anyOf:
+            - items:
+                $ref: '#/components/schemas/ToolCall'
+              type: array
+            - type: 'null'
+          title: Tool Calls
+        tool_call_id:
+          anyOf:
+            - type: string
+            - type: 'null'
+          title: Tool Call Id
+      type: object
+      required:
+        - role
+        - content
+      title: ChatMessage
+    ChatMessageRole:
+      type: string
+      enum:
+        - system
+        - user
+        - assistant
+        - tool
+      title: ChatMessageRole
+      description: Chat roles enum
+    ChatMessageContentTextChunk:
+      properties:
+        type:
+          type: string
+          const: text
+          title: Type
+        text:
+          type: string
+          title: Text
+      type: object
+      required:
+        - type
+        - text
+      title: ChatMessageContentTextChunk
+    ChatMessageContentImageChunk:
+      properties:
+        type:
+          type: string
+          const: image_url
+          title: Type
+        image_url:
+          anyOf:
+            - $ref: '#/components/schemas/URL'
+            - type: string
+          title: Image Url
+      type: object
+      required:
+        - type
+        - image_url
+      title: ChatMessageContentImageChunk
+    ChatMessageContentFileChunk:
+      properties:
+        type:
+          type: string
+          const: file_url
+          title: Type
+        file_url:
+          anyOf:
+            - $ref: '#/components/schemas/URL'
+            - type: string
+          title: File Url
+        file_name:
+          anyOf:
+            - type: string
+            - type: 'null'
+          title: File Name
+      type: object
+      required:
+        - type
+        - file_url
+      title: ChatMessageContentFileChunk
+    ChatMessageContentPDFChunk:
+      properties:
+        type:
+          type: string
+          const: pdf_url
+          title: Type
+        pdf_url:
+          anyOf:
+            - $ref: '#/components/schemas/URL'
+            - type: string
+          title: Pdf Url
+      type: object
+      required:
+        - type
+        - pdf_url
+      title: ChatMessageContentPDFChunk
+    ChatMessageContentVideoChunk:
+      properties:
+        type:
+          type: string
+          const: video_url
+          title: Type
+        video_url:
+          anyOf:
+            - $ref: '#/components/schemas/VideoURL'
+            - type: string
+          title: Video Url
+      type: object
+      required:
+        - type
+        - video_url
+      title: ChatMessageContentVideoChunk
+    ReasoningStep-Output:
+      properties:
+        thought:
+          type: string
+          title: Thought
+        type:
+          anyOf:
+            - type: string
+            - type: 'null'
+          title: Type
+        web_search:
+          anyOf:
+            - $ref: '#/components/schemas/WebSearchStepDetails'
+            - type: 'null'
+        fetch_url_content:
+          anyOf:
+            - $ref: '#/components/schemas/FetchUrlContentStepDetails'
+            - type: 'null'
+        execute_python:
+          anyOf:
+            - $ref: '#/components/schemas/ExecutePythonStepDetails'
+            - type: 'null'
+      type: object
+      required:
+        - thought
+      title: ReasoningStep
+      description: Reasoning step wrapper class
+    ToolCall:
+      properties:
+        id:
+          anyOf:
+            - type: string
+            - type: 'null'
+          title: Id
+        type:
+          anyOf:
+            - type: string
+              const: function
+            - type: 'null'
+          title: Type
+        function:
+          anyOf:
+            - $ref: '#/components/schemas/ToolCallFunction'
+            - type: 'null'
+      type: object
+      title: ToolCall
+    URL:
+      properties:
+        url:
+          type: string
+          title: Url
+      type: object
+      required:
+        - url
+      title: URL
+    VideoURL:
+      properties:
+        url:
+          type: string
+          title: Url
+        frame_interval:
+          anyOf:
+            - type: string
+            - type: integer
+          title: Frame Interval
+          default: 25
+      type: object
+      required:
+        - url
+      title: VideoURL
+    WebSearchStepDetails:
+      properties:
+        search_results:
+          items:
+            $ref: '#/components/schemas/ApiPublicSearchResult'
+          type: array
+          title: Search Results
+        search_keywords:
+          items:
+            type: string
+          type: array
+          title: Search Keywords
+      type: object
+      required:
+        - search_results
+        - search_keywords
+      title: WebSearchStepDetails
+      description: Web search step details wrapper class
+    FetchUrlContentStepDetails:
+      properties:
+        contents:
+          items:
+            $ref: '#/components/schemas/ApiPublicSearchResult'
+          type: array
+          title: Contents
+      type: object
+      required:
+        - contents
+      title: FetchUrlContentStepDetails
+      description: Fetch url content step details wrapper class
+    ExecutePythonStepDetails:
+      properties:
+        code:
+          type: string
+          title: Code
+        result:
+          type: string
+          title: Result
+      type: object
+      required:
+        - code
+        - result
+      title: ExecutePythonStepDetails
+      description: Code generation step details wrapper class
+    ToolCallFunction:
+      properties:
+        name:
+          anyOf:
+            - type: string
+            - type: 'null'
+          title: Name
+        arguments:
+          anyOf:
+            - type: string
+            - type: 'null'
+          title: Arguments
+      type: object
+      title: ToolCallFunction
+  securitySchemes:
+    HTTPBearer:
+      type: http
+      scheme: bearer

@@ -1,0 +1,205 @@
+openapi: 3.1.0
+info:
+  title: Perplexity AI API
+  description: Perplexity AI API
+  version: 0.1.0
+servers: []
+security: []
+paths:
+  /search:
+    post:
+      summary: Search the Web
+      description: Search the web and retrieve relevant web page contents.
+      operationId: search_search_post
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApiSearchRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiSearchResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+        - HTTPBearer: []
+components:
+  schemas:
+    ApiSearchRequest:
+      properties:
+        query:
+          anyOf:
+            - type: string
+            - items:
+                type: string
+              type: array
+          title: Query
+        max_tokens:
+          type: integer
+          title: Max Tokens
+          default: 10000
+        max_tokens_per_page:
+          type: integer
+          title: Max Tokens Per Page
+          default: 4096
+        max_results:
+          type: integer
+          title: Max Results
+          default: 10
+        search_domain_filter:
+          anyOf:
+            - items:
+                type: string
+              type: array
+            - type: 'null'
+          title: Search Domain Filter
+        search_language_filter:
+          anyOf:
+            - items:
+                type: string
+              type: array
+            - type: 'null'
+          title: Search Language Filter
+        search_recency_filter:
+          anyOf:
+            - type: string
+              enum:
+                - hour
+                - day
+                - week
+                - month
+                - year
+            - type: 'null'
+          title: Search Recency Filter
+        search_after_date_filter:
+          anyOf:
+            - type: string
+            - type: 'null'
+          title: Search After Date Filter
+        search_before_date_filter:
+          anyOf:
+            - type: string
+            - type: 'null'
+          title: Search Before Date Filter
+        last_updated_before_filter:
+          anyOf:
+            - type: string
+            - type: 'null'
+          title: Last Updated Before Filter
+        last_updated_after_filter:
+          anyOf:
+            - type: string
+            - type: 'null'
+          title: Last Updated After Filter
+        search_mode:
+          anyOf:
+            - type: string
+              enum:
+                - web
+                - academic
+                - sec
+            - type: 'null'
+          title: Search Mode
+        country:
+          anyOf:
+            - type: string
+            - type: 'null'
+          title: Country
+        display_server_time:
+          type: boolean
+          title: Display Server Time
+          default: false
+      type: object
+      required:
+        - query
+      title: ApiSearchRequest
+    ApiSearchResponse:
+      properties:
+        results:
+          items:
+            $ref: '#/components/schemas/ApiSearchPage'
+          type: array
+          title: Results
+        id:
+          type: string
+          title: Id
+        server_time:
+          anyOf:
+            - type: string
+            - type: 'null'
+          title: Server Time
+      type: object
+      required:
+        - results
+        - id
+      title: ApiSearchResponse
+    HTTPValidationError:
+      properties:
+        detail:
+          items:
+            $ref: '#/components/schemas/ValidationError'
+          type: array
+          title: Detail
+      type: object
+      title: HTTPValidationError
+    ApiSearchPage:
+      properties:
+        title:
+          type: string
+          title: Title
+        url:
+          type: string
+          title: Url
+        snippet:
+          type: string
+          title: Snippet
+        date:
+          anyOf:
+            - type: string
+            - type: 'null'
+          title: Date
+        last_updated:
+          anyOf:
+            - type: string
+            - type: 'null'
+          title: Last Updated
+      type: object
+      required:
+        - title
+        - url
+        - snippet
+      title: ApiSearchPage
+    ValidationError:
+      properties:
+        loc:
+          items:
+            anyOf:
+              - type: string
+              - type: integer
+          type: array
+          title: Location
+        msg:
+          type: string
+          title: Message
+        type:
+          type: string
+          title: Error Type
+      type: object
+      required:
+        - loc
+        - msg
+        - type
+      title: ValidationError
+  securitySchemes:
+    HTTPBearer:
+      type: http
+      scheme: bearer

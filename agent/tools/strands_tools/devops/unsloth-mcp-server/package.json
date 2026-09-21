@@ -1,0 +1,39 @@
+{
+  "name": "unsloth-mcp-server",
+  "version": "2.0.0",
+  "description": "Robust MCP server for Unsloth fine-tuning workflows",
+  "type": "module",
+  "main": "build/index.js",
+  "scripts": {
+    "build": "tsc && shx chmod +x build/*.js",
+    "start": "node build/index.js",
+    "start:stdio": "node build/stdio.js",
+    "dev:http": "concurrently \"tsc --watch\" \"nodemon --watch build build/index.js\"",
+    "dev:stdio": "concurrently \"tsc --watch\" \"nodemon --watch build build/stdio.js\""
+  },
+  "keywords": [
+    "unsloth",
+    "llm",
+    "fine-tuning",
+    "mcp",
+    "ai"
+  ],
+  "license": "Apache-2.0",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.10.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "node-fetch": "^3.3.2",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.17",
+    "@types/express": "^5.0.1",
+    "@types/node": "^20.8.10",
+    "concurrently": "^8.2.2",
+    "nodemon": "^3.1.9",
+    "shx": "^0.3.4",
+    "typescript": "^5.2.2"
+  }
+}

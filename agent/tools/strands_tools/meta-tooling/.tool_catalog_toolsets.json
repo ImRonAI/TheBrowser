@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "toolsets": {
+    "prototype_catalog_smoke_799c2e3f": {
+      "description": "prototype smoke toolset",
+      "tool_names": [
+        "current_time",
+        "batch"
+      ]
+    }
+  }
+}

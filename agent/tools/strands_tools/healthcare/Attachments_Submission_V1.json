@@ -1,0 +1,795 @@
+{
+  "info": {
+    "version": "v1",
+    "description": "275 Attachments Transaction",
+    "title": "Medical Network Attachments Submission v1"
+  },
+  "paths": {
+    "/healthcheck": {
+      "get": {
+        "operationId": "healthCheck",
+        "summary": "Health Check",
+        "responses": {
+          "200": {
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "description": "Bearer Your-Access-Token<br/>Example: <b>Bearer eyJraWQiOiIxIiwid…</b>",
+            "required": true,
+            "name": "Authorization",
+            "in": "header"
+          }
+        ],
+        "tags": [
+          "Health Check"
+        ]
+      }
+    },
+    "/uploads": {
+      "post": {
+        "responses": {
+          "200": {
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/Response"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "500": {
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/InternalErrorResponse"
+                }
+              }
+            },
+            "description": "Internal Server"
+          }
+        },
+        "description": "275 JSON and File, see OpenAPI components for Request schema.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "description": "Bearer Your-Access-Token<br/>Example: <b>Bearer eyJraWQiOiIxIiwid…</b>",
+            "required": true,
+            "name": "Authorization",
+            "in": "header"
+          }
+        ],
+        "tags": [
+          "Attachment Submission"
+        ],
+        "summary": "Attachment Submission",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "required": [
+                  "files"
+                ],
+                "type": "object",
+                "properties": {
+                  "files": {
+                    "items": {
+                      "type": "string",
+                      "format": "binary"
+                    },
+                    "type": "array"
+                  },
+                  "request": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "upload"
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "Health Check",
+      "description": "Health Check"
+    },
+    {
+      "name": "Attachment Submission",
+      "description": "Attachment Submission"
+    },
+    {
+      "name": "Attachment Status",
+      "description": "Attachment Status"
+    }
+  ],
+  "servers": [
+    {
+      "url": "https://sandbox-apigw.optum.com/medicalnetwork/attachments/submission/v1/",
+      "description": "Optum"
+    }
+  ],
+  "components": {
+    "schemas": {
+      "Subscriber": {
+        "required": [
+          "firstName",
+          "lastName",
+          "memberId"
+        ],
+        "type": "object",
+        "properties": {
+          "middleName": {
+            "description": "NM105 when NM102 = 1; LOOP 1000D",
+            "default": "Middleone",
+            "minLength": 1,
+            "maxLength": 25,
+            "type": "string",
+            "example": "Middleone"
+          },
+          "lastName": {
+            "description": "NM103 when NM102 = 1; LOOP 1000D",
+            "default": "Doeone",
+            "minLength": 1,
+            "maxLength": 60,
+            "type": "string",
+            "example": "Doeone"
+          },
+          "memberId": {
+            "default": "0000000001",
+            "type": "string",
+            "description": "NM109 when NM108 = MI; LOOP 1000D",
+            "example": "0000000001"
+          },
+          "firstName": {
+            "description": "NM104 when NM102 = 1; LOOP 1000D",
+            "default": "Jane",
+            "minLength": 1,
+            "maxLength": 35,
+            "type": "string",
+            "example": "Jane"
+          },
+          "suffix": {
+            "minLength": 1,
+            "type": "string",
+            "description": "NM107 when NM102 = 1; LOOP 1000D",
+            "maxLength": 10
+          }
+        },
+        "description": "Subscriber/Patient Name when NM101 = QC; LOOP 1000D"
+      },
+      "ProcedureOrRevenueDetails": {
+        "required": [
+          "procedureOrRevenueCode",
+          "procedureOrRevenueValue"
+        ],
+        "type": "object",
+        "properties": {
+          "procedureOrRevenueValue": {
+            "minLength": 1,
+            "type": "string",
+            "description": "REF02; LOOP 2000A",
+            "maxLength": 20
+          },
+          "revenueCode": {
+            "type": "string",
+            "description": "REF04-2 when REF04-1 = YJ; LOOP 2000A"
+          },
+          "procedureOrRevenueCode": {
+            "minLength": 2,
+            "maxLength": 3,
+            "type": "string",
+            "description": "REF01; LOOP 2000A",
+            "example": "CPT, F8, FO, PRT, RB, VP, YJ, ZZ"
+          }
+        },
+        "description": "ProcedureOrRevenueDetails REF; LOOP 2000A"
+      },
+      "Dependent": {
+        "required": [
+          "firstName",
+          "lastName"
+        ],
+        "type": "object",
+        "properties": {
+          "lastName": {
+            "type": "string"
+          },
+          "firstName": {
+            "type": "string"
+          }
+        }
+      },
+      "ClaimStatus": {
+        "required": [
+          "additionalInformationRequestCode",
+          "claimStatusCategoryCode"
+        ],
+        "type": "object",
+        "properties": {
+          "additionalInformationRequestCode": {
+            "minLength": 1,
+            "type": "string",
+            "description": "STC01-2; LOOP 2000A",
+            "maxLength": 30
+          },
+          "claimStatusCategoryCode": {
+            "minLength": 1,
+            "type": "string",
+            "description": "STC01-1; LOOP 2000A",
+            "maxLength": 30
+          }
+        },
+        "description": "Claim Status Information STC; LOOP 2000A"
+      },
+      "InternalError": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "example": "500"
+          },
+          "timestamp": {
+            "type": "string",
+            "example": "2022-04-06T15:58:17.478+00:00"
+          },
+          "message": {
+            "type": "string",
+            "example": "NullPointerException"
+          },
+          "path": {
+            "type": "string",
+            "example": "attachments/uploads"
+          },
+          "error": {
+            "type": "string",
+            "example": "Internal Server Error"
+          }
+        },
+        "description": "Error"
+      },
+      "Error": {
+        "type": "object",
+        "properties": {
+          "followupAction": {
+            "type": "string"
+          },
+          "field": {
+            "type": "string"
+          },
+          "code": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "location": {
+            "type": "string"
+          }
+        },
+        "description": "Error"
+      },
+      "Request": {
+        "required": [
+          "claimInformation",
+          "controlNumber",
+          "provider",
+          "submitter",
+          "subscriber",
+          "tradingPartnerServiceId",
+          "tradingPartnerName"
+        ],
+        "type": "object",
+        "properties": {
+          "payerAddress": {
+            "$ref": "#/components/schemas/Address"
+          },
+          "tradingPartnerId": {
+            "type": "string"
+          },
+          "payerFaxNumber": {
+            "type": "string"
+          },
+          "tradingPartnerServiceId": {
+            "default": "9496",
+            "type": "string",
+            "description": "NM109 when NM101 = PR and NM102 = 2 and NM108 = PI",
+            "example": "9496"
+          },
+          "controlNumber": {
+            "description": "ST02",
+            "default": "000000001",
+            "minLength": 9,
+            "maxLength": 9,
+            "type": "string",
+            "example": "000000001"
+          },
+          "subscriber": {
+            "$ref": "#/components/schemas/Subscriber"
+          },
+          "submitter": {
+            "$ref": "#/components/schemas/Submitter"
+          },
+          "claimInformation": {
+            "$ref": "#/components/schemas/ClaimInformation"
+          },
+          "provider": {
+            "$ref": "#/components/schemas/Provider"
+          },
+          "tradingPartnerName": {
+            "type": "string",
+            "description": "NM103 when NM101 = PR and NM102 = 2"
+          },
+          "dependent": {
+            "$ref": "#/components/schemas/Dependent"
+          }
+        },
+        "description": "Request"
+      },
+      "AttachmentDetails": {
+        "required": [
+          "name"
+        ],
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "attachment file name",
+            "example": "rightarm.jpg"
+          }
+        },
+        "description": "AttachmentDetails: CAT and BIN; LOOP 2100B and 2110B"
+      },
+      "InternalErrorResponse": {
+        "type": "object",
+        "$ref": "#/components/schemas/InternalError"
+      },
+      "Provider": {
+        "required": [
+          "address",
+          "npi"
+        ],
+        "type": "object",
+        "properties": {
+          "npi": {
+            "description": "NM109 when NM108 = XX; LOOP 1000C",
+            "default": "1760854442",
+            "minLength": 2,
+            "maxLength": 80,
+            "type": "string",
+            "example": "1760854442"
+          },
+          "suffix": {
+            "minLength": 1,
+            "type": "string",
+            "description": "NM107 when NM102 = 1; LOOP 1000C",
+            "maxLength": 10
+          },
+          "firstName": {
+            "description": "NM104 when NM102 = 1; LOOP 1000C",
+            "default": "Jane",
+            "minLength": 1,
+            "maxLength": 35,
+            "type": "string",
+            "example": "Jane"
+          },
+          "middleName": {
+            "description": "NM105 when NM102 = 1; LOOP 1000C",
+            "default": "Middleone",
+            "minLength": 1,
+            "maxLength": 25,
+            "type": "string",
+            "example": "Middleone"
+          },
+          "lastName": {
+            "description": "NM103 when NM102 = 1; LOOP 1000C",
+            "default": "Doeone",
+            "minLength": 1,
+            "maxLength": 60,
+            "type": "string",
+            "example": "Doeone"
+          },
+          "locationNumber": {
+            "minLength": 1,
+            "type": "string",
+            "description": "REF02 when REF01 = LU; LOOP 1000C",
+            "maxLength": 50
+          },
+          "faxNumber": {
+            "type": "string"
+          },
+          "providerUpinNumber": {
+            "minLength": 1,
+            "type": "string",
+            "description": "REF02 when REF01 = 1G; LOOP 1000C",
+            "maxLength": 50
+          },
+          "taxonomyCode": {
+            "minLength": 1,
+            "type": "string",
+            "description": "PRV03 when PRV01 = BI and PRV02 = PXC ; LOOP 1000C",
+            "maxLength": 50
+          },
+          "phoneNumber": {
+            "type": "string"
+          },
+          "stateLicenseNumber": {
+            "minLength": 1,
+            "type": "string",
+            "description": "REF02 when REF01 = 0B; LOOP 1000C",
+            "maxLength": 50
+          },
+          "providerCommercialNumber": {
+            "minLength": 1,
+            "type": "string",
+            "description": "REF02 when REF01 = G2; LOOP 1000C",
+            "maxLength": 50
+          },
+          "address": {
+            "$ref": "#/components/schemas/Address"
+          },
+          "organizationName": {
+            "description": "NM103 when NM102 = 2; LOOP 1000C",
+            "default": "HAPPY DOCTORS GROUP",
+            "minLength": 1,
+            "maxLength": 60,
+            "type": "string",
+            "example": "HAPPY DOCTORS GROUP"
+          }
+        },
+        "description": "Provider Name Information when NM101 = 1P; LOOP 1000C"
+      },
+      "ServiceLine": {
+        "required": [
+          "attachmentDetails",
+          "serviceLineDateInformation"
+        ],
+        "type": "object",
+        "properties": {
+          "claimStatus": {
+            "minItems": 0,
+            "items": {
+              "$ref": "#/components/schemas/ClaimStatus"
+            },
+            "type": "array",
+            "maxItems": 3
+          },
+          "attachmentDetails": {
+            "$ref": "#/components/schemas/AttachmentDetails"
+          },
+          "providerAttachmentControlNumber": {
+            "description": "TRN02 When TRN01 = 1; LOOP 2000A",
+            "default": "12345",
+            "minLength": 1,
+            "maxLength": 50,
+            "type": "string",
+            "example": "12345"
+          },
+          "lineItemControlNumber": {
+            "description": "REF02 When REF01 = FJ; LOOP 2000A",
+            "default": "12345",
+            "minLength": 1,
+            "maxLength": 50,
+            "type": "string",
+            "example": "12345"
+          },
+          "procedureCodeModifier": {
+            "$ref": "#/components/schemas/ProcedureCodeModifier"
+          },
+          "providerControlNumber": {
+            "description": "REF02 When REF01 = 6R; LOOP 2000A",
+            "default": "12345",
+            "minLength": 1,
+            "maxLength": 50,
+            "type": "string",
+            "example": "12345"
+          },
+          "procedureOrRevenueDetails": {
+            "$ref": "#/components/schemas/ProcedureOrRevenueDetails"
+          },
+          "payerClaimControlNumber": {
+            "description": "BGN02 When BGN01 = 11; TRN02 When TRN01 = 2; LOOP 2000A",
+            "default": "12345",
+            "minLength": 1,
+            "maxLength": 50,
+            "type": "string",
+            "example": "12345"
+          },
+          "serviceLineDateInformation": {
+            "$ref": "#/components/schemas/ServiceLineDateInformation"
+          }
+        },
+        "description": "ServiceLine"
+      },
+      "ProcedureCodeModifier": {
+        "required": [
+          "serviceChangeNumber"
+        ],
+        "type": "object",
+        "properties": {
+          "objectCode": {
+            "type": "string",
+            "description": "REF04-2; LOOP 2000A",
+            "example": "objectCode12345"
+          },
+          "serviceChangeNumber": {
+            "description": "REF02; LOOP 2000A",
+            "default": "12345",
+            "minLength": 1,
+            "maxLength": 50,
+            "type": "string",
+            "example": "12345"
+          },
+          "specialPaymentReferenceNumber": {
+            "type": "string",
+            "description": "REF04-6 when REF04-5 = 4N; LOOP 2000A",
+            "example": "12347"
+          },
+          "systemNumber": {
+            "type": "string",
+            "description": "REF04-4 when REF04-3 = 06; LOOP 2000A",
+            "example": "12346"
+          }
+        },
+        "description": "ProcedureCodeModifier REF when REF01 = SK; LOOP 2000A"
+      },
+      "Submitter": {
+        "type": "object",
+        "properties": {
+          "lastName": {
+            "minLength": 1,
+            "maxLength": 60,
+            "type": "string",
+            "description": "NM103 when NM102 = 1; LOOP 1000B",
+            "example": "Doeone"
+          },
+          "etin": {
+            "description": "NM109 when NM108 = 46; LOOP 1000B",
+            "default": "1942788757",
+            "minLength": 2,
+            "maxLength": 80,
+            "type": "string",
+            "example": "1942788757"
+          },
+          "organizationName": {
+            "description": "NM103 when NM102 = 2; LOOP 1000B",
+            "default": "REGIONAL PPO NETWORK",
+            "minLength": 1,
+            "maxLength": 60,
+            "type": "string",
+            "example": "REGIONAL PPO NETWORK"
+          },
+          "firstName": {
+            "minLength": 1,
+            "maxLength": 35,
+            "type": "string",
+            "description": "NM104 when NM102 = 1; LOOP 1000B",
+            "example": "John"
+          }
+        },
+        "description": "Submitter Information when NM101 = 41; LOOP 1000B"
+      },
+      "ClaimInformation": {
+        "required": [
+          "patientControlNumber",
+          "serviceLines"
+        ],
+        "type": "object",
+        "properties": {
+          "patientControlNumber": {
+            "description": "REF02 when REF01 = EJ; LOOP 1000D",
+            "default": "12345",
+            "minLength": 1,
+            "maxLength": 50,
+            "type": "string",
+            "example": "12345"
+          },
+          "claimNumber": {
+            "minLength": 1,
+            "type": "string",
+            "description": "REF02 when REF01 = D9; LOOP 1000D",
+            "maxLength": 50
+          },
+          "billingTypeIdentifier": {
+            "minLength": 1,
+            "type": "string",
+            "description": "REF02 when REF01 = BLT; LOOP 1000D",
+            "maxLength": 50
+          },
+          "medicalRecordIdentifier": {
+            "minLength": 1,
+            "type": "string",
+            "description": "REF02 when REF01 = EA; LOOP 1000D",
+            "maxLength": 50
+          },
+          "claimServiceDate": {
+            "minLength": 1,
+            "type": "string",
+            "description": "DTP03 when DTP01 = 472 and DTP02 = D8; LOOP 1000D",
+            "maxLength": 35
+          },
+          "endClaimServiceDate": {
+            "description": "DTP03 when DTP01 = 472 and DTP02 = RD8 end date; LOOP 1000D",
+            "default": "20050515",
+            "minLength": 1,
+            "maxLength": 35,
+            "type": "string",
+            "example": "20050515"
+          },
+          "serviceLines": {
+            "items": {
+              "$ref": "#/components/schemas/ServiceLine"
+            },
+            "type": "array"
+          },
+          "beginClaimServiceDate": {
+            "description": "DTP03 when DTP01 = 472 and DTP02 = RD8 start date; LOOP 1000D",
+            "default": "20050514",
+            "minLength": 1,
+            "maxLength": 35,
+            "type": "string",
+            "example": "20050514"
+          }
+        },
+        "description": "ClaimInformation; LOOP 1000D"
+      },
+      "Address": {
+        "required": [
+          "address1",
+          "city",
+          "postalCode",
+          "state"
+        ],
+        "type": "object",
+        "properties": {
+          "postalCode": {
+            "description": "N403",
+            "default": "981010000",
+            "minLength": 3,
+            "maxLength": 15,
+            "type": "string",
+            "example": "981010000"
+          },
+          "address1": {
+            "description": "N301",
+            "default": "123 address1",
+            "minLength": 1,
+            "maxLength": 55,
+            "type": "string",
+            "example": "123 address1"
+          },
+          "address2": {
+            "minLength": 1,
+            "type": "string",
+            "maxLength": 55
+          },
+          "state": {
+            "description": "N402",
+            "default": "wa",
+            "minLength": 2,
+            "maxLength": 2,
+            "type": "string",
+            "example": "wa"
+          },
+          "city": {
+            "description": "N401",
+            "default": "city1",
+            "minLength": 2,
+            "maxLength": 30,
+            "type": "string",
+            "example": "city1"
+          }
+        },
+        "description": "Address N3 and N4"
+      },
+      "ServiceLineDateInformation": {
+        "required": [
+          "submissionDate"
+        ],
+        "type": "object",
+        "properties": {
+          "beginServiceDate": {
+            "description": "DTP03 when DTP01 = 472 and DTP02 = RD8 start date; LOOP 2100A",
+            "default": "20050514",
+            "minLength": 1,
+            "maxLength": 35,
+            "type": "string",
+            "example": "20050514"
+          },
+          "endServiceDate": {
+            "description": "DTP03 when DTP01 = 472 and DTP02 = RD8 end date; LOOP 2100A",
+            "default": "20050515",
+            "minLength": 1,
+            "maxLength": 35,
+            "type": "string",
+            "example": "20050515"
+          },
+          "serviceDate": {
+            "description": "DTP03 when DTP01 = 472 and DTP02 = D8; LOOP 2100A",
+            "default": "20050515",
+            "minLength": 1,
+            "maxLength": 35,
+            "type": "string",
+            "example": "20050515"
+          },
+          "submissionDate": {
+            "description": "DTP03 when DTP01 = 368 and DTP02 = D8; LOOP 2100B",
+            "default": "20050515",
+            "minLength": 1,
+            "maxLength": 35,
+            "type": "string",
+            "example": "20050515"
+          }
+        },
+        "description": "ServiceLineDateInformation DTP: LOOP 2100A and 2100B"
+      },
+      "Response": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "implementationTransactionSetSyntaxError": {
+            "type": "string"
+          },
+          "attachmentId": {
+            "type": "string"
+          },
+          "transactionSetAcknowledgement": {
+            "type": "string"
+          }
+        }
+      },
+      "ErrorResponse": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "errors": {
+            "items": {
+              "$ref": "#/components/schemas/Error"
+            },
+            "type": "array"
+          }
+        }
+      }
+    }
+  },
+  "openapi": "3.0.1",
+  "x-readme": {
+    "explorer-enabled": true,
+    "proxy-enabled": true
+  }
+}

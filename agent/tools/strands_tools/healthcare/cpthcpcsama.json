@@ -1,0 +1,147 @@
+{
+  "openapi": "3.0.2",
+  "info": {
+    "title": "CPT Zip API",
+    "description": "CPT Bulk Zip API",
+    "contact": {
+      "email": "datalabs@ama-assn.org"
+    },
+    "version": "1.0.0"
+  },
+  "servers": [
+    {
+      "url": "https://api-platform.ama-assn.org/cpt-zip/1.0.0"
+    }
+  ],
+  "security": [
+    {
+      "default": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "Files",
+      "description": "Provides a zip archive of the standard CPT distribution files"
+    },
+    {
+      "name": "Releases",
+      "description": "All release data in descending order of date"
+    }
+  ],
+  "paths": {
+    "/files": {
+      "get": {
+        "tags": [
+          "Files"
+        ],
+        "summary": "Zip archive of the CPT standard distribution data files",
+        "description": "Provides a temporary download URL to the zip archive of the standard CPT distribution files. By default a URL to the most recent release files is returned.",
+        "operationId": "getFiles",
+        "parameters": [
+          {
+            "name": "release",
+            "in": "query",
+            "description": "ID of a previous release (i.e. ANNUAL-2023 or PLA-Q2-2022)",
+            "required": false,
+            "style": "form",
+            "explode": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/zip": {}
+            }
+          },
+          "303": {
+            "description": "successful creation of a time-limited download URL",
+            "headers": {
+              "Location": {
+                "style": "simple",
+                "explode": false,
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "default": []
+          }
+        ],
+        "x-auth-type": "Application & Application User",
+        "x-throttling-tier": "Unlimited"
+      }
+    },
+    "/releases": {
+      "get": {
+        "tags": [
+          "Releases"
+        ],
+        "summary": "Release data in descending order of date",
+        "description": "Allows user to query for updates to expose release data in descending order of date",
+        "operationId": "getReleaseDate",
+        "responses": {
+          "200": {
+            "description": "successful operation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Release"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "default": []
+          }
+        ],
+        "x-auth-type": "Application & Application User",
+        "x-throttling-tier": "Unlimited"
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Release": {
+        "required": [
+          "date",
+          "id"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "ANNUAL-2023"
+          },
+          "date": {
+            "type": "string",
+            "example": "2022-09-09"
+          }
+        }
+      }
+    },
+    "securitySchemes": {
+      "default": {
+        "type": "oauth2",
+        "flows": {
+          "implicit": {
+            "authorizationUrl": "https://api-platform.ama-assn.org/authorize",
+            "scopes": {}
+          }
+        }
+      }
+    }
+  }
+}

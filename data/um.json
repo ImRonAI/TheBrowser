@@ -1,0 +1,668 @@
+{
+  "type": "search",
+  "query": {
+    "original": "Utilization Review Medical Necessity",
+    "show_strict_warning": false,
+    "is_navigational": false,
+    "is_news_breaking": false,
+    "spellcheck_off": true,
+    "country": "us",
+    "bad_results": false,
+    "should_fallback": false,
+    "postal_code": "",
+    "city": "",
+    "header_country": "",
+    "more_results_available": true,
+    "state": ""
+  },
+  "mixed": {
+    "type": "mixed",
+    "main": [
+      {
+        "type": "web",
+        "index": 0,
+        "all": false
+      },
+      {
+        "type": "web",
+        "index": 1,
+        "all": false
+      },
+      {
+        "type": "web",
+        "index": 2,
+        "all": false
+      },
+      {
+        "type": "web",
+        "index": 3,
+        "all": false
+      },
+      {
+        "type": "web",
+        "index": 4,
+        "all": false
+      },
+      {
+        "type": "web",
+        "index": 5,
+        "all": false
+      },
+      {
+        "type": "web",
+        "index": 6,
+        "all": false
+      },
+      {
+        "type": "web",
+        "index": 7,
+        "all": false
+      },
+      {
+        "type": "web",
+        "index": 8,
+        "all": false
+      },
+      {
+        "type": "web",
+        "index": 9,
+        "all": false
+      },
+      {
+        "type": "web",
+        "index": 10,
+        "all": false
+      },
+      {
+        "type": "web",
+        "index": 11,
+        "all": false
+      },
+      {
+        "type": "web",
+        "index": 12,
+        "all": false
+      },
+      {
+        "type": "web",
+        "index": 13,
+        "all": false
+      },
+      {
+        "type": "web",
+        "index": 14,
+        "all": false
+      },
+      {
+        "type": "web",
+        "index": 15,
+        "all": false
+      },
+      {
+        "type": "web",
+        "index": 16,
+        "all": false
+      },
+      {
+        "type": "web",
+        "index": 17,
+        "all": false
+      },
+      {
+        "type": "web",
+        "index": 18,
+        "all": false
+      },
+      {
+        "type": "web",
+        "index": 19,
+        "all": false
+      }
+    ],
+    "top": [],
+    "side": []
+  },
+  "web": {
+    "type": "search",
+    "results": [
+      {
+        "title": "Legal Implications of Utilization Review - Controlling Costs and Changing Patient Care? - NCBI Bookshelf",
+        "url": "https://www.ncbi.nlm.nih.gov/books/NBK234991/",
+        "is_source_local": false,
+        "is_source_both": false,
+        "description": "The recent decade has seen a dramatic increase in the use of utilization review (UR) programs in an effort to stem the tide of rising health care costs. UR <strong>serves to verify the medical necessity of hospital admissions and specific medical procedures</strong>.",
+        "profile": {
+          "name": "NCBI",
+          "url": "https://www.ncbi.nlm.nih.gov/books/NBK234991/",
+          "long_name": "National Center for Biotechnology Information",
+          "img": "https://imgs.search.brave.com/gkBxwO1sOZFgZOmbyXRMgmUn2dO-t_REnly3tO-atyQ/rs:fit:32:32:1:0/g:ce/aHR0cDovL2Zhdmlj/b25zLnNlYXJjaC5i/cmF2ZS5jb20vaWNv/bnMvZjgxNzE0Nzlj/MzAxYmYwZjU0ODNi/MDgyYzdiMDY1NWJl/Y2I1ODFjOGQwYmYw/ODdkY2Y4MmE4NTE5/ZDZiMDZlZS93d3cu/bmNiaS5ubG0ubmlo/Lmdvdi8"
+        },
+        "language": "en",
+        "family_friendly": true,
+        "type": "search_result",
+        "subtype": "generic",
+        "is_live": false,
+        "meta_url": {
+          "scheme": "https",
+          "netloc": "ncbi.nlm.nih.gov",
+          "hostname": "www.ncbi.nlm.nih.gov",
+          "favicon": "https://imgs.search.brave.com/gkBxwO1sOZFgZOmbyXRMgmUn2dO-t_REnly3tO-atyQ/rs:fit:32:32:1:0/g:ce/aHR0cDovL2Zhdmlj/b25zLnNlYXJjaC5i/cmF2ZS5jb20vaWNv/bnMvZjgxNzE0Nzlj/MzAxYmYwZjU0ODNi/MDgyYzdiMDY1NWJl/Y2I1ODFjOGQwYmYw/ODdkY2Y4MmE4NTE5/ZDZiMDZlZS93d3cu/bmNiaS5ubG0ubmlo/Lmdvdi8",
+          "path": "› books  › NBK234991"
+        }
+      },
+      {
+        "title": "Utilization Management - StatPearls - NCBI Bookshelf",
+        "url": "https://www.ncbi.nlm.nih.gov/books/NBK560806/",
+        "is_source_local": false,
+        "is_source_both": false,
+        "description": "Utilization Management (UM), initially referred to as Utilization Review (UR), remains <strong>a well-recognized component of a cost management approach in the health care service delivery and payment arenas</strong>. UM processes include interventions that take place before, during, and after the clinical ...",
+        "page_age": "2023-07-10T00:00:00",
+        "profile": {
+          "name": "NCBI",
+          "url": "https://www.ncbi.nlm.nih.gov/books/NBK560806/",
+          "long_name": "National Center for Biotechnology Information",
+          "img": "https://imgs.search.brave.com/gkBxwO1sOZFgZOmbyXRMgmUn2dO-t_REnly3tO-atyQ/rs:fit:32:32:1:0/g:ce/aHR0cDovL2Zhdmlj/b25zLnNlYXJjaC5i/cmF2ZS5jb20vaWNv/bnMvZjgxNzE0Nzlj/MzAxYmYwZjU0ODNi/MDgyYzdiMDY1NWJl/Y2I1ODFjOGQwYmYw/ODdkY2Y4MmE4NTE5/ZDZiMDZlZS93d3cu/bmNiaS5ubG0ubmlo/Lmdvdi8"
+        },
+        "language": "en",
+        "family_friendly": true,
+        "type": "search_result",
+        "subtype": "generic",
+        "is_live": false,
+        "meta_url": {
+          "scheme": "https",
+          "netloc": "ncbi.nlm.nih.gov",
+          "hostname": "www.ncbi.nlm.nih.gov",
+          "favicon": "https://imgs.search.brave.com/gkBxwO1sOZFgZOmbyXRMgmUn2dO-t_REnly3tO-atyQ/rs:fit:32:32:1:0/g:ce/aHR0cDovL2Zhdmlj/b25zLnNlYXJjaC5i/cmF2ZS5jb20vaWNv/bnMvZjgxNzE0Nzlj/MzAxYmYwZjU0ODNi/MDgyYzdiMDY1NWJl/Y2I1ODFjOGQwYmYw/ODdkY2Y4MmE4NTE5/ZDZiMDZlZS93d3cu/bmNiaS5ubG0ubmlo/Lmdvdi8",
+          "path": "› books  › NBK560806"
+        },
+        "age": "July 10, 2023"
+      },
+      {
+        "title": "Utilization Management: Introduction and Definitions - Controlling Costs and Changing Patient Care? - NCBI Bookshelf",
+        "url": "https://www.ncbi.nlm.nih.gov/books/NBK234995/",
+        "is_source_local": false,
+        "is_source_both": false,
+        "description": "Prior review <strong>provides advance evaluation of whether medical services proposed for a specific person conform to provisions of health plans that limit coverage to medically necessary care</strong>.2 Most prior review programs include an integrated set of review steps, not all of which will apply to any ...",
+        "profile": {
+          "name": "NCBI",
+          "url": "https://www.ncbi.nlm.nih.gov/books/NBK234995/",
+          "long_name": "National Center for Biotechnology Information",
+          "img": "https://imgs.search.brave.com/gkBxwO1sOZFgZOmbyXRMgmUn2dO-t_REnly3tO-atyQ/rs:fit:32:32:1:0/g:ce/aHR0cDovL2Zhdmlj/b25zLnNlYXJjaC5i/cmF2ZS5jb20vaWNv/bnMvZjgxNzE0Nzlj/MzAxYmYwZjU0ODNi/MDgyYzdiMDY1NWJl/Y2I1ODFjOGQwYmYw/ODdkY2Y4MmE4NTE5/ZDZiMDZlZS93d3cu/bmNiaS5ubG0ubmlo/Lmdvdi8"
+        },
+        "language": "en",
+        "family_friendly": true,
+        "type": "search_result",
+        "subtype": "generic",
+        "is_live": false,
+        "meta_url": {
+          "scheme": "https",
+          "netloc": "ncbi.nlm.nih.gov",
+          "hostname": "www.ncbi.nlm.nih.gov",
+          "favicon": "https://imgs.search.brave.com/gkBxwO1sOZFgZOmbyXRMgmUn2dO-t_REnly3tO-atyQ/rs:fit:32:32:1:0/g:ce/aHR0cDovL2Zhdmlj/b25zLnNlYXJjaC5i/cmF2ZS5jb20vaWNv/bnMvZjgxNzE0Nzlj/MzAxYmYwZjU0ODNi/MDgyYzdiMDY1NWJl/Y2I1ODFjOGQwYmYw/ODdkY2Y4MmE4NTE5/ZDZiMDZlZS93d3cu/bmNiaS5ubG0ubmlo/Lmdvdi8",
+          "path": "› books  › NBK234995"
+        }
+      },
+      {
+        "title": "Origins of Utilization Management - Controlling Costs and Changing Patient Care? - NCBI Bookshelf",
+        "url": "https://www.ncbi.nlm.nih.gov/books/NBK235002/",
+        "is_source_local": false,
+        "is_source_both": false,
+        "description": "Hospitals and extended-care facilities were required, as a condition of participation in Medicare, to have operational utilization review committees to <strong>assure the medical necessity and quality of care &quot;without involving government in day-to-day hospital operations&quot;</strong> (Mills, 1967).",
+        "profile": {
+          "name": "NCBI",
+          "url": "https://www.ncbi.nlm.nih.gov/books/NBK235002/",
+          "long_name": "National Center for Biotechnology Information",
+          "img": "https://imgs.search.brave.com/gkBxwO1sOZFgZOmbyXRMgmUn2dO-t_REnly3tO-atyQ/rs:fit:32:32:1:0/g:ce/aHR0cDovL2Zhdmlj/b25zLnNlYXJjaC5i/cmF2ZS5jb20vaWNv/bnMvZjgxNzE0Nzlj/MzAxYmYwZjU0ODNi/MDgyYzdiMDY1NWJl/Y2I1ODFjOGQwYmYw/ODdkY2Y4MmE4NTE5/ZDZiMDZlZS93d3cu/bmNiaS5ubG0ubmlo/Lmdvdi8"
+        },
+        "language": "en",
+        "family_friendly": true,
+        "type": "search_result",
+        "subtype": "generic",
+        "is_live": false,
+        "meta_url": {
+          "scheme": "https",
+          "netloc": "ncbi.nlm.nih.gov",
+          "hostname": "www.ncbi.nlm.nih.gov",
+          "favicon": "https://imgs.search.brave.com/gkBxwO1sOZFgZOmbyXRMgmUn2dO-t_REnly3tO-atyQ/rs:fit:32:32:1:0/g:ce/aHR0cDovL2Zhdmlj/b25zLnNlYXJjaC5i/cmF2ZS5jb20vaWNv/bnMvZjgxNzE0Nzlj/MzAxYmYwZjU0ODNi/MDgyYzdiMDY1NWJl/Y2I1ODFjOGQwYmYw/ODdkY2Y4MmE4NTE5/ZDZiMDZlZS93d3cu/bmNiaS5ubG0ubmlo/Lmdvdi8",
+          "path": "› books  › NBK235002"
+        }
+      },
+      {
+        "title": "Utilization Review - an overview | ScienceDirect Topics",
+        "url": "https://www.sciencedirect.com/topics/nursing-and-health-professions/utilization-review",
+        "is_source_local": false,
+        "is_source_both": false,
+        "description": "Providers resent the imposition on professional autonomy associated with medical necessity review. It is popular to complain of clerical oversight of professional judgment. Although it is possible for unlicensed individuals to authorize or approve recommended treatment according to a professionally developed treatment guideline, the industry standard is that a clinical peer or board-certified psychiatrist renders all nonauthorization decisions. Many states legislate peer review and both NCQA and the Utilization Review Accreditation Commission (URAC) require it.",
+        "profile": {
+          "name": "ScienceDirect",
+          "url": "https://www.sciencedirect.com/topics/nursing-and-health-professions/utilization-review",
+          "long_name": "sciencedirect.com",
+          "img": "https://imgs.search.brave.com/NJbb0P2bwbdnGnD5FijFoBbn5rA0Jwz-yK3fG5QOBng/rs:fit:32:32:1:0/g:ce/aHR0cDovL2Zhdmlj/b25zLnNlYXJjaC5i/cmF2ZS5jb20vaWNv/bnMvMjc5YWUwYmQ5/YWNmYWRiMDAxZWU5/ODc3NjJmYTVmOTNi/ZjRmYmE2OTk5Zjk2/MTUzZjMwZmE5OTQ5/MWFjY2ZjNS93d3cu/c2NpZW5jZWRpcmVj/dC5jb20v"
+        },
+        "language": "en",
+        "family_friendly": true,
+        "type": "search_result",
+        "subtype": "generic",
+        "is_live": false,
+        "meta_url": {
+          "scheme": "https",
+          "netloc": "sciencedirect.com",
+          "hostname": "www.sciencedirect.com",
+          "favicon": "https://imgs.search.brave.com/NJbb0P2bwbdnGnD5FijFoBbn5rA0Jwz-yK3fG5QOBng/rs:fit:32:32:1:0/g:ce/aHR0cDovL2Zhdmlj/b25zLnNlYXJjaC5i/cmF2ZS5jb20vaWNv/bnMvMjc5YWUwYmQ5/YWNmYWRiMDAxZWU5/ODc3NjJmYTVmOTNi/ZjRmYmE2OTk5Zjk2/MTUzZjMwZmE5OTQ5/MWFjY2ZjNS93d3cu/c2NpZW5jZWRpcmVj/dC5jb20v",
+          "path": "› topics  › nursing-and-health-professions  › utilization-review"
+        }
+      },
+      {
+        "title": ". Prior Authorization and Utilization Management Reform Principles",
+        "url": "https://www.ama-assn.org/system/files/principles-with-signatory-page-for-slsc.pdf",
+        "is_source_local": false,
+        "is_source_both": false,
+        "description": "should make a determination and notify the provider within 48 hours of obtaining all necessary · information. For urgent care, the determination should be made within 24 hours of obtaining all ... Principle #14: In order to allow sufficient time for care delivery, a utilization review entity should not · revoke, limit, condition or restrict coverage for authorized care provided within 45 business days from ... Principle #13: Eligibility and all other medical policy coverage determinations should be performed as",
+        "profile": {
+          "name": "AMA",
+          "url": "https://www.ama-assn.org/system/files/principles-with-signatory-page-for-slsc.pdf",
+          "long_name": "ama-assn.org",
+          "img": "https://imgs.search.brave.com/1UskNZNH-98hdDTWPbYcRzJOCfWR_AXDka_aUTZCIoo/rs:fit:32:32:1:0/g:ce/aHR0cDovL2Zhdmlj/b25zLnNlYXJjaC5i/cmF2ZS5jb20vaWNv/bnMvZWE5NjcyMWJk/MGY2Zjc3YjA1ODM4/YTdjNGIzMzUyN2Ni/MjQxNmM4NGQ5MjE0/YjYzNGIxZTc1ODU3/NzYwMmIzOS93d3cu/YW1hLWFzc24ub3Jn/Lw"
+        },
+        "language": "en",
+        "family_friendly": true,
+        "type": "search_result",
+        "subtype": "generic",
+        "is_live": false,
+        "meta_url": {
+          "scheme": "https",
+          "netloc": "ama-assn.org",
+          "hostname": "www.ama-assn.org",
+          "favicon": "https://imgs.search.brave.com/1UskNZNH-98hdDTWPbYcRzJOCfWR_AXDka_aUTZCIoo/rs:fit:32:32:1:0/g:ce/aHR0cDovL2Zhdmlj/b25zLnNlYXJjaC5i/cmF2ZS5jb20vaWNv/bnMvZWE5NjcyMWJk/MGY2Zjc3YjA1ODM4/YTdjNGIzMzUyN2Ni/MjQxNmM4NGQ5MjE0/YjYzNGIxZTc1ODU3/NzYwMmIzOS93d3cu/YW1hLWFzc24ub3Jn/Lw",
+          "path": "› system  › files  › principles-with-signatory-page-for-slsc.pdf"
+        },
+        "content_type": "pdf"
+      },
+      {
+        "title": "Clinical Necessity Guidelines for Psychotherapy, Insurance Medical Necessity and Utilization Review Protocols, and Mental Health Parity - PubMed",
+        "url": "https://pubmed.ncbi.nlm.nih.gov/30015788/",
+        "is_source_local": false,
+        "is_source_both": false,
+        "description": "The authors of the guidelines conclude that, given appropriate medical necessity guidelines at parity with other medical care, consistent with provider expertise and a broad range of psychotherapy research, there would be no need or place for utilization review protocols.",
+        "profile": {
+          "name": "PubMed",
+          "url": "https://pubmed.ncbi.nlm.nih.gov/30015788/",
+          "long_name": "pubmed.ncbi.nlm.nih.gov",
+          "img": "https://imgs.search.brave.com/ct7iR5anN_weyHBpP8Sf5afc81ndEdn-ACwjApGeHF4/rs:fit:32:32:1:0/g:ce/aHR0cDovL2Zhdmlj/b25zLnNlYXJjaC5i/cmF2ZS5jb20vaWNv/bnMvNzY1MzFmMzQy/ZGQ2OWE1N2M2YjFl/YmEwOWU2NjIzY2Jh/N2I5ZTRkY2U3MzY4/OThkNDIyN2EyYWJl/OWE3MWNlYS9wdWJt/ZWQubmNiaS5ubG0u/bmloLmdvdi8"
+        },
+        "language": "en",
+        "family_friendly": true,
+        "type": "search_result",
+        "subtype": "generic",
+        "is_live": false,
+        "meta_url": {
+          "scheme": "https",
+          "netloc": "pubmed.ncbi.nlm.nih.gov",
+          "hostname": "pubmed.ncbi.nlm.nih.gov",
+          "favicon": "https://imgs.search.brave.com/ct7iR5anN_weyHBpP8Sf5afc81ndEdn-ACwjApGeHF4/rs:fit:32:32:1:0/g:ce/aHR0cDovL2Zhdmlj/b25zLnNlYXJjaC5i/cmF2ZS5jb20vaWNv/bnMvNzY1MzFmMzQy/ZGQ2OWE1N2M2YjFl/YmEwOWU2NjIzY2Jh/N2I5ZTRkY2U3MzY4/OThkNDIyN2EyYWJl/OWE3MWNlYS9wdWJt/ZWQubmNiaS5ubG0u/bmloLmdvdi8",
+          "path": "› 30015788"
+        },
+        "thumbnail": {
+          "src": "https://imgs.search.brave.com/awH-ZkCPRVJjPIfSAAs8aykD9OTBZi53ayGryKIDtDU/rs:fit:200:200:1:0/g:ce/aHR0cHM6Ly9jZG4u/bmNiaS5ubG0ubmlo/Lmdvdi9wdWJtZWQv/cGVyc2lzdGVudC9w/dWJtZWQtbWV0YS1p/bWFnZS12Mi5qcGc",
+          "original": "https://cdn.ncbi.nlm.nih.gov/pubmed/persistent/pubmed-meta-image-v2.jpg",
+          "logo": false
+        }
+      },
+      {
+        "title": "H-285.998 Managed Care | AMA",
+        "url": "https://policysearch.ama-assn.org/policyfinder/detail/\"scope of practice\"?uri=%2FAMADoc%2FHOD.xml-0-2122.xml",
+        "is_source_local": false,
+        "is_source_both": false,
+        "description": "Any health plan or utilization management firm conducting a prior authorization program should act within two business days on any patient or physician request for prior authorization and respond within one business day to other questions regarding medical necessity of services. Any health plan requiring prior authorization for covered services should provide enrollees subject to such requirements with consent forms for release of medical information for utilization review purposes, to be executed by the enrollee at the time services requiring prior authorization are recommended by the physicians.",
+        "profile": {
+          "name": "Ama-assn",
+          "url": "https://policysearch.ama-assn.org/policyfinder/detail/\"scope of practice\"?uri=%2FAMADoc%2FHOD.xml-0-2122.xml",
+          "long_name": "policysearch.ama-assn.org",
+          "img": "https://imgs.search.brave.com/Z6nVFu6UhC4k3vgyCEy97WjlcTPNpm6IJziMVFjPueQ/rs:fit:32:32:1:0/g:ce/aHR0cDovL2Zhdmlj/b25zLnNlYXJjaC5i/cmF2ZS5jb20vaWNv/bnMvMTUwMmI1ZGRk/ZTA1NTRmY2E5YWUy/NjViMjU1MDY0YWJl/OWRmMTZkYmViMmNk/OTBmZDYxMWEyOTVj/ZjE5ZWNkZS9wb2xp/Y3lzZWFyY2guYW1h/LWFzc24ub3JnLw"
+        },
+        "language": "en",
+        "family_friendly": true,
+        "type": "search_result",
+        "subtype": "generic",
+        "is_live": false,
+        "meta_url": {
+          "scheme": "https",
+          "netloc": "policysearch.ama-assn.org",
+          "hostname": "policysearch.ama-assn.org",
+          "favicon": "https://imgs.search.brave.com/Z6nVFu6UhC4k3vgyCEy97WjlcTPNpm6IJziMVFjPueQ/rs:fit:32:32:1:0/g:ce/aHR0cDovL2Zhdmlj/b25zLnNlYXJjaC5i/cmF2ZS5jb20vaWNv/bnMvMTUwMmI1ZGRk/ZTA1NTRmY2E5YWUy/NjViMjU1MDY0YWJl/OWRmMTZkYmViMmNk/OTBmZDYxMWEyOTVj/ZjE5ZWNkZS9wb2xp/Y3lzZWFyY2guYW1h/LWFzc24ub3JnLw",
+          "path": "› policyfinder  › detail  › \"scope of practice\""
+        }
+      },
+      {
+        "title": "Utilization Management in Peer Review Organizations - Controlling Costs and Changing Patient Care? - NCBI Bookshelf",
+        "url": "https://www.ncbi.nlm.nih.gov/books/NBK235001/",
+        "is_source_local": false,
+        "is_source_both": false,
+        "description": "In Medicare, the responsibility for initiating preadmission review lies with the hospital or physician, not the patient. Failure to obtain the relevant certification may lead to a penalty for the provider, not the patient. The provider is also responsible if the PRO denies payment based on retrospective review of the necessity of care.1 Generally, in the private sector, a contractual relationship must exist between the payer and the provider in order for the patient to be &quot;held harmless&quot; (without financial liability) in similar circumstances.",
+        "profile": {
+          "name": "NCBI",
+          "url": "https://www.ncbi.nlm.nih.gov/books/NBK235001/",
+          "long_name": "National Center for Biotechnology Information",
+          "img": "https://imgs.search.brave.com/gkBxwO1sOZFgZOmbyXRMgmUn2dO-t_REnly3tO-atyQ/rs:fit:32:32:1:0/g:ce/aHR0cDovL2Zhdmlj/b25zLnNlYXJjaC5i/cmF2ZS5jb20vaWNv/bnMvZjgxNzE0Nzlj/MzAxYmYwZjU0ODNi/MDgyYzdiMDY1NWJl/Y2I1ODFjOGQwYmYw/ODdkY2Y4MmE4NTE5/ZDZiMDZlZS93d3cu/bmNiaS5ubG0ubmlo/Lmdvdi8"
+        },
+        "language": "en",
+        "family_friendly": true,
+        "type": "search_result",
+        "subtype": "generic",
+        "is_live": false,
+        "meta_url": {
+          "scheme": "https",
+          "netloc": "ncbi.nlm.nih.gov",
+          "hostname": "www.ncbi.nlm.nih.gov",
+          "favicon": "https://imgs.search.brave.com/gkBxwO1sOZFgZOmbyXRMgmUn2dO-t_REnly3tO-atyQ/rs:fit:32:32:1:0/g:ce/aHR0cDovL2Zhdmlj/b25zLnNlYXJjaC5i/cmF2ZS5jb20vaWNv/bnMvZjgxNzE0Nzlj/MzAxYmYwZjU0ODNi/MDgyYzdiMDY1NWJl/Y2I1ODFjOGQwYmYw/ODdkY2Y4MmE4NTE5/ZDZiMDZlZS93d3cu/bmNiaS5ubG0ubmlo/Lmdvdi8",
+          "path": "› books  › NBK235001"
+        }
+      },
+      {
+        "title": "The Utilization Management Industry: Structure and Process - Controlling Costs and Changing Patient Care? - NCBI Bookshelf",
+        "url": "https://www.ncbi.nlm.nih.gov/books/NBK234996/",
+        "is_source_local": false,
+        "is_source_both": false,
+        "description": "The entity that organizes and manages the network may act simply as a broker that does not accept economic risk for the cost of services delivered by network providers. Alternatively, the organization may accept risk, typically sharing it with the providers in the network. Generally, the provider agrees to initiate the prior review process and to not bill the patient for any claim denied for lack of medical necessity.",
+        "profile": {
+          "name": "NCBI",
+          "url": "https://www.ncbi.nlm.nih.gov/books/NBK234996/",
+          "long_name": "National Center for Biotechnology Information",
+          "img": "https://imgs.search.brave.com/gkBxwO1sOZFgZOmbyXRMgmUn2dO-t_REnly3tO-atyQ/rs:fit:32:32:1:0/g:ce/aHR0cDovL2Zhdmlj/b25zLnNlYXJjaC5i/cmF2ZS5jb20vaWNv/bnMvZjgxNzE0Nzlj/MzAxYmYwZjU0ODNi/MDgyYzdiMDY1NWJl/Y2I1ODFjOGQwYmYw/ODdkY2Y4MmE4NTE5/ZDZiMDZlZS93d3cu/bmNiaS5ubG0ubmlo/Lmdvdi8"
+        },
+        "language": "en",
+        "family_friendly": true,
+        "type": "search_result",
+        "subtype": "generic",
+        "is_live": false,
+        "meta_url": {
+          "scheme": "https",
+          "netloc": "ncbi.nlm.nih.gov",
+          "hostname": "www.ncbi.nlm.nih.gov",
+          "favicon": "https://imgs.search.brave.com/gkBxwO1sOZFgZOmbyXRMgmUn2dO-t_REnly3tO-atyQ/rs:fit:32:32:1:0/g:ce/aHR0cDovL2Zhdmlj/b25zLnNlYXJjaC5i/cmF2ZS5jb20vaWNv/bnMvZjgxNzE0Nzlj/MzAxYmYwZjU0ODNi/MDgyYzdiMDY1NWJl/Y2I1ODFjOGQwYmYw/ODdkY2Y4MmE4NTE5/ZDZiMDZlZS93d3cu/bmNiaS5ubG0ubmlo/Lmdvdi8",
+          "path": "› books  › NBK234996"
+        }
+      },
+      {
+        "title": "Utilization and peer review. Medicine's privilege and responsibility - PubMed",
+        "url": "https://pubmed.ncbi.nlm.nih.gov/5527892/",
+        "is_source_local": false,
+        "is_source_both": false,
+        "description": "Physicians must be willing to ... utilization review of professional medical services can be performed only by physicians. They may be assisted by informed lay personnel and by computer-derived data. In no instances, however, should judgment of medical necessity be rendered ...",
+        "profile": {
+          "name": "PubMed",
+          "url": "https://pubmed.ncbi.nlm.nih.gov/5527892/",
+          "long_name": "pubmed.ncbi.nlm.nih.gov",
+          "img": "https://imgs.search.brave.com/ct7iR5anN_weyHBpP8Sf5afc81ndEdn-ACwjApGeHF4/rs:fit:32:32:1:0/g:ce/aHR0cDovL2Zhdmlj/b25zLnNlYXJjaC5i/cmF2ZS5jb20vaWNv/bnMvNzY1MzFmMzQy/ZGQ2OWE1N2M2YjFl/YmEwOWU2NjIzY2Jh/N2I5ZTRkY2U3MzY4/OThkNDIyN2EyYWJl/OWE3MWNlYS9wdWJt/ZWQubmNiaS5ubG0u/bmloLmdvdi8"
+        },
+        "language": "en",
+        "family_friendly": true,
+        "type": "search_result",
+        "subtype": "generic",
+        "is_live": false,
+        "meta_url": {
+          "scheme": "https",
+          "netloc": "pubmed.ncbi.nlm.nih.gov",
+          "hostname": "pubmed.ncbi.nlm.nih.gov",
+          "favicon": "https://imgs.search.brave.com/ct7iR5anN_weyHBpP8Sf5afc81ndEdn-ACwjApGeHF4/rs:fit:32:32:1:0/g:ce/aHR0cDovL2Zhdmlj/b25zLnNlYXJjaC5i/cmF2ZS5jb20vaWNv/bnMvNzY1MzFmMzQy/ZGQ2OWE1N2M2YjFl/YmEwOWU2NjIzY2Jh/N2I5ZTRkY2U3MzY4/OThkNDIyN2EyYWJl/OWE3MWNlYS9wdWJt/ZWQubmNiaS5ubG0u/bmloLmdvdi8",
+          "path": "› 5527892"
+        },
+        "thumbnail": {
+          "src": "https://imgs.search.brave.com/awH-ZkCPRVJjPIfSAAs8aykD9OTBZi53ayGryKIDtDU/rs:fit:200:200:1:0/g:ce/aHR0cHM6Ly9jZG4u/bmNiaS5ubG0ubmlo/Lmdvdi9wdWJtZWQv/cGVyc2lzdGVudC9w/dWJtZWQtbWV0YS1p/bWFnZS12Mi5qcGc",
+          "original": "https://cdn.ncbi.nlm.nih.gov/pubmed/persistent/pubmed-meta-image-v2.jpg",
+          "logo": false
+        }
+      },
+      {
+        "title": "What Is a Utilization Management Nurse? | ANA",
+        "url": "https://www.nursingworld.org/content-hub/resources/nursing-resources/utilization-management-nurse/",
+        "is_source_local": false,
+        "is_source_both": false,
+        "description": "A utilization management nurse’s roles and responsibilities include the following: Review medical records.",
+        "page_age": "2024-02-20T19:43:52",
+        "profile": {
+          "name": "American Nurses Association",
+          "url": "https://www.nursingworld.org/content-hub/resources/nursing-resources/utilization-management-nurse/",
+          "long_name": "nursingworld.org",
+          "img": "https://imgs.search.brave.com/2v1Z2mzxUv_K1j6xCvdC24QnESK2Z90aCQeicOXPTGQ/rs:fit:32:32:1:0/g:ce/aHR0cDovL2Zhdmlj/b25zLnNlYXJjaC5i/cmF2ZS5jb20vaWNv/bnMvNGQ5OGNmMDA0/OGM1YjI4NzUyYmFh/M2IzODVkY2Y5NDEy/NWJjNDkwMjg0M2Ji/ODFmZGI5OTBhYjgy/NWRhMzIyOC93d3cu/bnVyc2luZ3dvcmxk/Lm9yZy8"
+        },
+        "language": "en",
+        "family_friendly": true,
+        "type": "search_result",
+        "subtype": "generic",
+        "is_live": false,
+        "meta_url": {
+          "scheme": "https",
+          "netloc": "nursingworld.org",
+          "hostname": "www.nursingworld.org",
+          "favicon": "https://imgs.search.brave.com/2v1Z2mzxUv_K1j6xCvdC24QnESK2Z90aCQeicOXPTGQ/rs:fit:32:32:1:0/g:ce/aHR0cDovL2Zhdmlj/b25zLnNlYXJjaC5i/cmF2ZS5jb20vaWNv/bnMvNGQ5OGNmMDA0/OGM1YjI4NzUyYmFh/M2IzODVkY2Y5NDEy/NWJjNDkwMjg0M2Ji/ODFmZGI5OTBhYjgy/NWRhMzIyOC93d3cu/bnVyc2luZ3dvcmxk/Lm9yZy8",
+          "path": "› content-hub  › resources  › nursing-resources  › utilization-management-nurse"
+        },
+        "age": "February 20, 2024"
+      },
+      {
+        "title": "AMA adopts policies on medications, utilization reviews | American Medical Association",
+        "url": "https://www.ama-assn.org/press-center/ama-press-releases/ama-adopts-policies-medications-utilization-reviews",
+        "is_source_local": false,
+        "is_source_both": false,
+        "description": "With consolidation rampant, a large payer can dominate the definition of medically necessary care. That definition can then be used to deny access to care and the payment of medical services. Utilization management systems are designed to evaluate the medical necessity, appropriateness, and ...",
+        "page_age": "2025-06-11T13:34:09",
+        "profile": {
+          "name": "American Medical Association",
+          "url": "https://www.ama-assn.org/press-center/ama-press-releases/ama-adopts-policies-medications-utilization-reviews",
+          "long_name": "ama-assn.org",
+          "img": "https://imgs.search.brave.com/1UskNZNH-98hdDTWPbYcRzJOCfWR_AXDka_aUTZCIoo/rs:fit:32:32:1:0/g:ce/aHR0cDovL2Zhdmlj/b25zLnNlYXJjaC5i/cmF2ZS5jb20vaWNv/bnMvZWE5NjcyMWJk/MGY2Zjc3YjA1ODM4/YTdjNGIzMzUyN2Ni/MjQxNmM4NGQ5MjE0/YjYzNGIxZTc1ODU3/NzYwMmIzOS93d3cu/YW1hLWFzc24ub3Jn/Lw"
+        },
+        "language": "en",
+        "family_friendly": true,
+        "type": "search_result",
+        "subtype": "article",
+        "is_live": false,
+        "meta_url": {
+          "scheme": "https",
+          "netloc": "ama-assn.org",
+          "hostname": "www.ama-assn.org",
+          "favicon": "https://imgs.search.brave.com/1UskNZNH-98hdDTWPbYcRzJOCfWR_AXDka_aUTZCIoo/rs:fit:32:32:1:0/g:ce/aHR0cDovL2Zhdmlj/b25zLnNlYXJjaC5i/cmF2ZS5jb20vaWNv/bnMvZWE5NjcyMWJk/MGY2Zjc3YjA1ODM4/YTdjNGIzMzUyN2Ni/MjQxNmM4NGQ5MjE0/YjYzNGIxZTc1ODU3/NzYwMmIzOS93d3cu/YW1hLWFzc24ub3Jn/Lw",
+          "path": "› press-center  › ama-press-releases  › ama-adopts-policies-medications-utilization-reviews"
+        },
+        "thumbnail": {
+          "src": "https://imgs.search.brave.com/EL0PNCt5HBTG8UooMfLSRAL7TqU7OOQqI2zXuXhG0Z4/rs:fit:200:200:1:0/g:ce/aHR0cHM6Ly93d3cu/YW1hLWFzc24ub3Jn/L3NpdGVzL2FtYS1h/c3NuLm9yZy9maWxl/cy8yMDIzLTA4L2Fj/YS1QUi1pbmRleC1B/LmpwZw",
+          "original": "https://www.ama-assn.org/sites/ama-assn.org/files/2023-08/aca-PR-index-A.jpg",
+          "logo": false
+        },
+        "age": "June 11, 2025"
+      },
+      {
+        "title": "Utilization management as a cost-containment strategy - PMC",
+        "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC4195135/",
+        "is_source_local": false,
+        "is_source_both": false,
+        "description": "Utilization management (UM) is now an integral part of most public and private health plans. Hospital review, until recently the primary focus of UM, is <strong>associated with a reduction in bed days and rate of hospital cost increases</strong>. These reductions ...",
+        "profile": {
+          "name": "PubMed Central",
+          "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC4195135/",
+          "long_name": "pmc.ncbi.nlm.nih.gov",
+          "img": "https://imgs.search.brave.com/ijTTilvQEc3Szfx0cXONsFmJ4lXSgpFslJywgJ4L93Q/rs:fit:32:32:1:0/g:ce/aHR0cDovL2Zhdmlj/b25zLnNlYXJjaC5i/cmF2ZS5jb20vaWNv/bnMvYWE2NGUwNWIy/YjA3YTM4MjEwOWU5/MWUxNzY2NjVjOTdk/YWQ2YTFiNTgxYTcz/YTIxMTVjNzQzMWNi/ZWE2NmZhNC9wbWMu/bmNiaS5ubG0ubmlo/Lmdvdi8"
+        },
+        "language": "en",
+        "family_friendly": true,
+        "type": "search_result",
+        "subtype": "generic",
+        "is_live": false,
+        "meta_url": {
+          "scheme": "https",
+          "netloc": "pmc.ncbi.nlm.nih.gov",
+          "hostname": "pmc.ncbi.nlm.nih.gov",
+          "favicon": "https://imgs.search.brave.com/ijTTilvQEc3Szfx0cXONsFmJ4lXSgpFslJywgJ4L93Q/rs:fit:32:32:1:0/g:ce/aHR0cDovL2Zhdmlj/b25zLnNlYXJjaC5i/cmF2ZS5jb20vaWNv/bnMvYWE2NGUwNWIy/YjA3YTM4MjEwOWU5/MWUxNzY2NjVjOTdk/YWQ2YTFiNTgxYTcz/YTIxMTVjNzQzMWNi/ZWE2NmZhNC9wbWMu/bmNiaS5ubG0ubmlo/Lmdvdi8",
+          "path": "› articles  › PMC4195135"
+        }
+      },
+      {
+        "title": "Medical Necessity and Evolving Standards of Care - NCBI Bookshelf",
+        "url": "https://www.ncbi.nlm.nih.gov/books/NBK559523/",
+        "is_source_local": false,
+        "is_source_both": false,
+        "description": "Who should determine when health care is medically necessary? Serota SP. N Engl J Med. 1999 Jul 1; 341(1):59-60. Review The bare necessities? A realist review of necessity argumentations used in health care coverage decisions.[Health Policy.",
+        "page_age": "1999-05-11T00:00:00",
+        "profile": {
+          "name": "NCBI",
+          "url": "https://www.ncbi.nlm.nih.gov/books/NBK559523/",
+          "long_name": "National Center for Biotechnology Information",
+          "img": "https://imgs.search.brave.com/gkBxwO1sOZFgZOmbyXRMgmUn2dO-t_REnly3tO-atyQ/rs:fit:32:32:1:0/g:ce/aHR0cDovL2Zhdmlj/b25zLnNlYXJjaC5i/cmF2ZS5jb20vaWNv/bnMvZjgxNzE0Nzlj/MzAxYmYwZjU0ODNi/MDgyYzdiMDY1NWJl/Y2I1ODFjOGQwYmYw/ODdkY2Y4MmE4NTE5/ZDZiMDZlZS93d3cu/bmNiaS5ubG0ubmlo/Lmdvdi8"
+        },
+        "language": "en",
+        "family_friendly": true,
+        "type": "search_result",
+        "subtype": "book",
+        "is_live": false,
+        "meta_url": {
+          "scheme": "https",
+          "netloc": "ncbi.nlm.nih.gov",
+          "hostname": "www.ncbi.nlm.nih.gov",
+          "favicon": "https://imgs.search.brave.com/gkBxwO1sOZFgZOmbyXRMgmUn2dO-t_REnly3tO-atyQ/rs:fit:32:32:1:0/g:ce/aHR0cDovL2Zhdmlj/b25zLnNlYXJjaC5i/cmF2ZS5jb20vaWNv/bnMvZjgxNzE0Nzlj/MzAxYmYwZjU0ODNi/MDgyYzdiMDY1NWJl/Y2I1ODFjOGQwYmYw/ODdkY2Y4MmE4NTE5/ZDZiMDZlZS93d3cu/bmNiaS5ubG0ubmlo/Lmdvdi8",
+          "path": "› books  › NBK559523"
+        },
+        "age": "May 11, 1999"
+      },
+      {
+        "title": "Reinventing Utilization Management (UM) to Bring Value to the Point of Care | Healthcare IT News",
+        "url": "https://www.healthcareitnews.com/news/reinventing-utilization-management-um-bring-value-point-care",
+        "is_source_local": false,
+        "is_source_both": false,
+        "description": "The result is a new form of utilization management (UM) that shifts the balance of interactions from post-care decision with claims to pre-care decisions. This can be done through multiple layers of seamless automation that use existing medical information systems (i.e., electronic health records (EHRs), care management portals, etc.) to minimize or even eliminate routine administrative tasks, and empower providers and payers to focus manual medical necessity and authorization review efforts only on cases that require their clinical expertise.",
+        "profile": {
+          "name": "Healthcare IT News",
+          "url": "https://www.healthcareitnews.com/news/reinventing-utilization-management-um-bring-value-point-care",
+          "long_name": "healthcareitnews.com",
+          "img": "https://imgs.search.brave.com/Ae03Uv9-Q7-drGJdWA-o-sj4wrvKw-4m-gG91UuTv7I/rs:fit:32:32:1:0/g:ce/aHR0cDovL2Zhdmlj/b25zLnNlYXJjaC5i/cmF2ZS5jb20vaWNv/bnMvMWI3ZGU2OGE0/YWEyYTBhNzQ3NGNk/ODZjMWIxY2NiMmUz/MmE4YzE4YmEyNjhl/NjA4YmNmN2VkOTNi/NGRmZTY3YS93d3cu/aGVhbHRoY2FyZWl0/bmV3cy5jb20v"
+        },
+        "language": "en",
+        "family_friendly": true,
+        "type": "search_result",
+        "subtype": "generic",
+        "is_live": false,
+        "meta_url": {
+          "scheme": "https",
+          "netloc": "healthcareitnews.com",
+          "hostname": "www.healthcareitnews.com",
+          "favicon": "https://imgs.search.brave.com/Ae03Uv9-Q7-drGJdWA-o-sj4wrvKw-4m-gG91UuTv7I/rs:fit:32:32:1:0/g:ce/aHR0cDovL2Zhdmlj/b25zLnNlYXJjaC5i/cmF2ZS5jb20vaWNv/bnMvMWI3ZGU2OGE0/YWEyYTBhNzQ3NGNk/ODZjMWIxY2NiMmUz/MmE4YzE4YmEyNjhl/NjA4YmNmN2VkOTNi/NGRmZTY3YS93d3cu/aGVhbHRoY2FyZWl0/bmV3cy5jb20v",
+          "path": "› news  › reinventing-utilization-management-um-bring-value-point-care"
+        }
+      },
+      {
+        "title": "An Automated Clinical Laboratory Decision Support System for Test Utilization, Medical Necessity Verification, and Payment Processing - PMC",
+        "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC11862781/",
+        "is_source_local": false,
+        "is_source_both": false,
+        "description": "Appropriate tests use indication labels, for example, diagnostic, disease management, monitoring, and alternative tests, categorizing each test with the right indication or reason for testing to avoid using providers’ charts and notes that make it difficult to automate the system [4,5]. When assessing the effectiveness of LDS in improving test utilization and reimbursement with 96,170 laboratory requests comprising 374,423 test orders from a reference laboratory, 44,671 tests were accompanied by ICD-10 that are described by Medicare as “never covered” because of the lack of a system to check or support the medical necessity of each order. A total of 160,449 tests were subject to a Medicare policy review from which 112,400 tests met coverage criteria, and 48,049 tests did not.",
+        "profile": {
+          "name": "PubMed Central",
+          "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC11862781/",
+          "long_name": "pmc.ncbi.nlm.nih.gov",
+          "img": "https://imgs.search.brave.com/ijTTilvQEc3Szfx0cXONsFmJ4lXSgpFslJywgJ4L93Q/rs:fit:32:32:1:0/g:ce/aHR0cDovL2Zhdmlj/b25zLnNlYXJjaC5i/cmF2ZS5jb20vaWNv/bnMvYWE2NGUwNWIy/YjA3YTM4MjEwOWU5/MWUxNzY2NjVjOTdk/YWQ2YTFiNTgxYTcz/YTIxMTVjNzQzMWNi/ZWE2NmZhNC9wbWMu/bmNiaS5ubG0ubmlo/Lmdvdi8"
+        },
+        "language": "en",
+        "family_friendly": true,
+        "type": "search_result",
+        "subtype": "generic",
+        "is_live": false,
+        "meta_url": {
+          "scheme": "https",
+          "netloc": "pmc.ncbi.nlm.nih.gov",
+          "hostname": "pmc.ncbi.nlm.nih.gov",
+          "favicon": "https://imgs.search.brave.com/ijTTilvQEc3Szfx0cXONsFmJ4lXSgpFslJywgJ4L93Q/rs:fit:32:32:1:0/g:ce/aHR0cDovL2Zhdmlj/b25zLnNlYXJjaC5i/cmF2ZS5jb20vaWNv/bnMvYWE2NGUwNWIy/YjA3YTM4MjEwOWU5/MWUxNzY2NjVjOTdk/YWQ2YTFiNTgxYTcz/YTIxMTVjNzQzMWNi/ZWE2NmZhNC9wbWMu/bmNiaS5ubG0ubmlo/Lmdvdi8",
+          "path": "› articles  › PMC11862781"
+        }
+      },
+      {
+        "title": "Utilization management as a cost-containment strategy",
+        "url": "https://www.cms.gov/Research-Statistics-Data-and-Systems/Research/HealthCareFinancingReview/Downloads/CMS1191182dl.pdf",
+        "is_source_local": false,
+        "is_source_both": false,
+        "description": "program sponsored publicly for Medicare, or peer review ... UM as used in this article is: &quot; ... a set of techniques · used by or on behalf of purchasers of health benefits to · manage health care costs by influencing patient care · decision-making through case-by-case assessments of the · appropriateness of care ... &quot; (Institute of Medicine · Committee on Utilization ...",
+        "profile": {
+          "name": "Centers for Medicare & Medicaid Services",
+          "url": "https://www.cms.gov/Research-Statistics-Data-and-Systems/Research/HealthCareFinancingReview/Downloads/CMS1191182dl.pdf",
+          "long_name": "cms.gov",
+          "img": "https://imgs.search.brave.com/N5hwoQP68W8SAAJXvgFyzOkHkA8J99aW7BBgdvdH_4Y/rs:fit:32:32:1:0/g:ce/aHR0cDovL2Zhdmlj/b25zLnNlYXJjaC5i/cmF2ZS5jb20vaWNv/bnMvM2YzYjcyZDMw/NmQwMmJkZGRmNmNk/MjkwMjhlYWY1ODE4/ZDE1YmEwMzc5ZTRk/ZjczZjBjOTYxNzhk/ZWFhYTMwZC93d3cu/Y21zLmdvdi8"
+        },
+        "language": "en",
+        "family_friendly": true,
+        "type": "search_result",
+        "subtype": "generic",
+        "is_live": false,
+        "meta_url": {
+          "scheme": "https",
+          "netloc": "cms.gov",
+          "hostname": "www.cms.gov",
+          "favicon": "https://imgs.search.brave.com/N5hwoQP68W8SAAJXvgFyzOkHkA8J99aW7BBgdvdH_4Y/rs:fit:32:32:1:0/g:ce/aHR0cDovL2Zhdmlj/b25zLnNlYXJjaC5i/cmF2ZS5jb20vaWNv/bnMvM2YzYjcyZDMw/NmQwMmJkZGRmNmNk/MjkwMjhlYWY1ODE4/ZDE1YmEwMzc5ZTRk/ZjczZjBjOTYxNzhk/ZWFhYTMwZC93d3cu/Y21zLmdvdi8",
+          "path": "› Research-Statistics-Data-and-Systems  › Research  › HealthCareFinancingReview  › Downloads  › CMS1191182dl.pdf"
+        },
+        "content_type": "pdf"
+      },
+      {
+        "title": "Determining medical necessity of outpatient physical therapy services - PubMed",
+        "url": "https://pubmed.ncbi.nlm.nih.gov/1493381/",
+        "is_source_local": false,
+        "is_source_both": false,
+        "description": "Determination of medical necessity for continued therapy services requires knowledge of the natural history of diseases that may require therapy services, familiarity with the effectiveness of treatment alternatives for those diseases, and awareness of community practice patterns. Accurate and complete documentation from the therapist or referring physician is required for the physician advisor or utilization review consultant to make an accurate determination of medical necessity.",
+        "profile": {
+          "name": "PubMed",
+          "url": "https://pubmed.ncbi.nlm.nih.gov/1493381/",
+          "long_name": "pubmed.ncbi.nlm.nih.gov",
+          "img": "https://imgs.search.brave.com/ct7iR5anN_weyHBpP8Sf5afc81ndEdn-ACwjApGeHF4/rs:fit:32:32:1:0/g:ce/aHR0cDovL2Zhdmlj/b25zLnNlYXJjaC5i/cmF2ZS5jb20vaWNv/bnMvNzY1MzFmMzQy/ZGQ2OWE1N2M2YjFl/YmEwOWU2NjIzY2Jh/N2I5ZTRkY2U3MzY4/OThkNDIyN2EyYWJl/OWE3MWNlYS9wdWJt/ZWQubmNiaS5ubG0u/bmloLmdvdi8"
+        },
+        "language": "en",
+        "family_friendly": true,
+        "type": "search_result",
+        "subtype": "generic",
+        "is_live": false,
+        "meta_url": {
+          "scheme": "https",
+          "netloc": "pubmed.ncbi.nlm.nih.gov",
+          "hostname": "pubmed.ncbi.nlm.nih.gov",
+          "favicon": "https://imgs.search.brave.com/ct7iR5anN_weyHBpP8Sf5afc81ndEdn-ACwjApGeHF4/rs:fit:32:32:1:0/g:ce/aHR0cDovL2Zhdmlj/b25zLnNlYXJjaC5i/cmF2ZS5jb20vaWNv/bnMvNzY1MzFmMzQy/ZGQ2OWE1N2M2YjFl/YmEwOWU2NjIzY2Jh/N2I5ZTRkY2U3MzY4/OThkNDIyN2EyYWJl/OWE3MWNlYS9wdWJt/ZWQubmNiaS5ubG0u/bmloLmdvdi8",
+          "path": "› 1493381"
+        },
+        "thumbnail": {
+          "src": "https://imgs.search.brave.com/awH-ZkCPRVJjPIfSAAs8aykD9OTBZi53ayGryKIDtDU/rs:fit:200:200:1:0/g:ce/aHR0cHM6Ly9jZG4u/bmNiaS5ubG0ubmlo/Lmdvdi9wdWJtZWQv/cGVyc2lzdGVudC9w/dWJtZWQtbWV0YS1p/bWFnZS12Mi5qcGc",
+          "original": "https://cdn.ncbi.nlm.nih.gov/pubmed/persistent/pubmed-meta-image-v2.jpg",
+          "logo": false
+        }
+      },
+      {
+        "title": "Fixing prior auth: Give doctors a true peer to talk with—stat | American Medical Association",
+        "url": "https://www.ama-assn.org/practice-management/prior-authorization/fixing-prior-auth-give-doctors-true-peer-talk-stat",
+        "is_source_local": false,
+        "is_source_both": false,
+        "description": "The document says that a ... <strong>practicing medicine when it makes decisions that can prevent access to care that the physician, along with the patient and health care team, has decided is appropriate and medically necessary</strong>...",
+        "page_age": "2025-04-24T12:00:00",
+        "profile": {
+          "name": "American Medical Association",
+          "url": "https://www.ama-assn.org/practice-management/prior-authorization/fixing-prior-auth-give-doctors-true-peer-talk-stat",
+          "long_name": "ama-assn.org",
+          "img": "https://imgs.search.brave.com/1UskNZNH-98hdDTWPbYcRzJOCfWR_AXDka_aUTZCIoo/rs:fit:32:32:1:0/g:ce/aHR0cDovL2Zhdmlj/b25zLnNlYXJjaC5i/cmF2ZS5jb20vaWNv/bnMvZWE5NjcyMWJk/MGY2Zjc3YjA1ODM4/YTdjNGIzMzUyN2Ni/MjQxNmM4NGQ5MjE0/YjYzNGIxZTc1ODU3/NzYwMmIzOS93d3cu/YW1hLWFzc24ub3Jn/Lw"
+        },
+        "language": "en",
+        "family_friendly": true,
+        "type": "search_result",
+        "subtype": "article",
+        "is_live": false,
+        "meta_url": {
+          "scheme": "https",
+          "netloc": "ama-assn.org",
+          "hostname": "www.ama-assn.org",
+          "favicon": "https://imgs.search.brave.com/1UskNZNH-98hdDTWPbYcRzJOCfWR_AXDka_aUTZCIoo/rs:fit:32:32:1:0/g:ce/aHR0cDovL2Zhdmlj/b25zLnNlYXJjaC5i/cmF2ZS5jb20vaWNv/bnMvZWE5NjcyMWJk/MGY2Zjc3YjA1ODM4/YTdjNGIzMzUyN2Ni/MjQxNmM4NGQ5MjE0/YjYzNGIxZTc1ODU3/NzYwMmIzOS93d3cu/YW1hLWFzc24ub3Jn/Lw",
+          "path": "› practice-management  › prior-authorization  › fixing-prior-auth-give-doctors-true-peer-talk-stat"
+        },
+        "thumbnail": {
+          "src": "https://imgs.search.brave.com/rmo-12f1JTL8xDQc1ugEJZNzP5td3h-F6Kn1Lau9Vbw/rs:fit:200:200:1:0/g:ce/aHR0cHM6Ly93d3cu/YW1hLWFzc24ub3Jn/L3NpdGVzL2FtYS1h/c3NuLm9yZy9maWxl/cy9zdHlsZXMvaW1h/Z2VfcmF0aW9fMTZf/OS9wdWJsaWMvMjAy/NC0wNS8yMDI0LTA0/LTI5LVBBUEVFUl9J/bmRleC0xMTcweDc4/MC5qcGc_aXRvaz1Y/NXcxd184Wg",
+          "original": "https://www.ama-assn.org/sites/ama-assn.org/files/styles/image_ratio_16_9/public/2024-05/2024-04-29-PAPEER_Index-1170x780.jpg?itok=X5w1w_8Z",
+          "logo": false
+        },
+        "age": "April 24, 2025"
+      }
+    ],
+    "family_friendly": true
+  }
+}

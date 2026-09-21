@@ -1,0 +1,107 @@
+{
+  "dxt_version": "0.1",
+  "name": "pophive-mcp-server",
+  "display_name": "PopHIVE Public Health Data",
+  "version": "1.1.1",
+  "description": "Access near real-time public health data from PopHIVE dashboards including immunizations, respiratory diseases, chronic conditions, hospital capacity, injury/overdose rates, and youth mental health trends.",
+  "long_description": "Provides comprehensive access to PopHIVE's public health datasets from Yale School of Public Health. Includes childhood immunization data from CDC NIS and Epic Cosmos, respiratory disease surveillance from multiple CDC systems, wastewater monitoring, Google Health Trends, and chronic disease prevalence data. This version adds new datasets for hospital capacity, injury and overdose deaths, and youth mental health emergency department visits. Perfect for epidemiologists, public health researchers, policy makers, and anyone analyzing population health trends.",
+  "author": {
+    "name": "Cicatriiz",
+    "url": "https://github.com/Cicatriiz"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Cicatriiz/pophive-mcp-server"
+  },
+  "homepage": "https://github.com/Cicatriiz/pophive-mcp-server",
+  "documentation": "https://github.com/Cicatriiz/pophive-mcp-server#readme",
+  "icon": "icon.png",
+  "server": {
+    "type": "node",
+    "entry_point": "server/index.js",
+    "mcp_config": {
+      "command": "node",
+      "args": ["${__dirname}/server/index.js"],
+      "env": {
+        "DATA_CACHE_DIR": "${__dirname}/data",
+        "UPDATE_FREQUENCY": "${user_config.update_frequency}",
+        "NODE_ENV": "production"
+      }
+    }
+  },
+  "tools": [
+    {
+      "name": "filter_data",
+      "description": "Filter PopHIVE datasets by state, date range, age group, or other criteria"
+    },
+    {
+      "name": "compare_states",
+      "description": "Compare health metrics across multiple states"
+    },
+    {
+      "name": "time_series_analysis",
+      "description": "Analyze trends over time for specific health metrics"
+    },
+    {
+      "name": "get_available_datasets",
+      "description": "List all available PopHIVE datasets and their metadata"
+    },
+    {
+      "name": "search_health_data",
+      "description": "Search across all datasets for specific health conditions or metrics"
+    }
+  ],
+  "prompts": [
+    {
+      "name": "immunization_gaps",
+      "description": "Analyze vaccination coverage gaps by demographic factors",
+      "arguments": ["state", "vaccine_type", "demographic_focus"],
+      "text": "Analyze vaccination coverage gaps in ${arguments.state} for ${arguments.vaccine_type} vaccine, focusing on ${arguments.demographic_focus} demographics. Use the immunizations datasets to identify coverage disparities and provide actionable insights for public health interventions."
+    },
+    {
+      "name": "respiratory_surge_detection",
+      "description": "Identify respiratory disease surges in specific regions",
+      "arguments": ["region", "virus_type", "time_period"],
+      "text": "Analyze respiratory disease surveillance data for ${arguments.region} to detect ${arguments.virus_type} surges during ${arguments.time_period}. Use emergency department visits, lab positivity rates, and wastewater data to identify concerning trends and provide early warning insights."
+    },
+    {
+      "name": "chronic_disease_trends",
+      "description": "Analyze obesity/diabetes trends and correlations",
+      "arguments": ["condition", "demographic_focus", "comparison_states"],
+      "text": "Examine ${arguments.condition} trends with focus on ${arguments.demographic_focus} demographics. Compare patterns across ${arguments.comparison_states} using chronic disease datasets to identify risk factors, trends, and opportunities for intervention."
+    },
+    {
+      "name": "multi_source_analysis",
+      "description": "Compare data across multiple sources for comprehensive health insights",
+      "arguments": ["health_topic", "geographic_focus", "time_range"],
+      "text": "Conduct comprehensive analysis of ${arguments.health_topic} in ${arguments.geographic_focus} during ${arguments.time_range}. Integrate data from multiple PopHIVE sources (immunizations, respiratory surveillance, chronic disease data) to provide holistic public health insights and recommendations."
+    }
+  ],
+  "tools_generated": true,
+  "keywords": ["public-health", "epidemiology", "cdc", "immunizations", "respiratory", "chronic-disease", "surveillance", "yale", "epic-cosmos", "hospital-capacity", "overdose", "mental-health"],
+  "license": "MIT",
+  "compatibility": {
+    "platforms": ["darwin", "win32", "linux"],
+    "runtimes": {
+      "node": ">=16.0.0"
+    }
+  },
+  "user_config": {
+    "update_frequency": {
+      "type": "string",
+      "title": "Data Update Frequency",
+      "description": "How often to refresh data from PopHIVE (affects performance vs freshness). Choose between 'hourly', 'daily', or 'weekly' updates.",
+      "default": "daily",
+      "required": false
+    },
+    "cache_size_mb": {
+      "type": "number",
+      "title": "Cache Size (MB)",
+      "description": "Maximum size for local data cache",
+      "default": 100,
+      "min": 50,
+      "max": 500,
+      "required": false
+    }
+  }
+}

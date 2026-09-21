@@ -1,0 +1,488 @@
+{
+  "type": "news",
+  "query": {
+    "original": "Really Good Recipes",
+    "altered": "really good recipes",
+    "spellcheck_off": false,
+    "show_strict_warning": false
+  },
+  "results": [
+    {
+      "type": "news_result",
+      "title": "21 Easy, Healthy Recipes for Busy, Tired People",
+      "url": "https://cooking.nytimes.com/article/easy-healthy-recipes",
+      "description": "These weeknight-friendly recipes will help you eat well even when you’re short on time.",
+      "age": "2 weeks ago",
+      "page_age": "2026-01-03T10:00:38",
+      "meta_url": {
+        "scheme": "https",
+        "netloc": "cooking.nytimes.com",
+        "hostname": "cooking.nytimes.com",
+        "favicon": "https://imgs.search.brave.com/weLX53aF43mb_eCTjTAjcWR0u6xB98w073CVKvtCuzg/rs:fit:32:32:1:0/g:ce/aHR0cDovL2Zhdmlj/b25zLnNlYXJjaC5i/cmF2ZS5jb20vaWNv/bnMvNTE5NjZiODE0/YWUwNDNiODgzZGIw/YzQ2ZDE2MTVmYTJl/YjgxOTNjNjEzODYy/Yzg2YjQyZTY0NDhj/MGU4YTBlMC9jb29r/aW5nLm55dGltZXMu/Y29tLw",
+        "path": "› article  › easy-healthy-recipes"
+      },
+      "thumbnail": {
+        "src": "https://imgs.search.brave.com/1wM35x35RTwNC3oqo4Uv5jCBNc3jmko7H8s40l_hqUQ/rs:fit:200:200:1:0/g:ce/aHR0cHM6Ly9zdGF0/aWMwMS5ueXQuY29t/L2ltYWdlcy8yMDI1/LzAxLzAzL211bHRp/bWVkaWEvMDNGRC1I/RUFMVEhZLURJTk5F/UlMtUk9VTkRVUC10/b3BhcnQtc3RpY2t5/bWlzb3NhbG1vbi10/bXFiLzAzRkQtSEVB/TFRIWS1ESU5ORVJT/LVJPVU5EVVAtdG9w/YXJ0LXN0aWNreW1p/c29zYWxtb24tdG1x/Yi1hcnRpY2xlTGFy/Z2UuanBn"
+      },
+      "extra_snippets": [
+        "These weeknight-friendly recipes will help you eat well even when you’re short on time. Andy Baraghani’s sticky miso citrus salmon.Credit...Johnny Miller for The New York Times. Food Stylist: Samantha Seneviratne. ... Samantha Cassetty is a registered dietitian nutritionist. Published Jan. 3, 2026Updated Jan. 3, 2026 · Everyone wants to eat better, but who has the time? The truth is, healthy eating is easier than you think. It’s really about making small, smart choices consistently that can make a big difference over time, like cooking at home instead of going out, or cutting back on soft drinks.",
+        "These weeknight-friendly recipes are just those sorts of meals, and most of the come together in 45 minutes or less, so you can eat well any day of the week. (One note: Some of the dishes below call for miso paste and anchovies, which contain a good amount of sodium and may not be suitable for everyone.",
+        "Serve it with good bread for dipping and an easy vegetable side, such as roasted broccoli, charred green beans or an arugula salad with a lemony dressing. ... Credit...Linda Xiao for The New York Times. Food Stylist: Yossy Arefi. One reader calls Yossy Arefi’s soup “the perfect cozy soup.” Chicken, brown rice and zucchini create a wholesome, hearty base, while the optional chile crisp adds gentle heat. Recipe: Ginger Chicken and Rice Soup With Zucchini",
+        "Nisha Vora’s game-changing recipe calls for grated tofu, which turns crisp and chewy when pan-fried, then gets coated in a bold sauce of gochugaru, toasted sesame oil, Chinese black vinegar and soy sauce. Serve it over rice with roasted green vegetables, and opt for lower-sodium soy sauce if you want to lower the sodium a bit. Many readers note that leftovers are just as good cold, so consider making extra."
+      ]
+    },
+    {
+      "type": "news_result",
+      "title": "Our Best Recipes of 2025 - NYT Cooking",
+      "url": "https://cooking.nytimes.com/article/best-recipes-of-2025",
+      "description": "Chicken stew, Dubai chocolate, egg bites: You loved them all year. Now, see what rose to the top.",
+      "age": "December 3, 2025",
+      "page_age": "2025-12-03T10:01:13",
+      "meta_url": {
+        "scheme": "https",
+        "netloc": "cooking.nytimes.com",
+        "hostname": "cooking.nytimes.com",
+        "favicon": "https://imgs.search.brave.com/weLX53aF43mb_eCTjTAjcWR0u6xB98w073CVKvtCuzg/rs:fit:32:32:1:0/g:ce/aHR0cDovL2Zhdmlj/b25zLnNlYXJjaC5i/cmF2ZS5jb20vaWNv/bnMvNTE5NjZiODE0/YWUwNDNiODgzZGIw/YzQ2ZDE2MTVmYTJl/YjgxOTNjNjEzODYy/Yzg2YjQyZTY0NDhj/MGU4YTBlMC9jb29r/aW5nLm55dGltZXMu/Y29tLw",
+        "path": "› article  › best-recipes-of-2025"
+      },
+      "thumbnail": {
+        "src": "https://imgs.search.brave.com/oZq6wCkugocq_B2xPmFrgHfvNPNB5UR_01XfpyA_6-s/rs:fit:200:200:1:0/g:ce/aHR0cHM6Ly9zdGF0/aWMwMS5ueXQuY29t/L2ltYWdlcy8yMDI1/LzEyLzAzL211bHRp/bWVkaWEvMDNGRC1Q/T1BVTEFSLVJFQ0lQ/RVMtMjAyNS10b3Bh/cnQtY2hpY2tlbmZs/b3JlbnRpbmUtcWZo/dy8wM0ZELVBPUFVM/QVItUkVDSVBFUy0y/MDI1LXRvcGFydC1j/aGlja2VuZmxvcmVu/dGluZS1xZmh3LWFy/dGljbGVMYXJnZS5q/cGc"
+      },
+      "extra_snippets": [
+        "Recipe: One-Pot Roman Chicken Cacciatore With Potatoes · Credit...Julia Gartland for The New York Times. Food Stylist: Samantha Seneviratne. Ali Slagle really knows her way around a bag of store-bought gnocchi, as evidenced by her many recipes featuring the little potato dumplings.",
+        "Recipe: Skillet Gnocchi With Miso Butter and Asparagus · Credit...Christopher Testani for The New York Times. Food Stylist: Simon Andrews. In this classic, cozy dish from Dan Pelosi, ground beef, carrots, onions, celery and peas are smothered in a thick tomato gravy, then topped with a blanket of Cheddar mashed potatoes. Now is the time to put that bag of frozen vegetables in your freezer to good use.",
+        "I know I sound like a broken record, but it’s hard to believe that 2025 is already coming to a close. When the ball drops on Dec. 31, New York Times Cooking will have developed, tested and published more than 1,000 recipes this year.",
+        "Below are 25 of your favorites, the ones you took the time to rate, comment on, share with friends and come back to again and again. Weeknight chicken (no surprise here!) is a clear winner, but plenty of vegetarian recipes and even a handful of ground beef ones made it to the finish line this year."
+      ]
+    },
+    {
+      "type": "news_result",
+      "title": "Our 25 Most Popular Recipes of the Year So Far - NYT Cooking",
+      "url": "https://cooking.nytimes.com/article/most-popular-recipes-2025",
+      "description": "Recipe: Skillet Gnocchi With Miso Butter and Asparagus · Credit...Christopher Testani for The New York Times. Food Stylist: Simon Andrews. Cover anything with a blanket of buttery mashed potatoes, and it’s practically guaranteed to be good. But this rib-sticker cottage pie from Dan Pelosi really ...",
+      "age": "July 15, 2025",
+      "page_age": "2025-07-15T09:01:02",
+      "meta_url": {
+        "scheme": "https",
+        "netloc": "cooking.nytimes.com",
+        "hostname": "cooking.nytimes.com",
+        "favicon": "https://imgs.search.brave.com/weLX53aF43mb_eCTjTAjcWR0u6xB98w073CVKvtCuzg/rs:fit:32:32:1:0/g:ce/aHR0cDovL2Zhdmlj/b25zLnNlYXJjaC5i/cmF2ZS5jb20vaWNv/bnMvNTE5NjZiODE0/YWUwNDNiODgzZGIw/YzQ2ZDE2MTVmYTJl/YjgxOTNjNjEzODYy/Yzg2YjQyZTY0NDhj/MGU4YTBlMC9jb29r/aW5nLm55dGltZXMu/Y29tLw",
+        "path": "› article  › most-popular-recipes-2025"
+      },
+      "thumbnail": {
+        "src": "https://imgs.search.brave.com/ig_NJQD3ttIik1XgvANE0-TxiHoTelSXjBDkzq5ffd8/rs:fit:200:200:1:0/g:ce/aHR0cHM6Ly9zdGF0/aWMwMS5ueXQuY29t/L2ltYWdlcy8yMDI1/LzA3LzE0L211bHRp/bWVkaWEvMTRGRC1t/b3N0LXBvcHVsYXIt/SG9uZXktR2FybGlj/LVNocmltcC1nZndw/LzE0RkQtbW9zdC1w/b3B1bGFyLUhvbmV5/LUdhcmxpYy1TaHJp/bXAtZ2Z3cC1hcnRp/Y2xlTGFyZ2UuanBn"
+      },
+      "extra_snippets": [
+        "Recipe: Skillet Gnocchi With Miso Butter and Asparagus · Credit...Christopher Testani for The New York Times. Food Stylist: Simon Andrews. Cover anything with a blanket of buttery mashed potatoes, and it’s practically guaranteed to be good. But this rib-sticker cottage pie from Dan Pelosi really delivers.",
+        "Weeknight wins again with easy recipes like hoisin noodles, lemon-pepper chicken and honey garlic shrimp leading the pack.",
+        "Since Jan. 1, we at New York Times Cooking have published more than 400 new recipes (phew!), and our dear readers have enjoyed cooking and eating all of them. Below are the 25 recipes that they’ve visited again and again and loved most so far.",
+        "This popular recipe may be why halloumi, that perfect salty-chewy cheese, is sold out at my neighborhood Trader Joe’s. In this hearty vegetarian dish from Nargisse Benkabbou, a can of white beans is added to a quick sauce of cherry tomatoes, garlic, honey and oregano."
+      ]
+    },
+    {
+      "type": "news_result",
+      "title": "What Recipes NYT Food Staffers Are Cooking in the New Year - NYT Cooking",
+      "url": "https://cooking.nytimes.com/article/new-years-recipes-cooking",
+      "description": "The crunchy cucumber, juicy pops ... juice really come together for the most refreshing bite, with a bright burst of tang. It’s light, won’t weigh you down and is the perfect way to enjoy fresh pomegranate while it’s in season. JAEVON WILLIAMS ... Credit...Ryan Liebe for The New York Times. Food Stylist: Barrett Washburne. New Year, same fave. And for good reason! Melissa Clark’s recipe meets all ...",
+      "age": "2 weeks ago",
+      "page_age": "2026-01-01T10:01:08",
+      "meta_url": {
+        "scheme": "https",
+        "netloc": "cooking.nytimes.com",
+        "hostname": "cooking.nytimes.com",
+        "favicon": "https://imgs.search.brave.com/weLX53aF43mb_eCTjTAjcWR0u6xB98w073CVKvtCuzg/rs:fit:32:32:1:0/g:ce/aHR0cDovL2Zhdmlj/b25zLnNlYXJjaC5i/cmF2ZS5jb20vaWNv/bnMvNTE5NjZiODE0/YWUwNDNiODgzZGIw/YzQ2ZDE2MTVmYTJl/YjgxOTNjNjEzODYy/Yzg2YjQyZTY0NDhj/MGU4YTBlMC9jb29r/aW5nLm55dGltZXMu/Y29tLw",
+        "path": "› article  › new-years-recipes-cooking"
+      },
+      "thumbnail": {
+        "src": "https://imgs.search.brave.com/5ChWjIIOOkyZmI0ndZ7ljf_Y48CvyZOMgK8CSl3xorE/rs:fit:200:200:1:0/g:ce/aHR0cHM6Ly9zdGF0/aWMwMS5ueXQuY29t/L2ltYWdlcy8yMDI1/LzAxLzAxL211bHRp/bWVkaWEvMDFGRC1S/RVNFVC1ST1VORFVQ/LXRvcGFydC1jdWN1/bWJlcnBvbWVncmFu/YXRlc2FsYWQtbWdo/dy8wMUZELVJFU0VU/LVJPVU5EVVAtdG9w/YXJ0LWN1Y3VtYmVy/cG9tZWdyYW5hdGVz/YWxhZC1tZ2h3LWFy/dGljbGVMYXJnZS5q/cGc"
+      },
+      "extra_snippets": [
+        "The crunchy cucumber, juicy pops of pomegranate seeds, mint, red onion and lime juice really come together for the most refreshing bite, with a bright burst of tang. It’s light, won’t weigh you down and is the perfect way to enjoy fresh pomegranate while it’s in season. JAEVON WILLIAMS ... Credit...Ryan Liebe for The New York Times. Food Stylist: Barrett Washburne. New Year, same fave. And for good reason! Melissa Clark’s recipe meets all my cold weather needs: It’s hearty, it comes together in one pot in half an hour and it makes use of the canned chickpeas I have in spades.",
+        "After the holidays, we’re reaching for dishes that feel comforting, easy and restorative.",
+        "Recipes: Italian Broccoli Salad | Roasted Broccoli With Vinegar-Mustard Glaze | Mini Meatball Soup With Broccoli and Orecchiette ... Credit...James Ransom for The New York Times. Food Stylist: Barrett Washburne. This stew hits all the check marks for what I want and need in January. It’s warming, spicy, brothy, good-for-me (hello, leafy greens), inexpensive to make and exciting to eat.",
+        "Recipe: Amanda Cohen’s Secret-Weapon Stir-Fry Sauce ... Lentils are nutrient-dense, filling and easy to cook. Eating them to start the new year is also an Italian tradition; the abundance of coin-shaped pulses is meant to symbolize wealth and good fortune in the new year."
+      ]
+    },
+    {
+      "type": "news_result",
+      "title": "14 Easy Healthy Dinner Recipes - NYT Cooking",
+      "url": "https://cooking.nytimes.com/article/easy-healthy-dinner-ideas",
+      "description": "So consider the 14 below: They’re ... full of goodness — and they’ve been tested and vetted not only by our recipe developers and editors, but by our readers as well. Healthy can look like different things to different people, but the goal with these dishes is to help you get cooking, and to make something that feels nourishing. Read on for dishes that will make you feel confident about cooking, and, most important, taste really ...",
+      "age": "January 2, 2025",
+      "page_age": "2025-01-02T17:17:15",
+      "meta_url": {
+        "scheme": "https",
+        "netloc": "cooking.nytimes.com",
+        "hostname": "cooking.nytimes.com",
+        "favicon": "https://imgs.search.brave.com/weLX53aF43mb_eCTjTAjcWR0u6xB98w073CVKvtCuzg/rs:fit:32:32:1:0/g:ce/aHR0cDovL2Zhdmlj/b25zLnNlYXJjaC5i/cmF2ZS5jb20vaWNv/bnMvNTE5NjZiODE0/YWUwNDNiODgzZGIw/YzQ2ZDE2MTVmYTJl/YjgxOTNjNjEzODYy/Yzg2YjQyZTY0NDhj/MGU4YTBlMC9jb29r/aW5nLm55dGltZXMu/Y29tLw",
+        "path": "› article  › easy-healthy-dinner-ideas"
+      },
+      "thumbnail": {
+        "src": "https://imgs.search.brave.com/TbxVWdZM_hojuRpdHR18PQ9Cm68rP9hYzKdqcpiIJKk/rs:fit:200:200:1:0/g:ce/aHR0cHM6Ly9zdGF0/aWMwMS5ueXQuY29t/L2ltYWdlcy8yMDI0/LzEyLzMxL211bHRp/bWVkaWEvQ09PS0lO/Ry1IRUFMVEhZLURJ/Tk5FUlMtTEVOVElM/LVNXRUVULVBPVEFU/Ty1TQUxBRC16aGtq/L0NPT0tJTkctSEVB/TFRIWS1ESU5ORVJT/LUxFTlRJTC1TV0VF/VC1QT1RBVE8tU0FM/QUQtemhrai1hcnRp/Y2xlTGFyZ2UuanBn"
+      },
+      "extra_snippets": [
+        "So consider the 14 below: They’re fresh, filling and full of goodness — and they’ve been tested and vetted not only by our recipe developers and editors, but by our readers as well. Healthy can look like different things to different people, but the goal with these dishes is to help you get cooking, and to make something that feels nourishing. Read on for dishes that will make you feel confident about cooking, and, most important, taste really good.",
+        "Start the year off right with these recipes to refresh and reinvigorate.",
+        "You need to try this Becky Hughes recipe only once before you understand the hype. The comment section is full of adoring converts, but there’s arguably no fan more vocal than my colleague Natasha Janardan, who told me: “Between my sister and I, we make it nearly every week.",
+        "The best part of this Lidey Heuck recipe is how you can make it whatever consistency you like — extra soupy, extra thick or anywhere in between — by changing the amount of Parmesan or how long you cook the beans."
+      ]
+    },
+    {
+      "type": "news_result",
+      "title": "17 Easy, 30-Minute Chicken Recipes Our Readers Can’t Stop Making",
+      "url": "https://cooking.nytimes.com/article/reader-favorite-easy-quick-chicken-recipes",
+      "description": "These dishes, which take a half-hour or less, deserve a spot in your rotation, too.",
+      "age": "July 31, 2025",
+      "page_age": "2025-07-31T15:57:30",
+      "meta_url": {
+        "scheme": "https",
+        "netloc": "cooking.nytimes.com",
+        "hostname": "cooking.nytimes.com",
+        "favicon": "https://imgs.search.brave.com/weLX53aF43mb_eCTjTAjcWR0u6xB98w073CVKvtCuzg/rs:fit:32:32:1:0/g:ce/aHR0cDovL2Zhdmlj/b25zLnNlYXJjaC5i/cmF2ZS5jb20vaWNv/bnMvNTE5NjZiODE0/YWUwNDNiODgzZGIw/YzQ2ZDE2MTVmYTJl/YjgxOTNjNjEzODYy/Yzg2YjQyZTY0NDhj/MGU4YTBlMC9jb29r/aW5nLm55dGltZXMu/Y29tLw",
+        "path": "› article  › reader-favorite-easy-quick-chicken-recipes"
+      },
+      "thumbnail": {
+        "src": "https://imgs.search.brave.com/yyg3zR16UdmQ-2RqFneXsjVvYisYdXrdVMuDPyAgM34/rs:fit:200:200:1:0/g:ce/aHR0cHM6Ly9zdGF0/aWMwMS5ueXQuY29t/L2ltYWdlcy8yMDI1/LzA4LzI4L211bHRp/bWVkaWEvMjhGRC1S/RUFERVJGQVZPUklU/RS1DSElDS0VOLVJP/VU5EVVAtS3VhLUts/aW5nLXZqa3cvMjhG/RC1SRUFERVJGQVZP/UklURS1DSElDS0VO/LVJPVU5EVVAtS3Vh/LUtsaW5nLXZqa3ct/YXJ0aWNsZUxhcmdl/LmpwZw"
+      },
+      "extra_snippets": [
+        "Take a few minutes to scroll through our most popular recipes of the year (so far), and one thing is obvious: People really like chicken. Unsurprisingly, they’re especially fond of chicken recipes that promise a delicious meal in 30 minutes or less. And so, here are the easy weeknight chicken recipes our readers turn to again and again.",
+        "It’s hard to believe that you can prepare this Susan Spungen recipe with just six ingredients, but believe it. Sautéing garlic in olive oil, then using the infused oil to cook the chicken breasts results in a delicious, nuanced pan sauce.",
+        "This recipe from Emily Kim, a.k.a. Maangchi, makes it possible for you to enjoy Korean fire chicken at home. As in many of the best Korean dishes, the meat is simply coated in a gochujang-based sauce, then braised on the stovetop.",
+        "If the combination of chicken and garlicky yogurt isn’t on your radar, try this recipe from Ali Slagle."
+      ]
+    },
+    {
+      "type": "news_result",
+      "title": "Easy, Comfort Recipes to Make for Someone Who Is Sick - NYT Cooking",
+      "url": "https://cooking.nytimes.com/article/easy-comforting-sick-recipes",
+      "description": "Even if that someone is you. Easy chicken soup, instant pot congee, green smoothies and more dishes that restore and rejuvenate.",
+      "age": "October 10, 2025",
+      "page_age": "2025-10-10T19:11:34",
+      "meta_url": {
+        "scheme": "https",
+        "netloc": "cooking.nytimes.com",
+        "hostname": "cooking.nytimes.com",
+        "favicon": "https://imgs.search.brave.com/weLX53aF43mb_eCTjTAjcWR0u6xB98w073CVKvtCuzg/rs:fit:32:32:1:0/g:ce/aHR0cDovL2Zhdmlj/b25zLnNlYXJjaC5i/cmF2ZS5jb20vaWNv/bnMvNTE5NjZiODE0/YWUwNDNiODgzZGIw/YzQ2ZDE2MTVmYTJl/YjgxOTNjNjEzODYy/Yzg2YjQyZTY0NDhj/MGU4YTBlMC9jb29r/aW5nLm55dGltZXMu/Y29tLw",
+        "path": "› article  › easy-comforting-sick-recipes"
+      },
+      "thumbnail": {
+        "src": "https://imgs.search.brave.com/xstROYkamimm9hRydst12NoSoEDJHOrrlMN5uoYhu0I/rs:fit:200:200:1:0/g:ce/aHR0cHM6Ly9zdGF0/aWMwMS5ueXQuY29t/L2ltYWdlcy8yMDI1/LzEwLzA2L211bHRp/bWVkaWEvMDZGRC1T/SUNLLVJFQ0lQRVMt/Uk9VTkRVUC10b3Bh/cnQtcWxrYi8wNkZE/LVNJQ0stUkVDSVBF/Uy1ST1VORFVQLXRv/cGFydC1xbGtiLWFy/dGljbGVMYXJnZS5q/cGc"
+      },
+      "extra_snippets": [
+        "Smoothies can be hard to get right, but this recipe, from Ali Slagle, which she adapted from Veggies Natural Juice Bar & Cafe in Brooklyn, is tried and true. It has all the nutrients you need from spinach and curly kale, but most importantly, it tastes good.",
+        "For others, it’s nostalgic childhood foods like Jell-O, Saltines and ginger ale. What we want to eat when we’re sick varies, but it ultimately comes down to one thing: comfort. Here are the recipes our readers love to make when they — or their loved ones — are under the weather.",
+        "Ask me or any other Chinese person what they want when they’re sick, and chances are we’ll say congee. Melissa Clark’s recipe uses an Instant Pot for a hands-free bowl of savory porridge in just 30 minutes. But if you don’t have a pressure cooker, it’s extremely easy to make on the stovetop as well — it will just take a little more time.",
+        "Pastina, which means “tiny pasta” in Italian, makes this soup as fun to eat as it is nourishing. Making chicken soup from scratch sounds daunting, but with Naz Deravian’s recipe, just toss the chicken breasts into the pot with your onions, carrots and celery and wait until everything comes together."
+      ]
+    },
+    {
+      "type": "news_result",
+      "title": "17 Easy Healthy Breakfasts to Make on Repeat",
+      "url": "https://cooking.nytimes.com/article/easy-healthy-breakfast-ideas",
+      "description": "Start the day right with these can’t-miss recipes.",
+      "age": "January 27, 2025",
+      "page_age": "2025-01-27T20:50:53",
+      "meta_url": {
+        "scheme": "https",
+        "netloc": "cooking.nytimes.com",
+        "hostname": "cooking.nytimes.com",
+        "favicon": "https://imgs.search.brave.com/weLX53aF43mb_eCTjTAjcWR0u6xB98w073CVKvtCuzg/rs:fit:32:32:1:0/g:ce/aHR0cDovL2Zhdmlj/b25zLnNlYXJjaC5i/cmF2ZS5jb20vaWNv/bnMvNTE5NjZiODE0/YWUwNDNiODgzZGIw/YzQ2ZDE2MTVmYTJl/YjgxOTNjNjEzODYy/Yzg2YjQyZTY0NDhj/MGU4YTBlMC9jb29r/aW5nLm55dGltZXMu/Y29tLw",
+        "path": "› article  › easy-healthy-breakfast-ideas"
+      },
+      "thumbnail": {
+        "src": "https://imgs.search.brave.com/RwGEe-qsP8zcI358bTZrlKCzztWFxbf41lW61v1Et10/rs:fit:200:200:1:0/g:ce/aHR0cHM6Ly9zdGF0/aWMwMS5ueXQuY29t/L2ltYWdlcy8yMDI1/LzAxLzI3L211bHRp/bWVkaWEvMjdDT09L/SU5HLUhFQUxUSFkt/QlJFQUtGQVNULU1h/dGNoYS1PYXRzLWZn/d2ovMjdDT09LSU5H/LUhFQUxUSFktQlJF/QUtGQVNULU1hdGNo/YS1PYXRzLWZnd2ot/YXJ0aWNsZUxhcmdl/LmpwZw"
+      },
+      "extra_snippets": [
+        "Start the day right with these can’t-miss recipes. Lidey Heuck’s easy, one-bowl baked oatmeal is graciously adaptable.Credit...Christopher Testani for The New York Times. Food Stylist: Simon Andrews. ... Published Jan. 27, 2025Updated Jan. 9, 2026 · A good healthy breakfast should fill you up without making you sluggish and provide a base line of nutrients that your body needs to function at its peak.",
+        "The recipes below will get you on the right track, whether you want produce-filled smoothies that require little more than five minutes of your time before you dash out the door or make-ahead egg dishes that can take you and your family through a week of hectic mornings. Each and every recipe is guaranteed to work, and all are as delicious to eat as they are easy to make.",
+        "Giving uncooked oats a lengthy soak in milk softens them without imparting any of the gumminess sometimes associated with cooked oatmeal. In Genevieve Ko’s recipe, just five minutes the night before will give you five days’ worth of breakfasts.",
+        "My colleague Alexa Weibel, who has impeccable taste, says this granola recipe, adapted by Sam Sifton from the Manhattan fine-dining restaurant, “gets me out of bed in the morning.” And if that’s not enough to encourage you to make it ASAP, then maybe the 6,500 five-star ratings will."
+      ]
+    },
+    {
+      "type": "news_result",
+      "title": "15 Easy Baking Recipes for Tired People Who Need Something Sweet",
+      "url": "https://cooking.nytimes.com/article/easy-baking-recipes",
+      "description": "Setting aside any lengthy discourse ... Lomas really lets the fruit shine. An ultra buttery batter strings together apple slices, which become jammy and caramelized when they bake, for a dessert that isn’t a pie but is still all about apples. ... Credit...Kelly Marshall for The New York Times. Food Stylist: Samantha Seneviratne. We’re in a golden age of microwave desserts: This Ali Slagle recipe is big enough ...",
+      "age": "March 5, 2025",
+      "page_age": "2025-03-05T19:46:41",
+      "meta_url": {
+        "scheme": "https",
+        "netloc": "cooking.nytimes.com",
+        "hostname": "cooking.nytimes.com",
+        "favicon": "https://imgs.search.brave.com/weLX53aF43mb_eCTjTAjcWR0u6xB98w073CVKvtCuzg/rs:fit:32:32:1:0/g:ce/aHR0cDovL2Zhdmlj/b25zLnNlYXJjaC5i/cmF2ZS5jb20vaWNv/bnMvNTE5NjZiODE0/YWUwNDNiODgzZGIw/YzQ2ZDE2MTVmYTJl/YjgxOTNjNjEzODYy/Yzg2YjQyZTY0NDhj/MGU4YTBlMC9jb29r/aW5nLm55dGltZXMu/Y29tLw",
+        "path": "› article  › easy-baking-recipes"
+      },
+      "thumbnail": {
+        "src": "https://imgs.search.brave.com/L6lsV5eTVArHYgtDC-J5AOZ1w9cdAVp980Ta3A11JCw/rs:fit:200:200:1:0/g:ce/aHR0cHM6Ly9zdGF0/aWMwMS5ueXQuY29t/L2ltYWdlcy8yMDI0/LzEwLzExL211bHRp/bWVkaWEvRUFTWS1C/QUtJTkctUm91bmR1/cC1jYXJkYW1vbS1j/b2ZmZWUtYmFuYW5h/LWJyZWFkL0VBU1kt/QkFLSU5HLVJvdW5k/dXAtY2FyZGFtb20t/Y29mZmVlLWJhbmFu/YS1icmVhZC1hcnRp/Y2xlTGFyZ2UuanBn"
+      },
+      "extra_snippets": [
+        "Setting aside any lengthy discourse about what makes for a buckle versus a cobbler versus a crumble, this easy dessert from Vallery Lomas really lets the fruit shine. An ultra buttery batter strings together apple slices, which become jammy and caramelized when they bake, for a dessert that isn’t a pie but is still all about apples. ... Credit...Kelly Marshall for The New York Times. Food Stylist: Samantha Seneviratne. We’re in a golden age of microwave desserts: This Ali Slagle recipe is big enough for two, providing double the comforting flavors of sticky toffee pudding.",
+        "Sometimes baking is about the journey: It’s fun to whisk warm sugar into egg whites for an Italian meringue, then fold it carefully into a batter. And sometimes, it’s about the destination. You want a baked good — as soon as possible. That’s when the recipes below come in handy.",
+        "You don’t have to cut butter into flour in this simple recipe, which is easier, even, than a classic cream scone recipe. Here, Genevieve Ko instead drops the batter onto a sheet pan, ensuring there’s no chance of overworking the dough (and practically guaranteeing success). The recipe calls for blueberries, but you can fold in any seasonal fruit — dried or fresh.",
+        "These cookies come together in one bowl, but what’s even better is how Samantha Seneviratne, who created the recipe, lets you skip scooping and shaping individual balls of dough. Just bake all the dough in one skillet. It’s easier, and who doesn’t love a giant cookie?"
+      ]
+    },
+    {
+      "type": "news_result",
+      "title": "The Best Simple Recipes | Thanksgiving Recipes 2024 | NYT Cooking - NYT Cooking",
+      "url": "https://cooking.nytimes.com/article/best-simple-recipes",
+      "description": "An ingredient or two more — a ... — really can be the difference between a good dinner and a great one. Easy and cheap doesn’t mean skimping on excitement or flavor, and proving that is our goal. After all, the most streamlined meals are often the most ingenious — and the most treasured. Credit...Linda Pugliese for The New York Times. Food Stylist: Monica Pierini. You can feel like you’ve gone on a trip to Italy without even leaving the house. This Kay Chun recipe is a textbook ...",
+      "age": "September 20, 2022",
+      "page_age": "2022-09-20T09:00:35",
+      "meta_url": {
+        "scheme": "https",
+        "netloc": "cooking.nytimes.com",
+        "hostname": "cooking.nytimes.com",
+        "favicon": "https://imgs.search.brave.com/weLX53aF43mb_eCTjTAjcWR0u6xB98w073CVKvtCuzg/rs:fit:32:32:1:0/g:ce/aHR0cDovL2Zhdmlj/b25zLnNlYXJjaC5i/cmF2ZS5jb20vaWNv/bnMvNTE5NjZiODE0/YWUwNDNiODgzZGIw/YzQ2ZDE2MTVmYTJl/YjgxOTNjNjEzODYy/Yzg2YjQyZTY0NDhj/MGU4YTBlMC9jb29r/aW5nLm55dGltZXMu/Y29tLw",
+        "path": "› article  › best-simple-recipes"
+      },
+      "thumbnail": {
+        "src": "https://imgs.search.brave.com/H31RwigBocEC8iekDpxm3fFUgZEWjt96PQTgEuby68I/rs:fit:200:200:1:0/g:ce/aHR0cHM6Ly9zdGF0/aWMwMS5ueXQuY29t/L2ltYWdlcy8yMDIy/LzA5LzI1L2Rpbmlu/Zy8yMFNFVkVOSU5H/LVByb21vMS8yMFNF/VkVOSU5HLVByb21v/MS1hcnRpY2xlTGFy/Z2UuanBn"
+      },
+      "extra_snippets": [
+        "An ingredient or two more — a smattering of scallions, a dash of sweet-salty miso, the juice from a single orange — really can be the difference between a good dinner and a great one. Easy and cheap doesn’t mean skimping on excitement or flavor, and proving that is our goal. After all, the most streamlined meals are often the most ingenious — and the most treasured. Credit...Linda Pugliese for The New York Times. Food Stylist: Monica Pierini. You can feel like you’ve gone on a trip to Italy without even leaving the house. This Kay Chun recipe is a textbook example of how a few humble ingredients can create big, comforting, complex flavors.",
+        "These 24 recipes show you how to make the very most of very little.",
+        "Dinner in 15 minutes and just five ingredients, this Yasmin Fahr recipe is as generous as it is tart and creamy. Use labneh or a thick yogurt and any number of short pasta shapes. Make it as written, or go bigger — from five ingredients to six (wow) — and make the lemony scallion topping mentioned in the Tip. The details are up to you, but this pasta will be good no matter what.",
+        "But in this recipe from Danielle Alvarez’s cookbook “Always Add Lemon,” and adapted by Melissa Clark, nori sheets are blended into a briny oil that’s brushed onto the fillets. (Double it for future use. Trust us.) It’s a brilliant way to make seaweed snacks a dinner star, adding depth that makes a reliably good meal great."
+      ]
+    },
+    {
+      "type": "news_result",
+      "title": "The Best Recipes We've Ever Published, According to You (Published 2024)",
+      "url": "https://www.nytimes.com/interactive/2024/dining/best-nyt-cooking-recipes.html",
+      "description": "For the 10th anniversary of NYT Cooking, we’ve collected recipes that racked up five-star ratings, topped our charts and went viral — plus a few that lit up the comments section.",
+      "age": "September 16, 2024",
+      "page_age": "2024-09-16T21:32:55",
+      "meta_url": {
+        "scheme": "https",
+        "netloc": "nytimes.com",
+        "hostname": "www.nytimes.com",
+        "favicon": "https://imgs.search.brave.com/lWA-zkTMlWM2cUvrcYa1Fls86e-Vl-rkSBOjichQqVs/rs:fit:32:32:1:0/g:ce/aHR0cDovL2Zhdmlj/b25zLnNlYXJjaC5i/cmF2ZS5jb20vaWNv/bnMvMGFlZWRkYmVh/YWFhZmFjYjM4MWYy/NTQzZmExMTIwN2Nm/NGJmZjgwYTRhYjI5/OTliM2JkYmI2MWY0/M2RlOGFlMi93d3cu/bnl0aW1lcy5jb20v",
+        "path": "› interactive  › 2024  › dining  › best-nyt-cooking-recipes.html"
+      },
+      "thumbnail": {
+        "src": "https://imgs.search.brave.com/ilWUPUxs4aiUiNSVKuoqg_ma9suayHg_qINxsv3Rvfs/rs:fit:200:200:1:0/g:ce/aHR0cHM6Ly9zdGF0/aWMwMS5ueXQuY29t/L2ltYWdlcy8yMDI0/LzA5LzE2L2Rpbmlu/Zy9iZXN0LW55dC1j/b29raW5nLXJlY2lw/ZXMtMTcyNjUwMjQ3/ODkyMy9iZXN0LW55/dC1jb29raW5nLXJl/Y2lwZXMtMTcyNjUw/MjQ3ODkyMy1mYWNl/Ym9va0p1bWJvLmpw/Zz95ZWFyPTIwMjQm/YW1wO2g9NTUwJmFt/cDt3PTEwNTAmYW1w/O3M9NDI4MjU2N2Rl/NDZjMWE4MTEzOGRj/YTBmNGVjZjY5NGJi/ZmIyZDFlOTk2ZjJk/YzMyNmFiOTIyNWFl/MjMyMDJiZCZhbXA7/az1aUUpCS3FaMFZO"
+      },
+      "extra_snippets": [
+        "Bryan has since adopted a Labrador, and she said makes this sauce weekly in fall and winter: “We just really love it.” · “I cannot comment of the taste of the sauce. It was cooling and I ran a short errand. In the meantime, my 8 year old Labrador retriever, Jake, (who had never, ever bothered anything in the kitchen) somehow got the pot off of the cooktop and ate all of the sauce. The worst part was that I had tripled the recipe, so Jake ate 3 pounds of Bolognese sauce!",
+        "Try the recipes below: Sheet-Pan Feta With Chickpeas and Tomatoes Ali Slagle · One-Pan Feta Pasta With Cherry Tomatoes Jenni Hayrinen ... Christopher Testani for The New York Times. Food Stylist: Simon Andrews. ... Hetty Lui McKinnon’s brilliant salad has gained thousands of ardent fans in the short year and change since it was published, and for good reason.",
+        "To make what is perhaps the most luxurious scramble, Kenji López-Alt borrowed a technique from the blogger Mandy Lee, using cornstarch to prevent the eggs from setting up too firmly in the pan. It’s a small change with a big result, leaving the eggs tender and the recipe true to its name. “These eggs are incredible. I cooked them without telling my wife and tried to play it off like it was just a good batch.",
+        "They are so good, she caught on.” — A commenter · I want to make it. I’ve made it. Liked it? Try the recipes below:"
+      ]
+    },
+    {
+      "type": "news_result",
+      "title": "The 10 Most Popular Meatless NYT Cooking Recipes of 2025 - The New York Times",
+      "url": "https://nytimes.com/2025/12/25/dining/the-10-most-popular-meatless-recipes-of-2025.html",
+      "description": "I hope Santa brought you whatever ... just a good night’s sleep. I wished for all three, greedy as that may be. What a lifetime this year has been. As this is our last Veggie of 2025, there is no better time for a bit of reflection and reminiscing on our most-read newsletters of the year. Recipe Matchmaker aimed to please, and one particular edition from April really caught readers’ ...",
+      "age": "3 weeks ago",
+      "page_age": "2025-12-25T18:00:03",
+      "meta_url": {
+        "scheme": "https",
+        "netloc": "nytimes.com",
+        "hostname": "nytimes.com",
+        "favicon": "https://imgs.search.brave.com/RN_hisZu4P-ruAdWPR9uvaiS7YyW2d23CPtP4_gduCA/rs:fit:32:32:1:0/g:ce/aHR0cDovL2Zhdmlj/b25zLnNlYXJjaC5i/cmF2ZS5jb20vaWNv/bnMvOTRlZDNhZjVm/ZDNmYzA0NDdjYjYx/NjY5YWQ5ZDFiYmE1/ZTE5NjE5ZjBiYmRl/NTdkZGFiZDQ0M2Y5/NGNkZjA3Yi9ueXRp/bWVzLmNvbS8",
+        "path": "› 2025  › 12  › 25  › dining  › the-10-most-popular-meatless-recipes-of-2025.html"
+      },
+      "thumbnail": {
+        "src": "https://imgs.search.brave.com/foE7drUpHYmWK60i0erfB5NHYVNjPeSBYQXQLTp-ZIs/rs:fit:200:200:1:0/g:ce/aHR0cHM6Ly9zdGF0/aWMwMS5ueXQuY29t/L2ltYWdlcy8yMDI1/LzA0LzE3L211bHRp/bWVkaWEvaG0taG9p/c2luLWdhcmxpYy1u/b29kbGVzLWNibGgt/Y29weS9obS1ob2lz/aW4tZ2FybGljLW5v/b2RsZXMtY2JsaC1m/YWNlYm9va0p1bWJv/LmpwZw"
+      },
+      "extra_snippets": [
+        "I hope Santa brought you whatever you asked for, be that a new robe, a mountainous dessert or just a good night’s sleep. I wished for all three, greedy as that may be. What a lifetime this year has been. As this is our last Veggie of 2025, there is no better time for a bit of reflection and reminiscing on our most-read newsletters of the year. Recipe Matchmaker aimed to please, and one particular edition from April really caught readers’ eyes.",
+        "Porcini ragù. Roasted broccoli with whipped tofu. French lentil salad. Here’s what readers loved the most.",
+        "Millie Peartree’s cool, crunchy and sweet mango slaw (8) jazzed up your picnics and barbecues, and Hetty Lui McKinnon’s five-star no-cook chili bean salad (7) helped you weather the year’s heat waves. “Oh my gosh, so good!” one reader wrote. “I would have never thought that cold chili could be something that I might like. But it was 100 degrees today, and I did not want to cook anything.” Exactly! View this recipe."
+      ]
+    },
+    {
+      "type": "news_result",
+      "title": "12 of Our Staff’s Favorite Restaurant Recipes That You Can Make at Home - NYT Cooking",
+      "url": "https://cooking.nytimes.com/article/staff-favorite-restaurant-recipes",
+      "description": "Try Vinegar Hill House’s skillet sourdough pancakes, Roberta’s pizza and more dishes we’ve adapted from restaurants and bakeries over the years.",
+      "age": "September 9, 2025",
+      "page_age": "2025-09-09T09:02:20",
+      "meta_url": {
+        "scheme": "https",
+        "netloc": "cooking.nytimes.com",
+        "hostname": "cooking.nytimes.com",
+        "favicon": "https://imgs.search.brave.com/weLX53aF43mb_eCTjTAjcWR0u6xB98w073CVKvtCuzg/rs:fit:32:32:1:0/g:ce/aHR0cDovL2Zhdmlj/b25zLnNlYXJjaC5i/cmF2ZS5jb20vaWNv/bnMvNTE5NjZiODE0/YWUwNDNiODgzZGIw/YzQ2ZDE2MTVmYTJl/YjgxOTNjNjEzODYy/Yzg2YjQyZTY0NDhj/MGU4YTBlMC9jb29r/aW5nLm55dGltZXMu/Y29tLw",
+        "path": "› article  › staff-favorite-restaurant-recipes"
+      },
+      "thumbnail": {
+        "src": "https://imgs.search.brave.com/ZbcrnnXkh_C0NQ6dgUeOkUOyKLxQzErD2eWD1BuVgWo/rs:fit:200:200:1:0/g:ce/aHR0cHM6Ly9zdGF0/aWMwMS5ueXQuY29t/L2ltYWdlcy8yMDI1/LzA5LzA5L211bHRp/bWVkaWEvMDlGRC1T/VEFGRi1GQVZPUklU/RS1SRVNUQVVSQU5U/LVJFQ0lQRVMtZ29s/ZGVuLWRpbmVyLVR1/bmEtcWdtay8wOUZE/LVNUQUZGLUZBVk9S/SVRFLVJFU1RBVVJB/TlQtUkVDSVBFUy1n/b2xkZW4tZGluZXIt/VHVuYS1xZ21rLWFy/dGljbGVMYXJnZS5q/cGc"
+      },
+      "extra_snippets": [
+        "The chef Ryan Hardy nails the fundamentals by cooking the farro in apple cider with bay leaves and salt until it’s so flavorful you could eat it plain, then builds on that foundation with plenty of good olive oil, pistachios, Parmesan and a mix of fresh vegetables including tomatoes, radishes and arugula. It’s the kind of dish that makes you realize how incredible something as simple as a grain salad can be when every element is done exactly right. MELISSA CLARK ... Credit...Nico Schinco for The New York Times. Food Stylist: Barrett Washburne. The tender and spicy sliced lamb meat should be enough of a reward for making this recipe from Jason Wang and David Shi of Xi’an Famous Foods, but my favorite part is the homemade bun.",
+        "Many of New York Times Cooking’s most-loved recipes come from home kitchens, but just as many are created in restaurant kitchens, where technical skill, high-quality ingredients and ingenuity work together in harmony. In addition to the original dishes that our recipe developers and columnists create, restaurants often generously share their recipes with us, which we then adapt for home cooks.",
+        "The luxuriously thick and fruit-filled sourdough pancake at Vinegar Hill House is a thing of beauty, even before you learn about its origins with one Montana couple and their pure devotion to weekly pancakes. The dish is still on the brunch menu — right now you’ll find it filled with plums — but I love the recipe because you can make it part of your own weekly rhythm at home and the pancake will work all year long with different fruits swapped in.",
+        "I nearly cried when Roseann Grimm, the owner and chef of Anchor Oyster Bar in San Francisco, agreed to share her cioppino recipe with me. Alexa Weibel, one of the New York Times Cooking editors, adapted it for a home kitchen without losing any of the tiny magic tricks that make it so definitively Anchor’s."
+      ]
+    },
+    {
+      "type": "news_result",
+      "title": "2025 Was the Year of the Rotisserie Chicken - The New York Times",
+      "url": "https://nytimes.com/2025/12/30/dining/rotisserie-chicken-restaurants.html",
+      "description": "As food prices climb, a whole, glistening bird is especially attractive to restaurant owners and diners alike.",
+      "age": "2 weeks ago",
+      "page_age": "2025-12-30T15:36:04",
+      "meta_url": {
+        "scheme": "https",
+        "netloc": "nytimes.com",
+        "hostname": "nytimes.com",
+        "favicon": "https://imgs.search.brave.com/RN_hisZu4P-ruAdWPR9uvaiS7YyW2d23CPtP4_gduCA/rs:fit:32:32:1:0/g:ce/aHR0cDovL2Zhdmlj/b25zLnNlYXJjaC5i/cmF2ZS5jb20vaWNv/bnMvOTRlZDNhZjVm/ZDNmYzA0NDdjYjYx/NjY5YWQ5ZDFiYmE1/ZTE5NjE5ZjBiYmRl/NTdkZGFiZDQ0M2Y5/NGNkZjA3Yi9ueXRp/bWVzLmNvbS8",
+        "path": "› 2025  › 12  › 30  › dining  › rotisserie-chicken-restaurants.html"
+      },
+      "thumbnail": {
+        "src": "https://imgs.search.brave.com/MjkxC0Iln9J5RjjQQv_OhxcFA7CgwgCxQbavBgA2Hts/rs:fit:200:200:1:0/g:ce/aHR0cHM6Ly9zdGF0/aWMwMS5ueXQuY29t/L2ltYWdlcy8yMDI2/LzAxLzE0L211bHRp/bWVkaWEvMTRGRC1S/T1RJU1NFUklFLTA3/LW1ja2YvRkQtUk9U/SVNTRVJJRS0wNy1t/Y2tmLWZhY2Vib29r/SnVtYm8uanBn"
+      },
+      "extra_snippets": [
+        "But Ms. Tang wanted to pivot from the majority-takeout model of her family’s restaurants to “a place you want to have dinner and hang out with friends.” Along with a full bar, she added items like a sesame Caesar salad to the menu at Johnny’s and tweaked the green sauce recipe.",
+        "Follow New York Times Cooking on Instagram, Facebook, YouTube, TikTok and Pinterest. Get regular updates from New York Times Cooking, with recipe suggestions, cooking tips and shopping advice.",
+        "For $27 at Johnny’s in Williamsburg, Brooklyn, the whole rotisserie chicken arrives neatly quartered, with lacquered skin and juicy, seasoned meat. Stephanie Tang, an owner, is no stranger to a good rotisserie chicken. In 1973, her grandfather opened Peking BBQ, a Peruvian and Cantonese rotisserie spot in Woodside, Queens, which still operates today.",
+        "“I really think of us as salad first, plus rotisserie chicken, but rotisserie chicken really sells,” Mr."
+      ]
+    },
+    {
+      "type": "news_result",
+      "title": "100 Easy Summer Recipes for Right Now",
+      "url": "https://cooking.nytimes.com/article/quick-easy-summer-recipes",
+      "description": "Because worrying about dinner should be the last thing on your mind.",
+      "age": "June 16, 2025",
+      "page_age": "2025-06-16T09:00:41",
+      "meta_url": {
+        "scheme": "https",
+        "netloc": "cooking.nytimes.com",
+        "hostname": "cooking.nytimes.com",
+        "favicon": "https://imgs.search.brave.com/weLX53aF43mb_eCTjTAjcWR0u6xB98w073CVKvtCuzg/rs:fit:32:32:1:0/g:ce/aHR0cDovL2Zhdmlj/b25zLnNlYXJjaC5i/cmF2ZS5jb20vaWNv/bnMvNTE5NjZiODE0/YWUwNDNiODgzZGIw/YzQ2ZDE2MTVmYTJl/YjgxOTNjNjEzODYy/Yzg2YjQyZTY0NDhj/MGU4YTBlMC9jb29r/aW5nLm55dGltZXMu/Y29tLw",
+        "path": "› article  › quick-easy-summer-recipes"
+      },
+      "thumbnail": {
+        "src": "https://imgs.search.brave.com/9tjZgzehSFAmoTp6nbVpKsb32l1pb-3PD011iwgXU-4/rs:fit:200:200:1:0/g:ce/aHR0cHM6Ly9zdGF0/aWMwMS5ueXQuY29t/L2ltYWdlcy8yMDI1/LzA2LzE2L211bHRp/bWVkaWEvMTZGRC1T/VU1NRVItMTAwLVNh/bG1vbi13aXRoLUNv/cm4tYW5kLVRvbWF0/by16bWJwLzE2RkQt/U1VNTUVSLTEwMC1T/YWxtb24td2l0aC1D/b3JuLWFuZC1Ub21h/dG8tem1icC1hcnRp/Y2xlTGFyZ2UuanBn"
+      },
+      "extra_snippets": [
+        "Raspberry-Almond Clafoutis “Made this per the recipe was a huge hit, not too sweet and good for those gluten-free folks too!” wrote one reader.",
+        "Miso-Chile Asparagus With Tofu A sticky sauce of miso, mirin, rice vinegar and a good hit of chile coats tofu and asparagus, which is broiled until glossy and glazed.",
+        "So, to help, we put together a collection of 100 of our easiest, dreamiest summer recipes — salads, desserts, easy dinners, grilling and no-cook meals — that will make you and your loved ones happy, but leave plenty of time for you to do more important things like absolutely nothing.",
+        "Rotisserie chicken shaves time off this garlic-scallion chicken sandwich recipe.Credit...Ryan Liebe for The New York Times."
+      ]
+    },
+    {
+      "type": "news_result",
+      "title": "18 Recipes You Should Learn by Heart - The New York Times",
+      "url": "https://nytimes.com/2022/04/27/dining/recipes-to-learn-by-heart.html",
+      "description": "Memorize these easy dishes and techniques, and you’ll have an arsenal of easy meals at hand.",
+      "age": "April 27, 2022",
+      "page_age": "2022-04-27T14:18:22",
+      "meta_url": {
+        "scheme": "https",
+        "netloc": "nytimes.com",
+        "hostname": "nytimes.com",
+        "favicon": "https://imgs.search.brave.com/RN_hisZu4P-ruAdWPR9uvaiS7YyW2d23CPtP4_gduCA/rs:fit:32:32:1:0/g:ce/aHR0cDovL2Zhdmlj/b25zLnNlYXJjaC5i/cmF2ZS5jb20vaWNv/bnMvOTRlZDNhZjVm/ZDNmYzA0NDdjYjYx/NjY5YWQ5ZDFiYmE1/ZTE5NjE5ZjBiYmRl/NTdkZGFiZDQ0M2Y5/NGNkZjA3Yi9ueXRp/bWVzLmNvbS8",
+        "path": "› 2022  › 04  › 27  › dining  › recipes-to-learn-by-heart.html"
+      },
+      "thumbnail": {
+        "src": "https://imgs.search.brave.com/B4bRIMXOH2Iwfd_omdaRdeMhNAVLhVcIgpQ-_nUYOn4/rs:fit:200:200:1:0/g:ce/aHR0cHM6Ly9zdGF0/aWMwMS5ueXQuY29t/L2ltYWdlcy8yMDE5/LzAyLzA0L2Rpbmlu/Zy8yN21lbW9yaXpl/LXJvdW5kdXAtbWFy/c2htYWxsb3ctdHJl/YXRzLWNvcHkvZ2st/bWFyc2htYWxsb3ct/dHJlYXRzLWZhY2Vi/b29rSnVtYm8uanBn/P3llYXI9MjAyMiZh/bXA7aD01NTAmYW1w/O3c9MTA1MCZhbXA7/cz1hNzc1M2Q0Zjk0/Y2Q1NTFmNGVjYzBi/OTVkYjBiN2QzY2Qy/Y2VlZmRmNzgyY2My/MjA3MjY0ZjY3MTk4/MTI0ZTY2JmFtcDtr/PVpRSkJLcVowVk4"
+      },
+      "extra_snippets": [
+        "The beauty of this no-recipe recipe from Sam Sifton is that the two-ingredient glaze can be used on just about any kind of thick fish fillet, like haddock, cod, halibut or bluefish. If you really enjoy crunchy, caramelized bits, put the fillet under a broiler for a few minutes at the end.",
+        "Recipe: Roasted Salmon Glazed With Brown Sugar and Mustard ... Credit...Romulo Yanes for The New York Times. Food Stylist: Vivian Lui. It’s nearly impossible to mess up this cucumber salad from Sue Li. It’s really up to you how you balance the ingredients in the one-size-fits-all peanut butter sauce — taste, taste, taste!",
+        "For this recipe from Hetty McKinnon, the soy dressing is essential, but the rest is up to you: Fried shallots? Absolutely. Kimchi? Yes. Pickled onions? Sounds great. You really can’t go wrong.",
+        "The topping featured in this roasted squash recipe from Tejal Rao — shredded, unsweetened coconut, dried chiles de árbol softened in hot water and smashed garlic — can be scattered over just about any winter squash, but good luck finding a savory scenario in which it wouldn’t be a runaway hit."
+      ]
+    },
+    {
+      "type": "news_result",
+      "title": "A Very Andy Baraghani Thanksgiving - The New York Times",
+      "url": "https://www.nytimes.com/2025/11/18/dining/a-very-andy-baraghani-thanksgiving.html",
+      "description": "His menu is bold and bright, both in flavor and color: pomegranate-glazed turkey, golden mashed potatoes, roasted winter squash with citrus chile crisp.",
+      "age": "November 18, 2025",
+      "page_age": "2025-11-18T18:00:06",
+      "meta_url": {
+        "scheme": "https",
+        "netloc": "nytimes.com",
+        "hostname": "www.nytimes.com",
+        "favicon": "https://imgs.search.brave.com/lWA-zkTMlWM2cUvrcYa1Fls86e-Vl-rkSBOjichQqVs/rs:fit:32:32:1:0/g:ce/aHR0cDovL2Zhdmlj/b25zLnNlYXJjaC5i/cmF2ZS5jb20vaWNv/bnMvMGFlZWRkYmVh/YWFhZmFjYjM4MWYy/NTQzZmExMTIwN2Nm/NGJmZjgwYTRhYjI5/OTliM2JkYmI2MWY0/M2RlOGFlMi93d3cu/bnl0aW1lcy5jb20v",
+        "path": "› 2025  › 11  › 18  › dining  › a-very-andy-baraghani-thanksgiving.html"
+      },
+      "thumbnail": {
+        "src": "https://imgs.search.brave.com/6ZBiNpdR8lOHXZxNLDWjMr14UZ4wcxQGwtO5s4XAXAU/rs:fit:200:200:1:0/g:ce/aHR0cHM6Ly9zdGF0/aWMwMS5ueXQuY29t/L2ltYWdlcy8yMDI1/LzExLzE0L211bHRp/bWVkaWEvMTRGRC1N/RU5VLVRHUkVYNS1y/b2FzdGVkLXdpbnRl/ci1zcXVhc2gta3Fj/Zy1jb3B5LzE0RkQt/TUVOVS1UR1JFWDUt/cm9hc3RlZC13aW50/ZXItc3F1YXNoLWtx/Y2ctZmFjZWJvb2tK/dW1iby5qcGc"
+      },
+      "extra_snippets": [
+        "The theme of Andy’s menu is “bright and bold.” This doesn’t come as a surprise, given that his recipes are never shy with assertive flavors. But that also extends to the visuals of his menu: pale green feta dip with tons of herbs; golden mashed potatoes with turmeric, Cheddar and chives; a turkey with a deep red pomegranate glaze.",
+        "We still have plenty of dinners to cook and eat before Turkey Day, and, if you’re starting to gather Thanksgiving ingredients, your pantry, fridge and shopping list might be feeling a little squishy. So! I’ll leave you with our collection of 24 dinner recipes that require seven ingredients or fewer (not counting salt, pepper or oil).",
+        "Any new Andy Baraghani recipe is cause for celebration. They’re always doable and delicious, elegant but not fussy."
+      ]
+    },
+    {
+      "type": "news_result",
+      "title": "The Most Popular Recipes of 2024 - The New York Times",
+      "url": "https://www.nytimes.com/2024/12/09/dining/the-most-popular-recipes-of-2024.html",
+      "description": "You loved these recipes. Now see what made our Top 25.",
+      "age": "December 9, 2024",
+      "page_age": "2024-12-09T10:01:11",
+      "meta_url": {
+        "scheme": "https",
+        "netloc": "nytimes.com",
+        "hostname": "www.nytimes.com",
+        "favicon": "https://imgs.search.brave.com/lWA-zkTMlWM2cUvrcYa1Fls86e-Vl-rkSBOjichQqVs/rs:fit:32:32:1:0/g:ce/aHR0cDovL2Zhdmlj/b25zLnNlYXJjaC5i/cmF2ZS5jb20vaWNv/bnMvMGFlZWRkYmVh/YWFhZmFjYjM4MWYy/NTQzZmExMTIwN2Nm/NGJmZjgwYTRhYjI5/OTliM2JkYmI2MWY0/M2RlOGFlMi93d3cu/bnl0aW1lcy5jb20v",
+        "path": "› 2024  › 12  › 09  › dining  › the-most-popular-recipes-of-2024.html"
+      },
+      "thumbnail": {
+        "src": "https://imgs.search.brave.com/ZEy1nNsJ5kARLL4jEmVIa_t-zIes4BBa7MeOYCpMJCc/rs:fit:200:200:1:0/g:ce/aHR0cHM6Ly9zdGF0/aWMwMS5ueXQuY29t/L2ltYWdlcy8yMDI0/LzEyLzA5L211bHRp/bWVkaWEvMDlNT1NU/UE9QVUxBUi1UT1At/QVJULWtjaHcvMDlN/T1NUUE9QVUxBUi1U/T1AtQVJULWtjaHct/ZmFjZWJvb2tKdW1i/by5qcGc_eWVhcj0y/MDI0JmFtcDtoPTU1/MCZhbXA7dz0xMDUw/JmFtcDtzPTRhNjk3/ZGQ3YTFkZjc0YTQ3/Y2ZmMTM2M2U4NTgy/Nzg2YjJmMzFiNDdm/OWFiNTQyODI3Yjdi/MzhmNzM5Nzc2ZDgm/YW1wO2s9WlFKQktx/WjBWTg"
+      },
+      "extra_snippets": [
+        "Well, that was fast: It was January, we blinked and now it’s December. Quite a bit has happened in the last 300 or so days, and the team at New York Times Cooking created, tested and published about 1,000 delicious recipes to help you eat well through it all.",
+        "Your favorites — the dishes you added to your rotation, the meals your kids actually (OK, mostly) ate, the dinners you were excited to cook — are below. Once again, the three Cs (comfort, convenience and chicken) were king. You can view the complete list of our 50 most popular recipes here.",
+        "View the recipe."
+      ]
+    },
+    {
+      "type": "news_result",
+      "title": "Instant Pot Recipes and Wisdom - The New York Times",
+      "url": "https://www.nytimes.com/2021/10/22/dining/instant-pot-recipes-wisdom.html",
+      "description": "Melissa Clark on how to get the most out of your electric pressure cooker, whether you’re just starting out with it or already an expert.",
+      "age": "October 22, 2021",
+      "page_age": "2021-10-22T19:46:35",
+      "meta_url": {
+        "scheme": "https",
+        "netloc": "nytimes.com",
+        "hostname": "www.nytimes.com",
+        "favicon": "https://imgs.search.brave.com/lWA-zkTMlWM2cUvrcYa1Fls86e-Vl-rkSBOjichQqVs/rs:fit:32:32:1:0/g:ce/aHR0cDovL2Zhdmlj/b25zLnNlYXJjaC5i/cmF2ZS5jb20vaWNv/bnMvMGFlZWRkYmVh/YWFhZmFjYjM4MWYy/NTQzZmExMTIwN2Nm/NGJmZjgwYTRhYjI5/OTliM2JkYmI2MWY0/M2RlOGFlMi93d3cu/bnl0aW1lcy5jb20v",
+        "path": "› 2021  › 10  › 22  › dining  › instant-pot-recipes-wisdom.html"
+      },
+      "thumbnail": {
+        "src": "https://imgs.search.brave.com/7gdXx1IGrafQIN94p6jOziCX6DC1rZwaUEsafBxqkz0/rs:fit:200:200:1:0/g:ce/aHR0cHM6Ly9zdGF0/aWMwMS5ueXQuY29t/L2ltYWdlcy8yMDIx/LzEwLzI3L2Rpbmlu/Zy8yMkFwcGUtSW5z/dGFudC1Qb3Q0L21l/cmxpbl8xOTYwNzIw/NTBfMjMwYmI3MTEt/OGU4MS00Y2U5LTk0/OWItYWM5MzllNzE1/OTNlLWZhY2Vib29r/SnVtYm8uanBnP3ll/YXI9MjAyMSZhbXA7/aD01NDkmYW1wO3c9/MTA1MCZhbXA7cz00/N2Q2YzhiYmQ1NTU5/YTdhYWI2OGViOWQ4/ZDM2NTllNTQ1Mjg5/NzhjMjM2YTQ4MTYx/NjY2ZDRlYmU3MzBk/MjZhJmFtcDtrPVpR/SkJLcVowVk4"
+      },
+      "extra_snippets": [
+        "Spread it all over the ring, and let it sit in the sink for an hour or so (or overnight for really tough cases). Then throw the whole thing into your dishwasher. I do this along with all my other dishes, and everything comes out sparkling. Recipes: Instant Pot Pork Stew With Red Wine and Olives | Instant Pot Tomato-Braised Chickpeas With Tahini | Instant Pot Rice Pudding",
+        "Melissa Clark has been a columnist for the Food section since 2007. She reports on food trends, creates recipes and appears in cooking videos linked to her column, A Good Appetite.",
+        "It’s also important to use enough liquid, at least a half cup, even if the recipe doesn’t direct you to. Older Instant Pot recipes, my own included, might have been tested on earlier models of the appliance, which had a less sensitive burn sensor.",
+        "These recipes might not call for that much liquid because the old models didn’t need it."
+      ]
+    },
+    {
+      "type": "news_result",
+      "title": "Everyday Strategies for Healthier Eating | Duke Today",
+      "url": "https://today.duke.edu/2026/01/everyday-strategies-healthier-eating",
+      "description": "“It’s hard when you go on the ... Swafford said. “That’s why I love providing Duke employees with really good, individualized advice.” · For an easy and nutritious breakfast, try this recipe for overnight oats from LIVE FOR LIFE....",
+      "age": "2 weeks ago",
+      "page_age": "2026-01-04T17:42:26",
+      "meta_url": {
+        "scheme": "https",
+        "netloc": "today.duke.edu",
+        "hostname": "today.duke.edu",
+        "favicon": "https://imgs.search.brave.com/WT40X3Ta8W95SZRm1NPyfct1BQ8MOyaIyF-82BivySs/rs:fit:32:32:1:0/g:ce/aHR0cDovL2Zhdmlj/b25zLnNlYXJjaC5i/cmF2ZS5jb20vaWNv/bnMvOTNlNTlmOTAx/ZTY1N2I1ZDY0MTM5/NjdkMGM5YmM4NzE5/OWU5NDgzNWUwYjJi/MzQ0ZDIzMzhiYmEw/NWE5Y2EzMy90b2Rh/eS5kdWtlLmVkdS8",
+        "path": "› 2026  › 01  › everyday-strategies-healthier-eating"
+      },
+      "thumbnail": {
+        "src": "https://imgs.search.brave.com/ctwsSgVLR9FhSQPShhC4X3hYk6mfdkasM91J79Bl3f0/rs:fit:200:200:1:0/g:ce/aHR0cHM6Ly90b2Rh/eS5kdWtlLmVkdS9z/aXRlcy9kZWZhdWx0/L2ZpbGVzL3N0eWxl/cy8xMjAwX3hfNjMw/cHgvcHVibGljLzIw/MjUtMTEvVmVnZXRh/Ymxlc19NLmpwZWc_/aXRvaz1jbmFIMnFx/cw"
+      },
+      "extra_snippets": [
+        "“It’s hard when you go on the internet and there’s an overwhelming amount of information and so much of it isn’t trustworthy,” Swafford said. “That’s why I love providing Duke employees with really good, individualized advice.” · For an easy and nutritious breakfast, try this recipe for overnight oats from LIVE FOR LIFE.",
+        "Already a fan of Greek yogurt, Davis found a brand that used only natural flavorings, since artificial sweeteners can leave you feeling unsatisfied and craving another serving. Swafford gave Davis a recipe for overnight oats that can be dressed up with berries and nuts for a breakfast that’s low in sodium and sugar and high in fiber and protein.",
+        "In embracing his habit of eating salad for lunch each day, Matt Hall indulged his creativity, trying out new recipes and colorful combinations.",
+        "Find the oatmeal recipe at the bottom of the page."
+      ]
+    }
+  ]
+}

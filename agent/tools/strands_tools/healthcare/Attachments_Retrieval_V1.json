@@ -1,0 +1,341 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "description": "Optum's Attachment Retrieval API.",
+    "version": "1",
+    "title": "Medical Network Attachment Retrieval v1",
+    "contact": {
+      "email": "pathfinders@optum.com"
+    }
+  },
+  "security": [
+    {
+      "bearerToken": []
+    }
+  ],
+  "paths": {
+    "/search": {
+      "post": {
+        "summary": "search",
+        "description": "By default testMode is false to retrieve production data.To retrieve the test data user has to pass the query string as testMode=true. Search to retrieve a set of document ids based on upload date range, attachment control number, patient first name, last name , member id , provider id , provider first name , organization name, claim service start date and claim service end date",
+        "tags": [
+          "Attachment Document"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "startUploadDate",
+                  "endUploadDate"
+                ],
+                "properties": {
+                  "startUploadDate": {
+                    "type": "string",
+                    "description": "Filter to search document based on given document upload start date. Date Format: yyyy-MM-ddTHH:mm:ss.fffZ. Timestamp is optional and defaults to T00:00:00.000Z"
+                  },
+                  "endUploadDate": {
+                    "type": "string",
+                    "description": "Filter to search document based on given document upload end date. Date Format: yyyy-MM-ddTHH:mm:ss.fffZ. Timestamp is optional and defaults to T23:59:59.999Z"
+                  },
+                  "attachmentControlNumber": {
+                    "description": "Filter to search document based on given claim number.",
+                    "type": "string"
+                  },
+                  "patientFirstName": {
+                    "description": "Filter to search document based on given patient first name.",
+                    "type": "string"
+                  },
+                  "patientLastName": {
+                    "description": "Filter to search document based on given patient last name.",
+                    "type": "string"
+                  },
+                  "memberId": {
+                    "description": "Filter to search document based on given member id.",
+                    "type": "string"
+                  },
+                  "providerFirstName": {
+                    "description": "Filter to search document based on given provider first name.",
+                    "type": "string"
+                  },
+                  "organizationName": {
+                    "description": "Filter to search document based on given provider last name or organization name.",
+                    "type": "string"
+                  },
+                  "providerId": {
+                    "description": "Filter to search document based on given provider id",
+                    "type": "string"
+                  },
+                  "beginClaimServiceDate": {
+                    "description": "Filter to search document based on given claim service start date. Date Format: yyyy-MM-dd",
+                    "type": "string"
+                  },
+                  "endClaimServiceDate": {
+                    "description": "Filter to search document based on given claim service end date. Date Format: yyyy-MM-dd",
+                    "type": "string"
+                  },
+                  "size": {
+                    "description": "Return the number of records to display in the UI",
+                    "type": "number"
+                  }
+                }
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/DocumentInfo"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/{documentId}": {
+      "get": {
+        "tags": [
+          "Attachment Document"
+        ],
+        "summary": "Download a document for the given documentId",
+        "parameters": [
+          {
+            "name": "documentId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    }
+  },
+  "servers": [
+    {
+      "url": "https://sandbox-apigw.optum.com/medicalnetwork/attachments/retrieval/v1"
+    }
+  ],
+  "components": {
+    "responses": {
+      "BadRequest": {
+        "description": "Bad Request",
+        "content": {
+          "*/*": {
+            "schema": {
+              "$ref": "#/components/schemas/BadRequest"
+            }
+          }
+        }
+      },
+      "InternalError": {
+        "description": "Internal Server Error",
+        "content": {
+          "*/*": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            }
+          }
+        }
+      },
+      "Unauthorized": {
+        "description": "Not Authorized",
+        "content": {
+          "*/*": {
+            "schema": {
+              "type": "object",
+              "properties": {
+                "error": {
+                  "type": "string"
+                },
+                "error_description": {
+                  "type": "string"
+                }
+              },
+              "example": {
+                "error": "invalid_request",
+                "error_description": "The access token is missing"
+              }
+            }
+          }
+        }
+      },
+      "NotFound": {
+        "description": "Resource Not Found",
+        "content": {
+          "*/*": {
+            "schema": {
+              "$ref": "#/components/schemas/NotFound"
+            }
+          }
+        }
+      }
+    },
+    "securitySchemes": {
+      "bearerToken": {
+        "type": "apiKey",
+        "name": "Authorization",
+        "in": "header"
+      }
+    },
+    "schemas": {
+      "DocumentInfo": {
+        "type": "object",
+        "properties": {
+          "documentId": {
+            "type": "string",
+            "description": "ID of downloadable documents",
+            "example": "000fb167-ff90-4848-9e56-9edbf328a34c"
+          },
+          "attachmentControlNumber": {
+            "type": "string",
+            "description": "Attachment control number"
+          },
+          "memberId": {
+            "type": "string",
+            "description": "memberId"
+          },
+          "patientFirstName": {
+            "type": "string",
+            "description": "patientFirstName"
+          },
+          "patientLastName": {
+            "type": "string",
+            "description": "patientLastName"
+          },
+          "patientControlNumber": {
+            "type": "string",
+            "description": "patientControlNumber"
+          },
+          "providerId": {
+            "type": "string",
+            "description": "providerId"
+          },
+          "providerFirstName": {
+            "type": "string",
+            "description": "providerFirstName"
+          },
+          "organizationName": {
+            "type": "string",
+            "description": "organizationName"
+          },
+          "beginClaimServiceDate": {
+            "type": "string",
+            "description": "beginClaimServiceDate"
+          },
+          "endClaimServiceDate": {
+            "type": "string",
+            "description": "endClaimServiceDate"
+          },
+          "attachmentUploadDate": {
+            "type": "string",
+            "description": "attachmentUploadDate"
+          }
+        }
+      },
+      "ErrorResponse": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "typeInfo": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string"
+              },
+              "value": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "example": {
+          "code": "500",
+          "description": "Internal Server Error",
+          "typeInfo": {
+            "type": "ErrorResponse",
+            "value": "SystemErrors.INTERNAL_ERROR"
+          }
+        }
+      },
+      "BadRequest": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ErrorResponse"
+          }
+        ],
+        "example": {
+          "code": "400",
+          "description": "Invalid header value",
+          "typeInfo": {
+            "type": "ErrorResponse",
+            "value": "ClientErrors.BAD_REQUEST"
+          }
+        }
+      },
+      "NotFound": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ErrorResponse"
+          }
+        ],
+        "example": {
+          "code": "404",
+          "description": "Item not found",
+          "typeInfo": {
+            "type": "ErrorResponse",
+            "value": "ClientErrors.NOT_FOUND"
+          }
+        }
+      }
+    }
+  },
+  "x-readme": {
+    "explorer-enabled": true,
+    "proxy-enabled": true
+  }
+}

@@ -1,0 +1,324 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300" width="400" height="300">
+  <defs>
+    <!-- GLASS MORPHISM (aligned with existing public SVG aesthetic) -->
+    <linearGradient id="glassBody" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#5A7FBA" stop-opacity="0.92"/>
+      <stop offset="15%" stop-color="#3E5E94" stop-opacity="0.88"/>
+      <stop offset="50%" stop-color="#2A4470" stop-opacity="0.85"/>
+      <stop offset="85%" stop-color="#1E3355" stop-opacity="0.88"/>
+      <stop offset="100%" stop-color="#162848" stop-opacity="0.92"/>
+    </linearGradient>
+
+    <linearGradient id="glassShineTop" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#A8C8F0" stop-opacity="0.55"/>
+      <stop offset="15%" stop-color="#8AB4E8" stop-opacity="0.25"/>
+      <stop offset="40%" stop-color="#6A9AD8" stop-opacity="0.08"/>
+      <stop offset="100%" stop-color="#6A9AD8" stop-opacity="0"/>
+    </linearGradient>
+
+    <linearGradient id="glassShineEdge" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#B8D4F8" stop-opacity="0.7"/>
+      <stop offset="3%" stop-color="#8AB4E8" stop-opacity="0.4"/>
+      <stop offset="10%" stop-color="#6A9AD8" stop-opacity="0.15"/>
+      <stop offset="50%" stop-color="#5080C0" stop-opacity="0.2"/>
+      <stop offset="90%" stop-color="#4070B0" stop-opacity="0.15"/>
+      <stop offset="100%" stop-color="#6090D0" stop-opacity="0.4"/>
+    </linearGradient>
+
+    <linearGradient id="headerGlass" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#1A2E4A" stop-opacity="0.98"/>
+      <stop offset="50%" stop-color="#142438" stop-opacity="0.96"/>
+      <stop offset="100%" stop-color="#0F1C2C" stop-opacity="0.98"/>
+    </linearGradient>
+
+    <linearGradient id="headerShine" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#4A6A9A" stop-opacity="0.3"/>
+      <stop offset="100%" stop-color="#4A6A9A" stop-opacity="0"/>
+    </linearGradient>
+
+    <!-- PANELS / SURFACES -->
+    <linearGradient id="panelSurface" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#0F2136" stop-opacity="0.92"/>
+      <stop offset="100%" stop-color="#0B1828" stop-opacity="0.92"/>
+    </linearGradient>
+
+    <linearGradient id="panelEdge" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#7BABF8" stop-opacity="0.35"/>
+      <stop offset="50%" stop-color="#64FFDA" stop-opacity="0.12"/>
+      <stop offset="100%" stop-color="#7C4DFF" stop-opacity="0.25"/>
+    </linearGradient>
+
+    <!-- MESSAGE / CARD MATERIAL -->
+    <linearGradient id="cardFill" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#163558" stop-opacity="0.95"/>
+      <stop offset="100%" stop-color="#102842" stop-opacity="0.95"/>
+    </linearGradient>
+
+    <linearGradient id="cardStroke" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#A8C8F0" stop-opacity="0.55"/>
+      <stop offset="100%" stop-color="#64FFDA" stop-opacity="0.18"/>
+    </linearGradient>
+
+    <linearGradient id="cardShine" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0"/>
+      <stop offset="45%" stop-color="#FFFFFF" stop-opacity="0"/>
+      <stop offset="55%" stop-color="#FFFFFF" stop-opacity="0.20"/>
+      <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0"/>
+      <animateTransform attributeName="gradientTransform" type="translate" from="-1" to="2" dur="2.8s" repeatCount="indefinite"/>
+    </linearGradient>
+
+    <!-- FLOW / MOTION LINES -->
+    <linearGradient id="flowStroke" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#64FFDA" stop-opacity="0"/>
+      <stop offset="30%" stop-color="#64FFDA" stop-opacity="0.55"/>
+      <stop offset="60%" stop-color="#7C4DFF" stop-opacity="0.45"/>
+      <stop offset="100%" stop-color="#FFD700" stop-opacity="0"/>
+    </linearGradient>
+
+    <!-- FILTERS -->
+    <filter id="megaShadow" x="-100%" y="-100%" width="300%" height="300%">
+      <feDropShadow dx="0" dy="20" stdDeviation="30" flood-color="#000A14" flood-opacity="0.95"/>
+      <feDropShadow dx="0" dy="8" stdDeviation="15" flood-color="#1A3A6B" flood-opacity="0.6"/>
+      <feDropShadow dx="0" dy="3" stdDeviation="6" flood-color="#3B7DD8" flood-opacity="0.3"/>
+      <feDropShadow dx="0" dy="0" stdDeviation="2" flood-color="#64FFDA" flood-opacity="0.15"/>
+    </filter>
+
+    <filter id="ultraGlow" x="-200%" y="-200%" width="500%" height="500%">
+      <feGaussianBlur stdDeviation="2" result="b1"/>
+      <feGaussianBlur stdDeviation="5" result="b2"/>
+      <feGaussianBlur stdDeviation="10" result="b3"/>
+      <feGaussianBlur stdDeviation="20" result="b4"/>
+      <feMerge>
+        <feMergeNode in="b4"/>
+        <feMergeNode in="b3"/>
+        <feMergeNode in="b2"/>
+        <feMergeNode in="b1"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <filter id="softGlow" x="-80%" y="-80%" width="260%" height="260%">
+      <feGaussianBlur stdDeviation="2" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <filter id="textGlow" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur stdDeviation="0.9" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- TRANSPARENT BACKGROUND -->
+  <rect width="400" height="300" fill="transparent"/>
+
+  <!-- SUBTLE BACKGROUND ENERGY (kept light so it reads well at small sizes) -->
+  <g filter="url(#ultraGlow)" opacity="0.16">
+    <path d="M 55 250 C 120 215, 170 225, 200 170 C 230 115, 295 105, 345 140"
+          fill="none" stroke="url(#flowStroke)" stroke-width="3" stroke-linecap="round" stroke-dasharray="10 14">
+      <animate attributeName="stroke-dashoffset" values="0;-120" dur="8s" repeatCount="indefinite"/>
+    </path>
+    <path d="M 60 235 C 140 205, 165 235, 205 175 C 245 115, 300 120, 340 155"
+          fill="none" stroke="#7BABF8" stroke-width="1.2" stroke-linecap="round" opacity="0.45" stroke-dasharray="2 12">
+      <animate attributeName="stroke-dashoffset" values="0;-160" dur="10s" repeatCount="indefinite"/>
+    </path>
+  </g>
+
+  <!-- MAIN CHAT WINDOW -->
+  <g filter="url(#megaShadow)">
+    <!-- Body -->
+    <rect x="45" y="35" width="310" height="215" rx="16" ry="16" fill="url(#glassBody)"/>
+    <rect x="45" y="35" width="310" height="215" rx="16" ry="16" fill="url(#glassShineTop)"/>
+    <rect x="45" y="35" width="310" height="215" rx="16" ry="16" fill="none" stroke="url(#glassShineEdge)" stroke-width="1.5"/>
+    <rect x="48" y="38" width="304" height="209" rx="14" ry="14" fill="none" stroke="#A8C8F0" stroke-width="0.5" opacity="0.12"/>
+
+    <!-- Header -->
+    <rect x="45" y="35" width="310" height="42" rx="16" ry="16" fill="url(#headerGlass)"/>
+    <rect x="45" y="60" width="310" height="17" fill="url(#headerGlass)"/>
+    <rect x="45" y="35" width="310" height="20" rx="16" ry="16" fill="url(#headerShine)"/>
+    <line x1="45" y1="77" x2="355" y2="77" stroke="#3A5A8A" stroke-width="0.5" opacity="0.45"/>
+
+    <!-- Traffic lights -->
+    <g filter="url(#softGlow)">
+      <circle cx="72" cy="56" r="7.5" fill="#FF5F57"/>
+      <circle cx="98" cy="56" r="7.5" fill="#FFBD2E"/>
+      <circle cx="124" cy="56" r="7.5" fill="#28CA42"/>
+      <circle cx="69" cy="53" r="2.3" fill="#FF8A84" opacity="0.75"/>
+      <circle cx="95" cy="53" r="2.3" fill="#FFD980" opacity="0.75"/>
+      <circle cx="121" cy="53" r="2.3" fill="#6EE890" opacity="0.75"/>
+    </g>
+
+    <text x="200" y="60"
+          font-family="'SF Pro Display', 'Inter', -apple-system, sans-serif"
+          font-size="13" fill="#9CBAE8" text-anchor="middle" font-weight="650" letter-spacing="0.4"
+          filter="url(#textGlow)">Chat UI</text>
+  </g>
+
+  <!-- CHAT CONTENT -->
+  <g>
+    <!-- Right pane: conversation -->
+    <rect x="59" y="90" width="282" height="148" rx="12" fill="url(#panelSurface)" opacity="0.98"/>
+    <rect x="59" y="90" width="282" height="148" rx="12" fill="none" stroke="url(#panelEdge)" stroke-width="0.7" opacity="0.7"/>
+
+    <!-- Conversation header pill -->
+    <g filter="url(#textGlow)" font-family="'SF Pro Display', 'Inter', -apple-system, sans-serif" font-size="10.5" font-weight="650" letter-spacing="0.35">
+      <rect x="157" y="96" width="86" height="18" rx="9" fill="#0C1A2A" opacity="0.9"/>
+      <rect x="157" y="96" width="86" height="18" rx="9" fill="none" stroke="#3A5A8A" stroke-width="0.6" opacity="0.55"/>
+      <text x="200" y="109" fill="#E0F0FF" text-anchor="middle">RON</text>
+    </g>
+
+    <!-- Messages -->
+    <g filter="url(#softGlow)">
+      <!-- Inbound message -->
+      <g transform="translate(68 186)">
+        <g opacity="0">
+          <animate attributeName="opacity" dur="9s" repeatCount="indefinite"
+                   values="0;0;0;1;1;0"
+                   keyTimes="0;0.70;0.72;0.75;0.87;1"/>
+          <animateTransform attributeName="transform" type="translate" dur="9s" repeatCount="indefinite"
+                            values="0 6;0 6;0 6;0 0;0 0;0 6"
+                            keyTimes="0;0.70;0.72;0.75;0.87;1"/>
+          <circle cx="10" cy="12" r="7.5" fill="#0C1A2A" opacity="0.88"/>
+          <circle cx="10" cy="12" r="5.3" fill="#64FFDA" opacity="0.82"/>
+          <rect x="22" y="0" width="120" height="26" rx="12" fill="url(#cardFill)"/>
+          <rect x="22" y="0" width="120" height="26" rx="12" fill="none" stroke="url(#cardStroke)" stroke-width="0.7" opacity="0.75"/>
+          <rect x="34" y="8" width="0" height="4.4" rx="2.2" fill="#E0F0FF" opacity="0.65">
+            <animate attributeName="width" dur="9s" repeatCount="indefinite"
+                     values="0;0;72;72;0"
+                     keyTimes="0;0.72;0.78;0.87;1"/>
+          </rect>
+          <rect x="34" y="14.5" width="0" height="4.4" rx="2.2" fill="#C792EA" opacity="0.55">
+            <animate attributeName="width" dur="9s" repeatCount="indefinite"
+                     values="0;0;52;52;0"
+                     keyTimes="0;0.735;0.795;0.87;1"/>
+          </rect>
+        </g>
+      </g>
+
+      <!-- Outbound message (user) -->
+      <g transform="translate(214 122)">
+        <g opacity="0">
+          <animate attributeName="opacity" dur="9s" repeatCount="indefinite"
+                   values="0;0;1;1;0"
+                   keyTimes="0;0.333;0.36;0.87;1"/>
+          <animateTransform attributeName="transform" type="translate" dur="9s" repeatCount="indefinite"
+                            values="0 6;0 6;0 0;0 0;0 6"
+                            keyTimes="0;0.333;0.36;0.87;1"/>
+          <rect x="0" y="0" width="120" height="26" rx="12" fill="url(#cardFill)"/>
+          <rect x="0" y="0" width="120" height="26" rx="12" fill="none" stroke="#7C4DFF" stroke-width="0.8" opacity="0.55"/>
+          <rect x="12" y="8" width="0" height="4.4" rx="2.2" fill="#82AAFF" opacity="0.62">
+            <animate attributeName="width" dur="9s" repeatCount="indefinite"
+                     values="0;0;76;76;0"
+                     keyTimes="0;0.333;0.36;0.87;1"/>
+          </rect>
+          <rect x="12" y="14.5" width="0" height="4.4" rx="2.2" fill="#E0F0FF" opacity="0.45">
+            <animate attributeName="width" dur="9s" repeatCount="indefinite"
+                     values="0;0;48;48;0"
+                     keyTimes="0;0.345;0.372;0.87;1"/>
+          </rect>
+          <circle cx="108" cy="13" r="4" fill="#7C4DFF" opacity="0.78"/>
+        </g>
+      </g>
+
+      <!-- Typing indicator -->
+      <g transform="translate(68 156)">
+        <g opacity="0">
+          <animate attributeName="opacity" dur="9s" repeatCount="indefinite"
+                   values="0;0;1;1;0;0"
+                   keyTimes="0;0.366;0.39;0.70;0.72;1"/>
+          <circle cx="10" cy="12" r="7.5" fill="#0C1A2A" opacity="0.88"/>
+          <circle cx="10" cy="12" r="5.3" fill="#64FFDA" opacity="0.76"/>
+          <rect x="22" y="0" width="66" height="26" rx="12" fill="url(#cardFill)" opacity="0.95"/>
+          <rect x="22" y="0" width="66" height="26" rx="12" fill="none" stroke="url(#cardStroke)" stroke-width="0.7" opacity="0.6"/>
+          <g transform="translate(40 13)" filter="url(#softGlow)">
+            <circle r="2.5" fill="#E0F0FF" opacity="0.25">
+              <animate attributeName="opacity" values="0.25;0.9;0.25" dur="1.2s" repeatCount="indefinite"/>
+            </circle>
+            <circle cx="10" r="2.5" fill="#E0F0FF" opacity="0.25">
+              <animate attributeName="opacity" values="0.25;0.9;0.25" dur="1.2s" begin="0.15s" repeatCount="indefinite"/>
+            </circle>
+            <circle cx="20" r="2.5" fill="#E0F0FF" opacity="0.25">
+              <animate attributeName="opacity" values="0.25;0.9;0.25" dur="1.2s" begin="0.3s" repeatCount="indefinite"/>
+            </circle>
+          </g>
+        </g>
+      </g>
+    </g>
+
+    <!-- Input bar -->
+    <g filter="url(#softGlow)">
+      <rect x="65" y="214" width="248" height="20" rx="10" fill="#0C1A2A" opacity="0.82"/>
+      <rect x="65" y="214" width="248" height="20" rx="10" fill="none" stroke="#3A5A8A" stroke-width="0.7" opacity="0.55"/>
+
+      <!-- animated "typing" text inside the input -->
+      <rect x="77" y="222" width="0" height="4.2" rx="2.1" fill="#E0F0FF" opacity="0.38">
+        <animate attributeName="width" dur="9s" repeatCount="indefinite"
+                 values="0;150;150;0;0"
+                 keyTimes="0;0.288;0.322;0.355;1"/>
+      </rect>
+
+      <!-- caret blink (only visible while "typing") -->
+      <g opacity="1">
+        <animate attributeName="opacity" dur="9s" repeatCount="indefinite"
+                 values="1;1;0;0"
+                 keyTimes="0;0.355;0.39;1"/>
+        <rect x="77" y="219" width="2.2" height="10" rx="1.1" fill="#FFFFFF" opacity="0.0" filter="url(#textGlow)">
+          <animate attributeName="x" dur="9s" repeatCount="indefinite"
+                   values="77;230;230;77;77"
+                   keyTimes="0;0.288;0.322;0.355;1"/>
+          <animate attributeName="opacity" values="0;1;0" dur="0.9s" repeatCount="indefinite"/>
+        </rect>
+      </g>
+
+      <!-- Send button -->
+      <g transform="translate(326 214)">
+        <circle cx="10" cy="10" r="10" fill="url(#cardFill)" opacity="0.95"/>
+        <circle cx="10" cy="10" r="10" fill="none" stroke="#64FFDA" stroke-width="0.9" opacity="0.35">
+          <animate attributeName="opacity" values="0.25;0.6;0.25" dur="2.2s" repeatCount="indefinite"/>
+        </circle>
+        <!-- "tap" pulse -->
+        <circle cx="10" cy="10" r="10" fill="#64FFDA" opacity="0">
+          <animate attributeName="opacity" dur="9s" repeatCount="indefinite"
+                   values="0;0;0.22;0;0"
+                   keyTimes="0;0.300;0.322;0.344;1"/>
+        </circle>
+        <circle cx="10" cy="10" r="10" fill="none" stroke="#FFFFFF" stroke-width="1.1" opacity="0">
+          <animate attributeName="opacity" dur="9s" repeatCount="indefinite"
+                   values="0;0;0.35;0;0"
+                   keyTimes="0;0.300;0.322;0.344;1"/>
+          <animate attributeName="r" dur="9s" repeatCount="indefinite"
+                   values="10;10;12;14;14"
+                   keyTimes="0;0.300;0.322;0.355;1"/>
+        </circle>
+        <path d="M 6.2 10.2 L 14.8 10.2 L 10.6 6.8 Z" fill="#64FFDA" opacity="0.85"/>
+        <path d="M 6.6 10.2 L 10.6 13.4 L 14.2 10.2" fill="none" stroke="#64FFDA" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" opacity="0.65"/>
+      </g>
+    </g>
+  </g>
+
+  <!-- AMBIENT PARTICLES -->
+  <g filter="url(#softGlow)">
+    <circle r="2.5" fill="#64FFDA" opacity="0">
+      <animate attributeName="cx" values="20;50;20" dur="4.5s" repeatCount="indefinite"/>
+      <animate attributeName="cy" values="150;150;150" dur="4.5s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values="0;0.85;0" dur="4.5s" repeatCount="indefinite"/>
+    </circle>
+    <circle r="2" fill="#C792EA" opacity="0">
+      <animate attributeName="cx" values="380;350;380" dur="5s" repeatCount="indefinite" begin="0.8s"/>
+      <animate attributeName="cy" values="140;140;140" dur="5s" repeatCount="indefinite" begin="0.8s"/>
+      <animate attributeName="opacity" values="0;0.75;0" dur="5s" repeatCount="indefinite" begin="0.8s"/>
+    </circle>
+    <circle r="2" fill="#FFD700" opacity="0">
+      <animate attributeName="cx" values="200;200;200" dur="3.6s" repeatCount="indefinite" begin="0.4s"/>
+      <animate attributeName="cy" values="10;35;10" dur="3.6s" repeatCount="indefinite" begin="0.4s"/>
+      <animate attributeName="opacity" values="0;0.65;0" dur="3.6s" repeatCount="indefinite" begin="0.4s"/>
+    </circle>
+  </g>
+</svg>
+
+

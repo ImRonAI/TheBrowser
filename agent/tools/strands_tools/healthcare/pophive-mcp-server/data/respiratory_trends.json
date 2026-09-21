@@ -1,0 +1,7202 @@
+[
+  {
+    "geography": "US",
+    "date": "2025-07-24",
+    "week": "2025-30",
+    "search_term": "flu symptoms",
+    "relative_search_volume": 9,
+    "percent_change": 4.585856327457072,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "US",
+    "date": "2025-07-24",
+    "week": "2025-30",
+    "search_term": "RSV symptoms",
+    "relative_search_volume": 81,
+    "percent_change": 23.920528529973385,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "US",
+    "date": "2025-07-24",
+    "week": "2025-30",
+    "search_term": "COVID symptoms",
+    "relative_search_volume": 18,
+    "percent_change": 3.2705144098356342,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "US",
+    "date": "2025-07-24",
+    "week": "2025-30",
+    "search_term": "cough",
+    "relative_search_volume": 36,
+    "percent_change": 4.6223124739806165,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "US",
+    "date": "2025-07-24",
+    "week": "2025-30",
+    "search_term": "fever",
+    "relative_search_volume": 63,
+    "percent_change": -23.235474582418735,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "US",
+    "date": "2025-07-24",
+    "week": "2025-30",
+    "search_term": "sore throat",
+    "relative_search_volume": 81,
+    "percent_change": 15.610248404032667,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "CA",
+    "date": "2025-07-24",
+    "week": "2025-30",
+    "search_term": "flu symptoms",
+    "relative_search_volume": 16,
+    "percent_change": -23.524881099826665,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "CA",
+    "date": "2025-07-24",
+    "week": "2025-30",
+    "search_term": "RSV symptoms",
+    "relative_search_volume": 60,
+    "percent_change": -10.902358133497048,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "CA",
+    "date": "2025-07-24",
+    "week": "2025-30",
+    "search_term": "COVID symptoms",
+    "relative_search_volume": 88,
+    "percent_change": -24.346717240767866,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "CA",
+    "date": "2025-07-24",
+    "week": "2025-30",
+    "search_term": "cough",
+    "relative_search_volume": 11,
+    "percent_change": -14.165156086603737,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "CA",
+    "date": "2025-07-24",
+    "week": "2025-30",
+    "search_term": "fever",
+    "relative_search_volume": 55,
+    "percent_change": 17.476763645510196,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "CA",
+    "date": "2025-07-24",
+    "week": "2025-30",
+    "search_term": "sore throat",
+    "relative_search_volume": 50,
+    "percent_change": 1.3703993997674635,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "TX",
+    "date": "2025-07-24",
+    "week": "2025-30",
+    "search_term": "flu symptoms",
+    "relative_search_volume": 3,
+    "percent_change": -4.981244151404541,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "TX",
+    "date": "2025-07-24",
+    "week": "2025-30",
+    "search_term": "RSV symptoms",
+    "relative_search_volume": 33,
+    "percent_change": 18.393992942620162,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "TX",
+    "date": "2025-07-24",
+    "week": "2025-30",
+    "search_term": "COVID symptoms",
+    "relative_search_volume": 25,
+    "percent_change": 4.190778941945594,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "TX",
+    "date": "2025-07-24",
+    "week": "2025-30",
+    "search_term": "cough",
+    "relative_search_volume": 28,
+    "percent_change": 22.42290485832158,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "TX",
+    "date": "2025-07-24",
+    "week": "2025-30",
+    "search_term": "fever",
+    "relative_search_volume": 98,
+    "percent_change": -12.455851713117172,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "TX",
+    "date": "2025-07-24",
+    "week": "2025-30",
+    "search_term": "sore throat",
+    "relative_search_volume": 92,
+    "percent_change": 16.34598669449735,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "FL",
+    "date": "2025-07-24",
+    "week": "2025-30",
+    "search_term": "flu symptoms",
+    "relative_search_volume": 90,
+    "percent_change": 16.61035973550078,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "FL",
+    "date": "2025-07-24",
+    "week": "2025-30",
+    "search_term": "RSV symptoms",
+    "relative_search_volume": 31,
+    "percent_change": -24.067291604376283,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "FL",
+    "date": "2025-07-24",
+    "week": "2025-30",
+    "search_term": "COVID symptoms",
+    "relative_search_volume": 77,
+    "percent_change": -19.477636436229407,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "FL",
+    "date": "2025-07-24",
+    "week": "2025-30",
+    "search_term": "cough",
+    "relative_search_volume": 58,
+    "percent_change": -8.042670066763469,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "FL",
+    "date": "2025-07-24",
+    "week": "2025-30",
+    "search_term": "fever",
+    "relative_search_volume": 67,
+    "percent_change": 14.581073623508345,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "FL",
+    "date": "2025-07-24",
+    "week": "2025-30",
+    "search_term": "sore throat",
+    "relative_search_volume": 87,
+    "percent_change": 14.598309257324571,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NY",
+    "date": "2025-07-24",
+    "week": "2025-30",
+    "search_term": "flu symptoms",
+    "relative_search_volume": 63,
+    "percent_change": 19.698396647928497,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NY",
+    "date": "2025-07-24",
+    "week": "2025-30",
+    "search_term": "RSV symptoms",
+    "relative_search_volume": 10,
+    "percent_change": 9.723331398518564,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NY",
+    "date": "2025-07-24",
+    "week": "2025-30",
+    "search_term": "COVID symptoms",
+    "relative_search_volume": 11,
+    "percent_change": -4.794402176503043,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NY",
+    "date": "2025-07-24",
+    "week": "2025-30",
+    "search_term": "cough",
+    "relative_search_volume": 58,
+    "percent_change": 18.461294007826524,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NY",
+    "date": "2025-07-24",
+    "week": "2025-30",
+    "search_term": "fever",
+    "relative_search_volume": 38,
+    "percent_change": -15.844675469966973,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NY",
+    "date": "2025-07-24",
+    "week": "2025-30",
+    "search_term": "sore throat",
+    "relative_search_volume": 15,
+    "percent_change": 16.069643849295755,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "PA",
+    "date": "2025-07-24",
+    "week": "2025-30",
+    "search_term": "flu symptoms",
+    "relative_search_volume": 43,
+    "percent_change": 16.07624553480258,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "PA",
+    "date": "2025-07-24",
+    "week": "2025-30",
+    "search_term": "RSV symptoms",
+    "relative_search_volume": 74,
+    "percent_change": 15.443138047336348,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "PA",
+    "date": "2025-07-24",
+    "week": "2025-30",
+    "search_term": "COVID symptoms",
+    "relative_search_volume": 84,
+    "percent_change": -21.124541647358207,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "PA",
+    "date": "2025-07-24",
+    "week": "2025-30",
+    "search_term": "cough",
+    "relative_search_volume": 69,
+    "percent_change": 9.788555363981343,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "PA",
+    "date": "2025-07-24",
+    "week": "2025-30",
+    "search_term": "fever",
+    "relative_search_volume": 97,
+    "percent_change": 8.18279318286248,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "PA",
+    "date": "2025-07-24",
+    "week": "2025-30",
+    "search_term": "sore throat",
+    "relative_search_volume": 35,
+    "percent_change": 1.9950656686643087,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "IL",
+    "date": "2025-07-24",
+    "week": "2025-30",
+    "search_term": "flu symptoms",
+    "relative_search_volume": 67,
+    "percent_change": -3.0894497612368954,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "IL",
+    "date": "2025-07-24",
+    "week": "2025-30",
+    "search_term": "RSV symptoms",
+    "relative_search_volume": 79,
+    "percent_change": 21.84315518602635,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "IL",
+    "date": "2025-07-24",
+    "week": "2025-30",
+    "search_term": "COVID symptoms",
+    "relative_search_volume": 52,
+    "percent_change": 18.25794999475452,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "IL",
+    "date": "2025-07-24",
+    "week": "2025-30",
+    "search_term": "cough",
+    "relative_search_volume": 61,
+    "percent_change": -14.906552744576151,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "IL",
+    "date": "2025-07-24",
+    "week": "2025-30",
+    "search_term": "fever",
+    "relative_search_volume": 54,
+    "percent_change": 14.491423663297443,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "IL",
+    "date": "2025-07-24",
+    "week": "2025-30",
+    "search_term": "sore throat",
+    "relative_search_volume": 4,
+    "percent_change": -0.4347638232935713,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "OH",
+    "date": "2025-07-24",
+    "week": "2025-30",
+    "search_term": "flu symptoms",
+    "relative_search_volume": 3,
+    "percent_change": -11.677323628677726,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "OH",
+    "date": "2025-07-24",
+    "week": "2025-30",
+    "search_term": "RSV symptoms",
+    "relative_search_volume": 37,
+    "percent_change": -10.176393790303562,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "OH",
+    "date": "2025-07-24",
+    "week": "2025-30",
+    "search_term": "COVID symptoms",
+    "relative_search_volume": 44,
+    "percent_change": 2.19141059086303,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "OH",
+    "date": "2025-07-24",
+    "week": "2025-30",
+    "search_term": "cough",
+    "relative_search_volume": 53,
+    "percent_change": 14.614008508640918,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "OH",
+    "date": "2025-07-24",
+    "week": "2025-30",
+    "search_term": "fever",
+    "relative_search_volume": 6,
+    "percent_change": 24.33008640280371,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "OH",
+    "date": "2025-07-24",
+    "week": "2025-30",
+    "search_term": "sore throat",
+    "relative_search_volume": 53,
+    "percent_change": -12.336693950437883,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "GA",
+    "date": "2025-07-24",
+    "week": "2025-30",
+    "search_term": "flu symptoms",
+    "relative_search_volume": 63,
+    "percent_change": -1.669983037155165,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "GA",
+    "date": "2025-07-24",
+    "week": "2025-30",
+    "search_term": "RSV symptoms",
+    "relative_search_volume": 21,
+    "percent_change": -24.13075406309434,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "GA",
+    "date": "2025-07-24",
+    "week": "2025-30",
+    "search_term": "COVID symptoms",
+    "relative_search_volume": 64,
+    "percent_change": -7.17858085498616,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "GA",
+    "date": "2025-07-24",
+    "week": "2025-30",
+    "search_term": "cough",
+    "relative_search_volume": 14,
+    "percent_change": -14.891986235385868,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "GA",
+    "date": "2025-07-24",
+    "week": "2025-30",
+    "search_term": "fever",
+    "relative_search_volume": 22,
+    "percent_change": -6.445000539017565,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "GA",
+    "date": "2025-07-24",
+    "week": "2025-30",
+    "search_term": "sore throat",
+    "relative_search_volume": 6,
+    "percent_change": -0.38617734867909537,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NC",
+    "date": "2025-07-24",
+    "week": "2025-30",
+    "search_term": "flu symptoms",
+    "relative_search_volume": 21,
+    "percent_change": 9.786683182145284,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NC",
+    "date": "2025-07-24",
+    "week": "2025-30",
+    "search_term": "RSV symptoms",
+    "relative_search_volume": 46,
+    "percent_change": -2.414764661603841,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NC",
+    "date": "2025-07-24",
+    "week": "2025-30",
+    "search_term": "COVID symptoms",
+    "relative_search_volume": 5,
+    "percent_change": -16.0203378506241,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NC",
+    "date": "2025-07-24",
+    "week": "2025-30",
+    "search_term": "cough",
+    "relative_search_volume": 6,
+    "percent_change": 10.77602257087621,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NC",
+    "date": "2025-07-24",
+    "week": "2025-30",
+    "search_term": "fever",
+    "relative_search_volume": 58,
+    "percent_change": 5.449496110725316,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NC",
+    "date": "2025-07-24",
+    "week": "2025-30",
+    "search_term": "sore throat",
+    "relative_search_volume": 24,
+    "percent_change": -17.822608318745047,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "US",
+    "date": "2025-07-17",
+    "week": "2025-29",
+    "search_term": "flu symptoms",
+    "relative_search_volume": 17,
+    "percent_change": -6.380627524347515,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "US",
+    "date": "2025-07-17",
+    "week": "2025-29",
+    "search_term": "RSV symptoms",
+    "relative_search_volume": 23,
+    "percent_change": -23.70042566319208,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "US",
+    "date": "2025-07-17",
+    "week": "2025-29",
+    "search_term": "COVID symptoms",
+    "relative_search_volume": 20,
+    "percent_change": -13.014632108299018,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "US",
+    "date": "2025-07-17",
+    "week": "2025-29",
+    "search_term": "cough",
+    "relative_search_volume": 73,
+    "percent_change": -11.761613054243082,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "US",
+    "date": "2025-07-17",
+    "week": "2025-29",
+    "search_term": "fever",
+    "relative_search_volume": 90,
+    "percent_change": 8.804404929783239,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "US",
+    "date": "2025-07-17",
+    "week": "2025-29",
+    "search_term": "sore throat",
+    "relative_search_volume": 26,
+    "percent_change": -5.275252201628822,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "CA",
+    "date": "2025-07-17",
+    "week": "2025-29",
+    "search_term": "flu symptoms",
+    "relative_search_volume": 21,
+    "percent_change": 0.2743534234777023,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "CA",
+    "date": "2025-07-17",
+    "week": "2025-29",
+    "search_term": "RSV symptoms",
+    "relative_search_volume": 99,
+    "percent_change": 0.7812499077861301,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "CA",
+    "date": "2025-07-17",
+    "week": "2025-29",
+    "search_term": "COVID symptoms",
+    "relative_search_volume": 1,
+    "percent_change": 8.324922112910482,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "CA",
+    "date": "2025-07-17",
+    "week": "2025-29",
+    "search_term": "cough",
+    "relative_search_volume": 81,
+    "percent_change": 20.67307575236016,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "CA",
+    "date": "2025-07-17",
+    "week": "2025-29",
+    "search_term": "fever",
+    "relative_search_volume": 4,
+    "percent_change": -24.388409404543744,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "CA",
+    "date": "2025-07-17",
+    "week": "2025-29",
+    "search_term": "sore throat",
+    "relative_search_volume": 75,
+    "percent_change": 1.7093973601740031,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "TX",
+    "date": "2025-07-17",
+    "week": "2025-29",
+    "search_term": "flu symptoms",
+    "relative_search_volume": 3,
+    "percent_change": -24.73370130631759,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "TX",
+    "date": "2025-07-17",
+    "week": "2025-29",
+    "search_term": "RSV symptoms",
+    "relative_search_volume": 98,
+    "percent_change": -14.266557721322947,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "TX",
+    "date": "2025-07-17",
+    "week": "2025-29",
+    "search_term": "COVID symptoms",
+    "relative_search_volume": 19,
+    "percent_change": -9.930066515812108,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "TX",
+    "date": "2025-07-17",
+    "week": "2025-29",
+    "search_term": "cough",
+    "relative_search_volume": 98,
+    "percent_change": -20.565386690892474,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "TX",
+    "date": "2025-07-17",
+    "week": "2025-29",
+    "search_term": "fever",
+    "relative_search_volume": 41,
+    "percent_change": -18.259260855597404,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "TX",
+    "date": "2025-07-17",
+    "week": "2025-29",
+    "search_term": "sore throat",
+    "relative_search_volume": 72,
+    "percent_change": 19.225492926818934,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "FL",
+    "date": "2025-07-17",
+    "week": "2025-29",
+    "search_term": "flu symptoms",
+    "relative_search_volume": 96,
+    "percent_change": -5.708363867239019,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "FL",
+    "date": "2025-07-17",
+    "week": "2025-29",
+    "search_term": "RSV symptoms",
+    "relative_search_volume": 95,
+    "percent_change": -5.894303550918778,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "FL",
+    "date": "2025-07-17",
+    "week": "2025-29",
+    "search_term": "COVID symptoms",
+    "relative_search_volume": 45,
+    "percent_change": -10.88572600465325,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "FL",
+    "date": "2025-07-17",
+    "week": "2025-29",
+    "search_term": "cough",
+    "relative_search_volume": 55,
+    "percent_change": -15.63430478495096,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "FL",
+    "date": "2025-07-17",
+    "week": "2025-29",
+    "search_term": "fever",
+    "relative_search_volume": 26,
+    "percent_change": 21.934787113002365,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "FL",
+    "date": "2025-07-17",
+    "week": "2025-29",
+    "search_term": "sore throat",
+    "relative_search_volume": 68,
+    "percent_change": 8.158224613225562,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NY",
+    "date": "2025-07-17",
+    "week": "2025-29",
+    "search_term": "flu symptoms",
+    "relative_search_volume": 20,
+    "percent_change": -2.2808020915823457,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NY",
+    "date": "2025-07-17",
+    "week": "2025-29",
+    "search_term": "RSV symptoms",
+    "relative_search_volume": 87,
+    "percent_change": 4.432399518205132,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NY",
+    "date": "2025-07-17",
+    "week": "2025-29",
+    "search_term": "COVID symptoms",
+    "relative_search_volume": 61,
+    "percent_change": -10.467444322785536,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NY",
+    "date": "2025-07-17",
+    "week": "2025-29",
+    "search_term": "cough",
+    "relative_search_volume": 67,
+    "percent_change": 4.192784112072867,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NY",
+    "date": "2025-07-17",
+    "week": "2025-29",
+    "search_term": "fever",
+    "relative_search_volume": 77,
+    "percent_change": -14.811507433073901,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NY",
+    "date": "2025-07-17",
+    "week": "2025-29",
+    "search_term": "sore throat",
+    "relative_search_volume": 79,
+    "percent_change": -22.631556073219116,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "PA",
+    "date": "2025-07-17",
+    "week": "2025-29",
+    "search_term": "flu symptoms",
+    "relative_search_volume": 25,
+    "percent_change": -17.45614160968777,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "PA",
+    "date": "2025-07-17",
+    "week": "2025-29",
+    "search_term": "RSV symptoms",
+    "relative_search_volume": 30,
+    "percent_change": 4.864972490930953,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "PA",
+    "date": "2025-07-17",
+    "week": "2025-29",
+    "search_term": "COVID symptoms",
+    "relative_search_volume": 61,
+    "percent_change": 0.741818729685062,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "PA",
+    "date": "2025-07-17",
+    "week": "2025-29",
+    "search_term": "cough",
+    "relative_search_volume": 70,
+    "percent_change": -0.42152231868571866,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "PA",
+    "date": "2025-07-17",
+    "week": "2025-29",
+    "search_term": "fever",
+    "relative_search_volume": 26,
+    "percent_change": -18.041651746293553,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "PA",
+    "date": "2025-07-17",
+    "week": "2025-29",
+    "search_term": "sore throat",
+    "relative_search_volume": 42,
+    "percent_change": 14.414402999161712,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "IL",
+    "date": "2025-07-17",
+    "week": "2025-29",
+    "search_term": "flu symptoms",
+    "relative_search_volume": 16,
+    "percent_change": -16.960276444460597,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "IL",
+    "date": "2025-07-17",
+    "week": "2025-29",
+    "search_term": "RSV symptoms",
+    "relative_search_volume": 36,
+    "percent_change": 16.363183514481182,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "IL",
+    "date": "2025-07-17",
+    "week": "2025-29",
+    "search_term": "COVID symptoms",
+    "relative_search_volume": 10,
+    "percent_change": -21.88089024938059,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "IL",
+    "date": "2025-07-17",
+    "week": "2025-29",
+    "search_term": "cough",
+    "relative_search_volume": 80,
+    "percent_change": 1.4239506722905082,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "IL",
+    "date": "2025-07-17",
+    "week": "2025-29",
+    "search_term": "fever",
+    "relative_search_volume": 14,
+    "percent_change": -6.056828731595676,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "IL",
+    "date": "2025-07-17",
+    "week": "2025-29",
+    "search_term": "sore throat",
+    "relative_search_volume": 56,
+    "percent_change": -10.920747192868163,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "OH",
+    "date": "2025-07-17",
+    "week": "2025-29",
+    "search_term": "flu symptoms",
+    "relative_search_volume": 82,
+    "percent_change": 4.769122702498874,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "OH",
+    "date": "2025-07-17",
+    "week": "2025-29",
+    "search_term": "RSV symptoms",
+    "relative_search_volume": 75,
+    "percent_change": 1.2251429094846222,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "OH",
+    "date": "2025-07-17",
+    "week": "2025-29",
+    "search_term": "COVID symptoms",
+    "relative_search_volume": 93,
+    "percent_change": -15.842549352564795,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "OH",
+    "date": "2025-07-17",
+    "week": "2025-29",
+    "search_term": "cough",
+    "relative_search_volume": 17,
+    "percent_change": -13.585721108929983,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "OH",
+    "date": "2025-07-17",
+    "week": "2025-29",
+    "search_term": "fever",
+    "relative_search_volume": 29,
+    "percent_change": 16.52260204655709,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "OH",
+    "date": "2025-07-17",
+    "week": "2025-29",
+    "search_term": "sore throat",
+    "relative_search_volume": 7,
+    "percent_change": 10.886898272168555,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "GA",
+    "date": "2025-07-17",
+    "week": "2025-29",
+    "search_term": "flu symptoms",
+    "relative_search_volume": 90,
+    "percent_change": -4.044436186022516,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "GA",
+    "date": "2025-07-17",
+    "week": "2025-29",
+    "search_term": "RSV symptoms",
+    "relative_search_volume": 78,
+    "percent_change": 21.370508141871337,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "GA",
+    "date": "2025-07-17",
+    "week": "2025-29",
+    "search_term": "COVID symptoms",
+    "relative_search_volume": 3,
+    "percent_change": -6.92919060896412,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "GA",
+    "date": "2025-07-17",
+    "week": "2025-29",
+    "search_term": "cough",
+    "relative_search_volume": 27,
+    "percent_change": 0.006178607164342154,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "GA",
+    "date": "2025-07-17",
+    "week": "2025-29",
+    "search_term": "fever",
+    "relative_search_volume": 36,
+    "percent_change": 10.023841831804315,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "GA",
+    "date": "2025-07-17",
+    "week": "2025-29",
+    "search_term": "sore throat",
+    "relative_search_volume": 84,
+    "percent_change": 21.790376434355142,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NC",
+    "date": "2025-07-17",
+    "week": "2025-29",
+    "search_term": "flu symptoms",
+    "relative_search_volume": 99,
+    "percent_change": -16.543118781391463,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NC",
+    "date": "2025-07-17",
+    "week": "2025-29",
+    "search_term": "RSV symptoms",
+    "relative_search_volume": 35,
+    "percent_change": -12.388806394772034,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NC",
+    "date": "2025-07-17",
+    "week": "2025-29",
+    "search_term": "COVID symptoms",
+    "relative_search_volume": 86,
+    "percent_change": 1.940209213705868,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NC",
+    "date": "2025-07-17",
+    "week": "2025-29",
+    "search_term": "cough",
+    "relative_search_volume": 31,
+    "percent_change": 11.985691731711634,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NC",
+    "date": "2025-07-17",
+    "week": "2025-29",
+    "search_term": "fever",
+    "relative_search_volume": 17,
+    "percent_change": 7.1184409019207635,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NC",
+    "date": "2025-07-17",
+    "week": "2025-29",
+    "search_term": "sore throat",
+    "relative_search_volume": 73,
+    "percent_change": -21.597403072117714,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "US",
+    "date": "2025-07-10",
+    "week": "2025-28",
+    "search_term": "flu symptoms",
+    "relative_search_volume": 7,
+    "percent_change": -17.350398693671742,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "US",
+    "date": "2025-07-10",
+    "week": "2025-28",
+    "search_term": "RSV symptoms",
+    "relative_search_volume": 88,
+    "percent_change": -0.583149642323777,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "US",
+    "date": "2025-07-10",
+    "week": "2025-28",
+    "search_term": "COVID symptoms",
+    "relative_search_volume": 93,
+    "percent_change": -22.558345679544246,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "US",
+    "date": "2025-07-10",
+    "week": "2025-28",
+    "search_term": "cough",
+    "relative_search_volume": 52,
+    "percent_change": -20.157721190830447,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "US",
+    "date": "2025-07-10",
+    "week": "2025-28",
+    "search_term": "fever",
+    "relative_search_volume": 41,
+    "percent_change": -14.629725959855634,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "US",
+    "date": "2025-07-10",
+    "week": "2025-28",
+    "search_term": "sore throat",
+    "relative_search_volume": 82,
+    "percent_change": 3.7442473172938473,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "CA",
+    "date": "2025-07-10",
+    "week": "2025-28",
+    "search_term": "flu symptoms",
+    "relative_search_volume": 53,
+    "percent_change": 21.27374986028887,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "CA",
+    "date": "2025-07-10",
+    "week": "2025-28",
+    "search_term": "RSV symptoms",
+    "relative_search_volume": 13,
+    "percent_change": 20.871938117137866,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "CA",
+    "date": "2025-07-10",
+    "week": "2025-28",
+    "search_term": "COVID symptoms",
+    "relative_search_volume": 17,
+    "percent_change": 8.350726511965822,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "CA",
+    "date": "2025-07-10",
+    "week": "2025-28",
+    "search_term": "cough",
+    "relative_search_volume": 41,
+    "percent_change": -5.648680753781699,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "CA",
+    "date": "2025-07-10",
+    "week": "2025-28",
+    "search_term": "fever",
+    "relative_search_volume": 4,
+    "percent_change": -10.633503609171758,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "CA",
+    "date": "2025-07-10",
+    "week": "2025-28",
+    "search_term": "sore throat",
+    "relative_search_volume": 94,
+    "percent_change": 7.4937350661461455,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "TX",
+    "date": "2025-07-10",
+    "week": "2025-28",
+    "search_term": "flu symptoms",
+    "relative_search_volume": 27,
+    "percent_change": -19.181007224075852,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "TX",
+    "date": "2025-07-10",
+    "week": "2025-28",
+    "search_term": "RSV symptoms",
+    "relative_search_volume": 10,
+    "percent_change": 24.535697570349225,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "TX",
+    "date": "2025-07-10",
+    "week": "2025-28",
+    "search_term": "COVID symptoms",
+    "relative_search_volume": 94,
+    "percent_change": -7.896248427379982,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "TX",
+    "date": "2025-07-10",
+    "week": "2025-28",
+    "search_term": "cough",
+    "relative_search_volume": 94,
+    "percent_change": -2.1185706534372573,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "TX",
+    "date": "2025-07-10",
+    "week": "2025-28",
+    "search_term": "fever",
+    "relative_search_volume": 63,
+    "percent_change": -10.976579399151632,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "TX",
+    "date": "2025-07-10",
+    "week": "2025-28",
+    "search_term": "sore throat",
+    "relative_search_volume": 86,
+    "percent_change": -4.527014831165788,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "FL",
+    "date": "2025-07-10",
+    "week": "2025-28",
+    "search_term": "flu symptoms",
+    "relative_search_volume": 88,
+    "percent_change": 6.217569585674654,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "FL",
+    "date": "2025-07-10",
+    "week": "2025-28",
+    "search_term": "RSV symptoms",
+    "relative_search_volume": 83,
+    "percent_change": -18.71331685163501,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "FL",
+    "date": "2025-07-10",
+    "week": "2025-28",
+    "search_term": "COVID symptoms",
+    "relative_search_volume": 50,
+    "percent_change": 9.989577960529273,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "FL",
+    "date": "2025-07-10",
+    "week": "2025-28",
+    "search_term": "cough",
+    "relative_search_volume": 30,
+    "percent_change": -9.77878156209413,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "FL",
+    "date": "2025-07-10",
+    "week": "2025-28",
+    "search_term": "fever",
+    "relative_search_volume": 40,
+    "percent_change": -5.008761283925467,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "FL",
+    "date": "2025-07-10",
+    "week": "2025-28",
+    "search_term": "sore throat",
+    "relative_search_volume": 86,
+    "percent_change": -24.854059617469957,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NY",
+    "date": "2025-07-10",
+    "week": "2025-28",
+    "search_term": "flu symptoms",
+    "relative_search_volume": 12,
+    "percent_change": -3.4448305578512306,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NY",
+    "date": "2025-07-10",
+    "week": "2025-28",
+    "search_term": "RSV symptoms",
+    "relative_search_volume": 91,
+    "percent_change": -14.492507620957806,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NY",
+    "date": "2025-07-10",
+    "week": "2025-28",
+    "search_term": "COVID symptoms",
+    "relative_search_volume": 9,
+    "percent_change": 12.551110532043896,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NY",
+    "date": "2025-07-10",
+    "week": "2025-28",
+    "search_term": "cough",
+    "relative_search_volume": 57,
+    "percent_change": -3.3328579149450643,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NY",
+    "date": "2025-07-10",
+    "week": "2025-28",
+    "search_term": "fever",
+    "relative_search_volume": 69,
+    "percent_change": -9.914084862401829,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NY",
+    "date": "2025-07-10",
+    "week": "2025-28",
+    "search_term": "sore throat",
+    "relative_search_volume": 55,
+    "percent_change": 8.774032807484566,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "PA",
+    "date": "2025-07-10",
+    "week": "2025-28",
+    "search_term": "flu symptoms",
+    "relative_search_volume": 62,
+    "percent_change": -20.543973774082446,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "PA",
+    "date": "2025-07-10",
+    "week": "2025-28",
+    "search_term": "RSV symptoms",
+    "relative_search_volume": 22,
+    "percent_change": 6.336906923124963,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "PA",
+    "date": "2025-07-10",
+    "week": "2025-28",
+    "search_term": "COVID symptoms",
+    "relative_search_volume": 78,
+    "percent_change": 22.76573551187422,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "PA",
+    "date": "2025-07-10",
+    "week": "2025-28",
+    "search_term": "cough",
+    "relative_search_volume": 72,
+    "percent_change": 22.77713254553211,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "PA",
+    "date": "2025-07-10",
+    "week": "2025-28",
+    "search_term": "fever",
+    "relative_search_volume": 1,
+    "percent_change": -21.18741339335981,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "PA",
+    "date": "2025-07-10",
+    "week": "2025-28",
+    "search_term": "sore throat",
+    "relative_search_volume": 20,
+    "percent_change": 21.157871441718356,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "IL",
+    "date": "2025-07-10",
+    "week": "2025-28",
+    "search_term": "flu symptoms",
+    "relative_search_volume": 11,
+    "percent_change": -0.5303946323623077,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "IL",
+    "date": "2025-07-10",
+    "week": "2025-28",
+    "search_term": "RSV symptoms",
+    "relative_search_volume": 91,
+    "percent_change": 14.676060511305423,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "IL",
+    "date": "2025-07-10",
+    "week": "2025-28",
+    "search_term": "COVID symptoms",
+    "relative_search_volume": 17,
+    "percent_change": 17.11791866024477,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "IL",
+    "date": "2025-07-10",
+    "week": "2025-28",
+    "search_term": "cough",
+    "relative_search_volume": 15,
+    "percent_change": 0.8277862283295967,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "IL",
+    "date": "2025-07-10",
+    "week": "2025-28",
+    "search_term": "fever",
+    "relative_search_volume": 40,
+    "percent_change": 19.739508788173964,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "IL",
+    "date": "2025-07-10",
+    "week": "2025-28",
+    "search_term": "sore throat",
+    "relative_search_volume": 51,
+    "percent_change": 1.8482442772611685,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "OH",
+    "date": "2025-07-10",
+    "week": "2025-28",
+    "search_term": "flu symptoms",
+    "relative_search_volume": 76,
+    "percent_change": -13.905337687896225,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "OH",
+    "date": "2025-07-10",
+    "week": "2025-28",
+    "search_term": "RSV symptoms",
+    "relative_search_volume": 97,
+    "percent_change": 11.927387026658442,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "OH",
+    "date": "2025-07-10",
+    "week": "2025-28",
+    "search_term": "COVID symptoms",
+    "relative_search_volume": 13,
+    "percent_change": -20.675834810747638,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "OH",
+    "date": "2025-07-10",
+    "week": "2025-28",
+    "search_term": "cough",
+    "relative_search_volume": 95,
+    "percent_change": -17.439831672296833,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "OH",
+    "date": "2025-07-10",
+    "week": "2025-28",
+    "search_term": "fever",
+    "relative_search_volume": 45,
+    "percent_change": 8.077084909379606,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "OH",
+    "date": "2025-07-10",
+    "week": "2025-28",
+    "search_term": "sore throat",
+    "relative_search_volume": 24,
+    "percent_change": -3.3316554288004063,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "GA",
+    "date": "2025-07-10",
+    "week": "2025-28",
+    "search_term": "flu symptoms",
+    "relative_search_volume": 40,
+    "percent_change": -23.072993752939873,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "GA",
+    "date": "2025-07-10",
+    "week": "2025-28",
+    "search_term": "RSV symptoms",
+    "relative_search_volume": 1,
+    "percent_change": -15.198730103013991,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "GA",
+    "date": "2025-07-10",
+    "week": "2025-28",
+    "search_term": "COVID symptoms",
+    "relative_search_volume": 9,
+    "percent_change": -13.392888779156642,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "GA",
+    "date": "2025-07-10",
+    "week": "2025-28",
+    "search_term": "cough",
+    "relative_search_volume": 71,
+    "percent_change": 24.35398366917292,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "GA",
+    "date": "2025-07-10",
+    "week": "2025-28",
+    "search_term": "fever",
+    "relative_search_volume": 11,
+    "percent_change": -20.006567393672814,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "GA",
+    "date": "2025-07-10",
+    "week": "2025-28",
+    "search_term": "sore throat",
+    "relative_search_volume": 92,
+    "percent_change": -15.87461915541244,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NC",
+    "date": "2025-07-10",
+    "week": "2025-28",
+    "search_term": "flu symptoms",
+    "relative_search_volume": 59,
+    "percent_change": -19.267304879556747,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NC",
+    "date": "2025-07-10",
+    "week": "2025-28",
+    "search_term": "RSV symptoms",
+    "relative_search_volume": 70,
+    "percent_change": -1.8735894740849912,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NC",
+    "date": "2025-07-10",
+    "week": "2025-28",
+    "search_term": "COVID symptoms",
+    "relative_search_volume": 35,
+    "percent_change": -16.87400961967539,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NC",
+    "date": "2025-07-10",
+    "week": "2025-28",
+    "search_term": "cough",
+    "relative_search_volume": 85,
+    "percent_change": 18.11435929938462,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NC",
+    "date": "2025-07-10",
+    "week": "2025-28",
+    "search_term": "fever",
+    "relative_search_volume": 77,
+    "percent_change": 11.092905021668154,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NC",
+    "date": "2025-07-10",
+    "week": "2025-28",
+    "search_term": "sore throat",
+    "relative_search_volume": 53,
+    "percent_change": -22.346608423472247,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "US",
+    "date": "2025-07-03",
+    "week": "2025-27",
+    "search_term": "flu symptoms",
+    "relative_search_volume": 89,
+    "percent_change": 21.89021765169491,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "US",
+    "date": "2025-07-03",
+    "week": "2025-27",
+    "search_term": "RSV symptoms",
+    "relative_search_volume": 89,
+    "percent_change": 10.445223041365937,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "US",
+    "date": "2025-07-03",
+    "week": "2025-27",
+    "search_term": "COVID symptoms",
+    "relative_search_volume": 59,
+    "percent_change": 10.992321871630129,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "US",
+    "date": "2025-07-03",
+    "week": "2025-27",
+    "search_term": "cough",
+    "relative_search_volume": 52,
+    "percent_change": -8.88275841567523,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "US",
+    "date": "2025-07-03",
+    "week": "2025-27",
+    "search_term": "fever",
+    "relative_search_volume": 32,
+    "percent_change": 9.492729275464773,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "US",
+    "date": "2025-07-03",
+    "week": "2025-27",
+    "search_term": "sore throat",
+    "relative_search_volume": 88,
+    "percent_change": 0.962506751807124,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "CA",
+    "date": "2025-07-03",
+    "week": "2025-27",
+    "search_term": "flu symptoms",
+    "relative_search_volume": 13,
+    "percent_change": 22.569217289651,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "CA",
+    "date": "2025-07-03",
+    "week": "2025-27",
+    "search_term": "RSV symptoms",
+    "relative_search_volume": 78,
+    "percent_change": 22.371559033938993,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "CA",
+    "date": "2025-07-03",
+    "week": "2025-27",
+    "search_term": "COVID symptoms",
+    "relative_search_volume": 39,
+    "percent_change": -5.456042539502281,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "CA",
+    "date": "2025-07-03",
+    "week": "2025-27",
+    "search_term": "cough",
+    "relative_search_volume": 94,
+    "percent_change": 1.7240829495651866,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "CA",
+    "date": "2025-07-03",
+    "week": "2025-27",
+    "search_term": "fever",
+    "relative_search_volume": 32,
+    "percent_change": -3.031458428884237,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "CA",
+    "date": "2025-07-03",
+    "week": "2025-27",
+    "search_term": "sore throat",
+    "relative_search_volume": 82,
+    "percent_change": -1.958043457313885,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "TX",
+    "date": "2025-07-03",
+    "week": "2025-27",
+    "search_term": "flu symptoms",
+    "relative_search_volume": 40,
+    "percent_change": -0.7725213152426247,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "TX",
+    "date": "2025-07-03",
+    "week": "2025-27",
+    "search_term": "RSV symptoms",
+    "relative_search_volume": 18,
+    "percent_change": -4.47134239067315,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "TX",
+    "date": "2025-07-03",
+    "week": "2025-27",
+    "search_term": "COVID symptoms",
+    "relative_search_volume": 39,
+    "percent_change": 24.870305892303556,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "TX",
+    "date": "2025-07-03",
+    "week": "2025-27",
+    "search_term": "cough",
+    "relative_search_volume": 7,
+    "percent_change": 10.237761423748292,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "TX",
+    "date": "2025-07-03",
+    "week": "2025-27",
+    "search_term": "fever",
+    "relative_search_volume": 30,
+    "percent_change": 10.981936787746049,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "TX",
+    "date": "2025-07-03",
+    "week": "2025-27",
+    "search_term": "sore throat",
+    "relative_search_volume": 11,
+    "percent_change": 1.4417537221361632,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "FL",
+    "date": "2025-07-03",
+    "week": "2025-27",
+    "search_term": "flu symptoms",
+    "relative_search_volume": 42,
+    "percent_change": 2.9788636981585737,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "FL",
+    "date": "2025-07-03",
+    "week": "2025-27",
+    "search_term": "RSV symptoms",
+    "relative_search_volume": 82,
+    "percent_change": -6.8297921742911605,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "FL",
+    "date": "2025-07-03",
+    "week": "2025-27",
+    "search_term": "COVID symptoms",
+    "relative_search_volume": 91,
+    "percent_change": 11.938655625429517,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "FL",
+    "date": "2025-07-03",
+    "week": "2025-27",
+    "search_term": "cough",
+    "relative_search_volume": 71,
+    "percent_change": 16.78923292540909,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "FL",
+    "date": "2025-07-03",
+    "week": "2025-27",
+    "search_term": "fever",
+    "relative_search_volume": 74,
+    "percent_change": -6.3090669663136145,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "FL",
+    "date": "2025-07-03",
+    "week": "2025-27",
+    "search_term": "sore throat",
+    "relative_search_volume": 90,
+    "percent_change": 12.821873809508254,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NY",
+    "date": "2025-07-03",
+    "week": "2025-27",
+    "search_term": "flu symptoms",
+    "relative_search_volume": 34,
+    "percent_change": 11.79044930681975,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NY",
+    "date": "2025-07-03",
+    "week": "2025-27",
+    "search_term": "RSV symptoms",
+    "relative_search_volume": 97,
+    "percent_change": -14.19427130837374,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NY",
+    "date": "2025-07-03",
+    "week": "2025-27",
+    "search_term": "COVID symptoms",
+    "relative_search_volume": 15,
+    "percent_change": -14.619886017386985,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NY",
+    "date": "2025-07-03",
+    "week": "2025-27",
+    "search_term": "cough",
+    "relative_search_volume": 78,
+    "percent_change": -20.063162490635523,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NY",
+    "date": "2025-07-03",
+    "week": "2025-27",
+    "search_term": "fever",
+    "relative_search_volume": 89,
+    "percent_change": -2.412663570645568,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NY",
+    "date": "2025-07-03",
+    "week": "2025-27",
+    "search_term": "sore throat",
+    "relative_search_volume": 21,
+    "percent_change": 0.9890723644174204,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "PA",
+    "date": "2025-07-03",
+    "week": "2025-27",
+    "search_term": "flu symptoms",
+    "relative_search_volume": 39,
+    "percent_change": 3.3461060745503812,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "PA",
+    "date": "2025-07-03",
+    "week": "2025-27",
+    "search_term": "RSV symptoms",
+    "relative_search_volume": 59,
+    "percent_change": 10.01698808897229,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "PA",
+    "date": "2025-07-03",
+    "week": "2025-27",
+    "search_term": "COVID symptoms",
+    "relative_search_volume": 3,
+    "percent_change": 23.967190178136764,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "PA",
+    "date": "2025-07-03",
+    "week": "2025-27",
+    "search_term": "cough",
+    "relative_search_volume": 12,
+    "percent_change": 7.683464811823648,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "PA",
+    "date": "2025-07-03",
+    "week": "2025-27",
+    "search_term": "fever",
+    "relative_search_volume": 17,
+    "percent_change": -23.955890306929117,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "PA",
+    "date": "2025-07-03",
+    "week": "2025-27",
+    "search_term": "sore throat",
+    "relative_search_volume": 18,
+    "percent_change": 16.42001795329562,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "IL",
+    "date": "2025-07-03",
+    "week": "2025-27",
+    "search_term": "flu symptoms",
+    "relative_search_volume": 68,
+    "percent_change": -23.91557399096682,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "IL",
+    "date": "2025-07-03",
+    "week": "2025-27",
+    "search_term": "RSV symptoms",
+    "relative_search_volume": 4,
+    "percent_change": -13.562552875843126,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "IL",
+    "date": "2025-07-03",
+    "week": "2025-27",
+    "search_term": "COVID symptoms",
+    "relative_search_volume": 83,
+    "percent_change": -19.457388219998293,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "IL",
+    "date": "2025-07-03",
+    "week": "2025-27",
+    "search_term": "cough",
+    "relative_search_volume": 76,
+    "percent_change": -20.94344023752668,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "IL",
+    "date": "2025-07-03",
+    "week": "2025-27",
+    "search_term": "fever",
+    "relative_search_volume": 95,
+    "percent_change": -19.844442669739404,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "IL",
+    "date": "2025-07-03",
+    "week": "2025-27",
+    "search_term": "sore throat",
+    "relative_search_volume": 66,
+    "percent_change": -22.790230977945257,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "OH",
+    "date": "2025-07-03",
+    "week": "2025-27",
+    "search_term": "flu symptoms",
+    "relative_search_volume": 92,
+    "percent_change": -12.313469321056946,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "OH",
+    "date": "2025-07-03",
+    "week": "2025-27",
+    "search_term": "RSV symptoms",
+    "relative_search_volume": 89,
+    "percent_change": 24.950053429800466,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "OH",
+    "date": "2025-07-03",
+    "week": "2025-27",
+    "search_term": "COVID symptoms",
+    "relative_search_volume": 42,
+    "percent_change": -8.033348504269055,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "OH",
+    "date": "2025-07-03",
+    "week": "2025-27",
+    "search_term": "cough",
+    "relative_search_volume": 25,
+    "percent_change": 15.850894291425465,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "OH",
+    "date": "2025-07-03",
+    "week": "2025-27",
+    "search_term": "fever",
+    "relative_search_volume": 69,
+    "percent_change": -11.043660991190052,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "OH",
+    "date": "2025-07-03",
+    "week": "2025-27",
+    "search_term": "sore throat",
+    "relative_search_volume": 90,
+    "percent_change": 0.7430206225029878,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "GA",
+    "date": "2025-07-03",
+    "week": "2025-27",
+    "search_term": "flu symptoms",
+    "relative_search_volume": 56,
+    "percent_change": -6.5572720763433345,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "GA",
+    "date": "2025-07-03",
+    "week": "2025-27",
+    "search_term": "RSV symptoms",
+    "relative_search_volume": 96,
+    "percent_change": -5.9959245975405135,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "GA",
+    "date": "2025-07-03",
+    "week": "2025-27",
+    "search_term": "COVID symptoms",
+    "relative_search_volume": 86,
+    "percent_change": -9.813475931009519,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "GA",
+    "date": "2025-07-03",
+    "week": "2025-27",
+    "search_term": "cough",
+    "relative_search_volume": 64,
+    "percent_change": 19.871080201735005,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "GA",
+    "date": "2025-07-03",
+    "week": "2025-27",
+    "search_term": "fever",
+    "relative_search_volume": 63,
+    "percent_change": 24.365477091196887,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "GA",
+    "date": "2025-07-03",
+    "week": "2025-27",
+    "search_term": "sore throat",
+    "relative_search_volume": 96,
+    "percent_change": 12.276701371063725,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NC",
+    "date": "2025-07-03",
+    "week": "2025-27",
+    "search_term": "flu symptoms",
+    "relative_search_volume": 31,
+    "percent_change": 13.802052489936045,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NC",
+    "date": "2025-07-03",
+    "week": "2025-27",
+    "search_term": "RSV symptoms",
+    "relative_search_volume": 30,
+    "percent_change": -21.911176894847973,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NC",
+    "date": "2025-07-03",
+    "week": "2025-27",
+    "search_term": "COVID symptoms",
+    "relative_search_volume": 22,
+    "percent_change": 18.435006853549616,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NC",
+    "date": "2025-07-03",
+    "week": "2025-27",
+    "search_term": "cough",
+    "relative_search_volume": 72,
+    "percent_change": 5.728971802580207,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NC",
+    "date": "2025-07-03",
+    "week": "2025-27",
+    "search_term": "fever",
+    "relative_search_volume": 93,
+    "percent_change": 24.97147651182573,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NC",
+    "date": "2025-07-03",
+    "week": "2025-27",
+    "search_term": "sore throat",
+    "relative_search_volume": 76,
+    "percent_change": 1.3621791709391706,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "US",
+    "date": "2025-06-26",
+    "week": "2025-26",
+    "search_term": "flu symptoms",
+    "relative_search_volume": 82,
+    "percent_change": 5.156005189554125,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "US",
+    "date": "2025-06-26",
+    "week": "2025-26",
+    "search_term": "RSV symptoms",
+    "relative_search_volume": 78,
+    "percent_change": -1.0778596234854443,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "US",
+    "date": "2025-06-26",
+    "week": "2025-26",
+    "search_term": "COVID symptoms",
+    "relative_search_volume": 13,
+    "percent_change": -11.815177754761951,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "US",
+    "date": "2025-06-26",
+    "week": "2025-26",
+    "search_term": "cough",
+    "relative_search_volume": 37,
+    "percent_change": 14.628314438058965,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "US",
+    "date": "2025-06-26",
+    "week": "2025-26",
+    "search_term": "fever",
+    "relative_search_volume": 69,
+    "percent_change": 1.3376891061311125,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "US",
+    "date": "2025-06-26",
+    "week": "2025-26",
+    "search_term": "sore throat",
+    "relative_search_volume": 8,
+    "percent_change": -17.09305809981577,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "CA",
+    "date": "2025-06-26",
+    "week": "2025-26",
+    "search_term": "flu symptoms",
+    "relative_search_volume": 96,
+    "percent_change": -0.8524796851409611,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "CA",
+    "date": "2025-06-26",
+    "week": "2025-26",
+    "search_term": "RSV symptoms",
+    "relative_search_volume": 19,
+    "percent_change": 11.947649489861456,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "CA",
+    "date": "2025-06-26",
+    "week": "2025-26",
+    "search_term": "COVID symptoms",
+    "relative_search_volume": 82,
+    "percent_change": -13.110188686598423,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "CA",
+    "date": "2025-06-26",
+    "week": "2025-26",
+    "search_term": "cough",
+    "relative_search_volume": 22,
+    "percent_change": 24.94003163520233,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "CA",
+    "date": "2025-06-26",
+    "week": "2025-26",
+    "search_term": "fever",
+    "relative_search_volume": 46,
+    "percent_change": 11.37878417160203,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "CA",
+    "date": "2025-06-26",
+    "week": "2025-26",
+    "search_term": "sore throat",
+    "relative_search_volume": 66,
+    "percent_change": -24.230533450326764,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "TX",
+    "date": "2025-06-26",
+    "week": "2025-26",
+    "search_term": "flu symptoms",
+    "relative_search_volume": 23,
+    "percent_change": 2.5173110001134202,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "TX",
+    "date": "2025-06-26",
+    "week": "2025-26",
+    "search_term": "RSV symptoms",
+    "relative_search_volume": 94,
+    "percent_change": -14.89055570448361,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "TX",
+    "date": "2025-06-26",
+    "week": "2025-26",
+    "search_term": "COVID symptoms",
+    "relative_search_volume": 7,
+    "percent_change": 5.207691978361839,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "TX",
+    "date": "2025-06-26",
+    "week": "2025-26",
+    "search_term": "cough",
+    "relative_search_volume": 28,
+    "percent_change": -8.598306773822594,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "TX",
+    "date": "2025-06-26",
+    "week": "2025-26",
+    "search_term": "fever",
+    "relative_search_volume": 69,
+    "percent_change": -10.345747131327443,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "TX",
+    "date": "2025-06-26",
+    "week": "2025-26",
+    "search_term": "sore throat",
+    "relative_search_volume": 39,
+    "percent_change": 19.2621874946312,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "FL",
+    "date": "2025-06-26",
+    "week": "2025-26",
+    "search_term": "flu symptoms",
+    "relative_search_volume": 67,
+    "percent_change": -0.9324955511542887,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "FL",
+    "date": "2025-06-26",
+    "week": "2025-26",
+    "search_term": "RSV symptoms",
+    "relative_search_volume": 76,
+    "percent_change": 0.11604560072839831,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "FL",
+    "date": "2025-06-26",
+    "week": "2025-26",
+    "search_term": "COVID symptoms",
+    "relative_search_volume": 85,
+    "percent_change": -8.093326995658112,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "FL",
+    "date": "2025-06-26",
+    "week": "2025-26",
+    "search_term": "cough",
+    "relative_search_volume": 61,
+    "percent_change": 24.186671973667085,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "FL",
+    "date": "2025-06-26",
+    "week": "2025-26",
+    "search_term": "fever",
+    "relative_search_volume": 63,
+    "percent_change": -23.15348198012568,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "FL",
+    "date": "2025-06-26",
+    "week": "2025-26",
+    "search_term": "sore throat",
+    "relative_search_volume": 22,
+    "percent_change": 15.39945000320545,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NY",
+    "date": "2025-06-26",
+    "week": "2025-26",
+    "search_term": "flu symptoms",
+    "relative_search_volume": 22,
+    "percent_change": 24.99609615930757,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NY",
+    "date": "2025-06-26",
+    "week": "2025-26",
+    "search_term": "RSV symptoms",
+    "relative_search_volume": 85,
+    "percent_change": -23.529022127673173,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NY",
+    "date": "2025-06-26",
+    "week": "2025-26",
+    "search_term": "COVID symptoms",
+    "relative_search_volume": 97,
+    "percent_change": 6.040313172216171,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NY",
+    "date": "2025-06-26",
+    "week": "2025-26",
+    "search_term": "cough",
+    "relative_search_volume": 52,
+    "percent_change": 9.040121521798062,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NY",
+    "date": "2025-06-26",
+    "week": "2025-26",
+    "search_term": "fever",
+    "relative_search_volume": 34,
+    "percent_change": 7.182731155693145,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NY",
+    "date": "2025-06-26",
+    "week": "2025-26",
+    "search_term": "sore throat",
+    "relative_search_volume": 57,
+    "percent_change": -4.783044342281828,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "PA",
+    "date": "2025-06-26",
+    "week": "2025-26",
+    "search_term": "flu symptoms",
+    "relative_search_volume": 9,
+    "percent_change": -1.636165210165419,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "PA",
+    "date": "2025-06-26",
+    "week": "2025-26",
+    "search_term": "RSV symptoms",
+    "relative_search_volume": 33,
+    "percent_change": 8.789429426451623,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "PA",
+    "date": "2025-06-26",
+    "week": "2025-26",
+    "search_term": "COVID symptoms",
+    "relative_search_volume": 28,
+    "percent_change": -4.073513621216895,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "PA",
+    "date": "2025-06-26",
+    "week": "2025-26",
+    "search_term": "cough",
+    "relative_search_volume": 31,
+    "percent_change": -4.710291247015286,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "PA",
+    "date": "2025-06-26",
+    "week": "2025-26",
+    "search_term": "fever",
+    "relative_search_volume": 43,
+    "percent_change": 3.143218759059585,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "PA",
+    "date": "2025-06-26",
+    "week": "2025-26",
+    "search_term": "sore throat",
+    "relative_search_volume": 58,
+    "percent_change": 0.8476227780130241,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "IL",
+    "date": "2025-06-26",
+    "week": "2025-26",
+    "search_term": "flu symptoms",
+    "relative_search_volume": 24,
+    "percent_change": 7.735616648103227,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "IL",
+    "date": "2025-06-26",
+    "week": "2025-26",
+    "search_term": "RSV symptoms",
+    "relative_search_volume": 80,
+    "percent_change": 16.960452493465304,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "IL",
+    "date": "2025-06-26",
+    "week": "2025-26",
+    "search_term": "COVID symptoms",
+    "relative_search_volume": 59,
+    "percent_change": -3.2696832326669423,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "IL",
+    "date": "2025-06-26",
+    "week": "2025-26",
+    "search_term": "cough",
+    "relative_search_volume": 43,
+    "percent_change": -1.873561964424797,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "IL",
+    "date": "2025-06-26",
+    "week": "2025-26",
+    "search_term": "fever",
+    "relative_search_volume": 68,
+    "percent_change": -6.6691129367873465,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "IL",
+    "date": "2025-06-26",
+    "week": "2025-26",
+    "search_term": "sore throat",
+    "relative_search_volume": 81,
+    "percent_change": -22.575440966215687,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "OH",
+    "date": "2025-06-26",
+    "week": "2025-26",
+    "search_term": "flu symptoms",
+    "relative_search_volume": 6,
+    "percent_change": 0.0795275883918034,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "OH",
+    "date": "2025-06-26",
+    "week": "2025-26",
+    "search_term": "RSV symptoms",
+    "relative_search_volume": 73,
+    "percent_change": -17.687749301379164,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "OH",
+    "date": "2025-06-26",
+    "week": "2025-26",
+    "search_term": "COVID symptoms",
+    "relative_search_volume": 38,
+    "percent_change": -0.17236934130668846,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "OH",
+    "date": "2025-06-26",
+    "week": "2025-26",
+    "search_term": "cough",
+    "relative_search_volume": 57,
+    "percent_change": 10.193272497470907,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "OH",
+    "date": "2025-06-26",
+    "week": "2025-26",
+    "search_term": "fever",
+    "relative_search_volume": 98,
+    "percent_change": -4.011451366178742,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "OH",
+    "date": "2025-06-26",
+    "week": "2025-26",
+    "search_term": "sore throat",
+    "relative_search_volume": 94,
+    "percent_change": 8.974130177667739,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "GA",
+    "date": "2025-06-26",
+    "week": "2025-26",
+    "search_term": "flu symptoms",
+    "relative_search_volume": 47,
+    "percent_change": 19.057340707478666,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "GA",
+    "date": "2025-06-26",
+    "week": "2025-26",
+    "search_term": "RSV symptoms",
+    "relative_search_volume": 39,
+    "percent_change": 6.071043653362384,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "GA",
+    "date": "2025-06-26",
+    "week": "2025-26",
+    "search_term": "COVID symptoms",
+    "relative_search_volume": 96,
+    "percent_change": -13.781027107113065,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "GA",
+    "date": "2025-06-26",
+    "week": "2025-26",
+    "search_term": "cough",
+    "relative_search_volume": 38,
+    "percent_change": -14.842179864109784,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "GA",
+    "date": "2025-06-26",
+    "week": "2025-26",
+    "search_term": "fever",
+    "relative_search_volume": 57,
+    "percent_change": -2.520025780038848,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "GA",
+    "date": "2025-06-26",
+    "week": "2025-26",
+    "search_term": "sore throat",
+    "relative_search_volume": 29,
+    "percent_change": 10.34955710706421,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NC",
+    "date": "2025-06-26",
+    "week": "2025-26",
+    "search_term": "flu symptoms",
+    "relative_search_volume": 16,
+    "percent_change": -10.13231977064748,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NC",
+    "date": "2025-06-26",
+    "week": "2025-26",
+    "search_term": "RSV symptoms",
+    "relative_search_volume": 5,
+    "percent_change": 1.1386440952967591,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NC",
+    "date": "2025-06-26",
+    "week": "2025-26",
+    "search_term": "COVID symptoms",
+    "relative_search_volume": 77,
+    "percent_change": -3.0093180962890043,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NC",
+    "date": "2025-06-26",
+    "week": "2025-26",
+    "search_term": "cough",
+    "relative_search_volume": 74,
+    "percent_change": -13.453251376103504,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NC",
+    "date": "2025-06-26",
+    "week": "2025-26",
+    "search_term": "fever",
+    "relative_search_volume": 98,
+    "percent_change": 6.434496670944245,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NC",
+    "date": "2025-06-26",
+    "week": "2025-26",
+    "search_term": "sore throat",
+    "relative_search_volume": 21,
+    "percent_change": -14.725830114965133,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "US",
+    "date": "2025-06-19",
+    "week": "2025-25",
+    "search_term": "flu symptoms",
+    "relative_search_volume": 72,
+    "percent_change": -15.924694369048343,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "US",
+    "date": "2025-06-19",
+    "week": "2025-25",
+    "search_term": "RSV symptoms",
+    "relative_search_volume": 70,
+    "percent_change": -7.087714959205272,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "US",
+    "date": "2025-06-19",
+    "week": "2025-25",
+    "search_term": "COVID symptoms",
+    "relative_search_volume": 41,
+    "percent_change": 0.0462930789721927,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "US",
+    "date": "2025-06-19",
+    "week": "2025-25",
+    "search_term": "cough",
+    "relative_search_volume": 45,
+    "percent_change": -4.565676350298364,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "US",
+    "date": "2025-06-19",
+    "week": "2025-25",
+    "search_term": "fever",
+    "relative_search_volume": 82,
+    "percent_change": -12.476144034451986,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "US",
+    "date": "2025-06-19",
+    "week": "2025-25",
+    "search_term": "sore throat",
+    "relative_search_volume": 12,
+    "percent_change": -6.518708215409008,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "CA",
+    "date": "2025-06-19",
+    "week": "2025-25",
+    "search_term": "flu symptoms",
+    "relative_search_volume": 62,
+    "percent_change": -4.744066858713236,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "CA",
+    "date": "2025-06-19",
+    "week": "2025-25",
+    "search_term": "RSV symptoms",
+    "relative_search_volume": 39,
+    "percent_change": 23.50091924392157,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "CA",
+    "date": "2025-06-19",
+    "week": "2025-25",
+    "search_term": "COVID symptoms",
+    "relative_search_volume": 3,
+    "percent_change": -8.914359599258159,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "CA",
+    "date": "2025-06-19",
+    "week": "2025-25",
+    "search_term": "cough",
+    "relative_search_volume": 70,
+    "percent_change": 8.994545401916753,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "CA",
+    "date": "2025-06-19",
+    "week": "2025-25",
+    "search_term": "fever",
+    "relative_search_volume": 6,
+    "percent_change": -24.184312031421364,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "CA",
+    "date": "2025-06-19",
+    "week": "2025-25",
+    "search_term": "sore throat",
+    "relative_search_volume": 93,
+    "percent_change": -16.223932637678907,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "TX",
+    "date": "2025-06-19",
+    "week": "2025-25",
+    "search_term": "flu symptoms",
+    "relative_search_volume": 51,
+    "percent_change": 20.93387406552276,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "TX",
+    "date": "2025-06-19",
+    "week": "2025-25",
+    "search_term": "RSV symptoms",
+    "relative_search_volume": 14,
+    "percent_change": -18.24608487744459,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "TX",
+    "date": "2025-06-19",
+    "week": "2025-25",
+    "search_term": "COVID symptoms",
+    "relative_search_volume": 33,
+    "percent_change": -16.957453705656256,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "TX",
+    "date": "2025-06-19",
+    "week": "2025-25",
+    "search_term": "cough",
+    "relative_search_volume": 70,
+    "percent_change": 14.157046871833867,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "TX",
+    "date": "2025-06-19",
+    "week": "2025-25",
+    "search_term": "fever",
+    "relative_search_volume": 13,
+    "percent_change": 13.379497446758338,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "TX",
+    "date": "2025-06-19",
+    "week": "2025-25",
+    "search_term": "sore throat",
+    "relative_search_volume": 84,
+    "percent_change": 11.130610949553411,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "FL",
+    "date": "2025-06-19",
+    "week": "2025-25",
+    "search_term": "flu symptoms",
+    "relative_search_volume": 2,
+    "percent_change": -14.55688159649493,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "FL",
+    "date": "2025-06-19",
+    "week": "2025-25",
+    "search_term": "RSV symptoms",
+    "relative_search_volume": 85,
+    "percent_change": 7.1627753469980515,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "FL",
+    "date": "2025-06-19",
+    "week": "2025-25",
+    "search_term": "COVID symptoms",
+    "relative_search_volume": 17,
+    "percent_change": -12.758966117656822,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "FL",
+    "date": "2025-06-19",
+    "week": "2025-25",
+    "search_term": "cough",
+    "relative_search_volume": 59,
+    "percent_change": -10.837132134588956,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "FL",
+    "date": "2025-06-19",
+    "week": "2025-25",
+    "search_term": "fever",
+    "relative_search_volume": 67,
+    "percent_change": -14.998848199828274,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "FL",
+    "date": "2025-06-19",
+    "week": "2025-25",
+    "search_term": "sore throat",
+    "relative_search_volume": 16,
+    "percent_change": -14.975844822532569,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NY",
+    "date": "2025-06-19",
+    "week": "2025-25",
+    "search_term": "flu symptoms",
+    "relative_search_volume": 91,
+    "percent_change": -14.58383242189516,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NY",
+    "date": "2025-06-19",
+    "week": "2025-25",
+    "search_term": "RSV symptoms",
+    "relative_search_volume": 25,
+    "percent_change": 20.865157971238503,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NY",
+    "date": "2025-06-19",
+    "week": "2025-25",
+    "search_term": "COVID symptoms",
+    "relative_search_volume": 14,
+    "percent_change": -23.68215449875768,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NY",
+    "date": "2025-06-19",
+    "week": "2025-25",
+    "search_term": "cough",
+    "relative_search_volume": 75,
+    "percent_change": -4.919417909184675,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NY",
+    "date": "2025-06-19",
+    "week": "2025-25",
+    "search_term": "fever",
+    "relative_search_volume": 7,
+    "percent_change": 11.830960426845882,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NY",
+    "date": "2025-06-19",
+    "week": "2025-25",
+    "search_term": "sore throat",
+    "relative_search_volume": 6,
+    "percent_change": 12.426269501062336,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "PA",
+    "date": "2025-06-19",
+    "week": "2025-25",
+    "search_term": "flu symptoms",
+    "relative_search_volume": 27,
+    "percent_change": -1.940121891948221,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "PA",
+    "date": "2025-06-19",
+    "week": "2025-25",
+    "search_term": "RSV symptoms",
+    "relative_search_volume": 33,
+    "percent_change": 15.318995272288893,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "PA",
+    "date": "2025-06-19",
+    "week": "2025-25",
+    "search_term": "COVID symptoms",
+    "relative_search_volume": 64,
+    "percent_change": 20.037487462626082,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "PA",
+    "date": "2025-06-19",
+    "week": "2025-25",
+    "search_term": "cough",
+    "relative_search_volume": 9,
+    "percent_change": -11.47393148084397,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "PA",
+    "date": "2025-06-19",
+    "week": "2025-25",
+    "search_term": "fever",
+    "relative_search_volume": 11,
+    "percent_change": 24.91917993266568,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "PA",
+    "date": "2025-06-19",
+    "week": "2025-25",
+    "search_term": "sore throat",
+    "relative_search_volume": 68,
+    "percent_change": 22.10633534497951,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "IL",
+    "date": "2025-06-19",
+    "week": "2025-25",
+    "search_term": "flu symptoms",
+    "relative_search_volume": 54,
+    "percent_change": 2.6512501461250393,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "IL",
+    "date": "2025-06-19",
+    "week": "2025-25",
+    "search_term": "RSV symptoms",
+    "relative_search_volume": 67,
+    "percent_change": 20.820223095692892,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "IL",
+    "date": "2025-06-19",
+    "week": "2025-25",
+    "search_term": "COVID symptoms",
+    "relative_search_volume": 28,
+    "percent_change": -3.9860141972762775,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "IL",
+    "date": "2025-06-19",
+    "week": "2025-25",
+    "search_term": "cough",
+    "relative_search_volume": 42,
+    "percent_change": 16.250680885965195,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "IL",
+    "date": "2025-06-19",
+    "week": "2025-25",
+    "search_term": "fever",
+    "relative_search_volume": 67,
+    "percent_change": -23.934248193614792,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "IL",
+    "date": "2025-06-19",
+    "week": "2025-25",
+    "search_term": "sore throat",
+    "relative_search_volume": 36,
+    "percent_change": -20.169876428816725,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "OH",
+    "date": "2025-06-19",
+    "week": "2025-25",
+    "search_term": "flu symptoms",
+    "relative_search_volume": 97,
+    "percent_change": 20.621156890893864,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "OH",
+    "date": "2025-06-19",
+    "week": "2025-25",
+    "search_term": "RSV symptoms",
+    "relative_search_volume": 91,
+    "percent_change": -9.614012807988404,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "OH",
+    "date": "2025-06-19",
+    "week": "2025-25",
+    "search_term": "COVID symptoms",
+    "relative_search_volume": 37,
+    "percent_change": -15.611099407593176,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "OH",
+    "date": "2025-06-19",
+    "week": "2025-25",
+    "search_term": "cough",
+    "relative_search_volume": 35,
+    "percent_change": -5.82804062153045,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "OH",
+    "date": "2025-06-19",
+    "week": "2025-25",
+    "search_term": "fever",
+    "relative_search_volume": 3,
+    "percent_change": 3.7210880073553443,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "OH",
+    "date": "2025-06-19",
+    "week": "2025-25",
+    "search_term": "sore throat",
+    "relative_search_volume": 85,
+    "percent_change": -18.42856164770862,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "GA",
+    "date": "2025-06-19",
+    "week": "2025-25",
+    "search_term": "flu symptoms",
+    "relative_search_volume": 93,
+    "percent_change": -0.8373576056846854,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "GA",
+    "date": "2025-06-19",
+    "week": "2025-25",
+    "search_term": "RSV symptoms",
+    "relative_search_volume": 98,
+    "percent_change": 18.01155423311327,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "GA",
+    "date": "2025-06-19",
+    "week": "2025-25",
+    "search_term": "COVID symptoms",
+    "relative_search_volume": 48,
+    "percent_change": 9.377301277804984,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "GA",
+    "date": "2025-06-19",
+    "week": "2025-25",
+    "search_term": "cough",
+    "relative_search_volume": 66,
+    "percent_change": -5.423912426847844,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "GA",
+    "date": "2025-06-19",
+    "week": "2025-25",
+    "search_term": "fever",
+    "relative_search_volume": 2,
+    "percent_change": 1.0564022836243026,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "GA",
+    "date": "2025-06-19",
+    "week": "2025-25",
+    "search_term": "sore throat",
+    "relative_search_volume": 38,
+    "percent_change": -3.5507110349155435,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NC",
+    "date": "2025-06-19",
+    "week": "2025-25",
+    "search_term": "flu symptoms",
+    "relative_search_volume": 50,
+    "percent_change": -22.73737852519272,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NC",
+    "date": "2025-06-19",
+    "week": "2025-25",
+    "search_term": "RSV symptoms",
+    "relative_search_volume": 9,
+    "percent_change": 16.908232992630623,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NC",
+    "date": "2025-06-19",
+    "week": "2025-25",
+    "search_term": "COVID symptoms",
+    "relative_search_volume": 67,
+    "percent_change": 17.15994881025984,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NC",
+    "date": "2025-06-19",
+    "week": "2025-25",
+    "search_term": "cough",
+    "relative_search_volume": 60,
+    "percent_change": -18.892453178350998,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NC",
+    "date": "2025-06-19",
+    "week": "2025-25",
+    "search_term": "fever",
+    "relative_search_volume": 97,
+    "percent_change": 16.524387559828757,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NC",
+    "date": "2025-06-19",
+    "week": "2025-25",
+    "search_term": "sore throat",
+    "relative_search_volume": 21,
+    "percent_change": -13.049925142215091,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "US",
+    "date": "2025-06-12",
+    "week": "2025-24",
+    "search_term": "flu symptoms",
+    "relative_search_volume": 85,
+    "percent_change": -17.37636472303278,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "US",
+    "date": "2025-06-12",
+    "week": "2025-24",
+    "search_term": "RSV symptoms",
+    "relative_search_volume": 28,
+    "percent_change": -4.495984143541698,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "US",
+    "date": "2025-06-12",
+    "week": "2025-24",
+    "search_term": "COVID symptoms",
+    "relative_search_volume": 54,
+    "percent_change": 14.375377699344416,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "US",
+    "date": "2025-06-12",
+    "week": "2025-24",
+    "search_term": "cough",
+    "relative_search_volume": 95,
+    "percent_change": -15.739750424250353,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "US",
+    "date": "2025-06-12",
+    "week": "2025-24",
+    "search_term": "fever",
+    "relative_search_volume": 48,
+    "percent_change": 16.93815304213543,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "US",
+    "date": "2025-06-12",
+    "week": "2025-24",
+    "search_term": "sore throat",
+    "relative_search_volume": 11,
+    "percent_change": 17.367184590856155,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "CA",
+    "date": "2025-06-12",
+    "week": "2025-24",
+    "search_term": "flu symptoms",
+    "relative_search_volume": 36,
+    "percent_change": 17.793323833273412,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "CA",
+    "date": "2025-06-12",
+    "week": "2025-24",
+    "search_term": "RSV symptoms",
+    "relative_search_volume": 88,
+    "percent_change": 15.623354714969507,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "CA",
+    "date": "2025-06-12",
+    "week": "2025-24",
+    "search_term": "COVID symptoms",
+    "relative_search_volume": 81,
+    "percent_change": -23.01763206612938,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "CA",
+    "date": "2025-06-12",
+    "week": "2025-24",
+    "search_term": "cough",
+    "relative_search_volume": 76,
+    "percent_change": -22.05774916887967,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "CA",
+    "date": "2025-06-12",
+    "week": "2025-24",
+    "search_term": "fever",
+    "relative_search_volume": 91,
+    "percent_change": -4.984906239495368,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "CA",
+    "date": "2025-06-12",
+    "week": "2025-24",
+    "search_term": "sore throat",
+    "relative_search_volume": 4,
+    "percent_change": -21.264496484396645,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "TX",
+    "date": "2025-06-12",
+    "week": "2025-24",
+    "search_term": "flu symptoms",
+    "relative_search_volume": 75,
+    "percent_change": 0.2991517043756664,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "TX",
+    "date": "2025-06-12",
+    "week": "2025-24",
+    "search_term": "RSV symptoms",
+    "relative_search_volume": 31,
+    "percent_change": -11.050787029599862,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "TX",
+    "date": "2025-06-12",
+    "week": "2025-24",
+    "search_term": "COVID symptoms",
+    "relative_search_volume": 30,
+    "percent_change": -19.415020444462762,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "TX",
+    "date": "2025-06-12",
+    "week": "2025-24",
+    "search_term": "cough",
+    "relative_search_volume": 64,
+    "percent_change": -13.765773165500262,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "TX",
+    "date": "2025-06-12",
+    "week": "2025-24",
+    "search_term": "fever",
+    "relative_search_volume": 73,
+    "percent_change": 1.1564077723478339,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "TX",
+    "date": "2025-06-12",
+    "week": "2025-24",
+    "search_term": "sore throat",
+    "relative_search_volume": 24,
+    "percent_change": 10.62998208296696,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "FL",
+    "date": "2025-06-12",
+    "week": "2025-24",
+    "search_term": "flu symptoms",
+    "relative_search_volume": 80,
+    "percent_change": 20.169154470019656,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "FL",
+    "date": "2025-06-12",
+    "week": "2025-24",
+    "search_term": "RSV symptoms",
+    "relative_search_volume": 52,
+    "percent_change": -0.005548482559192269,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "FL",
+    "date": "2025-06-12",
+    "week": "2025-24",
+    "search_term": "COVID symptoms",
+    "relative_search_volume": 84,
+    "percent_change": -12.604906582614984,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "FL",
+    "date": "2025-06-12",
+    "week": "2025-24",
+    "search_term": "cough",
+    "relative_search_volume": 64,
+    "percent_change": 3.2175364484916202,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "FL",
+    "date": "2025-06-12",
+    "week": "2025-24",
+    "search_term": "fever",
+    "relative_search_volume": 15,
+    "percent_change": -7.69647401515221,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "FL",
+    "date": "2025-06-12",
+    "week": "2025-24",
+    "search_term": "sore throat",
+    "relative_search_volume": 95,
+    "percent_change": -0.675649382479937,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NY",
+    "date": "2025-06-12",
+    "week": "2025-24",
+    "search_term": "flu symptoms",
+    "relative_search_volume": 24,
+    "percent_change": 7.654612619015511,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NY",
+    "date": "2025-06-12",
+    "week": "2025-24",
+    "search_term": "RSV symptoms",
+    "relative_search_volume": 3,
+    "percent_change": 24.931688981816635,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NY",
+    "date": "2025-06-12",
+    "week": "2025-24",
+    "search_term": "COVID symptoms",
+    "relative_search_volume": 59,
+    "percent_change": 9.968249970171572,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NY",
+    "date": "2025-06-12",
+    "week": "2025-24",
+    "search_term": "cough",
+    "relative_search_volume": 33,
+    "percent_change": 17.256440214405,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NY",
+    "date": "2025-06-12",
+    "week": "2025-24",
+    "search_term": "fever",
+    "relative_search_volume": 61,
+    "percent_change": 17.878995064855708,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NY",
+    "date": "2025-06-12",
+    "week": "2025-24",
+    "search_term": "sore throat",
+    "relative_search_volume": 78,
+    "percent_change": 24.126606634482172,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "PA",
+    "date": "2025-06-12",
+    "week": "2025-24",
+    "search_term": "flu symptoms",
+    "relative_search_volume": 4,
+    "percent_change": -1.9646613667105517,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "PA",
+    "date": "2025-06-12",
+    "week": "2025-24",
+    "search_term": "RSV symptoms",
+    "relative_search_volume": 22,
+    "percent_change": 19.746402878154147,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "PA",
+    "date": "2025-06-12",
+    "week": "2025-24",
+    "search_term": "COVID symptoms",
+    "relative_search_volume": 55,
+    "percent_change": -13.561223006920187,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "PA",
+    "date": "2025-06-12",
+    "week": "2025-24",
+    "search_term": "cough",
+    "relative_search_volume": 96,
+    "percent_change": 6.571682866672601,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "PA",
+    "date": "2025-06-12",
+    "week": "2025-24",
+    "search_term": "fever",
+    "relative_search_volume": 76,
+    "percent_change": 11.005728633925072,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "PA",
+    "date": "2025-06-12",
+    "week": "2025-24",
+    "search_term": "sore throat",
+    "relative_search_volume": 75,
+    "percent_change": 21.909502380583856,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "IL",
+    "date": "2025-06-12",
+    "week": "2025-24",
+    "search_term": "flu symptoms",
+    "relative_search_volume": 92,
+    "percent_change": -10.602257646401247,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "IL",
+    "date": "2025-06-12",
+    "week": "2025-24",
+    "search_term": "RSV symptoms",
+    "relative_search_volume": 93,
+    "percent_change": -5.889881986615797,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "IL",
+    "date": "2025-06-12",
+    "week": "2025-24",
+    "search_term": "COVID symptoms",
+    "relative_search_volume": 18,
+    "percent_change": 23.915426187289114,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "IL",
+    "date": "2025-06-12",
+    "week": "2025-24",
+    "search_term": "cough",
+    "relative_search_volume": 74,
+    "percent_change": 23.274783467160788,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "IL",
+    "date": "2025-06-12",
+    "week": "2025-24",
+    "search_term": "fever",
+    "relative_search_volume": 14,
+    "percent_change": -11.89000623998867,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "IL",
+    "date": "2025-06-12",
+    "week": "2025-24",
+    "search_term": "sore throat",
+    "relative_search_volume": 33,
+    "percent_change": 18.487803843115515,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "OH",
+    "date": "2025-06-12",
+    "week": "2025-24",
+    "search_term": "flu symptoms",
+    "relative_search_volume": 87,
+    "percent_change": -10.355441014417222,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "OH",
+    "date": "2025-06-12",
+    "week": "2025-24",
+    "search_term": "RSV symptoms",
+    "relative_search_volume": 67,
+    "percent_change": 17.159558471118242,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "OH",
+    "date": "2025-06-12",
+    "week": "2025-24",
+    "search_term": "COVID symptoms",
+    "relative_search_volume": 55,
+    "percent_change": -16.77382921716125,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "OH",
+    "date": "2025-06-12",
+    "week": "2025-24",
+    "search_term": "cough",
+    "relative_search_volume": 66,
+    "percent_change": -23.98382112741745,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "OH",
+    "date": "2025-06-12",
+    "week": "2025-24",
+    "search_term": "fever",
+    "relative_search_volume": 68,
+    "percent_change": -5.251295515705834,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "OH",
+    "date": "2025-06-12",
+    "week": "2025-24",
+    "search_term": "sore throat",
+    "relative_search_volume": 17,
+    "percent_change": -1.3610470834504507,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "GA",
+    "date": "2025-06-12",
+    "week": "2025-24",
+    "search_term": "flu symptoms",
+    "relative_search_volume": 46,
+    "percent_change": -10.280178350520707,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "GA",
+    "date": "2025-06-12",
+    "week": "2025-24",
+    "search_term": "RSV symptoms",
+    "relative_search_volume": 86,
+    "percent_change": -4.8995319511926265,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "GA",
+    "date": "2025-06-12",
+    "week": "2025-24",
+    "search_term": "COVID symptoms",
+    "relative_search_volume": 46,
+    "percent_change": 13.330935438623204,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "GA",
+    "date": "2025-06-12",
+    "week": "2025-24",
+    "search_term": "cough",
+    "relative_search_volume": 59,
+    "percent_change": -5.5736292029812,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "GA",
+    "date": "2025-06-12",
+    "week": "2025-24",
+    "search_term": "fever",
+    "relative_search_volume": 7,
+    "percent_change": 5.158423881231777,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "GA",
+    "date": "2025-06-12",
+    "week": "2025-24",
+    "search_term": "sore throat",
+    "relative_search_volume": 9,
+    "percent_change": -14.061863970750077,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NC",
+    "date": "2025-06-12",
+    "week": "2025-24",
+    "search_term": "flu symptoms",
+    "relative_search_volume": 72,
+    "percent_change": 17.874833085165598,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NC",
+    "date": "2025-06-12",
+    "week": "2025-24",
+    "search_term": "RSV symptoms",
+    "relative_search_volume": 32,
+    "percent_change": -6.710274024725338,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NC",
+    "date": "2025-06-12",
+    "week": "2025-24",
+    "search_term": "COVID symptoms",
+    "relative_search_volume": 89,
+    "percent_change": 15.614238112118306,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NC",
+    "date": "2025-06-12",
+    "week": "2025-24",
+    "search_term": "cough",
+    "relative_search_volume": 45,
+    "percent_change": 17.926820388082763,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NC",
+    "date": "2025-06-12",
+    "week": "2025-24",
+    "search_term": "fever",
+    "relative_search_volume": 42,
+    "percent_change": -22.41800588032874,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NC",
+    "date": "2025-06-12",
+    "week": "2025-24",
+    "search_term": "sore throat",
+    "relative_search_volume": 14,
+    "percent_change": -9.47608708246509,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "US",
+    "date": "2025-06-05",
+    "week": "2025-23",
+    "search_term": "flu symptoms",
+    "relative_search_volume": 94,
+    "percent_change": 10.133207158857582,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "US",
+    "date": "2025-06-05",
+    "week": "2025-23",
+    "search_term": "RSV symptoms",
+    "relative_search_volume": 34,
+    "percent_change": -1.7496191867669597,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "US",
+    "date": "2025-06-05",
+    "week": "2025-23",
+    "search_term": "COVID symptoms",
+    "relative_search_volume": 21,
+    "percent_change": -21.546576539624805,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "US",
+    "date": "2025-06-05",
+    "week": "2025-23",
+    "search_term": "cough",
+    "relative_search_volume": 95,
+    "percent_change": 23.574287314074528,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "US",
+    "date": "2025-06-05",
+    "week": "2025-23",
+    "search_term": "fever",
+    "relative_search_volume": 22,
+    "percent_change": 8.240881006176293,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "US",
+    "date": "2025-06-05",
+    "week": "2025-23",
+    "search_term": "sore throat",
+    "relative_search_volume": 20,
+    "percent_change": 15.128334336516359,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "CA",
+    "date": "2025-06-05",
+    "week": "2025-23",
+    "search_term": "flu symptoms",
+    "relative_search_volume": 87,
+    "percent_change": -20.24449678473025,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "CA",
+    "date": "2025-06-05",
+    "week": "2025-23",
+    "search_term": "RSV symptoms",
+    "relative_search_volume": 26,
+    "percent_change": -5.457685888603503,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "CA",
+    "date": "2025-06-05",
+    "week": "2025-23",
+    "search_term": "COVID symptoms",
+    "relative_search_volume": 27,
+    "percent_change": 17.859744875453075,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "CA",
+    "date": "2025-06-05",
+    "week": "2025-23",
+    "search_term": "cough",
+    "relative_search_volume": 39,
+    "percent_change": -23.846484840022374,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "CA",
+    "date": "2025-06-05",
+    "week": "2025-23",
+    "search_term": "fever",
+    "relative_search_volume": 12,
+    "percent_change": -22.842030642932375,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "CA",
+    "date": "2025-06-05",
+    "week": "2025-23",
+    "search_term": "sore throat",
+    "relative_search_volume": 9,
+    "percent_change": 19.46052280142927,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "TX",
+    "date": "2025-06-05",
+    "week": "2025-23",
+    "search_term": "flu symptoms",
+    "relative_search_volume": 51,
+    "percent_change": 14.981031245259436,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "TX",
+    "date": "2025-06-05",
+    "week": "2025-23",
+    "search_term": "RSV symptoms",
+    "relative_search_volume": 98,
+    "percent_change": 4.937587136685906,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "TX",
+    "date": "2025-06-05",
+    "week": "2025-23",
+    "search_term": "COVID symptoms",
+    "relative_search_volume": 53,
+    "percent_change": -24.79408940346971,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "TX",
+    "date": "2025-06-05",
+    "week": "2025-23",
+    "search_term": "cough",
+    "relative_search_volume": 61,
+    "percent_change": -11.02770055827179,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "TX",
+    "date": "2025-06-05",
+    "week": "2025-23",
+    "search_term": "fever",
+    "relative_search_volume": 83,
+    "percent_change": -19.03471620551621,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "TX",
+    "date": "2025-06-05",
+    "week": "2025-23",
+    "search_term": "sore throat",
+    "relative_search_volume": 84,
+    "percent_change": -18.871600337103565,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "FL",
+    "date": "2025-06-05",
+    "week": "2025-23",
+    "search_term": "flu symptoms",
+    "relative_search_volume": 93,
+    "percent_change": -16.082013452088827,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "FL",
+    "date": "2025-06-05",
+    "week": "2025-23",
+    "search_term": "RSV symptoms",
+    "relative_search_volume": 12,
+    "percent_change": -4.349628723619492,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "FL",
+    "date": "2025-06-05",
+    "week": "2025-23",
+    "search_term": "COVID symptoms",
+    "relative_search_volume": 78,
+    "percent_change": -15.729406130200307,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "FL",
+    "date": "2025-06-05",
+    "week": "2025-23",
+    "search_term": "cough",
+    "relative_search_volume": 58,
+    "percent_change": -7.131481885831548,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "FL",
+    "date": "2025-06-05",
+    "week": "2025-23",
+    "search_term": "fever",
+    "relative_search_volume": 99,
+    "percent_change": -7.621842706141935,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "FL",
+    "date": "2025-06-05",
+    "week": "2025-23",
+    "search_term": "sore throat",
+    "relative_search_volume": 9,
+    "percent_change": 20.007828776498727,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NY",
+    "date": "2025-06-05",
+    "week": "2025-23",
+    "search_term": "flu symptoms",
+    "relative_search_volume": 16,
+    "percent_change": -23.071004291778173,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NY",
+    "date": "2025-06-05",
+    "week": "2025-23",
+    "search_term": "RSV symptoms",
+    "relative_search_volume": 9,
+    "percent_change": -12.629215793187164,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NY",
+    "date": "2025-06-05",
+    "week": "2025-23",
+    "search_term": "COVID symptoms",
+    "relative_search_volume": 10,
+    "percent_change": -7.083693205750407,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NY",
+    "date": "2025-06-05",
+    "week": "2025-23",
+    "search_term": "cough",
+    "relative_search_volume": 73,
+    "percent_change": 0.4316830475311395,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NY",
+    "date": "2025-06-05",
+    "week": "2025-23",
+    "search_term": "fever",
+    "relative_search_volume": 21,
+    "percent_change": -4.392255179013949,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NY",
+    "date": "2025-06-05",
+    "week": "2025-23",
+    "search_term": "sore throat",
+    "relative_search_volume": 5,
+    "percent_change": 0.34471689185651133,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "PA",
+    "date": "2025-06-05",
+    "week": "2025-23",
+    "search_term": "flu symptoms",
+    "relative_search_volume": 61,
+    "percent_change": -24.99878936001717,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "PA",
+    "date": "2025-06-05",
+    "week": "2025-23",
+    "search_term": "RSV symptoms",
+    "relative_search_volume": 93,
+    "percent_change": 17.693222566392087,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "PA",
+    "date": "2025-06-05",
+    "week": "2025-23",
+    "search_term": "COVID symptoms",
+    "relative_search_volume": 0,
+    "percent_change": -1.618715078876376,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "PA",
+    "date": "2025-06-05",
+    "week": "2025-23",
+    "search_term": "cough",
+    "relative_search_volume": 8,
+    "percent_change": -8.584039150199951,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "PA",
+    "date": "2025-06-05",
+    "week": "2025-23",
+    "search_term": "fever",
+    "relative_search_volume": 27,
+    "percent_change": 14.221434912839081,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "PA",
+    "date": "2025-06-05",
+    "week": "2025-23",
+    "search_term": "sore throat",
+    "relative_search_volume": 9,
+    "percent_change": 7.55980893574616,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "IL",
+    "date": "2025-06-05",
+    "week": "2025-23",
+    "search_term": "flu symptoms",
+    "relative_search_volume": 36,
+    "percent_change": -22.07850242824313,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "IL",
+    "date": "2025-06-05",
+    "week": "2025-23",
+    "search_term": "RSV symptoms",
+    "relative_search_volume": 7,
+    "percent_change": -19.23101541084652,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "IL",
+    "date": "2025-06-05",
+    "week": "2025-23",
+    "search_term": "COVID symptoms",
+    "relative_search_volume": 87,
+    "percent_change": -16.903520112999594,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "IL",
+    "date": "2025-06-05",
+    "week": "2025-23",
+    "search_term": "cough",
+    "relative_search_volume": 70,
+    "percent_change": 19.824126192416493,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "IL",
+    "date": "2025-06-05",
+    "week": "2025-23",
+    "search_term": "fever",
+    "relative_search_volume": 26,
+    "percent_change": -14.168103999542147,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "IL",
+    "date": "2025-06-05",
+    "week": "2025-23",
+    "search_term": "sore throat",
+    "relative_search_volume": 24,
+    "percent_change": 17.124681851644873,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "OH",
+    "date": "2025-06-05",
+    "week": "2025-23",
+    "search_term": "flu symptoms",
+    "relative_search_volume": 95,
+    "percent_change": -20.723431002223414,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "OH",
+    "date": "2025-06-05",
+    "week": "2025-23",
+    "search_term": "RSV symptoms",
+    "relative_search_volume": 39,
+    "percent_change": 4.737138218776293,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "OH",
+    "date": "2025-06-05",
+    "week": "2025-23",
+    "search_term": "COVID symptoms",
+    "relative_search_volume": 13,
+    "percent_change": 5.284173571791495,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "OH",
+    "date": "2025-06-05",
+    "week": "2025-23",
+    "search_term": "cough",
+    "relative_search_volume": 35,
+    "percent_change": 20.737613226052776,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "OH",
+    "date": "2025-06-05",
+    "week": "2025-23",
+    "search_term": "fever",
+    "relative_search_volume": 45,
+    "percent_change": 13.420715065748933,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "OH",
+    "date": "2025-06-05",
+    "week": "2025-23",
+    "search_term": "sore throat",
+    "relative_search_volume": 78,
+    "percent_change": -1.4958473535585548,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "GA",
+    "date": "2025-06-05",
+    "week": "2025-23",
+    "search_term": "flu symptoms",
+    "relative_search_volume": 73,
+    "percent_change": 24.902780266381598,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "GA",
+    "date": "2025-06-05",
+    "week": "2025-23",
+    "search_term": "RSV symptoms",
+    "relative_search_volume": 37,
+    "percent_change": 5.274839595174685,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "GA",
+    "date": "2025-06-05",
+    "week": "2025-23",
+    "search_term": "COVID symptoms",
+    "relative_search_volume": 6,
+    "percent_change": -2.8778196639657416,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "GA",
+    "date": "2025-06-05",
+    "week": "2025-23",
+    "search_term": "cough",
+    "relative_search_volume": 10,
+    "percent_change": 19.722792876817707,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "GA",
+    "date": "2025-06-05",
+    "week": "2025-23",
+    "search_term": "fever",
+    "relative_search_volume": 0,
+    "percent_change": 12.847346924230918,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "GA",
+    "date": "2025-06-05",
+    "week": "2025-23",
+    "search_term": "sore throat",
+    "relative_search_volume": 31,
+    "percent_change": -5.3347769085224535,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NC",
+    "date": "2025-06-05",
+    "week": "2025-23",
+    "search_term": "flu symptoms",
+    "relative_search_volume": 88,
+    "percent_change": 3.9393250218981546,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NC",
+    "date": "2025-06-05",
+    "week": "2025-23",
+    "search_term": "RSV symptoms",
+    "relative_search_volume": 20,
+    "percent_change": -0.9108433020253104,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NC",
+    "date": "2025-06-05",
+    "week": "2025-23",
+    "search_term": "COVID symptoms",
+    "relative_search_volume": 39,
+    "percent_change": -23.113113111237602,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NC",
+    "date": "2025-06-05",
+    "week": "2025-23",
+    "search_term": "cough",
+    "relative_search_volume": 27,
+    "percent_change": 10.597634194297656,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NC",
+    "date": "2025-06-05",
+    "week": "2025-23",
+    "search_term": "fever",
+    "relative_search_volume": 1,
+    "percent_change": -22.060509144612595,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NC",
+    "date": "2025-06-05",
+    "week": "2025-23",
+    "search_term": "sore throat",
+    "relative_search_volume": 52,
+    "percent_change": 19.16441568829609,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "US",
+    "date": "2025-05-29",
+    "week": "2025-22",
+    "search_term": "flu symptoms",
+    "relative_search_volume": 64,
+    "percent_change": -22.145800043315955,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "US",
+    "date": "2025-05-29",
+    "week": "2025-22",
+    "search_term": "RSV symptoms",
+    "relative_search_volume": 72,
+    "percent_change": 21.37682050956913,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "US",
+    "date": "2025-05-29",
+    "week": "2025-22",
+    "search_term": "COVID symptoms",
+    "relative_search_volume": 63,
+    "percent_change": 5.5949737170717935,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "US",
+    "date": "2025-05-29",
+    "week": "2025-22",
+    "search_term": "cough",
+    "relative_search_volume": 92,
+    "percent_change": 23.696777439140636,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "US",
+    "date": "2025-05-29",
+    "week": "2025-22",
+    "search_term": "fever",
+    "relative_search_volume": 70,
+    "percent_change": -4.461996893945419,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "US",
+    "date": "2025-05-29",
+    "week": "2025-22",
+    "search_term": "sore throat",
+    "relative_search_volume": 49,
+    "percent_change": 3.1442971607451686,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "CA",
+    "date": "2025-05-29",
+    "week": "2025-22",
+    "search_term": "flu symptoms",
+    "relative_search_volume": 31,
+    "percent_change": 12.710803748353394,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "CA",
+    "date": "2025-05-29",
+    "week": "2025-22",
+    "search_term": "RSV symptoms",
+    "relative_search_volume": 23,
+    "percent_change": 4.4491852460130765,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "CA",
+    "date": "2025-05-29",
+    "week": "2025-22",
+    "search_term": "COVID symptoms",
+    "relative_search_volume": 48,
+    "percent_change": -17.70871409741156,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "CA",
+    "date": "2025-05-29",
+    "week": "2025-22",
+    "search_term": "cough",
+    "relative_search_volume": 63,
+    "percent_change": 15.502752577862777,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "CA",
+    "date": "2025-05-29",
+    "week": "2025-22",
+    "search_term": "fever",
+    "relative_search_volume": 12,
+    "percent_change": 19.176782360185165,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "CA",
+    "date": "2025-05-29",
+    "week": "2025-22",
+    "search_term": "sore throat",
+    "relative_search_volume": 40,
+    "percent_change": 15.525187805176099,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "TX",
+    "date": "2025-05-29",
+    "week": "2025-22",
+    "search_term": "flu symptoms",
+    "relative_search_volume": 94,
+    "percent_change": -16.839795820461955,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "TX",
+    "date": "2025-05-29",
+    "week": "2025-22",
+    "search_term": "RSV symptoms",
+    "relative_search_volume": 64,
+    "percent_change": -24.097463275601715,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "TX",
+    "date": "2025-05-29",
+    "week": "2025-22",
+    "search_term": "COVID symptoms",
+    "relative_search_volume": 0,
+    "percent_change": -3.5166000492891314,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "TX",
+    "date": "2025-05-29",
+    "week": "2025-22",
+    "search_term": "cough",
+    "relative_search_volume": 54,
+    "percent_change": 10.754962639912724,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "TX",
+    "date": "2025-05-29",
+    "week": "2025-22",
+    "search_term": "fever",
+    "relative_search_volume": 75,
+    "percent_change": -13.377007138375985,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "TX",
+    "date": "2025-05-29",
+    "week": "2025-22",
+    "search_term": "sore throat",
+    "relative_search_volume": 61,
+    "percent_change": -8.340281548961636,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "FL",
+    "date": "2025-05-29",
+    "week": "2025-22",
+    "search_term": "flu symptoms",
+    "relative_search_volume": 35,
+    "percent_change": -0.9965392831686293,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "FL",
+    "date": "2025-05-29",
+    "week": "2025-22",
+    "search_term": "RSV symptoms",
+    "relative_search_volume": 88,
+    "percent_change": -24.155899191990017,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "FL",
+    "date": "2025-05-29",
+    "week": "2025-22",
+    "search_term": "COVID symptoms",
+    "relative_search_volume": 66,
+    "percent_change": -17.631253409415727,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "FL",
+    "date": "2025-05-29",
+    "week": "2025-22",
+    "search_term": "cough",
+    "relative_search_volume": 75,
+    "percent_change": -14.283282599850121,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "FL",
+    "date": "2025-05-29",
+    "week": "2025-22",
+    "search_term": "fever",
+    "relative_search_volume": 55,
+    "percent_change": 21.55171836867109,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "FL",
+    "date": "2025-05-29",
+    "week": "2025-22",
+    "search_term": "sore throat",
+    "relative_search_volume": 9,
+    "percent_change": -16.055358304213474,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NY",
+    "date": "2025-05-29",
+    "week": "2025-22",
+    "search_term": "flu symptoms",
+    "relative_search_volume": 22,
+    "percent_change": 0.39407963190006834,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NY",
+    "date": "2025-05-29",
+    "week": "2025-22",
+    "search_term": "RSV symptoms",
+    "relative_search_volume": 94,
+    "percent_change": 1.6751824144955352,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NY",
+    "date": "2025-05-29",
+    "week": "2025-22",
+    "search_term": "COVID symptoms",
+    "relative_search_volume": 68,
+    "percent_change": -21.626226804905336,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NY",
+    "date": "2025-05-29",
+    "week": "2025-22",
+    "search_term": "cough",
+    "relative_search_volume": 35,
+    "percent_change": 24.723569787563783,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NY",
+    "date": "2025-05-29",
+    "week": "2025-22",
+    "search_term": "fever",
+    "relative_search_volume": 74,
+    "percent_change": 13.101485448989191,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NY",
+    "date": "2025-05-29",
+    "week": "2025-22",
+    "search_term": "sore throat",
+    "relative_search_volume": 94,
+    "percent_change": 9.373525470840727,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "PA",
+    "date": "2025-05-29",
+    "week": "2025-22",
+    "search_term": "flu symptoms",
+    "relative_search_volume": 70,
+    "percent_change": -14.7047329771002,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "PA",
+    "date": "2025-05-29",
+    "week": "2025-22",
+    "search_term": "RSV symptoms",
+    "relative_search_volume": 44,
+    "percent_change": -1.808069992913608,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "PA",
+    "date": "2025-05-29",
+    "week": "2025-22",
+    "search_term": "COVID symptoms",
+    "relative_search_volume": 6,
+    "percent_change": 13.840738728904455,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "PA",
+    "date": "2025-05-29",
+    "week": "2025-22",
+    "search_term": "cough",
+    "relative_search_volume": 27,
+    "percent_change": 2.7262869292132175,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "PA",
+    "date": "2025-05-29",
+    "week": "2025-22",
+    "search_term": "fever",
+    "relative_search_volume": 52,
+    "percent_change": 10.43961489200308,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "PA",
+    "date": "2025-05-29",
+    "week": "2025-22",
+    "search_term": "sore throat",
+    "relative_search_volume": 60,
+    "percent_change": 12.82985169823414,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "IL",
+    "date": "2025-05-29",
+    "week": "2025-22",
+    "search_term": "flu symptoms",
+    "relative_search_volume": 93,
+    "percent_change": -22.296278859215146,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "IL",
+    "date": "2025-05-29",
+    "week": "2025-22",
+    "search_term": "RSV symptoms",
+    "relative_search_volume": 90,
+    "percent_change": -4.211380706868184,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "IL",
+    "date": "2025-05-29",
+    "week": "2025-22",
+    "search_term": "COVID symptoms",
+    "relative_search_volume": 6,
+    "percent_change": 18.323586309801996,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "IL",
+    "date": "2025-05-29",
+    "week": "2025-22",
+    "search_term": "cough",
+    "relative_search_volume": 50,
+    "percent_change": -14.685860751385416,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "IL",
+    "date": "2025-05-29",
+    "week": "2025-22",
+    "search_term": "fever",
+    "relative_search_volume": 51,
+    "percent_change": 17.862852957728016,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "IL",
+    "date": "2025-05-29",
+    "week": "2025-22",
+    "search_term": "sore throat",
+    "relative_search_volume": 60,
+    "percent_change": -6.530737147583343,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "OH",
+    "date": "2025-05-29",
+    "week": "2025-22",
+    "search_term": "flu symptoms",
+    "relative_search_volume": 23,
+    "percent_change": -8.958189519512294,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "OH",
+    "date": "2025-05-29",
+    "week": "2025-22",
+    "search_term": "RSV symptoms",
+    "relative_search_volume": 78,
+    "percent_change": -9.951902413486668,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "OH",
+    "date": "2025-05-29",
+    "week": "2025-22",
+    "search_term": "COVID symptoms",
+    "relative_search_volume": 85,
+    "percent_change": 18.260880055746085,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "OH",
+    "date": "2025-05-29",
+    "week": "2025-22",
+    "search_term": "cough",
+    "relative_search_volume": 49,
+    "percent_change": -13.573613197755863,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "OH",
+    "date": "2025-05-29",
+    "week": "2025-22",
+    "search_term": "fever",
+    "relative_search_volume": 67,
+    "percent_change": -24.971857265232234,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "OH",
+    "date": "2025-05-29",
+    "week": "2025-22",
+    "search_term": "sore throat",
+    "relative_search_volume": 1,
+    "percent_change": 3.116211578146455,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "GA",
+    "date": "2025-05-29",
+    "week": "2025-22",
+    "search_term": "flu symptoms",
+    "relative_search_volume": 51,
+    "percent_change": 20.377007210020192,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "GA",
+    "date": "2025-05-29",
+    "week": "2025-22",
+    "search_term": "RSV symptoms",
+    "relative_search_volume": 39,
+    "percent_change": 2.285254157886929,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "GA",
+    "date": "2025-05-29",
+    "week": "2025-22",
+    "search_term": "COVID symptoms",
+    "relative_search_volume": 3,
+    "percent_change": 12.230528803577878,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "GA",
+    "date": "2025-05-29",
+    "week": "2025-22",
+    "search_term": "cough",
+    "relative_search_volume": 51,
+    "percent_change": 7.185313680451777,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "GA",
+    "date": "2025-05-29",
+    "week": "2025-22",
+    "search_term": "fever",
+    "relative_search_volume": 83,
+    "percent_change": 6.875478170898097,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "GA",
+    "date": "2025-05-29",
+    "week": "2025-22",
+    "search_term": "sore throat",
+    "relative_search_volume": 20,
+    "percent_change": 15.910668833292752,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NC",
+    "date": "2025-05-29",
+    "week": "2025-22",
+    "search_term": "flu symptoms",
+    "relative_search_volume": 43,
+    "percent_change": -11.433261757196222,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NC",
+    "date": "2025-05-29",
+    "week": "2025-22",
+    "search_term": "RSV symptoms",
+    "relative_search_volume": 19,
+    "percent_change": -19.518444447726967,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NC",
+    "date": "2025-05-29",
+    "week": "2025-22",
+    "search_term": "COVID symptoms",
+    "relative_search_volume": 24,
+    "percent_change": 23.24317593648797,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NC",
+    "date": "2025-05-29",
+    "week": "2025-22",
+    "search_term": "cough",
+    "relative_search_volume": 69,
+    "percent_change": 16.411528408340324,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NC",
+    "date": "2025-05-29",
+    "week": "2025-22",
+    "search_term": "fever",
+    "relative_search_volume": 55,
+    "percent_change": 23.299477564332317,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NC",
+    "date": "2025-05-29",
+    "week": "2025-22",
+    "search_term": "sore throat",
+    "relative_search_volume": 19,
+    "percent_change": 11.52503782968225,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "US",
+    "date": "2025-05-22",
+    "week": "2025-21",
+    "search_term": "flu symptoms",
+    "relative_search_volume": 93,
+    "percent_change": -16.22502521238185,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "US",
+    "date": "2025-05-22",
+    "week": "2025-21",
+    "search_term": "RSV symptoms",
+    "relative_search_volume": 90,
+    "percent_change": -1.3187364303847149,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "US",
+    "date": "2025-05-22",
+    "week": "2025-21",
+    "search_term": "COVID symptoms",
+    "relative_search_volume": 31,
+    "percent_change": -5.833826474226456,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "US",
+    "date": "2025-05-22",
+    "week": "2025-21",
+    "search_term": "cough",
+    "relative_search_volume": 78,
+    "percent_change": -22.21012922592338,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "US",
+    "date": "2025-05-22",
+    "week": "2025-21",
+    "search_term": "fever",
+    "relative_search_volume": 83,
+    "percent_change": -5.133111814412727,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "US",
+    "date": "2025-05-22",
+    "week": "2025-21",
+    "search_term": "sore throat",
+    "relative_search_volume": 99,
+    "percent_change": -23.92341122954139,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "CA",
+    "date": "2025-05-22",
+    "week": "2025-21",
+    "search_term": "flu symptoms",
+    "relative_search_volume": 99,
+    "percent_change": 12.534440947632264,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "CA",
+    "date": "2025-05-22",
+    "week": "2025-21",
+    "search_term": "RSV symptoms",
+    "relative_search_volume": 99,
+    "percent_change": 6.453368732929555,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "CA",
+    "date": "2025-05-22",
+    "week": "2025-21",
+    "search_term": "COVID symptoms",
+    "relative_search_volume": 74,
+    "percent_change": -21.77861299593864,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "CA",
+    "date": "2025-05-22",
+    "week": "2025-21",
+    "search_term": "cough",
+    "relative_search_volume": 7,
+    "percent_change": -0.968155278148819,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "CA",
+    "date": "2025-05-22",
+    "week": "2025-21",
+    "search_term": "fever",
+    "relative_search_volume": 58,
+    "percent_change": -9.097619378268151,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "CA",
+    "date": "2025-05-22",
+    "week": "2025-21",
+    "search_term": "sore throat",
+    "relative_search_volume": 42,
+    "percent_change": 18.71621543516109,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "TX",
+    "date": "2025-05-22",
+    "week": "2025-21",
+    "search_term": "flu symptoms",
+    "relative_search_volume": 6,
+    "percent_change": 20.99527804710902,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "TX",
+    "date": "2025-05-22",
+    "week": "2025-21",
+    "search_term": "RSV symptoms",
+    "relative_search_volume": 30,
+    "percent_change": -11.51102846790566,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "TX",
+    "date": "2025-05-22",
+    "week": "2025-21",
+    "search_term": "COVID symptoms",
+    "relative_search_volume": 7,
+    "percent_change": -8.688139795992578,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "TX",
+    "date": "2025-05-22",
+    "week": "2025-21",
+    "search_term": "cough",
+    "relative_search_volume": 93,
+    "percent_change": 11.0865236604197,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "TX",
+    "date": "2025-05-22",
+    "week": "2025-21",
+    "search_term": "fever",
+    "relative_search_volume": 50,
+    "percent_change": 3.372404923743566,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "TX",
+    "date": "2025-05-22",
+    "week": "2025-21",
+    "search_term": "sore throat",
+    "relative_search_volume": 70,
+    "percent_change": 1.91134612729158,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "FL",
+    "date": "2025-05-22",
+    "week": "2025-21",
+    "search_term": "flu symptoms",
+    "relative_search_volume": 80,
+    "percent_change": 5.520730299861542,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "FL",
+    "date": "2025-05-22",
+    "week": "2025-21",
+    "search_term": "RSV symptoms",
+    "relative_search_volume": 40,
+    "percent_change": -5.467244263999915,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "FL",
+    "date": "2025-05-22",
+    "week": "2025-21",
+    "search_term": "COVID symptoms",
+    "relative_search_volume": 4,
+    "percent_change": 13.381000403331134,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "FL",
+    "date": "2025-05-22",
+    "week": "2025-21",
+    "search_term": "cough",
+    "relative_search_volume": 38,
+    "percent_change": -14.898976181816504,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "FL",
+    "date": "2025-05-22",
+    "week": "2025-21",
+    "search_term": "fever",
+    "relative_search_volume": 57,
+    "percent_change": -24.170680951622657,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "FL",
+    "date": "2025-05-22",
+    "week": "2025-21",
+    "search_term": "sore throat",
+    "relative_search_volume": 13,
+    "percent_change": 16.21211147199254,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NY",
+    "date": "2025-05-22",
+    "week": "2025-21",
+    "search_term": "flu symptoms",
+    "relative_search_volume": 0,
+    "percent_change": -14.825577135844092,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NY",
+    "date": "2025-05-22",
+    "week": "2025-21",
+    "search_term": "RSV symptoms",
+    "relative_search_volume": 91,
+    "percent_change": 21.17026564198844,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NY",
+    "date": "2025-05-22",
+    "week": "2025-21",
+    "search_term": "COVID symptoms",
+    "relative_search_volume": 35,
+    "percent_change": 9.78796493301588,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NY",
+    "date": "2025-05-22",
+    "week": "2025-21",
+    "search_term": "cough",
+    "relative_search_volume": 18,
+    "percent_change": -1.4419025375386418,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NY",
+    "date": "2025-05-22",
+    "week": "2025-21",
+    "search_term": "fever",
+    "relative_search_volume": 93,
+    "percent_change": -7.855428030381462,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NY",
+    "date": "2025-05-22",
+    "week": "2025-21",
+    "search_term": "sore throat",
+    "relative_search_volume": 12,
+    "percent_change": -8.136641277204582,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "PA",
+    "date": "2025-05-22",
+    "week": "2025-21",
+    "search_term": "flu symptoms",
+    "relative_search_volume": 70,
+    "percent_change": -10.892166707173468,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "PA",
+    "date": "2025-05-22",
+    "week": "2025-21",
+    "search_term": "RSV symptoms",
+    "relative_search_volume": 70,
+    "percent_change": 9.220846456067388,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "PA",
+    "date": "2025-05-22",
+    "week": "2025-21",
+    "search_term": "COVID symptoms",
+    "relative_search_volume": 48,
+    "percent_change": 13.070768636605834,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "PA",
+    "date": "2025-05-22",
+    "week": "2025-21",
+    "search_term": "cough",
+    "relative_search_volume": 28,
+    "percent_change": 1.4529291040853431,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "PA",
+    "date": "2025-05-22",
+    "week": "2025-21",
+    "search_term": "fever",
+    "relative_search_volume": 16,
+    "percent_change": -12.191141104395864,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "PA",
+    "date": "2025-05-22",
+    "week": "2025-21",
+    "search_term": "sore throat",
+    "relative_search_volume": 72,
+    "percent_change": -24.83595025246349,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "IL",
+    "date": "2025-05-22",
+    "week": "2025-21",
+    "search_term": "flu symptoms",
+    "relative_search_volume": 62,
+    "percent_change": -12.915595553576775,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "IL",
+    "date": "2025-05-22",
+    "week": "2025-21",
+    "search_term": "RSV symptoms",
+    "relative_search_volume": 71,
+    "percent_change": 21.844812619224474,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "IL",
+    "date": "2025-05-22",
+    "week": "2025-21",
+    "search_term": "COVID symptoms",
+    "relative_search_volume": 87,
+    "percent_change": -1.941141643319777,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "IL",
+    "date": "2025-05-22",
+    "week": "2025-21",
+    "search_term": "cough",
+    "relative_search_volume": 28,
+    "percent_change": -23.123185529644232,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "IL",
+    "date": "2025-05-22",
+    "week": "2025-21",
+    "search_term": "fever",
+    "relative_search_volume": 40,
+    "percent_change": 14.477531005691624,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "IL",
+    "date": "2025-05-22",
+    "week": "2025-21",
+    "search_term": "sore throat",
+    "relative_search_volume": 10,
+    "percent_change": -18.533409014137703,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "OH",
+    "date": "2025-05-22",
+    "week": "2025-21",
+    "search_term": "flu symptoms",
+    "relative_search_volume": 37,
+    "percent_change": -17.429427211078398,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "OH",
+    "date": "2025-05-22",
+    "week": "2025-21",
+    "search_term": "RSV symptoms",
+    "relative_search_volume": 20,
+    "percent_change": -15.187221012544217,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "OH",
+    "date": "2025-05-22",
+    "week": "2025-21",
+    "search_term": "COVID symptoms",
+    "relative_search_volume": 0,
+    "percent_change": -5.238566774104458,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "OH",
+    "date": "2025-05-22",
+    "week": "2025-21",
+    "search_term": "cough",
+    "relative_search_volume": 77,
+    "percent_change": 7.0808174009016955,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "OH",
+    "date": "2025-05-22",
+    "week": "2025-21",
+    "search_term": "fever",
+    "relative_search_volume": 19,
+    "percent_change": -1.0656718518863073,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "OH",
+    "date": "2025-05-22",
+    "week": "2025-21",
+    "search_term": "sore throat",
+    "relative_search_volume": 93,
+    "percent_change": -2.0007438508154007,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "GA",
+    "date": "2025-05-22",
+    "week": "2025-21",
+    "search_term": "flu symptoms",
+    "relative_search_volume": 83,
+    "percent_change": -20.522643813509767,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "GA",
+    "date": "2025-05-22",
+    "week": "2025-21",
+    "search_term": "RSV symptoms",
+    "relative_search_volume": 57,
+    "percent_change": -13.61352954939623,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "GA",
+    "date": "2025-05-22",
+    "week": "2025-21",
+    "search_term": "COVID symptoms",
+    "relative_search_volume": 46,
+    "percent_change": -5.025826894962327,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "GA",
+    "date": "2025-05-22",
+    "week": "2025-21",
+    "search_term": "cough",
+    "relative_search_volume": 71,
+    "percent_change": 20.53035036079335,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "GA",
+    "date": "2025-05-22",
+    "week": "2025-21",
+    "search_term": "fever",
+    "relative_search_volume": 67,
+    "percent_change": -0.7899420082270181,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "GA",
+    "date": "2025-05-22",
+    "week": "2025-21",
+    "search_term": "sore throat",
+    "relative_search_volume": 18,
+    "percent_change": 24.016408211378437,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NC",
+    "date": "2025-05-22",
+    "week": "2025-21",
+    "search_term": "flu symptoms",
+    "relative_search_volume": 5,
+    "percent_change": -12.384863396947864,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NC",
+    "date": "2025-05-22",
+    "week": "2025-21",
+    "search_term": "RSV symptoms",
+    "relative_search_volume": 63,
+    "percent_change": -4.07722866965905,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NC",
+    "date": "2025-05-22",
+    "week": "2025-21",
+    "search_term": "COVID symptoms",
+    "relative_search_volume": 40,
+    "percent_change": 0.22327011424497778,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NC",
+    "date": "2025-05-22",
+    "week": "2025-21",
+    "search_term": "cough",
+    "relative_search_volume": 12,
+    "percent_change": -6.173385649618435,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NC",
+    "date": "2025-05-22",
+    "week": "2025-21",
+    "search_term": "fever",
+    "relative_search_volume": 41,
+    "percent_change": 3.4353769270083268,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NC",
+    "date": "2025-05-22",
+    "week": "2025-21",
+    "search_term": "sore throat",
+    "relative_search_volume": 94,
+    "percent_change": -23.80490068717317,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "US",
+    "date": "2025-05-15",
+    "week": "2025-20",
+    "search_term": "flu symptoms",
+    "relative_search_volume": 80,
+    "percent_change": -19.922972812560346,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "US",
+    "date": "2025-05-15",
+    "week": "2025-20",
+    "search_term": "RSV symptoms",
+    "relative_search_volume": 87,
+    "percent_change": -1.0330156270910829,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "US",
+    "date": "2025-05-15",
+    "week": "2025-20",
+    "search_term": "COVID symptoms",
+    "relative_search_volume": 86,
+    "percent_change": -22.644265537848906,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "US",
+    "date": "2025-05-15",
+    "week": "2025-20",
+    "search_term": "cough",
+    "relative_search_volume": 29,
+    "percent_change": -0.06078929627901797,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "US",
+    "date": "2025-05-15",
+    "week": "2025-20",
+    "search_term": "fever",
+    "relative_search_volume": 36,
+    "percent_change": 2.678231480051396,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "US",
+    "date": "2025-05-15",
+    "week": "2025-20",
+    "search_term": "sore throat",
+    "relative_search_volume": 6,
+    "percent_change": -9.007765038177439,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "CA",
+    "date": "2025-05-15",
+    "week": "2025-20",
+    "search_term": "flu symptoms",
+    "relative_search_volume": 27,
+    "percent_change": -11.560384499973097,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "CA",
+    "date": "2025-05-15",
+    "week": "2025-20",
+    "search_term": "RSV symptoms",
+    "relative_search_volume": 14,
+    "percent_change": -16.85780117916845,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "CA",
+    "date": "2025-05-15",
+    "week": "2025-20",
+    "search_term": "COVID symptoms",
+    "relative_search_volume": 62,
+    "percent_change": 9.862561423066108,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "CA",
+    "date": "2025-05-15",
+    "week": "2025-20",
+    "search_term": "cough",
+    "relative_search_volume": 37,
+    "percent_change": -10.00335437596741,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "CA",
+    "date": "2025-05-15",
+    "week": "2025-20",
+    "search_term": "fever",
+    "relative_search_volume": 78,
+    "percent_change": -12.947942426593507,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "CA",
+    "date": "2025-05-15",
+    "week": "2025-20",
+    "search_term": "sore throat",
+    "relative_search_volume": 71,
+    "percent_change": -19.654127582440385,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "TX",
+    "date": "2025-05-15",
+    "week": "2025-20",
+    "search_term": "flu symptoms",
+    "relative_search_volume": 94,
+    "percent_change": -23.8739136823394,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "TX",
+    "date": "2025-05-15",
+    "week": "2025-20",
+    "search_term": "RSV symptoms",
+    "relative_search_volume": 62,
+    "percent_change": 23.908545840745433,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "TX",
+    "date": "2025-05-15",
+    "week": "2025-20",
+    "search_term": "COVID symptoms",
+    "relative_search_volume": 79,
+    "percent_change": 15.946184860851131,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "TX",
+    "date": "2025-05-15",
+    "week": "2025-20",
+    "search_term": "cough",
+    "relative_search_volume": 86,
+    "percent_change": -7.808325632228364,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "TX",
+    "date": "2025-05-15",
+    "week": "2025-20",
+    "search_term": "fever",
+    "relative_search_volume": 34,
+    "percent_change": 1.7969460870225995,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "TX",
+    "date": "2025-05-15",
+    "week": "2025-20",
+    "search_term": "sore throat",
+    "relative_search_volume": 28,
+    "percent_change": -21.03113036477359,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "FL",
+    "date": "2025-05-15",
+    "week": "2025-20",
+    "search_term": "flu symptoms",
+    "relative_search_volume": 0,
+    "percent_change": 21.198725519322437,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "FL",
+    "date": "2025-05-15",
+    "week": "2025-20",
+    "search_term": "RSV symptoms",
+    "relative_search_volume": 56,
+    "percent_change": 8.724980448982468,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "FL",
+    "date": "2025-05-15",
+    "week": "2025-20",
+    "search_term": "COVID symptoms",
+    "relative_search_volume": 21,
+    "percent_change": 5.645978648168171,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "FL",
+    "date": "2025-05-15",
+    "week": "2025-20",
+    "search_term": "cough",
+    "relative_search_volume": 62,
+    "percent_change": -3.87086608436773,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "FL",
+    "date": "2025-05-15",
+    "week": "2025-20",
+    "search_term": "fever",
+    "relative_search_volume": 52,
+    "percent_change": -13.66543277894825,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "FL",
+    "date": "2025-05-15",
+    "week": "2025-20",
+    "search_term": "sore throat",
+    "relative_search_volume": 37,
+    "percent_change": 6.231236344728286,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NY",
+    "date": "2025-05-15",
+    "week": "2025-20",
+    "search_term": "flu symptoms",
+    "relative_search_volume": 6,
+    "percent_change": 4.356501430667348,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NY",
+    "date": "2025-05-15",
+    "week": "2025-20",
+    "search_term": "RSV symptoms",
+    "relative_search_volume": 30,
+    "percent_change": -11.814721847417697,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NY",
+    "date": "2025-05-15",
+    "week": "2025-20",
+    "search_term": "COVID symptoms",
+    "relative_search_volume": 1,
+    "percent_change": 10.046493733439876,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NY",
+    "date": "2025-05-15",
+    "week": "2025-20",
+    "search_term": "cough",
+    "relative_search_volume": 9,
+    "percent_change": -5.983699596438163,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NY",
+    "date": "2025-05-15",
+    "week": "2025-20",
+    "search_term": "fever",
+    "relative_search_volume": 67,
+    "percent_change": 17.784321851127082,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NY",
+    "date": "2025-05-15",
+    "week": "2025-20",
+    "search_term": "sore throat",
+    "relative_search_volume": 39,
+    "percent_change": 0.6500079447091744,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "PA",
+    "date": "2025-05-15",
+    "week": "2025-20",
+    "search_term": "flu symptoms",
+    "relative_search_volume": 14,
+    "percent_change": -21.905531543818547,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "PA",
+    "date": "2025-05-15",
+    "week": "2025-20",
+    "search_term": "RSV symptoms",
+    "relative_search_volume": 77,
+    "percent_change": 13.66653472449718,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "PA",
+    "date": "2025-05-15",
+    "week": "2025-20",
+    "search_term": "COVID symptoms",
+    "relative_search_volume": 89,
+    "percent_change": 0.3059424812479339,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "PA",
+    "date": "2025-05-15",
+    "week": "2025-20",
+    "search_term": "cough",
+    "relative_search_volume": 79,
+    "percent_change": 16.02133866817469,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "PA",
+    "date": "2025-05-15",
+    "week": "2025-20",
+    "search_term": "fever",
+    "relative_search_volume": 80,
+    "percent_change": -14.936607031841708,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "PA",
+    "date": "2025-05-15",
+    "week": "2025-20",
+    "search_term": "sore throat",
+    "relative_search_volume": 32,
+    "percent_change": 4.180478793421183,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "IL",
+    "date": "2025-05-15",
+    "week": "2025-20",
+    "search_term": "flu symptoms",
+    "relative_search_volume": 45,
+    "percent_change": -0.1137340003854681,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "IL",
+    "date": "2025-05-15",
+    "week": "2025-20",
+    "search_term": "RSV symptoms",
+    "relative_search_volume": 30,
+    "percent_change": -6.680980769655809,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "IL",
+    "date": "2025-05-15",
+    "week": "2025-20",
+    "search_term": "COVID symptoms",
+    "relative_search_volume": 27,
+    "percent_change": -9.215973058548233,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "IL",
+    "date": "2025-05-15",
+    "week": "2025-20",
+    "search_term": "cough",
+    "relative_search_volume": 24,
+    "percent_change": -11.83774365074658,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "IL",
+    "date": "2025-05-15",
+    "week": "2025-20",
+    "search_term": "fever",
+    "relative_search_volume": 27,
+    "percent_change": 15.956609458236548,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "IL",
+    "date": "2025-05-15",
+    "week": "2025-20",
+    "search_term": "sore throat",
+    "relative_search_volume": 54,
+    "percent_change": -1.1455884230858748,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "OH",
+    "date": "2025-05-15",
+    "week": "2025-20",
+    "search_term": "flu symptoms",
+    "relative_search_volume": 45,
+    "percent_change": 1.9670040249339826,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "OH",
+    "date": "2025-05-15",
+    "week": "2025-20",
+    "search_term": "RSV symptoms",
+    "relative_search_volume": 34,
+    "percent_change": 13.44113404902666,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "OH",
+    "date": "2025-05-15",
+    "week": "2025-20",
+    "search_term": "COVID symptoms",
+    "relative_search_volume": 37,
+    "percent_change": -3.4827234793974426,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "OH",
+    "date": "2025-05-15",
+    "week": "2025-20",
+    "search_term": "cough",
+    "relative_search_volume": 8,
+    "percent_change": 22.06237044318208,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "OH",
+    "date": "2025-05-15",
+    "week": "2025-20",
+    "search_term": "fever",
+    "relative_search_volume": 30,
+    "percent_change": -3.314949134314893,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "OH",
+    "date": "2025-05-15",
+    "week": "2025-20",
+    "search_term": "sore throat",
+    "relative_search_volume": 24,
+    "percent_change": 6.737124639549097,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "GA",
+    "date": "2025-05-15",
+    "week": "2025-20",
+    "search_term": "flu symptoms",
+    "relative_search_volume": 70,
+    "percent_change": 19.237762416936523,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "GA",
+    "date": "2025-05-15",
+    "week": "2025-20",
+    "search_term": "RSV symptoms",
+    "relative_search_volume": 21,
+    "percent_change": -2.9717108940536585,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "GA",
+    "date": "2025-05-15",
+    "week": "2025-20",
+    "search_term": "COVID symptoms",
+    "relative_search_volume": 65,
+    "percent_change": -18.109053608396376,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "GA",
+    "date": "2025-05-15",
+    "week": "2025-20",
+    "search_term": "cough",
+    "relative_search_volume": 39,
+    "percent_change": 2.045362003190865,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "GA",
+    "date": "2025-05-15",
+    "week": "2025-20",
+    "search_term": "fever",
+    "relative_search_volume": 54,
+    "percent_change": 16.932450778995957,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "GA",
+    "date": "2025-05-15",
+    "week": "2025-20",
+    "search_term": "sore throat",
+    "relative_search_volume": 16,
+    "percent_change": -20.836991557926964,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NC",
+    "date": "2025-05-15",
+    "week": "2025-20",
+    "search_term": "flu symptoms",
+    "relative_search_volume": 76,
+    "percent_change": -20.493353754020973,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NC",
+    "date": "2025-05-15",
+    "week": "2025-20",
+    "search_term": "RSV symptoms",
+    "relative_search_volume": 35,
+    "percent_change": -4.455750318186769,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NC",
+    "date": "2025-05-15",
+    "week": "2025-20",
+    "search_term": "COVID symptoms",
+    "relative_search_volume": 58,
+    "percent_change": 7.420968626634505,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NC",
+    "date": "2025-05-15",
+    "week": "2025-20",
+    "search_term": "cough",
+    "relative_search_volume": 61,
+    "percent_change": -21.820877978781063,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NC",
+    "date": "2025-05-15",
+    "week": "2025-20",
+    "search_term": "fever",
+    "relative_search_volume": 86,
+    "percent_change": -6.690087533146627,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NC",
+    "date": "2025-05-15",
+    "week": "2025-20",
+    "search_term": "sore throat",
+    "relative_search_volume": 34,
+    "percent_change": -7.535509305302169,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "US",
+    "date": "2025-05-08",
+    "week": "2025-19",
+    "search_term": "flu symptoms",
+    "relative_search_volume": 32,
+    "percent_change": -15.603022405881973,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "US",
+    "date": "2025-05-08",
+    "week": "2025-19",
+    "search_term": "RSV symptoms",
+    "relative_search_volume": 59,
+    "percent_change": -16.18308102560171,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "US",
+    "date": "2025-05-08",
+    "week": "2025-19",
+    "search_term": "COVID symptoms",
+    "relative_search_volume": 90,
+    "percent_change": -21.980799601261413,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "US",
+    "date": "2025-05-08",
+    "week": "2025-19",
+    "search_term": "cough",
+    "relative_search_volume": 79,
+    "percent_change": 17.362201855732618,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "US",
+    "date": "2025-05-08",
+    "week": "2025-19",
+    "search_term": "fever",
+    "relative_search_volume": 13,
+    "percent_change": 10.543980071476899,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "US",
+    "date": "2025-05-08",
+    "week": "2025-19",
+    "search_term": "sore throat",
+    "relative_search_volume": 38,
+    "percent_change": 3.9424315867436777,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "CA",
+    "date": "2025-05-08",
+    "week": "2025-19",
+    "search_term": "flu symptoms",
+    "relative_search_volume": 51,
+    "percent_change": -16.90875742191772,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "CA",
+    "date": "2025-05-08",
+    "week": "2025-19",
+    "search_term": "RSV symptoms",
+    "relative_search_volume": 16,
+    "percent_change": -24.63293663336321,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "CA",
+    "date": "2025-05-08",
+    "week": "2025-19",
+    "search_term": "COVID symptoms",
+    "relative_search_volume": 19,
+    "percent_change": 17.05514129354604,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "CA",
+    "date": "2025-05-08",
+    "week": "2025-19",
+    "search_term": "cough",
+    "relative_search_volume": 45,
+    "percent_change": -7.170093073343842,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "CA",
+    "date": "2025-05-08",
+    "week": "2025-19",
+    "search_term": "fever",
+    "relative_search_volume": 95,
+    "percent_change": 20.61386857249761,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "CA",
+    "date": "2025-05-08",
+    "week": "2025-19",
+    "search_term": "sore throat",
+    "relative_search_volume": 55,
+    "percent_change": 11.648034235702687,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "TX",
+    "date": "2025-05-08",
+    "week": "2025-19",
+    "search_term": "flu symptoms",
+    "relative_search_volume": 23,
+    "percent_change": -10.17400147592361,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "TX",
+    "date": "2025-05-08",
+    "week": "2025-19",
+    "search_term": "RSV symptoms",
+    "relative_search_volume": 52,
+    "percent_change": 1.3208227780781456,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "TX",
+    "date": "2025-05-08",
+    "week": "2025-19",
+    "search_term": "COVID symptoms",
+    "relative_search_volume": 33,
+    "percent_change": 14.461476219388214,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "TX",
+    "date": "2025-05-08",
+    "week": "2025-19",
+    "search_term": "cough",
+    "relative_search_volume": 24,
+    "percent_change": 8.150067121619609,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "TX",
+    "date": "2025-05-08",
+    "week": "2025-19",
+    "search_term": "fever",
+    "relative_search_volume": 37,
+    "percent_change": -23.735922944036524,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "TX",
+    "date": "2025-05-08",
+    "week": "2025-19",
+    "search_term": "sore throat",
+    "relative_search_volume": 27,
+    "percent_change": 1.2248920100642269,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "FL",
+    "date": "2025-05-08",
+    "week": "2025-19",
+    "search_term": "flu symptoms",
+    "relative_search_volume": 53,
+    "percent_change": -5.388024929317792,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "FL",
+    "date": "2025-05-08",
+    "week": "2025-19",
+    "search_term": "RSV symptoms",
+    "relative_search_volume": 1,
+    "percent_change": -6.50836098834654,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "FL",
+    "date": "2025-05-08",
+    "week": "2025-19",
+    "search_term": "COVID symptoms",
+    "relative_search_volume": 89,
+    "percent_change": 13.733252807885965,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "FL",
+    "date": "2025-05-08",
+    "week": "2025-19",
+    "search_term": "cough",
+    "relative_search_volume": 87,
+    "percent_change": 5.029287957059325,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "FL",
+    "date": "2025-05-08",
+    "week": "2025-19",
+    "search_term": "fever",
+    "relative_search_volume": 65,
+    "percent_change": -0.1770239721115452,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "FL",
+    "date": "2025-05-08",
+    "week": "2025-19",
+    "search_term": "sore throat",
+    "relative_search_volume": 93,
+    "percent_change": 12.423099178706632,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NY",
+    "date": "2025-05-08",
+    "week": "2025-19",
+    "search_term": "flu symptoms",
+    "relative_search_volume": 26,
+    "percent_change": 12.183393604998349,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NY",
+    "date": "2025-05-08",
+    "week": "2025-19",
+    "search_term": "RSV symptoms",
+    "relative_search_volume": 86,
+    "percent_change": -23.594764485182207,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NY",
+    "date": "2025-05-08",
+    "week": "2025-19",
+    "search_term": "COVID symptoms",
+    "relative_search_volume": 57,
+    "percent_change": 24.911203537795878,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NY",
+    "date": "2025-05-08",
+    "week": "2025-19",
+    "search_term": "cough",
+    "relative_search_volume": 95,
+    "percent_change": -12.835739872615303,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NY",
+    "date": "2025-05-08",
+    "week": "2025-19",
+    "search_term": "fever",
+    "relative_search_volume": 38,
+    "percent_change": 23.164168404842034,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NY",
+    "date": "2025-05-08",
+    "week": "2025-19",
+    "search_term": "sore throat",
+    "relative_search_volume": 86,
+    "percent_change": -6.943175392019684,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "PA",
+    "date": "2025-05-08",
+    "week": "2025-19",
+    "search_term": "flu symptoms",
+    "relative_search_volume": 55,
+    "percent_change": -10.660912975723036,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "PA",
+    "date": "2025-05-08",
+    "week": "2025-19",
+    "search_term": "RSV symptoms",
+    "relative_search_volume": 31,
+    "percent_change": 23.05324635363386,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "PA",
+    "date": "2025-05-08",
+    "week": "2025-19",
+    "search_term": "COVID symptoms",
+    "relative_search_volume": 26,
+    "percent_change": 2.247686658582204,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "PA",
+    "date": "2025-05-08",
+    "week": "2025-19",
+    "search_term": "cough",
+    "relative_search_volume": 44,
+    "percent_change": -15.674830488701375,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "PA",
+    "date": "2025-05-08",
+    "week": "2025-19",
+    "search_term": "fever",
+    "relative_search_volume": 32,
+    "percent_change": 5.832492602680039,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "PA",
+    "date": "2025-05-08",
+    "week": "2025-19",
+    "search_term": "sore throat",
+    "relative_search_volume": 38,
+    "percent_change": 14.573283263587433,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "IL",
+    "date": "2025-05-08",
+    "week": "2025-19",
+    "search_term": "flu symptoms",
+    "relative_search_volume": 54,
+    "percent_change": -19.533298231748198,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "IL",
+    "date": "2025-05-08",
+    "week": "2025-19",
+    "search_term": "RSV symptoms",
+    "relative_search_volume": 80,
+    "percent_change": -24.875308038428045,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "IL",
+    "date": "2025-05-08",
+    "week": "2025-19",
+    "search_term": "COVID symptoms",
+    "relative_search_volume": 2,
+    "percent_change": 9.282235271842875,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "IL",
+    "date": "2025-05-08",
+    "week": "2025-19",
+    "search_term": "cough",
+    "relative_search_volume": 75,
+    "percent_change": 16.06919015194529,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "IL",
+    "date": "2025-05-08",
+    "week": "2025-19",
+    "search_term": "fever",
+    "relative_search_volume": 15,
+    "percent_change": 0.3132847459602073,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "IL",
+    "date": "2025-05-08",
+    "week": "2025-19",
+    "search_term": "sore throat",
+    "relative_search_volume": 53,
+    "percent_change": -17.229836073565053,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "OH",
+    "date": "2025-05-08",
+    "week": "2025-19",
+    "search_term": "flu symptoms",
+    "relative_search_volume": 76,
+    "percent_change": 15.297819171595595,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "OH",
+    "date": "2025-05-08",
+    "week": "2025-19",
+    "search_term": "RSV symptoms",
+    "relative_search_volume": 55,
+    "percent_change": 19.759319102374917,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "OH",
+    "date": "2025-05-08",
+    "week": "2025-19",
+    "search_term": "COVID symptoms",
+    "relative_search_volume": 75,
+    "percent_change": 7.5633675596612715,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "OH",
+    "date": "2025-05-08",
+    "week": "2025-19",
+    "search_term": "cough",
+    "relative_search_volume": 3,
+    "percent_change": 16.204997844879443,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "OH",
+    "date": "2025-05-08",
+    "week": "2025-19",
+    "search_term": "fever",
+    "relative_search_volume": 40,
+    "percent_change": 17.68375860663213,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "OH",
+    "date": "2025-05-08",
+    "week": "2025-19",
+    "search_term": "sore throat",
+    "relative_search_volume": 77,
+    "percent_change": -5.304023731053609,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "GA",
+    "date": "2025-05-08",
+    "week": "2025-19",
+    "search_term": "flu symptoms",
+    "relative_search_volume": 43,
+    "percent_change": -4.307583043596075,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "GA",
+    "date": "2025-05-08",
+    "week": "2025-19",
+    "search_term": "RSV symptoms",
+    "relative_search_volume": 58,
+    "percent_change": 21.412313424262752,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "GA",
+    "date": "2025-05-08",
+    "week": "2025-19",
+    "search_term": "COVID symptoms",
+    "relative_search_volume": 66,
+    "percent_change": 9.153061576618772,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "GA",
+    "date": "2025-05-08",
+    "week": "2025-19",
+    "search_term": "cough",
+    "relative_search_volume": 43,
+    "percent_change": -21.074665829471762,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "GA",
+    "date": "2025-05-08",
+    "week": "2025-19",
+    "search_term": "fever",
+    "relative_search_volume": 70,
+    "percent_change": -8.7822559735786,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "GA",
+    "date": "2025-05-08",
+    "week": "2025-19",
+    "search_term": "sore throat",
+    "relative_search_volume": 74,
+    "percent_change": 6.663908425683173,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NC",
+    "date": "2025-05-08",
+    "week": "2025-19",
+    "search_term": "flu symptoms",
+    "relative_search_volume": 2,
+    "percent_change": -12.238419706142256,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NC",
+    "date": "2025-05-08",
+    "week": "2025-19",
+    "search_term": "RSV symptoms",
+    "relative_search_volume": 43,
+    "percent_change": -15.022914947669996,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NC",
+    "date": "2025-05-08",
+    "week": "2025-19",
+    "search_term": "COVID symptoms",
+    "relative_search_volume": 31,
+    "percent_change": 5.6057028566924405,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NC",
+    "date": "2025-05-08",
+    "week": "2025-19",
+    "search_term": "cough",
+    "relative_search_volume": 14,
+    "percent_change": -11.04952696861714,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NC",
+    "date": "2025-05-08",
+    "week": "2025-19",
+    "search_term": "fever",
+    "relative_search_volume": 37,
+    "percent_change": 12.090180192037725,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  },
+  {
+    "geography": "NC",
+    "date": "2025-05-08",
+    "week": "2025-19",
+    "search_term": "sore throat",
+    "relative_search_volume": 10,
+    "percent_change": 18.643066133339392,
+    "source": "Google Trends",
+    "last_updated": "2025-07-24"
+  }
+]

@@ -1,0 +1,180 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300" width="400" height="300">
+  <defs>
+    <!-- Glass + neon system (matched to holographic-code-ui.svg) -->
+    <linearGradient id="glassBody" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#5A7FBA" stop-opacity="0.58"/>
+      <stop offset="18%" stop-color="#3E5E94" stop-opacity="0.52"/>
+      <stop offset="52%" stop-color="#2A4470" stop-opacity="0.50"/>
+      <stop offset="86%" stop-color="#1E3355" stop-opacity="0.52"/>
+      <stop offset="100%" stop-color="#162848" stop-opacity="0.58"/>
+    </linearGradient>
+
+    <linearGradient id="glassShineTop" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#E6F4FF" stop-opacity="0.38"/>
+      <stop offset="18%" stop-color="#A8C8F0" stop-opacity="0.16"/>
+      <stop offset="42%" stop-color="#6A9AD8" stop-opacity="0.06"/>
+      <stop offset="100%" stop-color="#6A9AD8" stop-opacity="0"/>
+    </linearGradient>
+
+    <linearGradient id="glassEdge" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#B8D4F8" stop-opacity="0.72"/>
+      <stop offset="6%" stop-color="#8AB4E8" stop-opacity="0.38"/>
+      <stop offset="14%" stop-color="#6A9AD8" stop-opacity="0.15"/>
+      <stop offset="55%" stop-color="#5080C0" stop-opacity="0.20"/>
+      <stop offset="92%" stop-color="#4070B0" stop-opacity="0.14"/>
+      <stop offset="100%" stop-color="#64FFDA" stop-opacity="0.26"/>
+    </linearGradient>
+
+    <linearGradient id="headerGlass" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#1A2E4A" stop-opacity="0.88"/>
+      <stop offset="55%" stop-color="#142438" stop-opacity="0.84"/>
+      <stop offset="100%" stop-color="#0F1C2C" stop-opacity="0.88"/>
+    </linearGradient>
+
+    <linearGradient id="headerShine" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#4A6A9A" stop-opacity="0.30"/>
+      <stop offset="100%" stop-color="#4A6A9A" stop-opacity="0"/>
+    </linearGradient>
+
+    <linearGradient id="flowStroke" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#64FFDA" stop-opacity="0"/>
+      <stop offset="30%" stop-color="#64FFDA" stop-opacity="0.55"/>
+      <stop offset="60%" stop-color="#7C4DFF" stop-opacity="0.45"/>
+      <stop offset="100%" stop-color="#FFD700" stop-opacity="0"/>
+    </linearGradient>
+
+    <radialGradient id="holoCore" cx="50%" cy="45%" r="70%">
+      <stop offset="0%" stop-color="#9EDBFF" stop-opacity="0.14"/>
+      <stop offset="45%" stop-color="#64FFDA" stop-opacity="0.10"/>
+      <stop offset="100%" stop-color="#7C4DFF" stop-opacity="0"/>
+    </radialGradient>
+
+    <!-- Filters -->
+    <filter id="megaShadow" x="-120%" y="-120%" width="340%" height="340%">
+      <feDropShadow dx="0" dy="20" stdDeviation="28" flood-color="#000A14" flood-opacity="0.92"/>
+      <feDropShadow dx="0" dy="8" stdDeviation="14" flood-color="#1A3A6B" flood-opacity="0.55"/>
+      <feDropShadow dx="0" dy="2" stdDeviation="6" flood-color="#3B7DD8" flood-opacity="0.28"/>
+      <feDropShadow dx="0" dy="0" stdDeviation="2" flood-color="#64FFDA" flood-opacity="0.22"/>
+      <feDropShadow dx="0" dy="0" stdDeviation="3.8" flood-color="#7C4DFF" flood-opacity="0.18"/>
+    </filter>
+
+    <filter id="glassGrain" x="-30%" y="-30%" width="160%" height="160%" color-interpolation-filters="sRGB">
+      <feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="2" seed="7" result="noise"/>
+      <feColorMatrix in="noise" type="luminanceToAlpha" result="noiseAlpha"/>
+      <feComponentTransfer in="noiseAlpha" result="alpha">
+        <feFuncA type="linear" slope="0.16"/>
+      </feComponentTransfer>
+      <feComposite in="SourceGraphic" in2="alpha" operator="in"/>
+    </filter>
+
+    <filter id="ultraGlow" x="-200%" y="-200%" width="500%" height="500%">
+      <feGaussianBlur stdDeviation="2" result="b1"/>
+      <feGaussianBlur stdDeviation="6" result="b2"/>
+      <feGaussianBlur stdDeviation="12" result="b3"/>
+      <feGaussianBlur stdDeviation="24" result="b4"/>
+      <feMerge>
+        <feMergeNode in="b4"/>
+        <feMergeNode in="b3"/>
+        <feMergeNode in="b2"/>
+        <feMergeNode in="b1"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <filter id="softGlow" x="-80%" y="-80%" width="260%" height="260%">
+      <feGaussianBlur stdDeviation="2" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <filter id="textGlow" x="-70%" y="-70%" width="240%" height="240%">
+      <feGaussianBlur stdDeviation="0.9" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <filter id="bubbleShadow" x="-50%" y="-50%" width="200%" height="200%">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#000A14" flood-opacity="0.6"/>
+      <feDropShadow dx="0" dy="0" stdDeviation="2" flood-color="#64FFDA" flood-opacity="0.3"/>
+    </filter>
+
+    <!-- Thought cloud main body (rounded rectangle) -->
+    <path id="bubblePath" d="M 60 60 H 340 A 25 25 0 0 1 365 85 V 195 A 25 25 0 0 1 340 220 H 60 A 25 25 0 0 1 35 195 V 85 A 25 25 0 0 1 60 60 Z" />
+  </defs>
+
+  <!-- Transparent background -->
+  <rect width="400" height="300" fill="transparent"/>
+
+  <!-- Soft ambient glow -->
+  <g filter="url(#ultraGlow)" opacity="0.85">
+    <ellipse cx="200" cy="140" rx="210" ry="150" fill="url(#holoCore)"/>
+  </g>
+
+  <!-- Decorative particles -->
+  <g filter="url(#softGlow)">
+    <circle r="2.0" fill="#64FFDA" opacity="0">
+      <animate attributeName="cx" values="350;370;350" dur="4s" repeatCount="indefinite"/>
+      <animate attributeName="cy" values="260;240;260" dur="4s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values="0;0.6;0" dur="4s" repeatCount="indefinite"/>
+    </circle>
+    <circle r="1.5" fill="#7C4DFF" opacity="0">
+      <animate attributeName="cx" values="40;60;40" dur="5s" repeatCount="indefinite" begin="1s"/>
+      <animate attributeName="cy" values="70;90;70" dur="5s" repeatCount="indefinite" begin="1s"/>
+      <animate attributeName="opacity" values="0;0.5;0" dur="5s" repeatCount="indefinite" begin="1s"/>
+    </circle>
+  </g>
+
+  <!-- THOUGHT CLOUD BUBBLES (trailing to bottom-right) -->
+  <g filter="url(#bubbleShadow)">
+    <!-- Large bubble -->
+    <ellipse cx="340" cy="245" rx="18" ry="15" fill="url(#glassBody)"/>
+    <ellipse cx="340" cy="245" rx="18" ry="15" fill="url(#glassShineTop)"/>
+    <ellipse cx="340" cy="245" rx="18" ry="15" fill="none" stroke="url(#glassEdge)" stroke-width="1.2"/>
+
+    <!-- Medium bubble -->
+    <ellipse cx="362" cy="265" rx="11" ry="9" fill="url(#glassBody)"/>
+    <ellipse cx="362" cy="265" rx="11" ry="9" fill="url(#glassShineTop)"/>
+    <ellipse cx="362" cy="265" rx="11" ry="9" fill="none" stroke="url(#glassEdge)" stroke-width="1"/>
+
+    <!-- Small bubble -->
+    <ellipse cx="378" cy="280" rx="6" ry="5" fill="url(#glassBody)"/>
+    <ellipse cx="378" cy="280" rx="6" ry="5" fill="url(#glassShineTop)"/>
+    <ellipse cx="378" cy="280" rx="6" ry="5" fill="none" stroke="url(#glassEdge)" stroke-width="0.8"/>
+  </g>
+
+  <!-- Connector beams (adjusted for right side) -->
+  <g filter="url(#ultraGlow)" opacity="0.2">
+    <path d="M 340 220 Q 350 235 340 245" fill="none" stroke="#64FFDA" stroke-width="2" stroke-linecap="round"/>
+    <path d="M 35 100 C 15 80, 5 60, 5 40" fill="none" stroke="url(#flowStroke)" stroke-width="2" stroke-dasharray="4 8">
+        <animate attributeName="stroke-dashoffset" values="0;-100" dur="8s" repeatCount="indefinite"/>
+    </path>
+  </g>
+
+  <!-- MAIN THOUGHT CLOUD -->
+  <g filter="url(#megaShadow)">
+    <!-- 1. Body Fill -->
+    <use href="#bubblePath" fill="url(#glassBody)"/>
+
+    <!-- 2. Shine Overlay -->
+    <use href="#bubblePath" fill="url(#glassShineTop)"/>
+
+    <!-- 3. Glass Edge Stroke -->
+    <use href="#bubblePath" fill="none" stroke="url(#glassEdge)" stroke-width="1.5"/>
+
+    <!-- 4. Inner Border Highlight (Simulating 3D bevel) -->
+    <use href="#bubblePath" fill="none" stroke="#A8C8F0" stroke-width="0.6" opacity="0.15" transform="translate(1,1)"/>
+  </g>
+
+  <!-- Grain Overlay (Clipped to bubble) -->
+  <mask id="bubbleMask">
+    <use href="#bubblePath" fill="white"/>
+  </mask>
+  <rect x="0" y="0" width="400" height="300" fill="#FFFFFF" opacity="0.06" filter="url(#glassGrain)" mask="url(#bubbleMask)"/>
+
+  <!-- Dynamic text content area - populated by React component -->
+
+</svg>

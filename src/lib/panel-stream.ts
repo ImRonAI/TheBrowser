@@ -1,0 +1,545 @@
+/** Native panel protocol. Keep transport parsing independent of React. */
+export interface PanelEvent {
+  version: 1
+  sequence: number
+  session_id: string
+  run_id: string
+  type: string
+  node_path: unknown[]
+  [key: string]: unknown
+}
+
+export type RunStatus = 'idle' | 'running' | 'completed' | 'cancelled' | 'checkpointed' | 'interrupted' | 'error'
+export interface PanelInterrupt { id: string; reason: unknown }
+export interface RuntimeOptions {
+  checkpointing: boolean
+  tool_execution: 'concurrent' | 'sequential'
+  context: 'auto' | 'agentic' | 'sliding'
+  goal: string
+  background: boolean
+}
+export interface PanelConfiguration {
+  model: string
+  provider: string
+  effort: string
+  options: Partial<RuntimeOptions> & Record<string, unknown>
+}
+export interface ToolPart {
+  kind: 'tool'
+  key: string
+  id: string
+  name: string
+  path: unknown[]
+  input: unknown
+  progress: string[]
+  status?: string
+  output?: unknown
+  finished: boolean
+}
+export type PanelPart = ToolPart | {
+  kind: 'text' | 'reasoning' | 'activity' | 'retry'
+  key: string
+  path: unknown[]
+  text: string
+  discarded?: boolean
+  modelAttempt?: unknown
+  cycle?: unknown
+}
+export interface PanelMessage {
+  id: string
+  role: 'user' | 'assistant'
+  runId?: string
+  parts: PanelPart[]
+}
+export interface PanelState {
+  sessionId: string
+  messages: PanelMessage[]
+  sequence: number
+  runId?: string
+  status: RunStatus
+  interrupts: PanelInterrupt[]
+  checkpoint?: unknown
+  error?: string
+  stopReason?: string
+  model?: string
+  provider?: string
+  configuration?: PanelConfiguration
+  configurationLocked?: boolean
+  latestSequence?: number
+  needsReplay?: boolean
+  recoveryRequired?: boolean
+  historyIncomplete?: boolean
+  followPending?: boolean
+}
+
+/** A terminal snapshot can precede the runtime's finally-phase steering admission. */
+export function shouldFollowPanel(state: PanelState): boolean {
+  return Boolean(state.needsReplay || state.followPending)
+}
+
+export function emptyPanelState(sessionId: string): PanelState {
+  return { sessionId, messages: [], sequence: 0, status: 'idle', interrupts: [] }
+}
+
+const recoveryMessage = 'Recovery required: execution stopped before a committed result. The last committed history has been restored; work was not automatically repeated. Start a New chat to continue.'
+
+export function nativeRunStatus(value: unknown): RunStatus {
+  if (['starting', 'running', 'finishing', 'active'].includes(String(value))) return 'running'
+  if (value === 'failed' || value === 'error') return 'error'
+  return ['completed', 'cancelled', 'checkpointed', 'interrupted'].includes(String(value)) ? value as RunStatus : 'idle'
+}
+
+export function displayValue(value: unknown): string {
+  if (typeof value === 'string') return value
+  if (value === undefined) return ''
+  return JSON.stringify(value, null, 2)
+}
+
+function record(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {}
+}
+
+function interruptsFrom(value: unknown): PanelInterrupt[] {
+  return Array.isArray(value) ? value.flatMap((item) => {
+    const entry = record(item)
+    return typeof entry.id === 'string' ? [{ id: entry.id, reason: entry.reason }] : []
+  }) : []
+}
+
+export function toolIdentity(runId: string, path: unknown[], id: string): string {
+  return JSON.stringify([runId, path, id])
+}
+
+export function isTerminalEvent(event: PanelEvent): boolean {
+  return event.node_path.length === 0 && (event.type === 'run_finished' || event.type === 'error')
+}
+
+export function parsePanelEvent(data: string): PanelEvent {
+  let raw: unknown
+  try { raw = JSON.parse(data) } catch { throw new Error('Invalid JSON in agent event stream') }
+  const event = record(raw)
+  if (event.code === 'replay_overflow' && event.resync_required === true) {
+    throw new PanelReplayOverflow(displayValue(event.message) || 'Replay history expired. Reconnect to restore the committed session history.')
+  }
+  if (event.version !== 1 || !Number.isSafeInteger(event.sequence) || Number(event.sequence) < 0 ||
+      typeof event.session_id !== 'string' || typeof event.run_id !== 'string' ||
+      typeof event.type !== 'string' || !Array.isArray(event.node_path)) {
+    throw new Error('Invalid or unsupported agent event envelope')
+  }
+  return event as PanelEvent
+}
+
+export class PanelReplayOverflow extends Error {}
+
+/** Handles CR, LF, CRLF, split UTF-8, comments, multiline data and an unframed EOF. */
+export class PanelSSEParser {
+  private buffer = ''
+  private data: string[] = []
+  private first = true
+  private readonly emit: (event: PanelEvent) => void
+  constructor(emit: (event: PanelEvent) => void) { this.emit = emit }
+
+  push(chunk: string, final = false): void {
+    if (this.first && chunk.length) {
+      chunk = chunk.replace(/^\uFEFF/, '')
+      this.first = false
+    }
+    this.buffer += chunk
+    let start = 0
+    for (let index = 0; index < this.buffer.length; index++) {
+      const char = this.buffer[index]
+      if (char !== '\r' && char !== '\n') continue
+      if (char === '\r' && index === this.buffer.length - 1 && !final) break
+      this.line(this.buffer.slice(start, index))
+      if (char === '\r' && this.buffer[index + 1] === '\n') index++
+      start = index + 1
+    }
+    this.buffer = this.buffer.slice(start)
+    if (final) {
+      if (this.buffer) this.line(this.buffer)
+      this.buffer = ''
+      this.dispatch()
+    }
+  }
+
+  private line(line: string): void {
+    if (!line) { this.dispatch(); return }
+    if (line.startsWith(':')) return
+    const colon = line.indexOf(':')
+    const field = colon < 0 ? line : line.slice(0, colon)
+    let value = colon < 0 ? '' : line.slice(colon + 1)
+    if (value.startsWith(' ')) value = value.slice(1)
+    if (field === 'data') this.data.push(value)
+  }
+
+  private dispatch(): void {
+    if (!this.data.length) return
+    const data = this.data.join('\n')
+    this.data = []
+    if (data.trim()) this.emit(parsePanelEvent(data))
+  }
+}
+
+export async function responseError(response: Response): Promise<Error> {
+  const body = await response.text()
+  let detail = body
+  try {
+    const parsed = JSON.parse(body)
+    if (parsed.detail?.code === 'replay_overflow') return new PanelReplayOverflow(displayValue(parsed.detail.message))
+    detail = displayValue(parsed.detail ?? parsed.error ?? parsed)
+  } catch { /* Plain-text HTTP error. */ }
+  return new Error(`HTTP ${response.status}: ${detail || response.statusText}`)
+}
+
+export async function readPanelStream(response: Response, onEvent: (event: PanelEvent) => void | boolean): Promise<boolean> {
+  if (!response.ok) throw await responseError(response)
+  if (!response.body) throw new Error('Agent response has no event stream')
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder()
+  let terminal = false
+  const parser = new PanelSSEParser((event) => {
+    if (terminal) return // Do not consume the next run from the same network chunk.
+    const accepted = onEvent(event)
+    if (accepted !== false && isTerminalEvent(event)) terminal = true
+  })
+  try {
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) { parser.push(decoder.decode(), true); break }
+      parser.push(decoder.decode(value, { stream: true }))
+      if (terminal) { await reader.cancel(); break }
+    }
+  } finally {
+    await reader.cancel().catch(() => undefined)
+    reader.releaseLock()
+  }
+  return terminal
+}
+
+/** Sequence numbers are session-wide; tool IDs are scoped to run AND node path. */
+export function reducePanelEvent(state: PanelState, event: PanelEvent): PanelState {
+  if (event.session_id !== state.sessionId || event.sequence <= state.sequence) return state
+  let next: PanelState = { ...state, sequence: event.sequence, latestSequence: Math.max(state.latestSequence ?? 0, event.sequence) }
+  const root = event.node_path.length === 0
+  if (root && event.type === 'run_started') {
+    next = { ...next, runId: event.run_id, status: 'running', error: undefined,
+      stopReason: undefined, interrupts: [], checkpoint: undefined,
+      configurationLocked: true, followPending: false,
+      model: typeof event.model_id === 'string' ? event.model_id : state.model,
+      provider: typeof event.provider === 'string' ? event.provider : state.provider }
+    if (next.configuration) next.configuration = { ...next.configuration,
+      model: next.model ?? next.configuration.model, provider: next.provider ?? next.configuration.provider }
+    // The initial POST may fail after reservation but before any bytes arrive.
+    // A subsequent replay must still bind the optimistic input to the real run.
+    const last = next.messages[next.messages.length - 1]
+    if (last?.role === 'user' && !last.runId && last.id.startsWith('user-')) {
+      next.messages = [...next.messages.slice(0, -1), { ...last, runId: event.run_id }]
+    }
+  }
+  if (root && event.type === 'interrupt') next.interrupts = interruptsFrom(event.interrupts)
+  if (root && event.type === 'checkpoint') next.checkpoint = event.checkpoint
+  if (root && event.type === 'error') {
+    next.status = 'error'
+    next.error = displayValue(event.error) || 'Agent run failed'
+    if (record(event.error).code === 'recovery_required' || event.recovery_required === true) {
+      next.recoveryRequired = true
+      next.error = `${next.error}\n\n${recoveryMessage}`
+    }
+  }
+  if (root && event.type === 'run_finished') {
+    const status = nativeRunStatus(event.status)
+    next.status = next.error || status === 'idle' || status === 'running' ? 'error' : status
+    next.stopReason = displayValue(event.stop_reason)
+    if (next.status === 'error') next.error = next.error || `Agent run failed${next.stopReason ? `: ${next.stopReason}` : ''}`
+    const result = record(event.result)
+    if (event.interrupts || event.pending_interrupts || result.interrupts) next.interrupts = interruptsFrom(event.interrupts ?? event.pending_interrupts ?? result.interrupts)
+    if (event.checkpoint !== undefined || result.checkpoint !== undefined) next.checkpoint = event.checkpoint ?? result.checkpoint
+    next.needsReplay = false
+  }
+
+  const renderTypes = ['text_delta', 'reasoning_delta', 'tool_input', 'tool_progress', 'tool_result',
+    'retry', 'node_event', 'background_event', 'steering_accepted', 'steering_applied']
+  if (!root && event.type === 'interrupt') renderTypes.push('interrupt')
+  if (!renderTypes.includes(event.type) && !(event.type === 'error' && !root)) return next
+  const messages = [...next.messages]
+  let index = messages.findIndex((message) => message.role === 'assistant' && message.runId === event.run_id)
+  if (index < 0) {
+    index = messages.length
+    messages.push({ id: `run-${event.run_id}`, runId: event.run_id, role: 'assistant', parts: [] })
+  }
+  const parts = [...messages[index].parts]
+  const pathKey = JSON.stringify(event.node_path)
+  const key = `${event.run_id}-${event.sequence}`
+  if (event.type.startsWith('tool_')) {
+    if (typeof event.id !== 'string') throw new Error(`${event.type} is missing its tool ID`)
+    const identity = toolIdentity(event.run_id, event.node_path, event.id)
+    const position = parts.findIndex((part) => part.kind === 'tool' && part.key === identity)
+    const existing = position >= 0 ? parts[position] as ToolPart : undefined
+    const tool: ToolPart = { kind: 'tool', key: identity, id: event.id,
+      name: typeof event.name === 'string' ? event.name : existing?.name || event.id,
+      path: event.node_path, input: existing?.input ?? {}, progress: [], finished: false, ...existing }
+    if (typeof event.name === 'string') tool.name = event.name
+    if (event.type === 'tool_input') tool.input = event.input ?? tool.input
+    if (event.type === 'tool_progress' && !tool.finished) tool.progress = [...tool.progress, displayValue(event.data)]
+    // Identical results are harmless; transformed/corrected results remain authoritative.
+    if (event.type === 'tool_result') {
+      tool.output = event.content
+      tool.status = typeof event.status === 'string' ? event.status : 'success'
+      tool.finished = true
+    }
+    if (position >= 0) parts[position] = tool
+    else parts.push(tool)
+  } else if (event.type === 'text_delta' || event.type === 'reasoning_delta') {
+    if (typeof event.data !== 'string') throw new Error(`${event.type} is missing text data`)
+    const kind = event.type === 'text_delta' ? 'text' : 'reasoning'
+    const last = parts[parts.length - 1]
+    if (last?.kind === kind && !last.discarded && JSON.stringify(last.path) === pathKey &&
+        last.modelAttempt === event.model_attempt && last.cycle === event.cycle) {
+      parts[parts.length - 1] = { ...last, text: last.text + event.data }
+    } else parts.push({ kind, key, path: event.node_path, text: event.data, modelAttempt: event.model_attempt, cycle: event.cycle })
+  } else {
+    let text = displayValue(event.event ?? event.message ?? event.error)
+    if (event.type === 'retry') {
+      for (let i = 0; i < parts.length; i++) {
+        const part = parts[i]
+        // A tool retry never invalidates model output. Without attempt metadata,
+        // retain drafts rather than discarding successful earlier model cycles.
+        if (event.model_attempt !== undefined && !event.id &&
+            (part.kind === 'text' || part.kind === 'reasoning') && JSON.stringify(part.path) === pathKey &&
+            part.modelAttempt === event.model_attempt && part.cycle === event.cycle) {
+          parts[i] = { ...part, discarded: true }
+        }
+      }
+      text = `Retry${event.attempt === undefined ? '' : ` ${displayValue(event.attempt)}`}: ${displayValue(event.reason) || 'Trying again'}`
+      if (event.delay !== undefined) text += ` · delay ${displayValue(event.delay)}s`
+    } else if (event.type === 'interrupt') text = `Input requested · ${displayValue(event.interrupts)}`
+    else if (event.type === 'background_event') text = `Background · ${text}`
+    else if (event.type === 'node_event') text = `Node · ${text}`
+    else if (event.type === 'steering_accepted') text = `Steering accepted · ${text}`
+    else if (event.type === 'steering_applied') text = `Steering applied · ${text}`
+    parts.push({ kind: event.type === 'retry' ? 'retry' : 'activity', key, path: event.node_path, text })
+  }
+  messages[index] = { ...messages[index], parts }
+  return { ...next, messages }
+}
+
+/** Convert SDK content blocks without flattening tool/text ordering. */
+export function hydratePanelSession(sessionId: string, value: unknown): PanelState {
+  const snapshot = record(value)
+  const state = emptyPanelState(sessionId)
+  state.runId = typeof snapshot.run_id === 'string' ? snapshot.run_id : undefined
+  state.latestSequence = Number.isSafeInteger(snapshot.sequence) ? Number(snapshot.sequence) : 0
+  state.sequence = Number.isSafeInteger(snapshot.replay_after) ? Number(snapshot.replay_after) : state.latestSequence
+  state.status = nativeRunStatus(snapshot.status)
+  state.historyIncomplete = snapshot.history_incomplete === true || snapshot.replay_status === 'gap'
+  state.followPending = snapshot.active === true && state.status !== 'running' && !snapshot.recovery_required
+  state.needsReplay = Boolean(state.runId) && (state.status === 'running' || state.sequence < state.latestSequence)
+  state.configurationLocked = true
+  const selection = record(snapshot.selection)
+  state.model = typeof selection.model_id === 'string' ? selection.model_id : undefined
+  state.provider = typeof selection.provider === 'string' ? selection.provider : undefined
+  if (state.model && state.provider) state.configuration = { model: state.model, provider: state.provider,
+    effort: typeof selection.reasoning_effort === 'string' ? selection.reasoning_effort : '', options: record(snapshot.options) }
+  state.interrupts = interruptsFrom(snapshot.interrupts ?? snapshot.pending_interrupts)
+  state.checkpoint = snapshot.checkpoint
+  state.stopReason = typeof record(snapshot.result).stop_reason === 'string' ? String(record(snapshot.result).stop_reason) : undefined
+  const failure = snapshot.error == null ? '' : displayValue(snapshot.error)
+  if (state.status === 'error') state.error = failure || 'Previous agent run failed'
+  state.recoveryRequired = snapshot.recovery_required === true
+  if (state.recoveryRequired) { state.status = 'error'; state.error = failure ? `${failure}\n\n${recoveryMessage}` : recoveryMessage }
+  const sdkMessages = Array.isArray(snapshot.messages) ? snapshot.messages : []
+  let assistant: PanelMessage | undefined
+  sdkMessages.forEach((raw, messageIndex) => {
+    const message = record(raw)
+    const blocks = Array.isArray(message.content) ? message.content : []
+    // Legacy sessions (before ephemeral request-context injection) persisted the
+    // browser-context block as user text; never render it.
+    const userBlocks = blocks.filter((block) => !record(block).toolResult && !record(block).interruptResponse && !isRequestContextBlock(block))
+    if (message.role === 'user' && userBlocks.length) {
+      state.messages.push({ id: `history-user-${messageIndex}`, role: 'user', parts: userBlocks.map((block, i) => ({
+        kind: 'text', key: `history-${messageIndex}-${i}`, path: [],
+        text: typeof record(block).text === 'string' ? String(record(block).text) : displayValue(block),
+      })) })
+      assistant = undefined
+    }
+    blocks.forEach((rawBlock, blockIndex) => {
+      const block = record(rawBlock)
+      if (block.toolResult) {
+        const result = record(block.toolResult)
+        for (const part of assistant?.parts ?? []) {
+          if (part.kind === 'tool' && part.id === result.toolUseId && !part.finished) {
+            part.finished = true; part.output = result.content; part.status = String(result.status || 'success')
+          }
+        }
+        return
+      }
+      if (message.role !== 'assistant') return
+      if (!assistant) {
+        assistant = { id: `history-assistant-${messageIndex}`, role: 'assistant', parts: [] }
+        state.messages.push(assistant)
+      }
+      const key = `history-${messageIndex}-${blockIndex}`
+      if (typeof block.text === 'string') assistant.parts.push({ kind: 'text', key, path: [], text: block.text })
+      else if (block.toolUse) {
+        const tool = record(block.toolUse)
+        assistant.parts.push({ kind: 'tool', key, id: String(tool.toolUseId), name: String(tool.name),
+          path: [], input: tool.input ?? {}, progress: [], finished: false })
+      } else if (block.reasoningContent) {
+        const reasoning = record(record(block.reasoningContent).reasoningText)
+        if (typeof reasoning.text === 'string') assistant.parts.push({ kind: 'reasoning', key, path: [], text: reasoning.text })
+      } else assistant.parts.push({ kind: 'activity', key, path: [], text: displayValue(block) })
+    })
+  })
+  if (assistant && state.runId && !state.needsReplay && !state.recoveryRequired) {
+    assistant.runId = state.runId
+    for (const part of assistant.parts) if (part.kind === 'tool') part.key = toolIdentity(state.runId, part.path, part.id)
+  }
+  if (state.runId && !state.needsReplay && !state.recoveryRequired) {
+    const user = [...state.messages].reverse().find((message) => message.role === 'user')
+    if (user) user.runId = state.runId
+  }
+  // Active snapshots contain PRE-RUN history. Never relabel the prior answer as
+  // this run, and only append native message input (not checkpoint/interrupt input).
+  if (state.needsReplay && !state.historyIncomplete && state.runId && snapshot.input != null) {
+    const input = snapshot.input
+    const blocks = typeof input === 'string' ? [{ text: input }] : Array.isArray(input)
+      ? input.filter((block) => !record(block).interruptResponse) : []
+    if (blocks.length) state.messages.push({ id: `input-${state.runId}`, role: 'user', runId: state.runId,
+      parts: blocks.map((block, i) => ({ kind: 'text', key: `input-${state.runId}-${i}`, path: [],
+        text: typeof record(block).text === 'string' ? String(record(block).text) : displayValue(block) })) })
+  }
+  return state
+}
+
+/** Canonical history owns root content; replay owns progress, nested nodes and retries. */
+export function reconcilePanelSession(previous: PanelState, canonical: PanelState): PanelState {
+  if (previous.sessionId !== canonical.sessionId) return canonical
+  const used = new Set<PanelMessage>()
+  const signature = (message: PanelMessage) => JSON.stringify([message.role,
+    message.parts.filter((part) => part.path.length === 0 && part.kind === 'text' && !part.discarded)
+      .map((part) => part.kind !== 'tool' ? part.text : '').join(''),
+    message.parts.filter((part) => part.kind === 'tool' && part.path.length === 0).map((part) => part.kind === 'tool' ? part.id : '')])
+  const messages = canonical.messages.map((message) => {
+    // PRE-RUN hydration must rebuild the current run from its cursor, never
+    // merge its already-streamed assistant or duplicate pending input.
+    const candidates = previous.messages.filter((old) => !used.has(old) &&
+      !(canonical.needsReplay && old.role === 'assistant' && old.runId === canonical.runId))
+    let exact = candidates.find((old) => signature(old) === signature(message))
+    let old = exact ?? candidates.find((old) => old.role === message.role &&
+      message.runId !== undefined && old.runId === message.runId)
+    // Checkpoint/interrupt resumes have no new user message: SDK history groups
+    // multiple run responses into one assistant turn. Recombine that same turn.
+    if (message.role === 'assistant' && !exact) {
+      const start = old ? previous.messages.indexOf(old) : -1
+      let first = start
+      while (first > 0 && previous.messages[first - 1].role === 'assistant' && !used.has(previous.messages[first - 1])) first--
+      const group = first >= 0 ? previous.messages.slice(first, start + 1).filter((item) => candidates.includes(item)) : []
+      if (group.length > 1) {
+        group.forEach((item) => used.add(item))
+        old = { ...group[0], runId: message.runId, parts: group.flatMap((item) => item.parts) }
+        if (signature(old) === signature(message)) exact = old
+      }
+    }
+    // Retained replay can finish a resumed run with no new root output. The
+    // canonical assistant may match the pre-resume turn exactly; attach any
+    // remaining run-scoped nested/progress events instead of dropping them.
+    if (message.role === 'assistant' && message.runId && !canonical.needsReplay) {
+      const continuation = candidates.filter((item) => item !== old && !used.has(item) &&
+        item.role === 'assistant' && item.runId === message.runId)
+      if (old && continuation.length) {
+        used.add(old)
+        continuation.forEach((item) => used.add(item))
+        old = { ...old, runId: message.runId, parts: [...old.parts, ...continuation.flatMap((item) => item.parts)] }
+        exact = signature(old) === signature(message) ? old : undefined
+      }
+    }
+    if (!old) return message
+    used.add(old)
+    if (message.role === 'user') return { ...message, id: old.id, runId: old.runId }
+    const tools = message.parts.filter((part): part is ToolPart => part.kind === 'tool')
+    const enrichTool = (part: PanelPart): PanelPart => {
+      if (part.kind !== 'tool' || part.path.length) return part
+      const live = old.parts.find((item): item is ToolPart => item.kind === 'tool' && !item.path.length && item.id === part.id)
+      const saved = tools.find((item) => item.id === part.id)
+      return { ...part, ...saved, key: live?.key ?? part.key, progress: live?.progress ?? part.progress }
+    }
+    // Exact root text/tool matches can keep the original interleaving in full.
+    const parts = exact ? old.parts.map(enrichTool) : [
+      ...message.parts.map(enrichTool),
+      ...old.parts.filter((part) => part.path.length || (part.kind !== 'tool' &&
+        (part.discarded || part.kind === 'activity' || part.kind === 'retry' || part.kind === 'reasoning') &&
+        !message.parts.some((saved) => saved.kind === part.kind && saved.text === part.text))),
+    ]
+    // Native structured output/reasoning may not have appeared in delta events.
+    for (const part of message.parts) {
+      if (part.kind === 'tool' || part.kind === 'text') continue
+      if (!parts.some((item) => item.kind === part.kind && item.text === part.text)) parts.push(part)
+    }
+    return { ...message, id: old.id, runId: message.runId ?? old.runId, parts }
+  })
+  // Failure/recovery snapshots deliberately roll back incomplete work. Keep that
+  // visible evidence, but never treat it as committed SDK history.
+  if (canonical.recoveryRequired && !canonical.needsReplay) {
+    messages.push(...previous.messages.filter((message) => !used.has(message) && message.runId === previous.runId))
+  }
+  const ids = new Set<string>()
+  return { ...canonical, historyIncomplete: canonical.historyIncomplete || previous.historyIncomplete, messages: messages.map((message, index) => {
+    let id = message.id
+    while (ids.has(id)) id = `${id}-${canonical.sequence}-${index}`
+    ids.add(id)
+    return id === message.id ? message : { ...message, id }
+  }) }
+}
+
+
+/** Reference data the backend once injected as a leading user text block. */
+export function isRequestContextBlock(block: unknown): boolean {
+  const text = record(block).text
+  return typeof text === 'string' && /^Browser context (reference )?for this request/.test(text)
+}
+
+export type RenderItem =
+  | { kind: 'part'; part: PanelPart }
+  | { kind: 'think'; tool: ToolPart; steps: ThinkStep[] }
+export type ThinkStep =
+  | { kind: 'text'; key: string; text: string; active: boolean }
+  | { kind: 'reasoning'; key: string; text: string; active: boolean }
+  | { kind: 'tool'; key: string; tool: ToolPart; active: boolean }
+
+const THINK_TOOL = 'think'
+
+/**
+ * Group a message's flat parts for rendering. Nested events emitted by a `think`
+ * tool's child agent (node_path[0] === that think tool's id) become chain-of-
+ * thought steps inside the think block and are removed from the flat list.
+ * Nested parts under any other tool, and root reasoning, are left untouched.
+ */
+export function groupThinkParts(parts: PanelPart[], running: boolean): RenderItem[] {
+  const thinkIds = new Set(parts.filter((p) => p.kind === 'tool' && p.path.length === 0 && p.name === THINK_TOOL).map((p) => (p as ToolPart).id))
+  const items: RenderItem[] = []
+  for (const part of parts) {
+    const parentId = part.path.length ? String(part.path[0]) : undefined
+    if (parentId !== undefined && thinkIds.has(parentId)) continue // consumed by its think block
+    if (part.kind === 'tool' && part.path.length === 0 && part.name === THINK_TOOL) {
+      const nested = parts.filter((p) => p.path.length >= 1 && String(p.path[0]) === part.id)
+      const steps: ThinkStep[] = []
+      for (const child of nested) {
+        if (child.kind === 'tool') {
+          steps.push({ kind: 'tool', key: child.key, tool: child, active: !child.finished && running && !part.finished })
+        } else if (child.kind === 'text' || child.kind === 'reasoning') {
+          const last = steps[steps.length - 1]
+          if (last && last.kind === child.kind && child.kind !== 'reasoning' && !child.discarded) {
+            last.text += child.text
+          } else if (!child.discarded) {
+            steps.push({ kind: child.kind, key: child.key, text: child.text, active: false })
+          }
+        }
+      }
+      if (!part.finished && running && steps.length) steps[steps.length - 1].active = true
+      items.push({ kind: 'think', tool: part, steps })
+      continue
+    }
+    items.push({ kind: 'part', part })
+  }
+  return items
+}

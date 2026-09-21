@@ -1,0 +1,31 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "useDefineForClassFields": true,
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "skipLibCheck": true,
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "jsx": "react-jsx",
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "allowSyntheticDefaultImports": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./src/*"],
+      "@catalyst/*": ["./src/components/catalyst/*"],
+      "three": ["./node_modules/@types/three/index.d.ts"]
+    }
+  },
+  "include": ["src", "electron"],
+  "exclude": ["src/components/ai-elements/theapp"],
+  "references": [{ "path": "./tsconfig.node.json" }]
+}

@@ -1,0 +1,470 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "MyHealthfinder API",
+    "description": "Return demographic-specific health recommendations and health topics from the U.S. Department of Health and Human Services.\nLast updated: November 19, 2025.",
+    "version": "4.0.1",
+    "termsOfService": "https://odphp.health.gov/myhealthfinder",
+    "contact": {
+      "name": "Office of Disease Prevention and Health Promotion",
+      "url": "https://odphp.health.gov/contact-us"
+    },
+    "license": {
+      "name": "Apache 2.0",
+      "url": "https://opensource.org/licenses/Apache-2.0"
+    }
+  },
+  "servers": [
+    {
+      "url": "https://odphp.health.gov/myhealthfinder/api/v4",
+      "description": "Production Server"
+    }
+  ],
+  "paths": {
+    "/myhealthfinder.json": {
+      "get": {
+        "summary": "Search for MyHealthfinder recommendations (JSON)",
+        "description": "Returns demographic-specific health recommendations associated with the parameters below in JSON format.",
+        "operationId": "getMyHealthfinderJson",
+        "parameters": [
+          { "$ref": "#/components/parameters/LangParam" },
+          { "$ref": "#/components/parameters/AgeParam" },
+          { "$ref": "#/components/parameters/SexParam" },
+          { "$ref": "#/components/parameters/PregnantParam" },
+          { "$ref": "#/components/parameters/CallbackParam" }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful operation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MyHealthfinderResponseJSON"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input"
+          }
+        }
+      }
+    },
+    "/itemlist.json": {
+      "get": {
+        "summary": "Get a list of healthfinder items (JSON)",
+        "description": "Returns a list of categories and/or topics in JSON format.",
+        "operationId": "getItemListJson",
+        "parameters": [
+          { "$ref": "#/components/parameters/LangParam" },
+          { "$ref": "#/components/parameters/TypeParam" },
+          { "$ref": "#/components/parameters/CallbackParam" }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful operation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ItemListResponseJSON"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/topicsearch.json": {
+      "get": {
+        "summary": "Search for Health Topics (JSON)",
+        "description": "Returns health topics and tools associated with the parameters below in JSON format.",
+        "operationId": "searchTopicsJson",
+        "parameters": [
+          { "$ref": "#/components/parameters/LangParam" },
+          { "$ref": "#/components/parameters/TopicIdParam" },
+          { "$ref": "#/components/parameters/CategoryIdParam" },
+          { "$ref": "#/components/parameters/KeywordParam" },
+          { "$ref": "#/components/parameters/CallbackParam" }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful operation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TopicSearchResponseJSON"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/myhealthfinder.xml": {
+      "get": {
+        "summary": "Search for MyHealthfinder recommendations (XML)",
+        "description": "Returns demographic-specific health recommendations associated with the parameters below in XML format.",
+        "operationId": "getMyHealthfinderXml",
+        "parameters": [
+          { "$ref": "#/components/parameters/LangParam" },
+          { "$ref": "#/components/parameters/AgeParam" },
+          { "$ref": "#/components/parameters/SexParam" },
+          { "$ref": "#/components/parameters/PregnantParam" }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful operation",
+            "content": {
+              "application/xml": {
+                "schema": {
+                  "$ref": "#/components/schemas/MyHealthfinderResponseXML"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input"
+          }
+        }
+      }
+    },
+    "/itemlist.xml": {
+      "get": {
+        "summary": "Get a list of healthfinder items (XML)",
+        "description": "Returns a list of categories and/or topics in XML format.",
+        "operationId": "getItemListXml",
+        "parameters": [
+          { "$ref": "#/components/parameters/LangParam" },
+          { "$ref": "#/components/parameters/TypeParam" }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful operation",
+            "content": {
+              "application/xml": {
+                "schema": {
+                  "$ref": "#/components/schemas/ItemListResponseXML"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/topicsearch.xml": {
+      "get": {
+        "summary": "Search for Health Topics (XML)",
+        "description": "Returns health topics and tools associated with the parameters below in XML format.",
+        "operationId": "searchTopicsXml",
+        "parameters": [
+          { "$ref": "#/components/parameters/LangParam" },
+          { "$ref": "#/components/parameters/TopicIdParam" },
+          { "$ref": "#/components/parameters/CategoryIdParam" },
+          { "$ref": "#/components/parameters/KeywordParam" }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful operation",
+            "content": {
+              "application/xml": {
+                "schema": {
+                  "$ref": "#/components/schemas/TopicSearchResponseXML"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "parameters": {
+      "AgeParam": {
+        "name": "age",
+        "in": "query",
+        "description": "Age (0 to 120)",
+        "required": true,
+        "schema": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 120
+        }
+      },
+      "SexParam": {
+        "name": "sex",
+        "in": "query",
+        "description": "Sex (Male or Female)",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "enum": ["Male", "Female"]
+        }
+      },
+      "PregnantParam": {
+        "name": "pregnant",
+        "in": "query",
+        "description": "Pregnancy status (\"No\" or \"0\" = not pregnant (default), \"Yes\" or \"1\" = pregnant)",
+        "schema": {
+          "type": "string",
+          "default": "No"
+        }
+      },
+      "LangParam": {
+        "name": "lang",
+        "in": "query",
+        "description": "Language (\"en\" = English (default), \"es\" = Spanish)",
+        "schema": {
+          "type": "string",
+          "enum": ["en", "es"],
+          "default": "en"
+        }
+      },
+      "TypeParam": {
+        "name": "type",
+        "in": "query",
+        "description": "Type - topic or category. Default is everything.",
+        "schema": {
+          "type": "string",
+          "enum": ["topic", "category"]
+        }
+      },
+      "KeywordParam": {
+        "name": "keyword",
+        "in": "query",
+        "description": "Text contained in topics and tools to fetch. For multiple keywords, enter a space between each term. Place exact phrases in quotes.",
+        "schema": {
+          "type": "string"
+        }
+      },
+      "TopicIdParam": {
+        "name": "topicId",
+        "in": "query",
+        "description": "Comma-separated list of IDs of topics to fetch",
+        "schema": {
+          "type": "string"
+        }
+      },
+      "CategoryIdParam": {
+        "name": "categoryId",
+        "in": "query",
+        "description": "Comma-separated list of IDs of categories describing topics and tools to fetch",
+        "schema": {
+          "type": "string"
+        }
+      },
+      "CallbackParam": {
+        "name": "callback",
+        "in": "query",
+        "description": "Optional callback method",
+        "schema": {
+          "type": "string"
+        }
+      }
+    },
+    "schemas": {
+      "QueryInfo": {
+        "type": "object",
+        "properties": {
+          "ApiVersion": { "type": "string" },
+          "ApiType": { "type": "string" },
+          "TopicId": { "type": "string" },
+          "CategoryId": { "type": "string" },
+          "Keyword": { "type": "string" },
+          "Age": { "type": "string" },
+          "Sex": { "type": "string" },
+          "Pregnant": { "type": "string" },
+          "Category": { "type": "string" },
+          "Lang": { "type": "string" },
+          "Type": { "type": "string" },
+          "ReturnType": { "type": "string" },
+          "Callback": { "type": "string" }
+        }
+      },
+      "ResourceItem": {
+        "type": "object",
+        "properties": {
+          "Type": { "type": "string" },
+          "Id": { "type": "string" },
+          "Title": { "type": "string" },
+          "TranslationId": { "type": "string" },
+          "TranslationTitle": { "type": "string" },
+          "Categories": { "type": "string" },
+          "MyHFTitle": { "type": "string" },
+          "MyHFCategory": { "type": "string" },
+          "MyHFCategoryHeading": { "type": "string" },
+          "LastUpdate": { "type": "string" },
+          "ImageUrl": { "type": "string" },
+          "ImageAlt": { "type": "string" },
+          "AccessibleVersion": { "type": "string" },
+          "RelatedItems": {
+            "type": "object",
+            "properties": {
+              "RelatedItem": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "Type": { "type": "string" },
+                    "Id": { "type": "string" },
+                    "Title": { "type": "string" },
+                    "Url": { "type": "string" }
+                  }
+                }
+              }
+            }
+          },
+          "Sections": {
+            "type": "object",
+            "properties": {
+              "Section": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "Title": { "type": "string" },
+                    "Content": { "type": "string" }
+                  }
+                }
+              }
+            }
+          },
+          "HealthfinderLogo": { "type": "string" },
+          "HealthfinderUrl": { "type": "string" }
+        }
+      },
+      "ItemObject": {
+        "type": "object",
+        "properties": {
+          "Type": { "type": "string" },
+          "Id": { "type": "string" },
+          "Title": { "type": "string" },
+          "ParentId": { "type": "string" },
+          "TranslationId": { "type": "string" }
+        }
+      },
+      "MyHealthfinderResult": {
+        "type": "object",
+        "properties": {
+          "Error": { "type": "string" },
+          "Total": { "type": "integer" },
+          "Query": { "$ref": "#/components/schemas/QueryInfo" },
+          "Language": { "type": "string" },
+          "MyHFHeading": { "type": "string" },
+          "TakeAction": { "type": "string" },
+          "AboutTheseResults": { "type": "string" },
+          "Resources": {
+            "type": "object",
+            "properties": {
+              "All": {
+                "type": "object",
+                "properties": {
+                  "Resource": {
+                    "type": "array",
+                    "items": { "$ref": "#/components/schemas/ResourceItem" }
+                  }
+                }
+              }
+            }
+          },
+          "Callouts": {
+            "type": "object",
+            "properties": {
+              "All": {
+                "type": "object",
+                "properties": {
+                  "Resource": {
+                    "type": "array",
+                    "items": { "$ref": "#/components/schemas/ResourceItem" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "ItemListResult": {
+        "type": "object",
+        "properties": {
+          "Error": { "type": "string" },
+          "Total": { "type": "integer" },
+          "Query": { "$ref": "#/components/schemas/QueryInfo" },
+          "Language": { "type": "string" },
+          "MyHFHeading": { "type": "string" },
+          "Items": {
+            "type": "object",
+            "properties": {
+              "Item": {
+                "type": "array",
+                "items": { "$ref": "#/components/schemas/ItemObject" }
+              }
+            }
+          }
+        }
+      },
+      "TopicSearchResult": {
+        "type": "object",
+        "properties": {
+          "Error": { "type": "string" },
+          "Total": { "type": "integer" },
+          "Query": { "$ref": "#/components/schemas/QueryInfo" },
+          "Language": { "type": "string" },
+          "MyHFHeading": { "type": "string" },
+          "Resources": {
+            "type": "object",
+            "properties": {
+              "Resource": {
+                "type": "array",
+                "items": { "$ref": "#/components/schemas/ResourceItem" }
+              }
+            }
+          }
+        }
+      },
+      "MyHealthfinderResponseJSON": {
+        "type": "object",
+        "properties": {
+          "Result": { "$ref": "#/components/schemas/MyHealthfinderResult" }
+        }
+      },
+      "ItemListResponseJSON": {
+        "type": "object",
+        "properties": {
+          "Result": { "$ref": "#/components/schemas/ItemListResult" }
+        }
+      },
+      "TopicSearchResponseJSON": {
+        "type": "object",
+        "properties": {
+          "Result": { "$ref": "#/components/schemas/TopicSearchResult" }
+        }
+      },
+      "MyHealthfinderResponseXML": {
+        "type": "object",
+        "xml": {
+          "name": "response"
+        },
+        "properties": {
+          "Result": { "$ref": "#/components/schemas/MyHealthfinderResult" }
+        }
+      },
+      "ItemListResponseXML": {
+        "type": "object",
+        "xml": {
+          "name": "response"
+        },
+        "properties": {
+          "Result": { "$ref": "#/components/schemas/ItemListResult" }
+        }
+      },
+      "TopicSearchResponseXML": {
+        "type": "object",
+        "xml": {
+          "name": "response"
+        },
+        "properties": {
+          "Result": { "$ref": "#/components/schemas/TopicSearchResult" }
+        }
+      }
+    }
+  }
+}
