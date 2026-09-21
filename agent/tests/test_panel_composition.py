@@ -549,3 +549,30 @@ def test_configured_graph_actual_topology_and_explicit_child_tools(offline, monk
     assert results[0]["status"] == "success", results
     assert len(models) == 3  # parent + two graph children
     assert "first" in json.dumps(models[-1].calls)  # Second node sees native graph context.
+
+
+def test_create_panel_agent_merges_application_and_runtime_hooks(offline):
+    """Application hooks register first, then runtime hooks (priority-200 runtime layer)."""
+    from strands.hooks import HookProvider
+
+    build, _models, _catalogs, constructed, _storage = offline
+    order = []
+
+    class Recorder(HookProvider):
+        def __init__(self, label):
+            self.label = label
+
+        def register_hooks(self, registry, **kwargs):
+            order.append(self.label)
+
+    app_hook, runtime_hook = Recorder("app"), Recorder("runtime")
+    build(hooks=[app_hook], runtime_options={"hooks": [runtime_hook]})
+    kwargs = constructed[-1][1]
+    assert kwargs["hooks"] == [app_hook, runtime_hook]
+    assert order == ["app", "runtime"]
+
+
+def test_create_panel_agent_without_hooks_is_unchanged(offline):
+    build, _models, _catalogs, constructed, _storage = offline
+    build()
+    assert constructed[-1][1]["hooks"] == []

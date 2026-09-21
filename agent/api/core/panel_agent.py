@@ -47,10 +47,12 @@ import os
 
 import httpx
 from pathlib import Path
+from collections.abc import Sequence
 from typing import Any, Literal
 
 from strands.agent.agent import Agent
 from strands.experimental import config_to_agent
+from strands.hooks import HookProvider
 from strands.models.gemini import GeminiModel
 from strands.models.mistral import MistralModel
 from strands.tools import ToolProvider
@@ -715,6 +717,7 @@ def create_panel_agent(
     user_id: str,
     system_prompt: str,
     extra_tools: list[Any],
+    hooks: Sequence[HookProvider] = (),
     reasoning_effort: str | None = None,
     options: dict | None = None,
     runtime_options: dict | None = None,
@@ -810,7 +813,8 @@ def create_panel_agent(
             kwargs["conversation_manager"] = SlidingWindowConversationManager()
         kwargs.update(runtime)
         kwargs["plugins"] = [*plugins, *runtime.get("plugins", [])]
-        kwargs["hooks"] = list(runtime.get("hooks", []))
+        # Application hooks (e.g. browser availability) register before runtime hooks (order 200).
+        kwargs["hooks"] = [*hooks, *runtime.get("hooks", [])]
         # The catalog is the sole owner even when runtime overrides are supplied.
         kwargs["tools"] = [catalog]
         formations_file = os.getenv("PANEL_FORMATIONS_FILE")
