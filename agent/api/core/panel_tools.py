@@ -948,7 +948,19 @@ def create_think_tool(*, model_factory: ModelFactory, system_prompt: str) -> Age
         parent = tool_context.agent
         inherited = [
             value for name, value in parent.tool_registry.registry.items()
-            if name not in THINK_EXCLUDED_TOOLS and not name.startswith("strands_")
+
+def is_parent_only_tool(name: str) -> bool:
+    """Tools children must never inherit or be assigned.
+
+    Browser tools (``<browser>_browser_*``) stay parent-only: the availability
+    interrupt hook is registered on the parent agent only, so a child driving the
+    browser could bypass the unavailability policy.
+    """
+    from agent.api.core.panel_browser import is_browser_tool
+
+    return name in THINK_EXCLUDED_TOOLS or name.startswith("strands_") or is_browser_tool(name)
+
+            if not is_parent_only_tool(name)
         ]
         spec = ChildSpec(
             name="think",

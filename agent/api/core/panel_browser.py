@@ -17,11 +17,14 @@ from __future__ import annotations
 import os
 from collections.abc import Awaitable, Callable
 from pathlib import Path
-from typing import Final, Literal
+from typing import TYPE_CHECKING, Final, Literal
 
 import httpx
 from strands.hooks import HookProvider, HookRegistry
 from strands.hooks.events import BeforeToolCallEvent
+
+if TYPE_CHECKING:
+    from strands.tools.mcp import MCPClient
 
 BrowserName = Literal["user", "cloud"]
 BROWSERS: Final[tuple[str, ...]] = ("user", "cloud")
@@ -83,6 +86,38 @@ def browser_server_config(browser: str) -> dict[str, dict[str, object]]:
 def default_browser() -> str:
     """Browser used when a request omits ``browser``; ``RON_BROWSER_DEFAULT`` or ``user``."""
     return _validate(os.environ.get("RON_BROWSER_DEFAULT", "user"))
+
+
+def is_browser_tool(name: str) -> bool:
+    """``True`` for any tool staged from a browser server (``user_browser_*`` / ``cloud_browser_*``)."""
+    return any(name.startswith(f"{server_name(browser)}_") for browser in BROWSERS)
+
+
+def browser_client_factory(browser: str) -> Callable[[], MCPClient]:
+    """Factory for an UNSTARTED, prefixed ``MCPClient`` with the no-approval elicitation policy.
+
+    electron-playwright-mcp's ApprovalRequiredMiddleware elicits on every mutating tool
+    regardless of Electron's own ``requireApproval`` flag; ``MCPClient.load_servers`` builds
+    clients without an elicitation callback, so the mcp default would answer "Elicitation
+    not supported". The catalog calls this factory when the server is loaded by name.
+    """
+    from mcp import StdioServerParameters, stdio_client
+    from strands.tools.mcp import MCPClient
+
+    from agent.api.core.panel_tools import accept_browser_elicitation
+
+    name = server_name(browser)
+
+    def factory() -> MCPClient:
+        config = browser_server_config(browser)[name]
+        params = StdioServerParameters(
+            command=str(config["command"]), args=list(config["args"]), env=dict(config["env"]),  # type: ignore[arg-type]
+        )
+        return MCPClient(
+            lambda: stdio_client(params), prefix=name, elicitation_callback=accept_browser_elicitation,
+        )
+
+    return factory
 
 
 # --- availability policy --------------------------------------------------------------------

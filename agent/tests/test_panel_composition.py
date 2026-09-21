@@ -568,11 +568,93 @@ def test_create_panel_agent_merges_application_and_runtime_hooks(offline):
     app_hook, runtime_hook = Recorder("app"), Recorder("runtime")
     build(hooks=[app_hook], runtime_options={"hooks": [runtime_hook]})
     kwargs = constructed[-1][1]
-    assert kwargs["hooks"] == [app_hook, runtime_hook]
+    # Application hooks first, then the always-present BrowserAvailabilityHook, then runtime hooks.
+    from agent.api.core.panel_browser import BrowserAvailabilityHook
+
+    assert [h for h in kwargs["hooks"] if not isinstance(h, BrowserAvailabilityHook)] == [app_hook, runtime_hook]
+    assert isinstance(kwargs["hooks"][1], BrowserAvailabilityHook)
     assert order == ["app", "runtime"]
 
 
 def test_create_panel_agent_without_hooks_is_unchanged(offline):
     build, _models, _catalogs, constructed, _storage = offline
     build()
-    assert constructed[-1][1]["hooks"] == []
+    from agent.api.core.panel_browser import BrowserAvailabilityHook
+
+    hooks = constructed[-1][1]["hooks"]
+    assert len(hooks) == 1 and isinstance(hooks[0], BrowserAvailabilityHook)
+
+
+# --- browser target selection (todo 13) ---------------------------------------------------
+
+def test_browser_kwarg_configures_only_the_selected_server(offline, monkeypatch):
+    from agent.api.core import panel_browser
+    from agent.api.core.panel_browser import BrowserAvailabilityHook, browser_server_config, server_name
+
+    for name in ("RON_BROWSER_DEFAULT",):
+        monkeypatch.delenv(name, raising=False)
+    build, _models, catalogs, constructed, _storage = offline
+
+    agent = build(browser="cloud")
+    catalog = catalogs[-1]
+    assert set(catalog._server_config) == {"cloud_browser"}
+    assert catalog._server_config["cloud_browser"] == browser_server_config("cloud")["cloud_browser"]
+    assert not any(n.startswith(("cloud_browser_", "user_browser_")) for n in agent.tool_registry.registry)
+    hooks = [h for h in constructed[-1][1]["hooks"] if isinstance(h, BrowserAvailabilityHook)]
+    assert len(hooks) == 1 and hooks[0].browser == "cloud"
+
+    build(browser="user")
+    assert set(catalogs[-1]._server_config) == {"user_browser"}
+    assert [h.browser for h in constructed[-1][1]["hooks"] if isinstance(h, BrowserAvailabilityHook)] == ["user"]
+
+    build()  # omitted -> default_browser()
+    assert set(catalogs[-1]._server_config) == {server_name(panel_browser.default_browser())}
+
+
+def test_browser_kwarg_invalid_fails_before_model_construction(offline):
+    build, models, _catalogs, _constructed, _storage = offline
+    before = len(models)
+    with pytest.raises(ValueError):
+        build(browser="laptop")
+    assert len(models) == before
+
+
+def test_browser_client_factory_builds_prefixed_client_with_elicitation_policy(offline, monkeypatch):
+    from agent.api.core.panel_browser import browser_client_factory, server_name
+
+    captured = []
+    native_init = MCPClient.__init__
+
+    def spy(self, *args, **kwargs):
+        captured.append(kwargs)
+        native_init(self, *args, **kwargs)
+
+    monkeypatch.setattr(MCPClient, "__init__", spy)
+    build, _models, catalogs, _constructed, _storage = offline
+    build(browser="user")
+    catalog = catalogs[-1]
+    factory = catalog._client_factories[server_name("user")]
+    client = factory()
+    assert isinstance(client, MCPClient)
+    assert client._elicitation_callback is accept_browser_elicitation
+    assert client._prefix == "user_browser"
+    assert captured[-1]["prefix"] == "user_browser"
+    assert captured[-1]["elicitation_callback"] is accept_browser_elicitation
+    # Not started: no session thread yet.
+    assert getattr(client, "_background_thread", None) is None
+    # The module-level factory is the same thing the catalog uses.
+    assert browser_client_factory("cloud")()._prefix == "cloud_browser"
+
+
+def test_browser_tools_are_parent_only(offline):
+    """think children and formation children never inherit <browser>_browser_* tools."""
+    from agent.api.core.panel_tools import THINK_EXCLUDED_TOOLS, is_parent_only_tool
+
+    build, _models, _catalogs, _constructed, _storage = offline
+    agent = build(browser="user")
+    assert is_parent_only_tool("user_browser_playwright_List_tabs")
+    assert is_parent_only_tool("cloud_browser_playwright_List_tabs")
+    assert not is_parent_only_tool("shell")
+    assert "tool_catalog" in THINK_EXCLUDED_TOOLS
+    with pytest.raises(ValueError):
+        composition._assigned_tools(agent, ["user_browser_x"])

@@ -71,6 +71,15 @@ from agent.api.core.config import (
     XAI_NATIVE_TOOLS_ENABLED,
 )
 from agent.api.core.perplexity_model import PerplexityResponsesModel
+from agent.api.core.panel_browser import (
+    BROWSERS,
+    BrowserAvailabilityHook,
+    browser_client_factory,
+    browser_server_config,
+    default_browser,
+    is_browser_tool,
+    server_name,
+)
 from agent.api.core.panel_storage import create_memory_config, get_user_session_storage
 from agent.api.core.panel_tools import (
     ChildSpec, GraphSpec, ManagedMCP, PanelToolCatalog, SwarmSpec,
@@ -638,7 +647,7 @@ def _assigned_tools(agent: Agent, names: Any) -> tuple[Any, ...]:
             raise ValueError(f"Assigned tool {name!r} is not registered")
         # Plugin tools can capture their parent state; only catalog-owned local
         # tools and MCP providers are supported as explicit child capabilities.
-        if name.startswith("strands_") or value.tool_type == "agent":
+        if name.startswith("strands_") or value.tool_type == "agent" or is_browser_tool(name):
             raise ValueError(f"Cannot assign parent-bound tool {name!r} to a child")
         if isinstance(value, MCPAgentTool):
             mcp_assignments.setdefault(value.mcp_client, []).append(value.tool_name)
@@ -718,6 +727,8 @@ def create_panel_agent(
     system_prompt: str,
     extra_tools: list[Any],
     hooks: Sequence[HookProvider] = (),
+    hooks: Sequence[HookProvider] = (),
+    browser: str | None = None,
     reasoning_effort: str | None = None,
     options: dict | None = None,
     runtime_options: dict | None = None,
@@ -733,6 +744,10 @@ def create_panel_agent(
     from strands.hooks.events import AfterInvocationEvent
     from strands.session import SnapshotSessionManager
     from strands.tools.executors import ConcurrentToolExecutor, SequentialToolExecutor
+    # Validate the browser target before any model/catalog construction.
+    selected_browser = default_browser() if browser is None else browser
+    if selected_browser not in BROWSERS:
+        raise ValueError(f"browser must be one of {BROWSERS!r}, got {browser!r}")
     from strands.tools.mcp.mcp_agent_tool import MCPAgentTool
     from strands.vended_plugins.goal import GoalLoop, JudgeConfig
 
@@ -764,7 +779,15 @@ def create_panel_agent(
     if any(isinstance(value, MCPAgentTool) for value in extra_tools):
         raise ValueError("Pass the owning MCPClient in extra_tools, not unowned MCP tool references")
     local_tools = [adapt_native_tool(value) for value in extra_tools if not isinstance(value, MCPClient)]
-    catalog = _OwnedPanelCatalog(tools=local_tools, managed_mcp=[ManagedMCP(client) for client in clients])
+    # Exactly ONE browser MCP server is configured; it is staged on demand through
+    # tool_catalog(action="load", name=<server>) with a prefixed, elicitation-accepting client.
+    browser_server = server_name(selected_browser)
+    catalog = _OwnedPanelCatalog(
+        tools=local_tools, managed_mcp=[ManagedMCP(client) for client in clients],
+        mcp_servers=browser_server_config(selected_browser),
+        mcp_client_factories={browser_server: browser_client_factory(selected_browser)},
+    )
+    hooks = [*hooks, BrowserAvailabilityHook(selected_browser)]
     agent = None
     try:
         def model_factory(_name: str) -> Any:
