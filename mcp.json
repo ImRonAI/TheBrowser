@@ -7,6 +7,22 @@
         "ELECTRON_PLAYWRIGHT_MCP_PLAYWRIGHT_URL": "http://localhost:8931/mcp",
         "ELECTRON_PLAYWRIGHT_MCP_CDP_URL": "http://localhost:9222"
       }
+    },
+    "user_browser": {
+      "command": "/Users/tims-stuff/RonBrowserRebuild/venv/bin/electron-playwright-mcp",
+      "env": {
+        "ELECTRON_PLAYWRIGHT_MCP_ELECTRON_URL": "http://127.0.0.1:13000/electron",
+        "ELECTRON_PLAYWRIGHT_MCP_PLAYWRIGHT_URL": "http://127.0.0.1:18931/mcp",
+        "ELECTRON_PLAYWRIGHT_MCP_CDP_URL": "http://127.0.0.1:19222"
+      }
+    },
+    "cloud_browser": {
+      "command": "/Users/tims-stuff/RonBrowserRebuild/venv/bin/electron-playwright-mcp",
+      "env": {
+        "ELECTRON_PLAYWRIGHT_MCP_ELECTRON_URL": "http://127.0.0.1:3000/electron",
+        "ELECTRON_PLAYWRIGHT_MCP_PLAYWRIGHT_URL": "http://127.0.0.1:8931/mcp",
+        "ELECTRON_PLAYWRIGHT_MCP_CDP_URL": "http://127.0.0.1:9222"
+      }
     }
   }
 }
