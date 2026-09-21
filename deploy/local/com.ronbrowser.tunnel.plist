@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.ronbrowser.tunnel</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>__REPO_ROOT__/deploy/local/tunnel.sh</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>RON_VPS_HOST</key>
+    <string>__RON_VPS_HOST__</string>
+    <key>RON_VPS_USER</key>
+    <string>ron</string>
+    <key>RON_SSH_KEY</key>
+    <string>__HOME__/.ssh/ronbrowser_upcloud_ed25519</string>
+    <key>PATH</key>
+    <string>/usr/bin:/bin:/usr/sbin:/sbin</string>
+  </dict>
+  <key>KeepAlive</key>
+  <true/>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>ThrottleInterval</key>
+  <integer>5</integer>
+  <key>StandardOutPath</key>
+  <string>__HOME__/Library/Logs/ronbrowser-tunnel.log</string>
+  <key>StandardErrorPath</key>
+  <string>__HOME__/Library/Logs/ronbrowser-tunnel.log</string>
+</dict>
+</plist>
