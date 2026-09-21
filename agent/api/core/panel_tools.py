@@ -631,14 +631,15 @@ def create_tool_catalog(catalog: PanelToolCatalog, project_tools_dir: Path) -> A
 
     @tool(context=True)
     async def tool_catalog(action: str, query: str = "", name: str = "", tool_context: ToolContext = None) -> dict[str, Any]:
-        """Discover and load additional tools from the project tool library.
+        """Discover and load additional tools from the project tool library or configured MCP servers.
 
         Core tools are always available. Use this to find and load specialised
         tools on demand. A loaded tool becomes callable in your next step.
 
         Args:
-            action: One of `list` (categories with counts), `search` (by query),
-                `describe` (one tool by name), or `load` (register a tool by name).
+            action: One of `list` (categories with counts, plus configured MCP servers),
+                `search` (by query), `describe` (one tool or server by name), or
+                `load` (register a tool, or stage a configured MCP server, by name).
             query: Case-insensitive text matched against name/category/description for `search`.
             name: Tool name for `describe` and `load`.
             tool_context: Native invocation context.
@@ -650,7 +651,8 @@ def create_tool_catalog(catalog: PanelToolCatalog, project_tools_dir: Path) -> A
                 categories.setdefault(item["category"] or "(root)", []).append(item["name"])
             return {"root": str(root), "tool_count": len(items),
                     "categories": {key: sorted(set(values)) for key, values in sorted(categories.items())},
-                    "loaded": sorted(catalog._loaded)}
+                    "loaded": sorted(catalog._loaded),
+                    "mcp_servers": {key: key in catalog._active_servers for key in sorted(catalog._server_config)}}
         if action == "search":
             needle = query.strip().lower()
             if not needle:
@@ -699,6 +701,15 @@ def _install_mcp_client_elicitation() -> None:
     module.MCPClient = factory  # type: ignore[assignment]
 
 
+            if name in catalog._server_config:
+                loaded = name in catalog._active_servers
+                if action == "describe":
+                    return {"server": name, "kind": "mcp_server", "loaded": loaded}
+                if loaded:
+                    return {"server": name, "loaded": True, "note": "already loaded"}
+                tools = await catalog.stage_mcp_server(name, agent=tool_context.agent)
+                return {"server": name, "loaded": True, "tools": list(tools),
+                        "activation": "callable from your next step"}
 def build_core_tools(project_tools_dir: Path) -> list[AgentTool]:
     """The always-registered tool set (minus `tool_catalog`, which needs the catalog).
 

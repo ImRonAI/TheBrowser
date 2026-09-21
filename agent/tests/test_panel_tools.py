@@ -779,3 +779,53 @@ def test_installed_mcp_client_gets_elicitation_capable_factory_once():
     finally:
         tools_module.MCPClient = real
     assert captured["elicitation_callback"] == "custom"  # explicit callers win; default otherwise
+
+
+def test_tool_catalog_loads_configured_mcp_servers_by_name(tmp_path):
+    """tool_catalog(action=load, name=<configured server>) stages that server via stage_mcp_server."""
+    library = tmp_path / "lib"
+    library.mkdir()
+
+    async def scenario():
+        catalog = PanelToolCatalog(mcp_servers={"cloud_browser": {"command": "/bin/true"}})
+        staged = []
+
+        async def fake_stage(name, *, agent):
+            staged.append(name)
+            catalog._active_servers.add(name)
+            return ["cloud_browser_x"]
+
+        catalog.stage_mcp_server = fake_stage  # type: ignore[method-assign]
+        catalog.add_tools([create_tool_catalog(catalog, library)])
+        agent = Agent(model=OfflineModel(), tools=[catalog], callback_handler=None)
+        catalog.bind(agent)
+        tc = agent.tool_registry.registry["tool_catalog"]
+
+        _, listing = await call_tool(tc, {"action": "list"}, agent=agent)
+        assert json.loads(listing["content"][0]["text"])["mcp_servers"] == {"cloud_browser": False}
+
+        _, described = await call_tool(tc, {"action": "describe", "name": "cloud_browser"}, agent=agent)
+        assert json.loads(described["content"][0]["text"]) == {
+            "server": "cloud_browser", "kind": "mcp_server", "loaded": False}
+
+        _, loaded = await call_tool(tc, {"action": "load", "name": "cloud_browser"}, agent=agent)
+        assert loaded["status"] == "success"
+        assert json.loads(loaded["content"][0]["text"]) == {
+            "server": "cloud_browser", "loaded": True, "tools": ["cloud_browser_x"],
+            "activation": "callable from your next step"}
+        assert staged == ["cloud_browser"]
+
+        _, again = await call_tool(tc, {"action": "load", "name": "cloud_browser"}, agent=agent)
+        assert json.loads(again["content"][0]["text"]) == {
+            "server": "cloud_browser", "loaded": True, "note": "already loaded"}
+        assert staged == ["cloud_browser"]  # stage not called twice
+
+        _, listing = await call_tool(tc, {"action": "list"}, agent=agent)
+        assert json.loads(listing["content"][0]["text"])["mcp_servers"] == {"cloud_browser": True}
+
+        # Library-tool behaviour unchanged: unknown names still error the same way.
+        _, unknown = await call_tool(tc, {"action": "load", "name": "nope"}, agent=agent)
+        assert unknown["status"] == "error" and "Unknown library tool" in json.dumps(unknown)
+        agent.cleanup()
+
+    asyncio.run(scenario())
