@@ -291,3 +291,17 @@ def test_hook_default_probe_is_async_only():
     assert "httpx.get(" not in source
     assert inspect.iscoroutinefunction(panel_browser.default_probe)
     assert inspect.iscoroutinefunction(BrowserAvailabilityHook.before_tool_call)
+
+
+# --- mcp.json parity (todo 16) ------------------------------------------------------------
+
+@pytest.mark.parametrize("browser", ["user", "cloud"])
+def test_mcp_json_declares_browser_servers_matching_defaults(clean_env, browser):
+    declared = json.loads((REPO_ROOT / "mcp.json").read_text())["mcpServers"]
+    name = server_name(browser)
+    assert name in declared, f"mcp.json is missing {name}"
+    ours = browser_server_config(browser)[name]
+    assert declared[name]["env"] == ours["env"]
+    assert Path(declared[name]["command"]).name == Path(str(ours["command"])).name == "electron-playwright-mcp"
+    assert "prefix" not in declared[name]  # name-based prefixing
+    assert "electron-playwright-mcp" in declared  # legacy entry for external clients is kept
