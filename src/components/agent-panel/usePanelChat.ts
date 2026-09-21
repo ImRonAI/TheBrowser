@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useAuthStore } from '@/stores/authStore'
 import {
-  emptyPanelState, hydratePanelSession, isTerminalEvent, readPanelStream, reconcilePanelSession, reducePanelEvent, responseError, shouldFollowPanel,
-  PanelReplayOverflow, type PanelEvent, type PanelState, type RuntimeOptions,
+  emptyPanelState, hydratePanelSession, isTerminalEvent, readPanelStream, reconcilePanelSession, reducePanelEvent, resolveBrowserSelection, responseError, shouldFollowPanel,
+  PanelReplayOverflow, type BrowserSelection, type PanelEvent, type PanelState, type RuntimeOptions,
 } from '@/lib/panel-stream'
 import type { ContextItem } from './ContextPicker'
 import { ARTICLE_PREFIX, type AgentDestination, type ArticleAttachment } from '@/lib/articles'
@@ -19,6 +19,11 @@ const waitForFollow = (signal: AbortSignal, delay: number) => new Promise<void>(
 })
 function savedSession(userId: string, destination: AgentDestination): string {
   try { return localStorage.getItem(storageKey(userId, destination)) || newSessionId() } catch { return newSessionId() }
+}
+/** `GET /sessions/{id}` snapshot → `selection.browser`, or null when absent/invalid. */
+function snapshotBrowser(snapshot: unknown): BrowserSelection | null {
+  const selection = snapshot && typeof snapshot === 'object' ? (snapshot as { selection?: unknown }).selection : undefined
+  return resolveBrowserSelection(selection && typeof selection === 'object' ? (selection as { browser?: unknown }).browser : undefined)
 }
 
 interface Selection {
@@ -41,6 +46,10 @@ export function usePanelChat(selection: Selection) {
   const [transportError, setTransportError] = useState<string>()
   const [controlBusy, setControlBusy] = useState(false)
   const [restoreVersion, setRestoreVersion] = useState(0)
+  const [browser, setBrowser] = useState<BrowserSelection>('user')
+  // The server pins `browser` per session; a reloaded session must adopt the
+  // stored value before the first POST or the immutable-selection check 409s.
+  const [browserHydrated, setBrowserHydrated] = useState(false)
   const current = useRef(state)
   const generation = useRef(0)
   const controller = useRef<AbortController | undefined>(undefined)
@@ -53,6 +62,11 @@ export function usePanelChat(selection: Selection) {
     setState(next)
   }, [])
   const sessionUrl = useCallback((id: string) => `${API}/sessions/${encodeURIComponent(id)}`, [])
+  const syncBrowser = useCallback((snapshot: unknown) => {
+    const stored = snapshotBrowser(snapshot)
+    if (stored) setBrowser(stored)
+    setBrowserHydrated(true)
+  }, [])
 
   const refreshCanonical = useCallback(async (id: string, token: number, signal: AbortSignal) => {
     const response = await fetch(`${sessionUrl(id)}?user_id=${encodeURIComponent(userId)}`, { signal })
@@ -60,9 +74,10 @@ export function usePanelChat(selection: Selection) {
     const snapshot: unknown = await response.json()
     if (signal.aborted || token !== generation.current) return
     const hydrated = hydratePanelSession(id, snapshot)
+    syncBrowser(snapshot)
     commit(reconcilePanelSession(current.current, hydrated))
     ready.current = !shouldFollowPanel(hydrated) || (hydrated.status === 'running' && hydrated.sequence === hydrated.latestSequence)
-  }, [commit, sessionUrl, userId])
+  }, [commit, sessionUrl, syncBrowser, userId])
 
   const replay = useCallback(async (
     id: string, token: number, signal: AbortSignal,
@@ -147,15 +162,18 @@ export function usePanelChat(selection: Selection) {
     setConnection('loading')
     setTransportError(undefined)
     try { localStorage.setItem(storageKey(userId, destination), sessionId) } catch { /* Storage can be unavailable. */ }
+    setBrowserHydrated(false)
     void (async () => {
       try {
         const response = await fetch(`${sessionUrl(sessionId)}?user_id=${encodeURIComponent(userId)}`, { signal: abort.signal })
         if (token !== generation.current || abort.signal.aborted) return
-        if (response.status === 404) { commit(emptyPanelState(sessionId)); ready.current = true; setConnection('connected'); return }
+        // A brand-new session keeps the locally chosen browser; nothing to adopt.
+        if (response.status === 404) { commit(emptyPanelState(sessionId)); ready.current = true; setBrowserHydrated(true); setConnection('connected'); return }
         if (!response.ok) throw await responseError(response)
         const snapshot: unknown = await response.json()
         if (token !== generation.current || abort.signal.aborted) return
         const hydrated = hydratePanelSession(sessionId, snapshot)
+        syncBrowser(snapshot)
         commit(reconcilePanelSession(current.current, hydrated))
         ready.current = !shouldFollowPanel(hydrated) || (hydrated.status === 'running' && hydrated.sequence === hydrated.latestSequence)
         if (shouldFollowPanel(hydrated)) {
@@ -163,12 +181,14 @@ export function usePanelChat(selection: Selection) {
         } else setConnection('connected')
       } catch (error) {
         if (token !== generation.current || abort.signal.aborted) return
+        // Unreachable backend: never block composing; the retry path re-hydrates.
+        setBrowserHydrated(true)
         setConnection('detached')
         setTransportError(error instanceof Error ? error.message : 'Unable to restore session')
       }
     })()
     return () => { ++generation.current; ready.current = false; abort.abort(); controller.current?.abort() }
-  }, [sessionId, userId, destination, commit, replay, sessionUrl, restoreVersion])
+  }, [sessionId, userId, destination, commit, replay, sessionUrl, syncBrowser, restoreVersion])
 
   const newChat = useCallback(() => {
     ++generation.current
@@ -228,7 +248,7 @@ export function usePanelChat(selection: Selection) {
     responses?: { interruptId: string; response: unknown }[],
     onAccepted?: () => void,
   ): Promise<boolean> => {
-    if (!ready.current || current.current.recoveryRequired) return false
+    if (!ready.current || !browserHydrated || current.current.recoveryRequired) return false
     if (current.current.status === 'running') {
       const sent = action === 'message' && Boolean(text.trim()) && !selection.attachments?.length
         ? await sendControl('steer', text.trim()) : false
@@ -267,7 +287,7 @@ export function usePanelChat(selection: Selection) {
           session_id: id, user_id: userId, message: action === 'message' ? text.trim() : '', action,
           destination, attachments: action === 'message' ? selection.attachments ?? [] : [],
           ...(!previous.configurationLocked ? { model: configuration.model, provider: configuration.provider,
-            reasoning_effort: configuration.effort || null, options: configuration.options } : {}),
+            reasoning_effort: configuration.effort || null, options: configuration.options, browser } : {}),
           browser_context: { ...(browserContext as Record<string, unknown> ?? {}), selected_contexts: selection.contexts },
           ...(responses ? { interrupt_responses: responses } : {}),
         }),
@@ -314,7 +334,7 @@ export function usePanelChat(selection: Selection) {
     } finally {
       if (token === generation.current) posting.current = false
     }
-  }, [commit, refreshCanonical, replay, selection, sendControl, userId, destination])
+  }, [browser, browserHydrated, commit, refreshCanonical, replay, selection, sendControl, userId, destination])
 
   const reconnect = useCallback(() => {
     const token = ++generation.current
@@ -329,6 +349,9 @@ export function usePanelChat(selection: Selection) {
     void replay(current.current.sessionId, token, abort.signal)
   }, [replay])
 
-  return { ...state, connection, transportError, controlBusy, newChat, sendMessage,
+  // `configurationLocked` flips optimistically on the first accepted POST and on
+  // every hydrated snapshot; `runId` alone lags until run_started arrives.
+  const browserLocked = Boolean(state.configurationLocked)
+  return { ...state, connection, transportError, controlBusy, browser, setBrowser, browserLocked, browserHydrated, newChat, sendMessage,
     stop: () => sendControl('cancel'), reconnect }
 }

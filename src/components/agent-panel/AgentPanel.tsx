@@ -10,7 +10,7 @@ import { MessageResponse } from '@/components/ai-elements/response'
 import { Tool, ToolHeader, ToolContent, ToolInput, ToolOutput } from '@/components/ai-elements/tool'
 import { ChainOfThought, ChainOfThoughtContent, ChainOfThoughtHeader, ChainOfThoughtStep } from '@/components/ai-elements/chain-of-thought'
 import { detectPreviewUrl, fileFromToolCall, filesFromListDir, getToolView, toolOutputText } from '@/components/ai-elements/ide-tool-mapping'
-import { displayValue, groupThinkParts, type PanelInterrupt, type PanelMessage, type PanelPart, type RunStatus, type RuntimeOptions, type ThinkStep, type ToolPart } from '@/lib/panel-stream'
+import { displayValue, groupThinkParts, type BrowserSelection, type PanelInterrupt, type PanelMessage, type PanelPart, type RunStatus, type RuntimeOptions, type ThinkStep, type ToolPart } from '@/lib/panel-stream'
 import { ContextPicker, SelectedContexts, type ContextItem } from './ContextPicker'
 import { DEFAULT_AGENT_MODEL, ModelSelector, useAgentModels, type AgentModelSelection } from './ModelSelector'
 import { usePanelChat } from './usePanelChat'
@@ -192,6 +192,7 @@ export function AgentConversation({ destination, embedded = false }: { destinati
                   <ModelSelector value={model} provider={provider} effort={effort} includeEffort {...modelCatalogue} disabled={configurationLocked}
                     onChange={(model, provider, effort) => setSelection({ model, provider, effort })}
                     onOpen={refreshModels} className="min-w-0 flex-1" />
+                  <BrowserTargetSelector value={chat.browser} onChange={chat.setBrowser} locked={chat.browserLocked || chat.connection === 'loading'} />
                 </div>
                 <RuntimeSettings options={runtimeOptions} onChange={setOptions} disabled={configurationLocked} />
                 {chat.configurationLocked && <button onClick={handleNewChat} className="mt-2 text-xs text-indigo-600 dark:text-indigo-300 underline">New chat to change configuration</button>}
@@ -255,6 +256,31 @@ export function AgentConversation({ destination, embedded = false }: { destinati
       </div>
     </Transition.Root>
   )
+}
+
+const BROWSER_TARGETS: readonly { id: BrowserSelection; label: string }[] = [
+  { id: 'user', label: 'Your browser' },
+  { id: 'cloud', label: 'Cloud browser' },
+]
+const BROWSER_LOCKED_TITLE = 'Locked for this chat — start a new chat to switch'
+
+/** Two-option segmented control; the server pins the choice once a run is reserved. */
+export function BrowserTargetSelector({ value, onChange, locked }: {
+  value: BrowserSelection; onChange: (value: BrowserSelection) => void; locked: boolean
+}) {
+  return <div role="group" aria-label="Browser target" title={locked ? BROWSER_LOCKED_TITLE : 'Which browser the agent drives for this chat'}
+    className={cn('inline-flex h-9 shrink-0 items-center gap-0.5 rounded-xl border border-surface-200/80 bg-white/70 p-0.5 text-xs shadow-sm dark:border-surface-700 dark:bg-surface-850/80', locked && 'opacity-60')}>
+    {BROWSER_TARGETS.map((target) => {
+      const selected = target.id === value
+      return <button key={target.id} type="button" disabled={locked} aria-pressed={selected} onClick={() => onChange(target.id)}
+        title={locked ? BROWSER_LOCKED_TITLE : undefined}
+        className={cn('h-full rounded-[10px] px-2.5 font-semibold transition-colors disabled:cursor-not-allowed',
+          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-1 dark:focus-visible:ring-offset-surface-900',
+          selected ? 'bg-indigo-600 text-white shadow-sm dark:bg-indigo-500' : 'text-ink-muted hover:bg-indigo-50 hover:text-ink dark:text-ink-inverse-muted dark:hover:bg-surface-800 dark:hover:text-ink-inverse')}>
+        {target.label}
+      </button>
+    })}
+  </div>
 }
 
 function RuntimeSettings({ options, onChange, disabled }: {

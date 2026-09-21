@@ -77,6 +77,13 @@ export function shouldFollowPanel(state: PanelState): boolean {
   return Boolean(state.needsReplay || state.followPending)
 }
 
+/** Per-session browser target. Immutable server-side once the first run is reserved. */
+export type BrowserSelection = 'user' | 'cloud'
+
+export function resolveBrowserSelection(value: unknown): BrowserSelection | null {
+  return value === 'user' || value === 'cloud' ? value : null
+}
+
 export function emptyPanelState(sessionId: string): PanelState {
   return { sessionId, messages: [], sequence: 0, status: 'idle', interrupts: [] }
 }

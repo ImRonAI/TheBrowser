@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import {
-  PanelReplayOverflow, PanelSSEParser, emptyPanelState, groupThinkParts, hydratePanelSession, parsePanelEvent, readPanelStream, reconcilePanelSession, reducePanelEvent, shouldFollowPanel,
+  PanelReplayOverflow, PanelSSEParser, emptyPanelState, groupThinkParts, hydratePanelSession, parsePanelEvent, readPanelStream, reconcilePanelSession, reducePanelEvent, resolveBrowserSelection, shouldFollowPanel,
   type PanelEvent, type PanelPart, type ToolPart,
 } from './panel-stream.ts'
 
@@ -481,4 +481,13 @@ test('legacy browser-context user blocks are hidden on hydration', () => {
   const user = state.messages.find((m) => m.role === 'user')
   assert.ok(user)
   assert.deepEqual(user.parts.map((p) => (p as { text: string }).text), ['real question'])
+})
+
+
+test('resolveBrowserSelection accepts only the two browser targets and rejects everything else', () => {
+  assert.equal(resolveBrowserSelection('user'), 'user')
+  assert.equal(resolveBrowserSelection('cloud'), 'cloud')
+  for (const invalid of ['laptop', 'USER', '', null, undefined, 0, true, {}, [], { browser: 'cloud' }]) {
+    assert.equal(resolveBrowserSelection(invalid), null, `rejects ${JSON.stringify(invalid)}`)
+  }
 })
