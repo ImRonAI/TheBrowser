@@ -317,3 +317,25 @@ def test_config_endpoint_reports_only_panel_providers(monkeypatch):
     assert body["features"]["event_replay"] is True
     assert body["features"]["a2a"] is False
     assert body["runtime"]["session_settings_immutable"] is True
+
+
+def test_run_binds_api_host_and_port(monkeypatch):
+    """main.run() must bind uvicorn to API_HOST/API_PORT from config (systemd sets 127.0.0.1:8765)."""
+    import importlib
+
+    import uvicorn
+
+    import agent.api.main as main_module
+
+    calls = []
+    monkeypatch.setattr(uvicorn, "run", lambda app, **kwargs: calls.append((app, kwargs)))
+    monkeypatch.setenv("API_HOST", "127.0.0.1")
+    monkeypatch.setenv("API_PORT", "18765")
+    try:
+        importlib.reload(app_config)
+        main_module.run()
+    finally:
+        monkeypatch.undo()
+        importlib.reload(app_config)
+
+    assert calls == [(main_module.app, {"host": "127.0.0.1", "port": 18765})]

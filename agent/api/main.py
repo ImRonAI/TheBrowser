@@ -118,6 +118,14 @@ async def get_config():
     }
 
 
-if __name__ == "__main__":
+def run() -> None:
+    """Serve the API on API_HOST/API_PORT (defaults 0.0.0.0:8765; systemd pins 127.0.0.1)."""
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8765)
+
+    from agent.api.core.config import API_HOST, API_PORT
+
+    uvicorn.run(app, host=API_HOST, port=API_PORT)
+
+
+if __name__ == "__main__":
+    run()
