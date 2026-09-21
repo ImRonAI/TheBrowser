@@ -54,7 +54,8 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 #: electron-playwright-mcp server (mcp.json): stdio entrypoint + OpenAPI target
 #: surfaces served by the running Electron app. Connected on demand via the
 #: native strands_tools mcp_client tool (elicitation policy installed by panel_tools).
-ELECTRON_MCP_COMMAND = str(REPO_ROOT / "venv" / "bin" / "electron-playwright-mcp")
+#: The entrypoint path is owned by panel_browser (per-browser targets) and re-exported here.
+from agent.api.core.panel_browser import ELECTRON_MCP_COMMAND  # noqa: E402
 ELECTRON_MCP_ENV = {
     "ELECTRON_PLAYWRIGHT_MCP_ELECTRON_URL": "http://localhost:3000/electron",
     "ELECTRON_PLAYWRIGHT_MCP_PLAYWRIGHT_URL": "http://localhost:8931/mcp",
