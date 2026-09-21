@@ -1,0 +1,28 @@
+# Ron cloud browser (headless Electron) systemd unit
+# Electron binds automation ports (3000, 8931, 9222) exclusively to 127.0.0.1 (loopback) per electron/main.ts
+# Run headless inside xvfb virtual display on port :0
+# Never exposed on external or wildcard interfaces. Accessed remotely via SSH tunnel.
+
+[Unit]
+Description=Ron cloud browser (headless Electron)
+After=network-online.target ron-api.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ron
+Group=ron
+WorkingDirectory=/opt/ron/RonBrowserRebuild
+EnvironmentFile=/etc/ronbrowser/ron.env
+UnsetEnvironment=ELECTRON_RUN_AS_NODE
+Environment=ELECTRON_PLAYWRIGHT_MCP_REQUIRE_APPROVAL=false
+Environment=PATH=/home/ron/.local/bin:/usr/local/bin:/usr/bin:/bin
+Environment=HOME=/home/ron
+ExecStart=/usr/bin/xvfb-run -a -s "-screen 0 1600x1000x24" /opt/ron/RonBrowserRebuild/node_modules/.bin/electron /opt/ron/RonBrowserRebuild
+Restart=always
+RestartSec=5
+KillSignal=SIGTERM
+TimeoutStopSec=30
+
+[Install]
+WantedBy=multi-user.target

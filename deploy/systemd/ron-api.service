@@ -1,0 +1,26 @@
+# Ron agent FastAPI systemd unit
+# Binds exclusively to 127.0.0.1 (API_HOST=127.0.0.1, API_PORT=8765)
+# Never exposed on external or wildcard interfaces. Accessed remotely via SSH tunnel.
+
+[Unit]
+Description=Ron agent API
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ron
+Group=ron
+WorkingDirectory=/opt/ron/RonBrowserRebuild
+EnvironmentFile=/etc/ronbrowser/ron.env
+Environment=API_HOST=127.0.0.1
+Environment=API_PORT=8765
+Environment=PATH=/home/ron/.local/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=/opt/ron/RonBrowserRebuild/venv/bin/python agent/api/main.py
+Restart=always
+RestartSec=5
+KillSignal=SIGINT
+TimeoutStopSec=60
+
+[Install]
+WantedBy=multi-user.target
