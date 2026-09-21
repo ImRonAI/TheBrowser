@@ -22,7 +22,10 @@ unset `ELECTRON_RUN_AS_NODE`; npm scripts handle this.
 
 All agent tools run on the host through the Strands `strands_tools` package; there
 is no shell sandbox, Shell MCP server, or `sandbox.toml`. The browser MCP server
-path in `AGENT_SYSTEM_PROMPT` (`venv/bin/electron-playwright-mcp`) is repo-relative.
+path (`venv/bin/electron-playwright-mcp`) is repo-relative and owned by
+`agent/api/core/panel_browser.py`, which defines the two browser targets
+(`user` = the user's Ron window via SSH reverse tunnel, `cloud` = the server-side
+headless Ron). See [`deploy-vps.md`](deploy-vps.md) for the 24/7 server layout.
 
 ## Native execution and sessions
 
@@ -146,12 +149,37 @@ vendored Strands `@tool`:
 | `environment` | `strands_tools.environment` | read/manage environment variables |
 | `http_request` | `strands_tools.http_request` | HTTP requests |
 | `perplexity_search` | `agent/tools/strands_tools/research/perplexity_search_api.py` (async `@tool`, official `perplexityai` SDK, exposed under this name) | live web search |
-| `tool_catalog` | `panel_tools.create_tool_catalog` | `list` / `search` / `describe` / `load` over the project library |
+| `tool_catalog` | `panel_tools.create_tool_catalog` | `list` / `search` / `describe` / `load` over the project library, and `load` of a configured MCP server by name (`user_browser` / `cloud_browser`) |
 | `ask_user` | native `ToolContext.interrupt` | pause for user input |
 
-Composition installs an elicitation-capable `MCPClient` factory on the installed
-`strands_tools.mcp_client` module once (`accept_browser_elicitation`) so the
-approval-gated `electron-playwright-mcp` server works through `mcp_client`.
+### Browser target per chat
+
+`POST /chat` takes `browser: "user" | "cloud"` (omitted → `RON_BROWSER_DEFAULT`,
+default `user`). The value is pinned into the immutable session `selection`; a
+different value later is `409`, an invalid one `422`. `create_panel_agent(browser=...)`
+configures **only** that target's MCP server (`browser_server_config`) with a
+prefixed, unstarted `MCPClient` whose `elicitation_callback` is
+`accept_browser_elicitation` (electron-playwright-mcp elicits on mutating tools
+regardless of Electron's own approval flag). The prompt's `## Browser automation`
+section is generated per target by `browser_prompt_section()` and tells the agent to
+stage it with `tool_catalog(action="load", name="<browser>_browser")`, replacing the
+old `mcp_client(action="connect", ...)` ritual. Tools arrive as
+`<browser>_browser_playwright_*`; they are parent-only (`is_parent_only_tool`) so
+`think` children and formations cannot bypass the availability hook.
+
+`BrowserAvailabilityHook` (`BeforeToolCallEvent`, async) probes the selected
+target's Electron URL before each `<browser>_browser_*` call. Unreachable →
+native interrupt `browser_unavailable:<attempt>` with
+`reason = {browser, tool, url, question}`; the response `cancel` sets
+`event.cancel_tool` (error tool result *Browser unavailable; user cancelled this
+action.*), anything else re-probes and either proceeds or interrupts again with the
+next attempt number (kept in `agent.state`). No automatic retry, replay or browser
+switching. The renderer detects this interrupt by `reason.browser` and offers
+**Continue** / **Cancel action**.
+
+The legacy `mcp_client` route still works for ad-hoc servers; composition installs
+the elicitation-capable `MCPClient` factory on the installed `strands_tools.mcp_client`
+module once (`accept_browser_elicitation`).
 
 ### Tool library and `tool_catalog`
 
