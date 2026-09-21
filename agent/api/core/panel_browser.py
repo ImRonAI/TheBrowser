@@ -15,8 +15,13 @@ It never starts a client and never reads ``.env`` itself (config.py loads it).
 from __future__ import annotations
 
 import os
+from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Final, Literal
+
+import httpx
+from strands.hooks import HookProvider, HookRegistry
+from strands.hooks.events import BeforeToolCallEvent
 
 BrowserName = Literal["user", "cloud"]
 BROWSERS: Final[tuple[str, ...]] = ("user", "cloud")
@@ -78,3 +83,88 @@ def browser_server_config(browser: str) -> dict[str, dict[str, object]]:
 def default_browser() -> str:
     """Browser used when a request omits ``browser``; ``RON_BROWSER_DEFAULT`` or ``user``."""
     return _validate(os.environ.get("RON_BROWSER_DEFAULT", "user"))
+
+
+# --- availability policy --------------------------------------------------------------------
+
+#: agent.state key prefix; the suffix is the toolUseId being gated.
+ATTEMPTS_STATE_PREFIX: Final[str] = "panel.browser.unavailable_attempts:"
+CANCEL_MESSAGE: Final[str] = "Browser unavailable; user cancelled this action."
+PROBE_TIMEOUT_SECONDS: Final[float] = 2.0
+
+_QUESTIONS: Final[dict[str, str]] = {
+    "user": "Your browser is offline. Reconnect the tunnel and reply 'continue', or reply 'cancel'.",
+    "cloud": "The cloud browser is not responding. Reply 'continue' to retry once it is back, or reply 'cancel'.",
+}
+
+Probe = Callable[[str], Awaitable[bool]]
+
+
+def _transport_factory() -> httpx.AsyncBaseTransport | None:
+    """Indirection so tests can swap in ``httpx.MockTransport``; ``None`` = default transport."""
+    return None
+
+
+async def default_probe(url: str) -> bool:
+    """``True`` when the Electron surface answers with *any* HTTP response.
+
+    Any transport failure — refused connection, EOF behind a live SSH listener whose
+    Mac-side channel is gone (``RemoteProtocolError``), or a timeout on a dead listener —
+    counts as unavailable. Async so the single-worker event loop never blocks.
+    """
+    try:
+        async with httpx.AsyncClient(timeout=PROBE_TIMEOUT_SECONDS, transport=_transport_factory()) as client:
+            await client.get(url)
+    except httpx.HTTPError:
+        return False
+    return True
+
+
+class BrowserAvailabilityHook(HookProvider):
+    """Pause the run with a native interrupt when the selected browser is unreachable.
+
+    Applies to tools prefixed ``<browser>_browser_`` only. Before such a tool runs the
+    Electron URL is probed; if it is down the hook raises ``browser_unavailable:<attempt>``
+    through ``BeforeToolCallEvent.interrupt``. On resume, ``cancel`` sets ``cancel_tool``
+    (Strands turns that into an error tool result); any other reply re-probes and either
+    proceeds or interrupts again with the next attempt number. The tool itself is never
+    retried or replayed by this hook.
+    """
+
+    def __init__(self, browser: str, *, probe: Probe | None = None) -> None:
+        self.browser: BrowserName = _validate(browser)
+        self.prefix = f"{server_name(self.browser)}_"
+        self._probe: Probe = probe or default_probe
+
+    def register_hooks(self, registry: HookRegistry, **kwargs: object) -> None:
+        registry.add_callback(BeforeToolCallEvent, self.before_tool_call)
+
+    async def before_tool_call(self, event: BeforeToolCallEvent) -> None:
+        name = event.tool_use.get("name", "")
+        if not name.startswith(self.prefix):
+            return
+        tool_use_id = str(event.tool_use["toolUseId"])
+        state_key = f"{ATTEMPTS_STATE_PREFIX}{tool_use_id}"
+        url = browser_electron_url(self.browser)
+        attempt = int(event.agent.state.get(state_key) or 0)
+        while True:
+            if attempt:
+                # A prior interrupt exists for this attempt; interrupt() returns its response
+                # when the user has answered and raises again when it is still pending.
+                response = event.interrupt(f"browser_unavailable:{attempt}")
+                if isinstance(response, str) and response.strip().lower() == "cancel":
+                    event.cancel_tool = CANCEL_MESSAGE
+                    return
+            if await self._probe(url):
+                return
+            attempt += 1
+            event.agent.state.set(state_key, attempt)
+            event.interrupt(
+                f"browser_unavailable:{attempt}",
+                reason={
+                    "browser": self.browser,
+                    "tool": name,
+                    "url": url,
+                    "question": _QUESTIONS[self.browser],
+                },
+            )
