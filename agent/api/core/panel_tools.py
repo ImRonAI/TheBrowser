@@ -635,13 +635,15 @@ def create_tool_catalog(catalog: PanelToolCatalog, project_tools_dir: Path) -> A
 
         Core tools are always available. Use this to find and load specialised
         tools on demand. A loaded tool becomes callable in your next step.
+        Configured MCP servers (e.g. `user_browser`, `cloud_browser`) are loaded by
+        server name; their tools register with the server name as prefix.
 
         Args:
             action: One of `list` (categories with counts, plus configured MCP servers),
                 `search` (by query), `describe` (one tool or server by name), or
                 `load` (register a tool, or stage a configured MCP server, by name).
             query: Case-insensitive text matched against name/category/description for `search`.
-            name: Tool name for `describe` and `load`.
+            name: Tool or MCP server name for `describe` and `load`.
             tool_context: Native invocation context.
         """
         items = await asyncio.to_thread(entries)
@@ -662,6 +664,15 @@ def create_tool_catalog(catalog: PanelToolCatalog, project_tools_dir: Path) -> A
         if action in ("describe", "load"):
             if not name:
                 raise ValueError(f"{action} requires a tool name")
+            if name in catalog._server_config:
+                loaded = name in catalog._active_servers
+                if action == "describe":
+                    return {"server": name, "kind": "mcp_server", "loaded": loaded}
+                if loaded:
+                    return {"server": name, "loaded": True, "note": "already loaded"}
+                tools = await catalog.stage_mcp_server(name, agent=tool_context.agent)
+                return {"server": name, "loaded": True, "tools": list(tools),
+                        "activation": "callable from your next step"}
             matches = [item for item in items if item["name"] == name]
             if not matches:
                 raise ValueError(f"Unknown library tool {name!r}; use action='search' to find it")
@@ -701,15 +712,6 @@ def _install_mcp_client_elicitation() -> None:
     module.MCPClient = factory  # type: ignore[assignment]
 
 
-            if name in catalog._server_config:
-                loaded = name in catalog._active_servers
-                if action == "describe":
-                    return {"server": name, "kind": "mcp_server", "loaded": loaded}
-                if loaded:
-                    return {"server": name, "loaded": True, "note": "already loaded"}
-                tools = await catalog.stage_mcp_server(name, agent=tool_context.agent)
-                return {"server": name, "loaded": True, "tools": list(tools),
-                        "activation": "callable from your next step"}
 def build_core_tools(project_tools_dir: Path) -> list[AgentTool]:
     """The always-registered tool set (minus `tool_catalog`, which needs the catalog).
 
@@ -909,6 +911,18 @@ def create_skill_tool(
 #: (the parent owns the conversation), and catalog loading (parent registry only).
 THINK_EXCLUDED_TOOLS = frozenset({"think", "ask_user", "tool_catalog"})
 
+
+def is_parent_only_tool(name: str) -> bool:
+    """Tools children must never inherit or be assigned.
+
+    Browser tools (``<browser>_browser_*``) stay parent-only: the availability
+    interrupt hook is registered on the parent agent only, so a child driving the
+    browser could bypass the unavailability policy.
+    """
+    from agent.api.core.panel_browser import is_browser_tool
+
+    return name in THINK_EXCLUDED_TOOLS or name.startswith("strands_") or is_browser_tool(name)
+
 THINK_CHILD_ADDENDUM = """
 
 ## YOU ARE THE THINK AGENT
@@ -948,18 +962,6 @@ def create_think_tool(*, model_factory: ModelFactory, system_prompt: str) -> Age
         parent = tool_context.agent
         inherited = [
             value for name, value in parent.tool_registry.registry.items()
-
-def is_parent_only_tool(name: str) -> bool:
-    """Tools children must never inherit or be assigned.
-
-    Browser tools (``<browser>_browser_*``) stay parent-only: the availability
-    interrupt hook is registered on the parent agent only, so a child driving the
-    browser could bypass the unavailability policy.
-    """
-    from agent.api.core.panel_browser import is_browser_tool
-
-    return name in THINK_EXCLUDED_TOOLS or name.startswith("strands_") or is_browser_tool(name)
-
             if not is_parent_only_tool(name)
         ]
         spec = ChildSpec(
