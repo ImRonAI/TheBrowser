@@ -11,6 +11,9 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { ChevronUp, ChevronDown } from 'lucide-react'
 import { useNavigationStore, type HomeTab } from '@/stores/navigationStore'
 import { useSearchStore } from '@/stores/searchStore'
+import { useAuthStore } from '@/stores/authStore'
+import { articleDraftKey, EMPTY_ARTICLE_DRAFT, useArticleDraftStore } from '@/stores/articleDraftStore'
+import { ArticleAttachmentCard } from '@/components/interests/ArticleAttachmentCard'
 import { ContextPicker, type ContextItem } from '@/components/agent-panel/ContextPicker'
 import { TextAttachmentCard } from '@/components/ai-elements/text-attachment-card'
 import { fileToDataUrl, makePastedTextFilename } from '@/utils/file-utils'
@@ -87,6 +90,9 @@ const TAB_CONFIG: { id: HomeTab; label: string; icon: React.ReactNode }[] = [
 export function NavigationDrawer() {
   const { isDrawerExpanded, toggleDrawer, activeTab, setActiveTab } = useNavigationStore()
   const { search } = useSearchStore()
+  const user = useAuthStore((state) => state.user?.id || 'default')
+  const draftKey = articleDraftKey(user, 'search')
+  const articles = useArticleDraftStore((state) => (state.drafts[draftKey] || EMPTY_ARTICLE_DRAFT).articles)
   
   // Input state
   const [query, setQuery] = useState('')
@@ -95,6 +101,12 @@ export function NavigationDrawer() {
   const [textAttachments, setTextAttachments] = useState<TextAttachment[]>([])
   const inputRef = useRef<HTMLInputElement>(null)
   const drawerRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!isDrawerExpanded || !articles.length) return
+    const frame = requestAnimationFrame(() => inputRef.current?.focus())
+    return () => cancelAnimationFrame(frame)
+  }, [isDrawerExpanded, articles])
   
   // Notify Electron of drawer height changes so WebContentsView can adjust bounds
   useEffect(() => {
@@ -109,7 +121,7 @@ export function NavigationDrawer() {
     const timeout = setTimeout(updateDrawerHeight, 350) // slightly longer than animation duration (300ms)
     
     return () => clearTimeout(timeout)
-  }, [isDrawerExpanded])
+  }, [isDrawerExpanded, articles.length])
 
   // Handle search submission
   const handleSearch = async (e?: React.FormEvent) => {
@@ -118,6 +130,7 @@ export function NavigationDrawer() {
     if (!trimmed && textAttachments.length === 0) return
 
     // Trigger search
+    if (articles.length) useArticleDraftStore.getState().setText(draftKey, trimmed)
     search(trimmed)
 
     if (typeof window !== 'undefined' && window.electron?.browser?.search) {
@@ -211,6 +224,8 @@ export function NavigationDrawer() {
             )}>
               {/* Search Input Row */}
               <div className="max-w-2xl mx-auto mb-3">
+                {articles.map((article) => <ArticleAttachmentCard key={article.id} article={article}
+                  onRemove={() => useArticleDraftStore.getState().remove(draftKey, article.id)} />)}
                 {/* Text Attachments */}
                 {textAttachments.length > 0 && (
                   <div className="mb-2 flex flex-wrap gap-2">

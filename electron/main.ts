@@ -298,6 +298,7 @@ class TabsManager {
       this.attachIfActive(tab)
       tab.view!.webContents.loadURL(url)
       this.focusVisibleSurface(tab)
+      this.emitTabsUpdated()
       return { success: true, isExternal: true, url }
     } else {
       if (mainWindow && tab.view && mainWindow.contentView.children.includes(tab.view)) {
@@ -504,8 +505,7 @@ function tabByIndexOrId(index?: number, id?: string, fallbackActive = false): Au
   throw new Error('Provide index or id')
 }
 
-// Playwright MCP `browser_tabs` and electron_* tab tools. Create/select/close
-// go through TabsManager so the chrome tab bar follows the agent.
+// Every playwright tab/page action goes through TabsManager — the chrome strip.
 setTabController({
   list: () => automationTabs(),
   create: (url) => {
@@ -526,6 +526,22 @@ setTabController({
     const tab = tabByIndexOrId(index, id, true)
     if (!tabsManager.close(tab.id)) throw new Error('Failed to close tab')
     return { tabs: automationTabs() }
+  },
+  navigate: ({ url, direction }) => {
+    if (url) {
+      tabsManager.navigateActive(url)
+    } else if (direction === 'back') {
+      if (!tabsManager.goBackActive()) throw new Error('Cannot go back')
+    } else if (direction === 'forward') {
+      if (!tabsManager.goForwardActive()) throw new Error('Cannot go forward')
+    } else if (direction === 'reload') {
+      if (!tabsManager.reloadActive()) throw new Error('Cannot reload')
+    } else {
+      throw new Error('Provide url or direction')
+    }
+    const active = automationTabs().find((tab) => tab.active)
+    if (!active) throw new Error('No active tab after navigate')
+    return active
   },
 })
 

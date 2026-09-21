@@ -62,6 +62,38 @@ def events(response):
     return [json.loads(line[6:]) for line in response.text.splitlines() if line.startswith("data: ")]
 
 
+@pytest.mark.parametrize('destination', ['panel', 'search', 'build'])
+@pytest.mark.parametrize('explicit_selection', [True, False])
+def test_article_reaches_native_model_and_restored_history(monkeypatch, destination, explicit_selection):
+    from agent.api.core.articles import ARTICLE_PREFIX
+
+    async def scenario():
+        model = OfflineModel()
+        article = {'id': 'article-1', 'title': 'Reference', 'url': 'https://example.com/story',
+                   'source': 'example.com', 'text': 'Important content beyond the headline.', 'status': 'extracted'}
+        async with offline_api(monkeypatch, model=model) as (client, manager, builds, agents, shell, threads):
+            monkeypatch.setattr(chat, 'infer_provider', lambda _: 'openai')
+            monkeypatch.setattr(chat, 'provider_default_model', lambda _: 'offline')
+            response = await client.post('/chat', json={'session_id': f'article-{destination}',
+                **({'provider': 'openai', 'model': 'offline'} if explicit_selection else {}),
+                'message': 'Compare this evidence.', 'destination': destination, 'attachments': [article]})
+            events(response)
+            await manager.get('default', f'article-{destination}')
+            blocks = model.calls[0][0]['content']
+            assert blocks[0]['text'] == 'Compare this evidence.'
+            assert json.loads(blocks[1]['text'][len(ARTICLE_PREFIX):]) == article
+            snapshot = (await client.get(f'/sessions/article-{destination}')).json()
+            assert snapshot['selection']['provider'] == 'openai'
+            assert snapshot['selection']['model_id'] == 'offline'
+            assert snapshot['messages'][0]['content'] == blocks
+            if destination != 'panel':
+                assert f'You are {destination.title()} Agent.' in builds[0]['system_prompt']
+            wrong = await client.post('/chat', json={'session_id': f'article-{destination}', 'provider': 'openai',
+                'message': 'Wrong destination', 'destination': 'build' if destination != 'build' else 'search'})
+            assert wrong.status_code == 409
+    asyncio.run(scenario())
+
+
 @asynccontextmanager
 async def offline_api(monkeypatch, *, model=None, tools=(), hooks=(), history_limit=2048):
     model = model or OfflineModel()

@@ -14,6 +14,10 @@ import { displayValue, groupThinkParts, type PanelInterrupt, type PanelMessage, 
 import { ContextPicker, SelectedContexts, type ContextItem } from './ContextPicker'
 import { DEFAULT_AGENT_MODEL, ModelSelector, useAgentModels, type AgentModelSelection } from './ModelSelector'
 import { usePanelChat } from './usePanelChat'
+import { useAuthStore } from '@/stores/authStore'
+import { AGENT_LABELS, parseArticle, type AgentDestination } from '@/lib/articles'
+import { articleDraftKey, EMPTY_ARTICLE_DRAFT, useArticleDraftStore } from '@/stores/articleDraftStore'
+import { ArticleAttachmentCard } from '@/components/interests/ArticleAttachmentCard'
 
 const compactInput = 'w-full rounded-lg border border-surface-200 bg-white/70 px-2 py-1.5 text-xs dark:border-surface-700 dark:bg-surface-850 focus:outline-none focus:ring-2 focus:ring-indigo-500/30'
 const smallButton = 'rounded-lg border border-surface-200 px-3 py-1.5 text-xs font-medium hover:bg-indigo-50 disabled:opacity-50 dark:border-surface-700 dark:hover:bg-surface-800'
@@ -22,9 +26,27 @@ const focusComposer = (element: HTMLTextAreaElement | null) => {
 }
 
 export function AgentPanel() {
+  const { isPanelOpen } = useAgentUi()
+  const user = useAuthStore((state) => state.user?.id || 'default')
+  return isPanelOpen ? <AgentConversation key={user} destination="panel" /> : null
+}
+
+export function AgentWorkspace({ destination }: { destination: AgentDestination }) {
+  const user = useAuthStore((state) => state.user?.id || 'default')
+  return <AgentConversation key={`${user}:${destination}`} destination={destination} embedded />
+}
+
+export function AgentConversation({ destination, embedded = false }: { destination: AgentDestination; embedded?: boolean }) {
   const { isPanelOpen, closePanel, askRonPendingPrompt, consumeAskRonPendingPrompt,
     closeAskRon, agentPanelQueuedPrompts, consumeAgentPanelPrompt } = useAgentUi()
   const { panelWidth, setPanelWidth, setPanelMode } = usePanelAgentStore()
+  const user = useAuthStore((state) => state.user?.id || 'default')
+  const draftKey = articleDraftKey(user, destination)
+  const draft = useArticleDraftStore((state) => state.drafts[draftKey] || EMPTY_ARTICLE_DRAFT)
+  const setInput = useCallback((value: string | ((current: string) => string)) => {
+    const store = useArticleDraftStore.getState()
+    store.setText(draftKey, typeof value === 'function' ? value(store.drafts[draftKey]?.text || '') : value)
+  }, [draftKey])
   const { defaultModel, defaultProvider, refresh: refreshModels, ...modelCatalogue } = useAgentModels()
   const [selection, setSelection] = useState<AgentModelSelection>({ model: DEFAULT_AGENT_MODEL, provider: '', effort: '' })
   const [selectedContexts, setSelectedContexts] = useState<ContextItem[]>([])
@@ -32,7 +54,7 @@ export function AgentPanel() {
     checkpointing: false, tool_execution: 'concurrent', context: 'auto', goal: '', background: false,
   })
   const clearSentContexts = useCallback(() => setSelectedContexts([]), [])
-  const chat = usePanelChat({ ...selection,
+  const chat = usePanelChat({ ...selection, destination, attachments: draft.articles,
     contexts: selectedContexts, options, onSent: clearSentContexts })
   const model = chat.configuration?.model ?? selection.model
   const provider = chat.configuration?.provider ?? selection.provider
@@ -43,7 +65,7 @@ export function AgentPanel() {
   const active = status === 'running'
   const paused = status === 'checkpointed' || status === 'interrupted'
   const unavailable = chat.connection !== 'connected' || chat.controlBusy || paused || chat.recoveryRequired
-  const [input, setInput] = useState('')
+  const input = draft.text
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const sessionRef = useRef(chat.sessionId)
@@ -77,15 +99,17 @@ export function AgentPanel() {
     void sendMessage(text).then((sent) => { if (!sent && sessionRef.current === id) setInput((current) => current || text) })
   }, [sendMessage])
   useEffect(() => {
-    if (unavailable || chat.connection !== 'connected' || !agentPanelQueuedPrompts.length) return
+    if (destination !== 'panel' || unavailable || chat.connection !== 'connected' || !agentPanelQueuedPrompts.length) return
+    if (draft.articles.length) return
     const prompt = consumeAgentPanelPrompt()
     if (prompt) dispatchExternal(prompt)
-  }, [agentPanelQueuedPrompts, consumeAgentPanelPrompt, dispatchExternal, unavailable, chat.connection])
+  }, [destination, draft.articles.length, agentPanelQueuedPrompts, consumeAgentPanelPrompt, dispatchExternal, unavailable, chat.connection])
   useEffect(() => {
-    if (unavailable || chat.connection !== 'connected' || !askRonPendingPrompt) return
+    if (destination !== 'panel' || unavailable || chat.connection !== 'connected' || !askRonPendingPrompt) return
+    if (draft.articles.length) return
     const prompt = consumeAskRonPendingPrompt()
     if (prompt) { dispatchExternal(prompt); closeAskRon() }
-  }, [askRonPendingPrompt, consumeAskRonPendingPrompt, dispatchExternal, closeAskRon, unavailable, chat.connection])
+  }, [destination, draft.articles.length, askRonPendingPrompt, consumeAskRonPendingPrompt, dispatchExternal, closeAskRon, unavailable, chat.connection])
 
   const ideState = useMemo(() => {
     const files = new Map<string, IDEFile>()
@@ -124,12 +148,10 @@ export function AgentPanel() {
   }
   const handleSend = () => {
     const text = input.trim()
-    if (!text || unavailable) return
-    setInput('')
+    if (!text || unavailable || (active && draft.articles.length > 0)) return
     followOutput.current = true
-    const id = chat.sessionId
-    void sendMessage(text).then((sent) => {
-      if (!sent && sessionRef.current === id) setInput((current) => current || text)
+    void sendMessage(text, 'message', undefined, () => {
+      useArticleDraftStore.getState().clearSent(draftKey, input, draft.articles.map((article) => article.id))
     })
   }
   const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -139,18 +161,18 @@ export function AgentPanel() {
   }
 
   return (
-    <Transition.Root show={isPanelOpen} as={Fragment}>
-      <div className="absolute inset-0 z-50 flex pointer-events-none">
+    <Transition.Root show={embedded || isPanelOpen} as={Fragment}>
+      <div className={embedded ? 'relative flex h-full min-h-0' : 'absolute inset-0 z-50 flex pointer-events-none'}>
         <Transition.Child as={Fragment}
           enter="transform transition ease-smooth duration-400" enterFrom="translate-x-full" enterTo="translate-x-0"
           leave="transform transition ease-smooth duration-400" leaveFrom="translate-x-0" leaveTo="translate-x-full">
-          <section aria-label="Ron agent" className="relative ml-auto h-full max-w-full pointer-events-auto transition-all duration-300 ease-in-out" style={{ width: panelWidth }}>
+          <section aria-label={AGENT_LABELS[destination]} className="relative ml-auto h-full max-w-full pointer-events-auto transition-all duration-300 ease-in-out" style={{ width: embedded ? '100%' : panelWidth }}>
             <div className="h-full flex flex-col bg-white/95 dark:bg-surface-900/95 text-ink dark:text-ink-inverse backdrop-blur-xl border-l border-indigo-200/50 dark:border-indigo-900/50 shadow-2xl">
               <header className="flex-shrink-0 px-4 py-4 border-b border-indigo-100/50 dark:border-surface-800 bg-gradient-to-r from-white/50 via-indigo-50/30 to-white/50 dark:from-surface-900/50 dark:via-indigo-950/20 dark:to-surface-900/50">
                 <div className="flex items-center justify-between gap-2">
                   <div className="flex min-w-0 items-center gap-3">
                     <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500 via-indigo-600 to-violet-700 flex items-center justify-center shadow-lg shadow-indigo-600/30 text-white font-display">R</div>
-                    <div className="min-w-0"><h2 className="text-lg font-semibold">Ron</h2>
+                    <div className="min-w-0"><h2 className="text-lg font-semibold">{AGENT_LABELS[destination]}</h2>
                       <p role="status" className="text-[11px] text-ink-muted dark:text-ink-inverse-muted">
                         {chat.connection === 'loading' ? 'Restoring session…' : chat.connection === 'reconnecting' ? 'Reconnecting to run…' :
                           chat.connection === 'detached' ? 'Disconnected · run may still be active' :
@@ -163,7 +185,7 @@ export function AgentPanel() {
                   <div className="flex items-center gap-1">
                     {active && <button onClick={() => void chat.stop()} disabled={chat.controlBusy} className={smallButton} aria-label="Stop agent run"><StopIcon className="inline w-3 h-3 mr-1" />Stop</button>}
                     <button onClick={handleNewChat} className="p-2 rounded-lg hover:bg-surface-100 dark:hover:bg-surface-800" title="New chat" aria-label="New chat"><PlusIcon className="w-5 h-5" /></button>
-                    <button onClick={closePanel} className="p-2 rounded-lg hover:bg-surface-100 dark:hover:bg-surface-800" title="Close" aria-label="Close agent panel"><XMarkIcon className="w-5 h-5" /></button>
+                    {!embedded && <button onClick={closePanel} className="p-2 rounded-lg hover:bg-surface-100 dark:hover:bg-surface-800" title="Close" aria-label="Close agent panel"><XMarkIcon className="w-5 h-5" /></button>}
                   </div>
                 </div>
                 <div className="mt-3 flex min-w-0 items-center gap-1.5">
@@ -211,6 +233,9 @@ export function AgentPanel() {
                 onSubmit={(responses) => sendMessage('', 'interrupt_response', responses)} />}
 
               <footer className="flex-shrink-0 p-4 border-t border-indigo-100/50 dark:border-surface-800/80 bg-white/60 dark:bg-surface-900/60">
+                <div className="max-h-48 overflow-auto">{draft.articles.map((article) => <ArticleAttachmentCard key={article.id} article={article}
+                  onRemove={() => useArticleDraftStore.getState().remove(draftKey, article.id)} />)}</div>
+                {active && draft.articles.length > 0 && <p className="mb-2 text-xs text-ink-muted">Your attachments are saved for the next message. Wait for this run to finish or stop it.</p>}
                 <div className={cn('relative rounded-2xl border transition-all bg-white dark:bg-surface-850', input ? 'border-indigo-300 dark:border-indigo-700 shadow-md shadow-indigo-500/10 ring-2 ring-indigo-500/10' : 'border-surface-200/80 dark:border-surface-700 shadow-sm')}>
                   <SelectedContexts contexts={selectedContexts} onRemove={(id) => setSelectedContexts((previous) => previous.filter((item) => item.id !== id))} className="px-3 pt-3" />
                   <div className="flex items-center gap-2 px-3 py-2">
@@ -218,7 +243,7 @@ export function AgentPanel() {
                     <textarea ref={inputRef} value={input} onChange={(event) => setInput(event.target.value)} onKeyDown={handleKeyDown}
                       aria-label={active ? 'Steer the active run' : 'Message Ron'} placeholder={paused ? 'Resume the run above…' : active ? 'Guide the active run…' : 'Ask anything…'}
                       disabled={paused || chat.recoveryRequired} rows={1} className="flex-1 min-w-0 resize-none py-1.5 bg-transparent text-body-md placeholder:text-ink-muted/60 outline-none min-h-[32px] max-h-32" />
-                    <button onClick={handleSend} disabled={!input.trim() || unavailable} aria-label={active ? 'Send steering' : 'Send message'}
+                    <button onClick={handleSend} disabled={!input.trim() || unavailable || (active && draft.articles.length > 0)} aria-label={active ? 'Send steering' : 'Send message'}
                       className="shrink-0 rounded-lg bg-ink dark:bg-ink-inverse text-white dark:text-surface-900 px-3 h-8 text-xs font-semibold disabled:opacity-30">{active ? 'Steer' : 'Send'}</button>
                   </div>
                 </div>
@@ -342,7 +367,10 @@ function PartView({ part, isUser, status }: { part: PanelPart; isUser: boolean; 
   if (part.discarded) return <details className="my-2 text-xs text-ink-muted dark:text-ink-inverse-muted"><summary className="cursor-pointer">Discarded attempt · {part.kind === 'reasoning' ? 'reasoning' : 'draft'}</summary><pre className="mt-2 whitespace-pre-wrap break-words opacity-60">{part.text}</pre></details>
   if (part.kind === 'reasoning') return <ReasoningChain text={part.text} path={path} streaming={status === 'running'} />
   if (part.kind === 'activity') return <details className="my-2 text-xs"><summary className="cursor-pointer truncate">{part.text.split('\n')[0] || 'Activity'}{path ? ` · ${path}` : ''}</summary><pre className="mt-2 max-h-52 overflow-auto whitespace-pre-wrap break-words">{part.text}</pre></details>
-  if (isUser) return <p className="text-body-sm leading-relaxed whitespace-pre-wrap">{part.text}</p>
+  if (isUser) {
+    const article = parseArticle(part.text)
+    return article ? <ArticleAttachmentCard article={article} /> : <p className="text-body-sm leading-relaxed whitespace-pre-wrap">{part.text}</p>
+  }
   return <div className="my-2">{path && <p className="text-[10px] text-ink-muted dark:text-ink-inverse-muted">Node · {path}</p>}<MessageResponse>{part.text}</MessageResponse></div>
 }
 

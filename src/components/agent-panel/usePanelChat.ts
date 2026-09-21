@@ -5,22 +5,25 @@ import {
   PanelReplayOverflow, type PanelEvent, type PanelState, type RuntimeOptions,
 } from '@/lib/panel-stream'
 import type { ContextItem } from './ContextPicker'
+import { ARTICLE_PREFIX, type AgentDestination, type ArticleAttachment } from '@/lib/articles'
 
 const API = 'http://localhost:8765'
 type Connection = 'loading' | 'connected' | 'reconnecting' | 'detached'
 const newSessionId = () => `agent-${crypto.randomUUID()}`
-const storageKey = (userId: string) => `ron-panel-session:${userId}`
+const storageKey = (userId: string, destination: AgentDestination) => `ron-${destination}-session:${userId}`
 const waitForFollow = (signal: AbortSignal, delay: number) => new Promise<void>((resolve) => {
   const finish = () => { clearTimeout(timer); signal.removeEventListener('abort', finish); resolve() }
   const timer = setTimeout(finish, delay)
   signal.addEventListener('abort', finish, { once: true })
   if (signal.aborted) finish()
 })
-function savedSession(userId: string): string {
-  try { return localStorage.getItem(storageKey(userId)) || newSessionId() } catch { return newSessionId() }
+function savedSession(userId: string, destination: AgentDestination): string {
+  try { return localStorage.getItem(storageKey(userId, destination)) || newSessionId() } catch { return newSessionId() }
 }
 
 interface Selection {
+  destination?: AgentDestination
+  attachments?: ArticleAttachment[]
   model: string
   provider: string
   effort: string
@@ -30,8 +33,9 @@ interface Selection {
 }
 
 export function usePanelChat(selection: Selection) {
+  const destination = selection.destination ?? 'panel'
   const userId = useAuthStore((store) => store.user?.id || 'default')
-  const [sessionId, setSessionId] = useState(() => savedSession(userId))
+  const [sessionId, setSessionId] = useState(() => savedSession(userId, destination))
   const [state, setState] = useState(() => emptyPanelState(sessionId))
   const [connection, setConnection] = useState<Connection>('loading')
   const [transportError, setTransportError] = useState<string>()
@@ -128,7 +132,7 @@ export function usePanelChat(selection: Selection) {
   useEffect(() => {
     if (owner.current !== userId) {
       owner.current = userId
-      setSessionId(savedSession(userId))
+      setSessionId(savedSession(userId, destination))
       return
     }
     const token = ++generation.current
@@ -142,7 +146,7 @@ export function usePanelChat(selection: Selection) {
     if (current.current.sessionId !== sessionId) commit(emptyPanelState(sessionId))
     setConnection('loading')
     setTransportError(undefined)
-    try { localStorage.setItem(storageKey(userId), sessionId) } catch { /* Storage can be unavailable. */ }
+    try { localStorage.setItem(storageKey(userId, destination), sessionId) } catch { /* Storage can be unavailable. */ }
     void (async () => {
       try {
         const response = await fetch(`${sessionUrl(sessionId)}?user_id=${encodeURIComponent(userId)}`, { signal: abort.signal })
@@ -164,7 +168,7 @@ export function usePanelChat(selection: Selection) {
       }
     })()
     return () => { ++generation.current; ready.current = false; abort.abort(); controller.current?.abort() }
-  }, [sessionId, userId, commit, replay, sessionUrl, restoreVersion])
+  }, [sessionId, userId, destination, commit, replay, sessionUrl, restoreVersion])
 
   const newChat = useCallback(() => {
     ++generation.current
@@ -222,9 +226,15 @@ export function usePanelChat(selection: Selection) {
     text: string,
     action: 'message' | 'checkpoint_resume' | 'interrupt_response' = 'message',
     responses?: { interruptId: string; response: unknown }[],
+    onAccepted?: () => void,
   ): Promise<boolean> => {
     if (!ready.current || current.current.recoveryRequired) return false
-    if (current.current.status === 'running') return action === 'message' && Boolean(text.trim()) ? sendControl('steer', text.trim()) : false
+    if (current.current.status === 'running') {
+      const sent = action === 'message' && Boolean(text.trim()) && !selection.attachments?.length
+        ? await sendControl('steer', text.trim()) : false
+      if (sent) onAccepted?.()
+      return sent
+    }
     if (posting.current || (action === 'message' && !text.trim())) return false
     if (action === 'message' && ['interrupted', 'checkpointed'].includes(current.current.status)) return false
     posting.current = true
@@ -241,7 +251,8 @@ export function usePanelChat(selection: Selection) {
     setConnection('connected')
     commit({ ...previous, status: 'running', configuration, configurationLocked: true, error: undefined, stopReason: undefined,
       messages: action === 'message' ? [...previous.messages, {
-        id: `user-${crypto.randomUUID()}`, role: 'user', parts: [{ kind: 'text', key: crypto.randomUUID(), path: [], text: text.trim() }],
+        id: `user-${crypto.randomUUID()}`, role: 'user', parts: [{ kind: 'text', key: crypto.randomUUID(), path: [], text: text.trim() },
+          ...(selection.attachments ?? []).map((article) => ({ kind: 'text' as const, key: article.id, path: [], text: ARTICLE_PREFIX + JSON.stringify(article) }))],
       }] : previous.messages })
     let accepted = false
     let observed = false
@@ -254,6 +265,7 @@ export function usePanelChat(selection: Selection) {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: abort.signal,
         body: JSON.stringify({
           session_id: id, user_id: userId, message: action === 'message' ? text.trim() : '', action,
+          destination, attachments: action === 'message' ? selection.attachments ?? [] : [],
           ...(!previous.configurationLocked ? { model: configuration.model, provider: configuration.provider,
             reasoning_effort: configuration.effort || null, options: configuration.options } : {}),
           browser_context: { ...(browserContext as Record<string, unknown> ?? {}), selected_contexts: selection.contexts },
@@ -270,6 +282,7 @@ export function usePanelChat(selection: Selection) {
         throw error
       }
       accepted = true
+      onAccepted?.()
       if (token !== generation.current) return false
       selection.onSent()
       const terminal = await readPanelStream(response, (event) => {
@@ -301,7 +314,7 @@ export function usePanelChat(selection: Selection) {
     } finally {
       if (token === generation.current) posting.current = false
     }
-  }, [commit, refreshCanonical, replay, selection, sendControl, userId])
+  }, [commit, refreshCanonical, replay, selection, sendControl, userId, destination])
 
   const reconnect = useCallback(() => {
     const token = ++generation.current

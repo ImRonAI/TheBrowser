@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react'
 import { getAccessToken } from '@/api/supabase'
 import { API_BASE_URL, API_ENDPOINTS } from '@/pages/types/api'
+import { useArticleDraftStore } from '@/stores/articleDraftStore'
 
 export interface AskRonOption {
   id: string
@@ -106,6 +107,7 @@ export function AgentUiProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const startAskRon = useCallback(async (selectedText: string, sourceUrl: string) => {
+    useArticleDraftStore.getState().setDestination('panel')
     setAskRonStepState('loading')
     setAskRonSelectedText(selectedText)
     setAskRonSourceUrl(sourceUrl)
@@ -171,6 +173,7 @@ export function AgentUiProvider({ children }: { children: ReactNode }) {
 
   const selectAskRonOption = useCallback(async (option: AskRonOption) => {
     if (!askRonSelectedText) return
+    useArticleDraftStore.getState().setDestination('panel')
     const prompt = `The user selected this text: "${askRonSelectedText}" from ${askRonSourceUrl}. They want you to: ${option.label}. ${option.description || ''}`
     setAskRonStepState('executing')
     setAskRonThinkingText(`${option.label}...`)
@@ -180,6 +183,7 @@ export function AgentUiProvider({ children }: { children: ReactNode }) {
 
   const submitCustomAskRon = useCallback(async (prompt: string) => {
     if (!askRonSelectedText) return
+    useArticleDraftStore.getState().setDestination('panel')
     const fullPrompt = `The user selected this text: "${askRonSelectedText}" from ${askRonSourceUrl}. They want you to: ${prompt}`
     setAskRonStepState('executing')
     setAskRonThinkingText('Processing your request...')
@@ -197,6 +201,7 @@ export function AgentUiProvider({ children }: { children: ReactNode }) {
   const sendToAgentPanel = useCallback((prompt: string) => {
     const normalized = prompt.trim()
     if (!normalized) return
+    useArticleDraftStore.getState().setDestination('panel')
     setAgentPanelQueuedPrompts((prev) => [...prev, normalized])
     openPanel()
   }, [openPanel])
