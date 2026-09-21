@@ -13,10 +13,16 @@ npm run build          # dist/electron + dist/renderer
 npm run typecheck
 ./venv/bin/python -m pytest agent/tests -q
 ./venv/bin/python -m pytest agent/tests/test_chat.py::test_health
+shellcheck deploy/*.sh deploy/local/*.sh
+RON_VPS_HOST=<host> bash deploy/sync-to-vps.sh            # rsync Ron + ../electron-playwright-mcp to /opt/ron (never .env)
+ssh ron@<host> bash /opt/ron/RonBrowserRebuild/deploy/vps-install.sh
+RON_VPS_HOST=<host> bash deploy/local/install-tunnel.sh    # launchd SSH tunnel; do not run dev:backend while it is up
 ```
 
 - Manual Electron launches require `unset ELECTRON_RUN_AS_NODE`; npm handles this.
-- `test_chat.py` covers guards/catalogue/effort caching; `test_panel_*.py` covers native runtime, storage, tools, composition and HTTP streaming. Renderer transport tests use `node --experimental-strip-types --test src/lib/panel-stream.test.ts`.
+- `test_chat.py` covers guards/catalogue/effort caching; `test_panel_*.py` covers native runtime, storage, tools, composition and HTTP streaming; `test_panel_browser.py` covers browser targets, `BrowserAvailabilityHook`, and `mcp.json` parity; `test_panel_prompt.py` covers per-browser prompt composition. Renderer transport tests use `node --experimental-strip-types --test src/lib/panel-stream.test.ts`.
+- Pyright is not installed in `venv/`; use `npx -y pyright@latest <files>`. `panel_agent.py`, `panel_tools.py`, and `chat.py` carry pre-existing pyright errors — compare error sets against the previous commit rather than requiring zero.
+- Fresh venvs must pin `fastmcp==3.4.0` and `mcp==1.26.0` before `pip install --no-deps -e ../electron-playwright-mcp`: its unbounded `fastmcp>=3.2.0` resolves to fastmcp 4 / mcp 2.2, which violates Strands' `mcp<2.2` pin and removes `fastmcp.tools.tool`. `deploy/vps-install.sh` does this and runs `pip check`.
 
 ## Runtime boundaries
 
@@ -28,6 +34,8 @@ npm run typecheck
 - `think` exists only for `provider=perplexity`: a child Agent with the parent's tools/model whose events stream under `node_path=[toolUseId]` and render as `ChainOfThought`. Browser context (`request_context`) and steering use Strands `InvokeModelStage.Input` as a separate ephemeral user message after tool results, never persisted to messages/journal. Do not fold text into tool-result messages with `ContextInjector(everyTurn)` or add provider ordering subclasses; see `docs/panel-runtime.md` for the pinned internal middleware boundary.
 - Every chat pins one browser target (`ChatRequest.browser`: `user` | `cloud`, default `RON_BROWSER_DEFAULT`/`user`) into the immutable session selection. `agent/api/core/panel_browser.py` owns the targets: `create_panel_agent(browser=...)` configures ONLY that target's prefixed `electron-playwright-mcp` server (`user_browser` / `cloud_browser`, staged via `tool_catalog(action="load", name=...)`, elicitation accepted) and registers `BrowserAvailabilityHook`, whose native `BeforeToolCallEvent` interrupt (`browser_unavailable:<n>`, reply `continue`/`cancel`) is the only unavailability policy. Browser tools are parent-only; never auto-switch targets or replay a tool whose result was lost.
 - `deploy/` holds the 24/7 VPS layout (bootstrap/sync/install scripts, systemd units for `ron-api` + headless `ron-browser`, Mac launchd SSH tunnel). On the server `main.run()` binds `API_HOST`/`API_PORT` = `127.0.0.1:8765`; only SSH is public. The Mac reaches the API through `-L 8765` and exposes its own Ron via `-R 13000/18931/19222`. Secrets live only in `/etc/ronbrowser/ron.env`; `deploy/ron.env.example` has placeholders. See `docs/deploy-vps.md`.
+- Real electron-playwright-mcp HTTP probes: `GET :3000/electron/app/isReady`, `GET :3000/electron/app/version`, `GET :8931/mcp/tabs`, `GET :9222/json/version`. There is no `/electron/tabs`. Under `xvfb-run`, `Failed to connect to the bus` and GPU-process errors in `journalctl -u ron-browser` are expected noise; health is process up + those surfaces answering.
+- Browser-tool QA must select a native provider (e.g. `"provider": "xai"`): the default Perplexity catalogue model `xai/grok-4.5` narrates but does not emit tool calls, so `browser_unavailable` never fires and runs sit in `running` until `POST /sessions/{id}/cancel`. A `ron-api` restart mid-run yields `recovery_required: true` by design; nothing is replayed.
 
 ## Strands implementation direction
 
