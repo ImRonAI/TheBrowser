@@ -237,12 +237,16 @@ def test_perplexity_keeps_argument_recovery_adapter(monkeypatch):
     assert model.config["params"] == {
         "reasoning": {"effort": "high"},
         "max_output_tokens": panel_agent.PERPLEXITY_MAX_OUTPUT_TOKENS,
-        # Agent API built-ins per docs.perplexity.ai/docs/agent-api/tools (default set).
+        # Every static member of the Agent API Tool union, always (docs.perplexity.ai/docs/agent-api/tools/overview).
         "tools": [
             {"type": "web_search", "search_context_size": "medium"},
             {"type": "fetch_url"},
+            {"type": "people_search"},
+            {"type": "finance_search"},
             {"type": "sandbox"},
         ],
+        # Agent-API-only loop bound; the adapter moves it into extra_body on the wire.
+        "max_steps": panel_agent.PERPLEXITY_MAX_STEPS,
     }
 
 
@@ -253,7 +257,7 @@ def test_perplexity_hosted_tools_env_override(monkeypatch):
     tools = panel_agent.build_model("perplexity", "openai/gpt-5").config["params"]["tools"]
     assert tools == [{"type": "web_search", "search_context_size": "high"}, {"type": "finance_search"}]
     monkeypatch.setenv("PERPLEXITY_HOSTED_TOOLS", "")
-    assert "params" not in panel_agent.build_model("perplexity", "openai/gpt-5").config
+    assert "tools" not in panel_agent.build_model("perplexity", "openai/gpt-5").config["params"]
     monkeypatch.setenv("PERPLEXITY_HOSTED_TOOLS", "web_search,bogus")
     with pytest.raises(ValueError, match="bogus"):
         panel_agent.build_model("perplexity", "openai/gpt-5")
