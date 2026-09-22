@@ -93,6 +93,9 @@ def _completed_stream(text="done"):
 @pytest.mark.parametrize("error", [
     httpx.ReadTimeout("stalled"),
     openai.APITimeoutError(request=httpx.Request("POST", "https://api.perplexity.ai/v1/responses")),
+    # Observed live 2026-09-22: a transient connect failure on the first request of a turn
+    # ("Connection error."); the next request one second later succeeded. Retry, don't fail.
+    openai.APIConnectionError(request=httpx.Request("POST", "https://api.perplexity.ai/v1/responses")),
     # Observed live 2026-09-21: the Agent API closes the SSE body mid-stream
     # ("peer closed connection without sending complete message body (incomplete
     # chunked read)"). Same transient class as a stall: retry, don't fail the turn.
@@ -102,7 +105,7 @@ def test_stalled_stream_is_surfaced_as_retryable_throttle(monkeypatch, error):
     model, _ = _model(monkeypatch, [_StallingStream(error)])
 
     async def run():
-        with pytest.raises(ModelThrottledException, match="stalled|closed"):
+        with pytest.raises(ModelThrottledException, match="stalled|closed|Connection"):
             async for _ in model.stream([{"role": "user", "content": [{"text": "hi"}]}]):
                 pass
 

@@ -375,16 +375,18 @@ class PerplexityResponsesModel(OpenAIResponsesModel):
                     raise httpx.RemoteProtocolError("Perplexity Agent API stream ended without a terminal event")
             except (openai.APIError, _OpenAIResponsesStreamError, httpx.TimeoutException, httpx.RemoteProtocolError) as error:
                 error_kind = classify_openai_error(error)
-                # A pre-response timeout arrives as openai.APITimeoutError; a stall
-                # while iterating the SSE body arrives as a raw httpx.ReadTimeout, and
-                # an upstream close mid-body as httpx.RemoteProtocolError ("peer closed
-                # connection without sending complete message body"). The OpenAI
+                # A pre-response timeout arrives as openai.APITimeoutError and a transient
+                # connect failure as openai.APIConnectionError ("Connection error."); a
+                # stall while iterating the SSE body arrives as a raw httpx.ReadTimeout,
+                # and an upstream close mid-body as httpx.RemoteProtocolError ("peer
+                # closed connection without sending complete message body"). The OpenAI
                 # client does not wrap transport errors mid-stream.
-                if isinstance(error, (openai.APITimeoutError, httpx.TimeoutException, httpx.RemoteProtocolError)):
+                if isinstance(error, (openai.APITimeoutError, openai.APIConnectionError,
+                                      httpx.TimeoutException, httpx.RemoteProtocolError)):
                     # Transient upstream behaviour, not a caller error. Surface it as
                     # throttling so the native ModelRetryStrategy re-issues the call
                     # instead of failing the turn.
-                    logger.warning("Perplexity Agent API stream stalled or closed early; retrying via ModelRetryStrategy")
+                    logger.warning("Perplexity Agent API stream stalled, closed early or failed to connect; retrying via ModelRetryStrategy")
                     raise ModelThrottledException(f"Perplexity Agent API stream stalled or closed early: {error}") from error
                 # The Agent API reports upstream provider saturation as a `response.failed`
                 # event ("upstream model is overloaded, please try again later") with no
