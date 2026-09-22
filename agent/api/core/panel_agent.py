@@ -109,14 +109,19 @@ OPENAI_REASONING_EFFORTS = ("none", "minimal", "low", "medium", "high", "xhigh",
 OPENAI_HOSTED_TOOLS = ("web_search", "file_search", "code_interpreter")
 OPENAI_HOSTED_TOOLS_DEFAULT = ("web_search",)
 
-# https://docs.perplexity.ai/docs/agent-api/tools/{web-search,fetch-url-content,sandbox,
-# finance-search,people-search}. Agent API is OpenAI-Responses compatible; the adapter
-# (PerplexityResponsesModel <- OpenAIResponsesModel) merges params["tools"] with function
-# tools (openai_responses.py L588-593). Non-message hosted output items (search_results,
-# fetch_url_results, sandbox executions) are ignored by the adapter, not errors.
-PERPLEXITY_HOSTED_TOOLS = ("web_search", "fetch_url", "sandbox", "finance_search", "people_search")
-PERPLEXITY_HOSTED_TOOLS_DEFAULT = ("web_search", "fetch_url", "sandbox")
+# https://docs.perplexity.ai/docs/agent-api/tools/overview: every static member of the
+# Agent API `Tool` union, always. They execute on Perplexity's side inside the request's
+# own agentic loop; the adapter (PerplexityResponsesModel <- OpenAIResponsesModel) merges
+# params["tools"] with function tools and re-emits their result items
+# (search_results, fetch_url_results, sandbox_results, share_file, ...) as
+# {"perplexity": ...} stream events for the panel. With sandbox enabled the model may
+# also search/fetch from inside sandbox code via the preinstalled Perplexity SDK; those
+# results then arrive as sandbox_results. Both paths are real and both are rendered.
+PERPLEXITY_HOSTED_TOOLS = ("web_search", "fetch_url", "people_search", "finance_search", "sandbox")
+PERPLEXITY_HOSTED_TOOLS_DEFAULT = PERPLEXITY_HOSTED_TOOLS
 PERPLEXITY_SEARCH_CONTEXT_SIZES = ("low", "medium", "high")
+# Agent-API-only loop bound (docs: `max_steps`). Rides in extra_body on the wire.
+PERPLEXITY_MAX_STEPS = int(os.getenv("PERPLEXITY_MAX_STEPS", "100"))
 
 # https://platform.claude.com/docs/en/agents-and-tools/tool-use/{web-search-tool,web-fetch-tool}
 # Basic (non dynamic-filtering) versions: no allowed_callers/programmatic-tool-calling
@@ -471,7 +476,7 @@ def build_model(
     if provider == "perplexity":
         if not provider_api_key("perplexity"):
             raise ValueError("PERPLEXITY_API_KEY is not configured.")
-        params: dict[str, Any] = {}
+        params: dict[str, Any] = {"max_steps": PERPLEXITY_MAX_STEPS}
         if reasoning_effort:
             params["reasoning"] = {"effort": reasoning_effort}
         if model_id.startswith("anthropic/"):
