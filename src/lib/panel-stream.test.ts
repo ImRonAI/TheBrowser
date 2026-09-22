@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import {
-  PanelReplayOverflow, PanelSSEParser, emptyPanelState, groupThinkParts, hydratePanelSession, parsePanelEvent, readPanelStream, reconcilePanelSession, isBrowserUnavailable, reducePanelEvent, resolveBrowserSelection, shouldFollowPanel,
-  type PanelEvent, type PanelPart, type ToolPart,
+  PanelReplayOverflow, PanelSSEParser, emptyPanelState, groupThinkParts, hydratePanelSession, parsePanelEvent, readPanelStream, reconcilePanelSession, isBrowserUnavailable, isNativePart, reducePanelEvent, resolveBrowserSelection, shouldFollowPanel,
+  type NativePart, type PanelEvent, type PanelPart, type ToolPart,
 } from './panel-stream.ts'
 
 function event(sequence: number, type: string, payload: Record<string, unknown> = {}): PanelEvent {
@@ -155,7 +155,7 @@ test('active PRE-RUN snapshot replays from replay_after, preserves previous answ
     event(14, 'tool_progress', { id: 't', data: 'Searching' }), event(15, 'text_delta', { data: 'answer' })]
   state = frames.reduce(reducePanelEvent, state)
   assert.equal(state.messages.length, 4)
-  assert.deepEqual(state.messages[1].parts.map((part) => part.kind !== 'tool' && part.text), ['First answer'])
+  assert.deepEqual(state.messages[1].parts.map((part) => part.kind !== 'tool' && part.kind !== 'native' && part.text), ['First answer'])
   assert.equal(state.messages.filter((message) => message.role === 'user').length, 2)
   assert.deepEqual(frames.reduce(reducePanelEvent, state), state)
   assert.deepEqual(hydratePanelSession('session', snapshot).messages.length, 3)
@@ -201,7 +201,7 @@ test('model retry discards only its attempt/cycle/path; tool and unscoped retrie
     event(10, 'retry', { attempt: 4, reason: 'Unscoped retry' }),
   ].reduce(reducePanelEvent, emptyPanelState('session'))
   const drafts = state.messages[0].parts.filter((part) => part.kind === 'text' || part.kind === 'reasoning')
-  assert.deepEqual(drafts.map((part) => part.kind !== 'tool' && Boolean(part.discarded)), [false, true, true, false, false])
+  assert.deepEqual(drafts.map((part) => part.kind !== 'tool' && part.kind !== 'native' && Boolean(part.discarded)), [false, true, true, false, false])
   assert.equal((state.messages[0].parts[1] as ToolPart).output, 'Found')
 })
 
@@ -239,7 +239,7 @@ test('canonical changed root answer wins without losing nested or retry evidence
     messages: [{ role: 'assistant', content: [{ text: 'Canonical answer' }] }] })
   const result = reconcilePanelSession(live, canonical)
   assert.equal(result.messages.length, 1)
-  assert.deepEqual(result.messages[0].parts.map((part) => part.kind !== 'tool' && part.text), ['Canonical answer', 'Nested'])
+  assert.deepEqual(result.messages[0].parts.map((part) => part.kind !== 'tool' && part.kind !== 'native' && part.text), ['Canonical answer', 'Nested'])
 })
 
 test('HTTP and midstream overflow explicitly require resynchronization', async () => {
@@ -364,7 +364,7 @@ test('gap snapshot attaches at latest without duplicating input; terminal refres
   assert.equal(shouldFollowPanel(state), false)
   assert.equal(state.historyIncomplete, true, 'missing ephemeral progress still warrants a gap notice')
   assert.equal(state.messages.length, 4)
-  assert.deepEqual(state.messages[3].parts.filter((part) => part.kind === 'text').map((part) => part.kind !== 'tool' && part.text),
+  assert.deepEqual(state.messages[3].parts.filter((part) => part.kind === 'text').map((part) => part.kind !== 'tool' && part.kind !== 'native' && part.text),
     ['Completed cycle', 'Full beginning and end of in-flight answer', 'Nested progress'])
   assert.deepEqual(reconcilePanelSession(state, canonical), state)
 })
@@ -426,7 +426,7 @@ test('native string cycles reset attempt numbering; only discarded model_attempt
   const state = frames.reduce(reducePanelEvent, emptyPanelState('session'))
   const parts = state.messages[0].parts
   assert.deepEqual(parts.filter((part) => part.kind === 'text' || part.kind === 'reasoning')
-    .map((part) => part.kind !== 'tool' && Boolean(part.discarded)), [false, true, true, false, false])
+    .map((part) => part.kind !== 'tool' && part.kind !== 'native' && Boolean(part.discarded)), [false, true, true, false, false])
   assert.ok(parts[3].kind === 'retry' && parts[3].text.includes('Retry 2: throttled'))
   assert.ok(parts[6].kind === 'retry' && parts[6].text === 'Retry: throttled · delay 1s')
 })
@@ -499,4 +499,29 @@ test('isBrowserUnavailable detects the availability-hook interrupt by reason.bro
   for (const other of [{ question: 'Pick one' }, { browser: 'laptop', question: 'x' }, { browser: 'user' }, 'browser_unavailable:1', null, undefined, 42, [], {}]) {
     assert.equal(isBrowserUnavailable(other), false, `rejects ${JSON.stringify(other)}`)
   }
+})
+
+test('native_tool envelopes become NativePart entries: output items once, reasoning steps merged', () => {
+  const base = { version: 1, session_id: 's', run_id: 'r1', node_path: [] as unknown[] }
+  const env = (sequence: number, extra: Record<string, unknown>): PanelEvent =>
+    ({ ...base, sequence, type: 'native_tool', ...extra }) as unknown as PanelEvent
+  let state = reducePanelEvent(emptyPanelState('s'), { ...base, sequence: 1, type: 'run_started' } as unknown as PanelEvent)
+  state = reducePanelEvent(state, env(2, { event: 'response.reasoning.search_web', item_type: null, payload: { type: 'response.reasoning.search_web', queries: ['a'] } }))
+  state = reducePanelEvent(state, env(3, { event: 'response.reasoning.search_web', item_type: null, payload: { type: 'response.reasoning.search_web', queries: ['b'] } }))
+  const sandbox = { type: 'sandbox_results', call_id: 'sb1', code: 'print(1)', language: 'python', status: 'completed', results: [{ stdout: '1\n', stderr: '', exit_code: 0, duration_ms: 5 }] }
+  state = reducePanelEvent(state, env(4, { event: 'response.output_item.done', item_type: 'sandbox_results', payload: { type: 'response.output_item.done', item: sandbox } }))
+  state = reducePanelEvent(state, env(5, { event: 'response.output_item.done', item_type: 'share_file', payload: { type: 'response.output_item.done', item: { type: 'share_file', call_id: 'sf1', filename: 'out.csv', url: 'https://x/f' } } }))
+  const assistant = state.messages.find((m) => m.role === 'assistant')
+  assert.ok(assistant)
+  const natives = assistant.parts.filter(isNativePart) as NativePart[]
+  assert.deepEqual(natives.map((n) => n.itemType), ['response.reasoning.search_web', 'sandbox_results', 'share_file'])
+  // consecutive reasoning steps of the same kind collapse into one part with both payloads
+  assert.equal(natives[0].steps.length, 2)
+  assert.deepEqual(natives[0].steps.map((s) => (s as { queries: string[] }).queries), [['a'], ['b']])
+  assert.equal((natives[1].item as { results: { stdout: string }[] }).results[0].stdout, '1\n')
+  assert.equal(natives[1].key, 'r1-native-sandbox_results-sb1')
+  assert.equal((natives[2].item as { filename: string }).filename, 'out.csv')
+  assert.equal(natives[2].key, 'r1-native-share_file-sf1')
+  // unaffected: no tool parts were fabricated
+  assert.equal(assistant.parts.filter((p) => p.kind === 'tool').length, 0)
 })

@@ -10,7 +10,7 @@ import { MessageResponse } from '@/components/ai-elements/response'
 import { Tool, ToolHeader, ToolContent, ToolInput, ToolOutput } from '@/components/ai-elements/tool'
 import { ChainOfThought, ChainOfThoughtContent, ChainOfThoughtHeader, ChainOfThoughtStep } from '@/components/ai-elements/chain-of-thought'
 import { detectPreviewUrl, fileFromToolCall, filesFromListDir, getToolView, toolOutputText } from '@/components/ai-elements/ide-tool-mapping'
-import { displayValue, groupThinkParts, isBrowserUnavailable, type BrowserSelection, type PanelInterrupt, type PanelMessage, type PanelPart, type RunStatus, type RuntimeOptions, type ThinkStep, type ToolPart } from '@/lib/panel-stream'
+import { displayValue, groupThinkParts, isBrowserUnavailable, type BrowserSelection, type NativePart, type PanelInterrupt, type PanelMessage, type PanelPart, type RunStatus, type RuntimeOptions, type ThinkStep, type ToolPart } from '@/lib/panel-stream'
 import { ContextPicker, SelectedContexts, type ContextItem } from './ContextPicker'
 import { DEFAULT_AGENT_MODEL, ModelSelector, useAgentModels, type AgentModelSelection } from './ModelSelector'
 import { usePanelChat } from './usePanelChat'
@@ -404,6 +404,7 @@ function PartView({ part, isUser, status }: { part: PanelPart; isUser: boolean; 
       </ToolContent>
     </Tool>
   }
+  if (part.kind === 'native') return <NativeToolCard part={part} path={path} />
   if (part.kind === 'retry') return <div className="my-3 rounded-lg border border-amber-200 dark:border-amber-900 bg-amber-50/50 dark:bg-amber-950/20 p-2 text-xs"><p className="font-medium">{part.text}</p></div>
   if (part.discarded) return <details className="my-2 text-xs text-ink-muted dark:text-ink-inverse-muted"><summary className="cursor-pointer">Discarded attempt · {part.kind === 'reasoning' ? 'reasoning' : 'draft'}</summary><pre className="mt-2 whitespace-pre-wrap break-words opacity-60">{part.text}</pre></details>
   if (part.kind === 'reasoning') return <ReasoningChain text={part.text} path={path} streaming={status === 'running'} />
@@ -413,6 +414,53 @@ function PartView({ part, isUser, status }: { part: PanelPart; isUser: boolean; 
     return article ? <ArticleAttachmentCard article={article} /> : <p className="text-body-sm leading-relaxed whitespace-pre-wrap">{part.text}</p>
   }
   return <div className="my-2">{path && <p className="text-[10px] text-ink-muted dark:text-ink-inverse-muted">Node · {path}</p>}<MessageResponse>{part.text}</MessageResponse></div>
+}
+
+const NATIVE_LABELS: Record<string, string> = {
+  search_results: 'Web search', people_search_results: 'People search', finance_results: 'Finance search',
+  fetch_url_results: 'Fetched page', sandbox_results: 'Sandbox', sandbox_write_file: 'Sandbox · wrote file',
+  sandbox_read_file: 'Sandbox · read file', sandbox_edit_file: 'Sandbox · edited file', sandbox_apply_patch: 'Sandbox · patch',
+  sandbox_glob: 'Sandbox · glob', sandbox_grep: 'Sandbox · grep', share_file: 'File', mcp_call: 'MCP call',
+  mcp_list_tools: 'MCP tools', skill_loaded: 'Skill loaded', advisor_result: 'Advisor',
+  'response.reasoning.search_web': 'Searching the web', 'response.reasoning.fetch_url': 'Fetching pages',
+  'response.reasoning.sandbox': 'Running code', 'response.reasoning.people_search': 'Searching people',
+  'response.reasoning.finance_search': 'Searching finance data', 'response.skill.loaded': 'Loading skill',
+}
+
+const str = (value: unknown): string | undefined => (typeof value === 'string' ? value : undefined)
+const list = (value: unknown): Record<string, unknown>[] => (Array.isArray(value) ? value.filter((v): v is Record<string, unknown> => Boolean(v) && typeof v === 'object') : [])
+
+/** Perplexity Agent API server-side tool card: search results, fetched pages, sandbox runs, files. */
+export function NativeToolCard({ part, path }: { part: NativePart; path: string }) {
+  const label = NATIVE_LABELS[part.itemType] ?? part.itemType.replace(/^response\./, '').replace(/[._]/g, ' ')
+  const item = part.item
+  const status = str(item?.status)
+  const failed = status === 'failed' || status === 'timed_out'
+  return <Tool className="my-3 overflow-hidden border-surface-200 dark:border-surface-700">
+    <ToolHeader type="dynamic-tool" toolName={label} title={label} state={item ? (failed ? 'output-error' : 'output-available') : 'input-available'} />
+    {path && <p className="px-3 pb-2 text-[10px] text-ink-muted dark:text-ink-inverse-muted break-words">Node · {path}</p>}
+    <ToolContent>
+      {!item && <ul className="px-3 pb-2 text-xs space-y-1">{part.steps.map((step, i) => {
+        const queries = list(step.queries).length ? (step.queries as string[]) : Array.isArray(step.queries) ? step.queries as string[] : []
+        const urls = Array.isArray(step.urls) ? step.urls as string[] : []
+        return <li key={i} className="truncate">{queries.length ? queries.join(' · ') : urls.length ? urls.join(' · ') : str(step.name) ?? displayValue(step)}</li>
+      })}</ul>}
+      {item?.type === 'sandbox_results' && <div className="px-3 pb-3 text-xs space-y-2">
+        <pre className="max-h-48 overflow-auto whitespace-pre-wrap break-words rounded bg-surface-100 dark:bg-surface-850 p-2">{str(item.code)}</pre>
+        {list(item.results).map((run, i) => <div key={i}>
+          <p className="text-[10px] text-ink-muted dark:text-ink-inverse-muted">exit {String(run.exit_code)} · {String(run.duration_ms)} ms · {str(run.status)}</p>
+          {str(run.stdout) && <pre className="max-h-48 overflow-auto whitespace-pre-wrap break-words">{str(run.stdout)}</pre>}
+          {str(run.stderr) && <pre className="max-h-32 overflow-auto whitespace-pre-wrap break-words text-red-600 dark:text-red-400">{str(run.stderr)}</pre>}
+        </div>)}
+      </div>}
+      {(item?.type === 'search_results' || item?.type === 'people_search_results' || item?.type === 'finance_results') && <ol className="px-3 pb-3 text-xs space-y-1 list-decimal list-inside">
+        {list(item.results).map((r, i) => <li key={i} className="truncate">{str(r.url) ? <a href={str(r.url)} target="_blank" rel="noreferrer" className="underline">{str(r.title) ?? str(r.url)}</a> : str(r.title) ?? displayValue(r)}{str(r.snippet) ? <span className="text-ink-muted dark:text-ink-inverse-muted"> — {str(r.snippet)?.slice(0, 140)}</span> : null}</li>)}
+      </ol>}
+      {item?.type === 'fetch_url_results' && <ul className="px-3 pb-3 text-xs space-y-1">{list(item.results).map((r, i) => <li key={i} className="truncate"><a href={str(r.url)} target="_blank" rel="noreferrer" className="underline">{str(r.title) ?? str(r.url)}</a></li>)}</ul>}
+      {item?.type === 'share_file' && <p className="px-3 pb-3 text-xs">{str(item.url) ? <a href={str(item.url)} target="_blank" rel="noreferrer" className="underline">{str(item.filename) ?? 'Download file'}</a> : str(item.filename) ?? 'File'}{typeof item.bytes === 'number' ? <span className="text-ink-muted dark:text-ink-inverse-muted"> · {item.bytes} bytes</span> : null}</p>}
+      {item && !['sandbox_results', 'search_results', 'people_search_results', 'finance_results', 'fetch_url_results', 'share_file'].includes(str(item.type) ?? '') && <ToolOutput output={item} errorText={failed ? status : undefined} />}
+    </ToolContent>
+  </Tool>
 }
 
 /** Split streamed reasoning into steps. Providers (Gemini, xAI) emit summaries as

@@ -36,7 +36,23 @@ export interface ToolPart {
   output?: unknown
   finished: boolean
 }
-export type PanelPart = ToolPart | {
+/**
+ * A Perplexity Agent API server-side tool event (`native_tool` envelope). Output items
+ * (`sandbox_results`, `search_results`, `share_file`, ...) render once each; consecutive
+ * `response.reasoning.*` steps of the same kind collapse into one part with all payloads.
+ */
+export interface NativePart {
+  kind: 'native'
+  key: string
+  path: unknown[]
+  /** Output item `type`, or the `response.reasoning.*` event name for reasoning steps. */
+  itemType: string
+  /** The output item itself (undefined for reasoning steps). */
+  item?: Record<string, unknown>
+  /** Raw event payloads, in arrival order (one per merged reasoning step). */
+  steps: Record<string, unknown>[]
+}
+export type PanelPart = ToolPart | NativePart | {
   kind: 'text' | 'reasoning' | 'activity' | 'retry'
   key: string
   path: unknown[]
@@ -44,6 +60,15 @@ export type PanelPart = ToolPart | {
   discarded?: boolean
   modelAttempt?: unknown
   cycle?: unknown
+}
+
+export function isNativePart(part: PanelPart): part is NativePart {
+  return part.kind === 'native'
+}
+
+function nativeIdentity(runId: unknown, path: unknown[], itemType: string, item: Record<string, unknown> | undefined, sequence: unknown): string {
+  const id = item && (typeof item.call_id === 'string' ? item.call_id : typeof item.id === 'string' ? item.id : undefined)
+  return `${String(runId)}-native-${itemType}-${id ?? String(sequence)}${path.length ? `-${JSON.stringify(path)}` : ''}`
 }
 export interface PanelMessage {
   id: string
@@ -275,7 +300,7 @@ export function reducePanelEvent(state: PanelState, event: PanelEvent): PanelSta
     next.needsReplay = false
   }
 
-  const renderTypes = ['text_delta', 'reasoning_delta', 'tool_input', 'tool_progress', 'tool_result',
+  const renderTypes = ['text_delta', 'reasoning_delta', 'tool_input', 'tool_progress', 'tool_result', 'native_tool',
     'retry', 'node_event', 'background_event', 'steering_accepted', 'steering_applied']
   if (!root && event.type === 'interrupt') renderTypes.push('interrupt')
   if (!renderTypes.includes(event.type) && !(event.type === 'error' && !root)) return next
@@ -307,6 +332,21 @@ export function reducePanelEvent(state: PanelState, event: PanelEvent): PanelSta
     }
     if (position >= 0) parts[position] = tool
     else parts.push(tool)
+  } else if (event.type === 'native_tool') {
+    const payload = (event.payload && typeof event.payload === 'object' ? event.payload : {}) as Record<string, unknown>
+    const item = payload.item && typeof payload.item === 'object' ? payload.item as Record<string, unknown> : undefined
+    const itemType = typeof event.item_type === 'string' ? event.item_type : typeof event.event === 'string' ? event.event : 'native'
+    const last = parts[parts.length - 1]
+    if (!item && last?.kind === 'native' && !last.item && last.itemType === itemType && JSON.stringify(last.path) === pathKey) {
+      // Consecutive reasoning steps of one kind (e.g. several search_web queries) share a card.
+      parts[parts.length - 1] = { ...last, steps: [...last.steps, payload] }
+    } else {
+      const identity = nativeIdentity(event.run_id, event.node_path, itemType, item, event.sequence)
+      const position = parts.findIndex((part) => part.kind === 'native' && part.key === identity)
+      const native: NativePart = { kind: 'native', key: identity, path: event.node_path, itemType, item, steps: [payload] }
+      if (position >= 0) parts[position] = native
+      else parts.push(native)
+    }
   } else if (event.type === 'text_delta' || event.type === 'reasoning_delta') {
     if (typeof event.data !== 'string') throw new Error(`${event.type} is missing text data`)
     const kind = event.type === 'text_delta' ? 'text' : 'reasoning'
@@ -435,7 +475,7 @@ export function reconcilePanelSession(previous: PanelState, canonical: PanelStat
   const used = new Set<PanelMessage>()
   const signature = (message: PanelMessage) => JSON.stringify([message.role,
     message.parts.filter((part) => part.path.length === 0 && part.kind === 'text' && !part.discarded)
-      .map((part) => part.kind !== 'tool' ? part.text : '').join(''),
+      .map((part) => part.kind !== 'tool' && part.kind !== 'native' ? part.text : '').join(''),
     message.parts.filter((part) => part.kind === 'tool' && part.path.length === 0).map((part) => part.kind === 'tool' ? part.id : '')])
   const messages = canonical.messages.map((message) => {
     // PRE-RUN hydration must rebuild the current run from its cursor, never
@@ -484,14 +524,16 @@ export function reconcilePanelSession(previous: PanelState, canonical: PanelStat
     // Exact root text/tool matches can keep the original interleaving in full.
     const parts = exact ? old.parts.map(enrichTool) : [
       ...message.parts.map(enrichTool),
-      ...old.parts.filter((part) => part.path.length || (part.kind !== 'tool' &&
+      // Server-side tool cards (native) are live-only: the canonical snapshot never
+      // carries them, so every one the stream produced is kept.
+      ...old.parts.filter((part) => part.path.length || part.kind === 'native' || (part.kind !== 'tool' &&
         (part.discarded || part.kind === 'activity' || part.kind === 'retry' || part.kind === 'reasoning') &&
-        !message.parts.some((saved) => saved.kind === part.kind && saved.text === part.text))),
+        !message.parts.some((saved) => saved.kind !== 'tool' && saved.kind !== 'native' && saved.kind === part.kind && saved.text === part.text))),
     ]
     // Native structured output/reasoning may not have appeared in delta events.
     for (const part of message.parts) {
-      if (part.kind === 'tool' || part.kind === 'text') continue
-      if (!parts.some((item) => item.kind === part.kind && item.text === part.text)) parts.push(part)
+      if (part.kind === 'tool' || part.kind === 'text' || part.kind === 'native') continue
+      if (!parts.some((item) => item.kind !== 'tool' && item.kind !== 'native' && item.kind === part.kind && item.text === part.text)) parts.push(part)
     }
     return { ...message, id: old.id, runId: message.runId ?? old.runId, parts }
   })
