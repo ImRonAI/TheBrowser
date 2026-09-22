@@ -93,6 +93,38 @@ NATIVE_OUTPUT_ITEM_TYPES: frozenset[str] = frozenset({
 #: must travel in ``extra_body``.
 _OPENAI_FIELDS: frozenset[str] = frozenset(inspect.signature(AsyncResponses.create).parameters) - {"self"}
 
+#: Errors no retry can fix. HTTP client statuses, plus the symbolic codes the Agent API
+#: puts on a `response.failed` / SSE `error` event after a 200 (it does not set a status
+#: there). Everything else the stream raises is treated as transient and retried by the
+#: native ModelRetryStrategy -- the policy the working reference adapter uses.
+PERMANENT_HTTP_STATUSES: frozenset[int] = frozenset({400, 401, 403, 404, 422, 424})
+PERMANENT_API_ERROR_TYPES: frozenset[str] = frozenset({
+    "invalid_request", "invalid_request_error", "external_connector_error", "invalid_api_key",
+    "authentication_error", "permission_error", "not_found_error", "insufficient_quota",
+})
+
+
+def is_permanent_error(error: BaseException) -> bool:
+    """Whether a stream/API error is a client error that retrying cannot fix."""
+    status = getattr(error, "status_code", None)
+    if isinstance(status, int) and status in PERMANENT_HTTP_STATUSES:
+        return True
+    for attr in ("code", "type"):
+        value = getattr(error, attr, None)
+        if isinstance(value, str) and value.lower() in PERMANENT_API_ERROR_TYPES:
+            return True
+        if isinstance(value, int) and value in PERMANENT_HTTP_STATUSES:
+            return True
+        if isinstance(value, str) and value.isdigit() and int(value) in PERMANENT_HTTP_STATUSES:
+            return True
+    body = getattr(error, "body", None)
+    if isinstance(body, dict):
+        for key in ("code", "type"):
+            value = body.get(key)
+            if isinstance(value, str) and value.lower() in PERMANENT_API_ERROR_TYPES:
+                return True
+    return False
+
 
 @dataclass
 class _Invocation:
@@ -397,7 +429,13 @@ class PerplexityResponsesModel(OpenAIResponsesModel):
                 if error_kind == "context_overflow":
                     logger.warning(_CONTEXT_WINDOW_OVERFLOW_MSG)
                     raise ContextWindowOverflowException(str(error)) from error
-                raise
+                if is_permanent_error(error):
+                    raise
+                # Any other stream-level failure (SSE `error` event -> APIError("Stream error
+                # from backend"), unclassified response.failed, ...) is transient upstream
+                # behaviour: retry it rather than failing the turn.
+                logger.warning("Perplexity Agent API stream error treated as transient; retrying via ModelRetryStrategy: %s", error)
+                raise ModelThrottledException(str(error)) from error
 
             for native in self._drain():
                 yield native

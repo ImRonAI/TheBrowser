@@ -135,6 +135,49 @@ def test_upstream_overloaded_stream_failure_is_retryable(monkeypatch):
     asyncio.run(run())
 
 
+def test_generic_stream_error_event_is_retryable(monkeypatch):
+    """Observed live 2026-09-22: SSE `event: error` -> openai.APIError("Stream error from backend")
+    with no status/code. Like the reference adapter, only an explicit permanent set fails the turn;
+    every other stream-level error is transient and retried."""
+    class _ErrorEventStream(_StallingStream):
+        async def __anext__(self):
+            self.sent += 1
+            if self.sent == 1:
+                return _Event("response.created", response=SimpleNamespace(id="resp-e"))
+            raise openai.APIError(message="Stream error from backend",
+                                  request=httpx.Request("POST", "https://api.perplexity.ai/v1/responses"), body={"message": "Stream error from backend"})
+
+    model, _ = _model(monkeypatch, [_ErrorEventStream(None)])
+
+    async def run():
+        with pytest.raises(ModelThrottledException, match="Stream error from backend"):
+            async for _ in model.stream([{"role": "user", "content": [{"text": "hi"}]}]):
+                pass
+
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize("code", ["invalid_request", "invalid_request_error", "external_connector_error"])
+def test_permanent_api_error_codes_are_not_retried(monkeypatch, code):
+    """A client-side/permanent error must surface as-is so the turn fails fast instead of retrying six times."""
+    class _PermanentStream(_StallingStream):
+        async def __anext__(self):
+            self.sent += 1
+            if self.sent == 1:
+                return _Event("response.created", response=SimpleNamespace(id="resp-p"))
+            return _Event("response.failed", response=SimpleNamespace(error=SimpleNamespace(message="bad request", code=code)))
+
+    model, _ = _model(monkeypatch, [_PermanentStream(None)])
+
+    async def run():
+        with pytest.raises(Exception) as exc:
+            async for _ in model.stream([{"role": "user", "content": [{"text": "hi"}]}]):
+                pass
+        assert not isinstance(exc.value, ModelThrottledException), type(exc.value)
+
+    asyncio.run(run())
+
+
 def test_stream_ending_without_terminal_event_is_retryable(monkeypatch):
     """Observed live 2026-09-21: the SSE body ends after text deltas with no response.completed /
     response.incomplete / response.failed. Treat like a stall so the turn is retried, not left half-done."""
