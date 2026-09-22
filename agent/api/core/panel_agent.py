@@ -122,6 +122,11 @@ PERPLEXITY_HOSTED_TOOLS_DEFAULT = PERPLEXITY_HOSTED_TOOLS
 PERPLEXITY_SEARCH_CONTEXT_SIZES = ("low", "medium", "high")
 # Agent-API-only loop bound (docs: `max_steps`). Rides in extra_body on the wire.
 PERPLEXITY_MAX_STEPS = int(os.getenv("PERPLEXITY_MAX_STEPS", "100"))
+# Built-in Agent API skills attached to every Perplexity request
+# (https://docs.perplexity.ai/docs/agent-api/skills): the `office` umbrella plus its
+# four leaves so sandbox runs can author PDF/DOCX/PPTX/XLSX files with visual QA.
+# A skill needs `max_steps` > 1 to load AND act; PERPLEXITY_MAX_STEPS covers that.
+PERPLEXITY_BUILTIN_SKILLS: tuple[str, ...] = ("office", "office/pdf", "office/docx", "office/pptx", "office/xlsx")
 
 # https://platform.claude.com/docs/en/agents-and-tools/tool-use/{web-search-tool,web-fetch-tool}
 # Basic (non dynamic-filtering) versions: no allowed_callers/programmatic-tool-calling
@@ -476,7 +481,10 @@ def build_model(
     if provider == "perplexity":
         if not provider_api_key("perplexity"):
             raise ValueError("PERPLEXITY_API_KEY is not configured.")
-        params: dict[str, Any] = {"max_steps": PERPLEXITY_MAX_STEPS}
+        params: dict[str, Any] = {
+            "max_steps": PERPLEXITY_MAX_STEPS,
+            "skills": [{"type": "builtin", "name": name} for name in PERPLEXITY_BUILTIN_SKILLS],
+        }
         if reasoning_effort:
             params["reasoning"] = {"effort": reasoning_effort}
         if model_id.startswith("anthropic/"):

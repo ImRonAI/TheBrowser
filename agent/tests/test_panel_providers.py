@@ -247,6 +247,10 @@ def test_perplexity_keeps_argument_recovery_adapter(monkeypatch):
         ],
         # Agent-API-only loop bound; the adapter moves it into extra_body on the wire.
         "max_steps": panel_agent.PERPLEXITY_MAX_STEPS,
+        # Built-in Agent API skills (docs.perplexity.ai/docs/agent-api/skills): the office
+        # umbrella plus its four leaves, so sandbox runs can produce PDF/DOCX/PPTX/XLSX files.
+        "skills": [{"type": "builtin", "name": name}
+                   for name in ("office", "office/pdf", "office/docx", "office/pptx", "office/xlsx")],
     }
 
 
