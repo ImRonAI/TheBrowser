@@ -309,6 +309,12 @@ class TabsManager {
       if (mainWindow && tab.view && mainWindow.contentView.children.includes(tab.view)) {
         mainWindow.contentView.removeChildView(tab.view)
       }
+      // Internal pages are rendered by the shell, not the previous website.
+      // Discard that hidden target so MCP cannot report/click it behind Home.
+      if (tab.view) {
+        if (!tab.view.webContents.isDestroyed()) tab.view.webContents.close()
+        tab.view = undefined
+      }
       if (url.startsWith('ron://search')) tab.title = 'Search'
       else if (url.startsWith('ron://home')) tab.title = 'Home'
       else tab.title = 'Ron'
@@ -323,20 +329,20 @@ class TabsManager {
 
   goBackActive() {
     const tab = this.activeTab
-    if (tab?.view?.webContents.canGoBack()) { tab.view.webContents.goBack(); return true }
+    if (tab?.view?.webContents.navigationHistory.canGoBack()) { tab.view.webContents.navigationHistory.goBack(); return true }
     return false
   }
 
   goForwardActive() {
     const tab = this.activeTab
-    if (tab?.view?.webContents.canGoForward()) { tab.view.webContents.goForward(); return true }
+    if (tab?.view?.webContents.navigationHistory.canGoForward()) { tab.view.webContents.navigationHistory.goForward(); return true }
     return false
   }
 
   canGoBackActive() {
     const tab = this.activeTab
     if (tab?.view && !tab.view.webContents.isDestroyed()) {
-      return tab.view.webContents.canGoBack()
+      return tab.view.webContents.navigationHistory.canGoBack()
     }
     return false
   }
@@ -344,7 +350,7 @@ class TabsManager {
   canGoForwardActive() {
     const tab = this.activeTab
     if (tab?.view && !tab.view.webContents.isDestroyed()) {
-      return tab.view.webContents.canGoForward()
+      return tab.view.webContents.navigationHistory.canGoForward()
     }
     return false
   }
@@ -369,7 +375,7 @@ class TabsManager {
 
     this.updateViewBounds(tab.view)
 
-    tab.view.webContents.on('did-navigate', (_, url) => {
+    const syncNavigation = (url: string) => {
       tab.url = url
       // Automation can navigate a view that was created for an internal tab
       // (ron://home). The moment it lands on a real URL the tab becomes
@@ -381,9 +387,13 @@ class TabsManager {
         tab.isExternal = true
         tab.title = 'New Tab'
         this.attachIfActive(tab)
-        this.emitTabsUpdated()
       }
+      this.emitTabsUpdated()
       if (this._activeTabId === tab.id) mainWindow?.webContents.send('browser:url-changed', url)
+    }
+    tab.view.webContents.on('did-navigate', (_, url) => syncNavigation(url))
+    tab.view.webContents.on('did-navigate-in-page', (_, url, isMainFrame) => {
+      if (isMainFrame) syncNavigation(url)
     })
 
     // window.open / target=_blank from page or automation: open as a real app
@@ -426,11 +436,13 @@ class TabsManager {
     const tab = this.tabs.get(id)
     if (!tab) return undefined
     this.ensureView(tab)
+    // A never-loaded WebContentsView has no renderer or DevTools target; CDP calls against it hang. Give automation a real about:blank document to attach to.
+    if (tab.view && tab.view.webContents.getURL() === '') { void tab.view.webContents.loadURL('about:blank') }
     return tab.view
   }
 
   updateViewBounds(view: WebContentsView) {
-    if (!mainWindow) return
+    if (!mainWindow || mainWindow.isDestroyed() || view.webContents.isDestroyed()) return
     view.setBounds(calculateWebContentsViewBounds())
   }
 
@@ -441,6 +453,19 @@ class TabsManager {
 
   emitTabsUpdated() {
     mainWindow?.webContents.send('tabs:updated', this.list())
+  }
+
+  /** Tab views belong to the main window. When it closes (macOS keeps the app
+   *  alive), drop them so a dock reopen starts clean, exactly like a launch. */
+  reset() {
+    for (const tab of this.tabs.values()) {
+      if (tab.view && !tab.view.webContents.isDestroyed()) {
+        try { tab.view.webContents.close() } catch {}
+      }
+    }
+    this.tabs.clear()
+    this.order = []
+    this._activeTabId = null
   }
 
   private focusVisibleSurface(tab: TabRecord) {
@@ -555,8 +580,14 @@ setTabController({
 // from automation contexts) is adopted as a real app tab -- the stray window
 // is destroyed and its URL reopens inside TabsManager, under the chrome,
 // with the agent panel untouched.
+// `browser-window-created` fires synchronously inside the BrowserWindow
+// constructor, i.e. before `mainWindow` is reassigned. Without this flag a
+// reopened main window is mistaken for a stray popup, hidden, destroyed, and
+// "adopted" as a tab -- which then sizes itself against a destroyed window.
+let creatingMainWindow = false
+
 app.on('browser-window-created', (_event, win) => {
-  if (!mainWindow || win === mainWindow) return
+  if (creatingMainWindow || !mainWindow || win === mainWindow) return
   const wc = win.webContents
   if ((wc.getType() as string) === 'devtools') return
 
@@ -565,6 +596,7 @@ app.on('browser-window-created', (_event, win) => {
     if (adopted) return
     adopted = true
     if (!win.isDestroyed()) win.destroy()
+    if (!mainWindow || mainWindow.isDestroyed()) return
     const created = tabsManager.create(undefined, url || 'about:blank')
     tabsManager.switch(created.id)
   }
@@ -578,23 +610,39 @@ async function createWindow() {
   // Await the MCP server initialization
   await mcpPromise;
 
-  mainWindow = new BrowserWindow({
-    title: 'Ron Browser',
-    width: 1400,
-    height: 900,
-    minWidth: 800,
-    minHeight: 600,
-    show: false,
-    frame: false, // Frameless UI
-    titleBarStyle: 'hidden', // Hidden native title bar
-    transparent: true,
-    backgroundColor: '#00000000',
-    vibrancy: 'sidebar', // Glassmorphic blur on macOS
-    webPreferences: {
-      preload: join(__dirname, 'preload.js'),
-      nodeIntegration: false,
-      contextIsolation: true,
-      sandbox: true
+  let win: BrowserWindow
+  creatingMainWindow = true
+  try {
+    win = new BrowserWindow({
+      title: 'Ron Browser',
+      width: 1400,
+      height: 900,
+      minWidth: 800,
+      minHeight: 600,
+      show: false,
+      frame: false, // Frameless UI
+      titleBarStyle: 'hidden', // Hidden native title bar
+      transparent: true,
+      backgroundColor: '#00000000',
+      vibrancy: 'sidebar', // Glassmorphic blur on macOS
+      webPreferences: {
+        preload: join(__dirname, 'preload.js'),
+        nodeIntegration: false,
+        contextIsolation: true,
+        sandbox: true
+      }
+    })
+  } finally {
+    creatingMainWindow = false
+  }
+  mainWindow = win
+
+  win.on('closed', () => {
+    // Never keep a handle to a destroyed window: every `mainWindow?.` call
+    // would otherwise throw "Object has been destroyed".
+    if (mainWindow === win) {
+      mainWindow = null
+      tabsManager.reset()
     }
   })
 
@@ -613,21 +661,29 @@ async function createWindow() {
   }
 }
 
-app.whenReady().then(async () => {
-  // createWindow is async (it awaits the MCP server). It must be awaited before any tab
-  // work: TabsManager.attachIfActive/updateViewBounds/emitTabsUpdated all no-op when
-  // mainWindow is still null, which would leave the initial tab detached and invisible.
-  await createWindow()
-  tabsManager.create('tab-initial', 'ron://home')
-  tabsManager.switch('tab-initial')
-})
+// createWindow is async (it awaits the MCP server). It must be awaited before any tab
+// work: TabsManager.attachIfActive/updateViewBounds/emitTabsUpdated all no-op when
+// mainWindow is still null, which would leave the initial tab detached and invisible.
+let openingMainWindow: Promise<void> | null = null
+function openMainWindow(): Promise<void> {
+  if (!openingMainWindow) {
+    openingMainWindow = (async () => {
+      await createWindow()
+      tabsManager.create('tab-initial', 'ron://home')
+      tabsManager.switch('tab-initial')
+    })().finally(() => { openingMainWindow = null })
+  }
+  return openingMainWindow
+}
+
+app.whenReady().then(() => openMainWindow())
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()
 })
 
 app.on('activate', () => {
-  if (BrowserWindow.getAllWindows().length === 0) createWindow()
+  if (!mainWindow || mainWindow.isDestroyed()) void openMainWindow()
 })
 
 // IPC window controls
