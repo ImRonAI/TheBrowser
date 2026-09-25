@@ -1,13 +1,15 @@
 import { create } from 'zustand'
 import { createJSONStorage, persist } from 'zustand/middleware'
 
-type OnboardingMode = 'talk' | 'type' | null
+/** Voice ("talk") onboarding is retired; the interview is typed. Kept for persisted-state compatibility. */
+type OnboardingMode = 'type' | null
 type OnboardingStep =
-  | 'mode-selection'
   | 'interview'
   | 'reasoning'
   | 'calibration'
   | 'complete'
+
+const ONBOARDING_STEPS: OnboardingStep[] = ['interview', 'reasoning', 'calibration', 'complete']
 
 interface OnboardingAnswer {
   question: string
@@ -43,22 +45,48 @@ interface OnboardingState {
   resetOnboarding: () => void
 }
 
-const INTERVIEW_QUESTIONS = [
-  "What brings you to Ron Browser today?",
-  "What topics are you most interested in?",
-  "How do you prefer to consume information?",
-  "What's your primary goal when browsing?",
-  "How important is privacy to you?",
-  "Do you prefer summaries or detailed articles?",
-  "What time of day do you usually browse?",
-  "What frustrates you about current browsers?"
+export type InterviewQuestionId =
+  | 'intent' | 'topics' | 'home' | 'goal' | 'teams' | 'format' | 'markets' | 'media'
+
+export interface InterviewQuestion {
+  id: InterviewQuestionId
+  question: string
+  placeholder: string
+}
+
+/**
+ * Interview script. Answers stay free text (typed or spoken); `discoverProfileStore`
+ * parses them into the structured inputs the Discover homepage needs (home location →
+ * weather/local news/country, teams → sports cards, markets → stock/crypto/currency
+ * cards, media → video sections). Question text is the persisted key for answers, and
+ * `interestsStore` keyword-matches `topics` / `brings you` / `goal`, so keep those words.
+ */
+const INTERVIEW: InterviewQuestion[] = [
+  { id: 'intent', question: "What brings you to Ron Browser today?",
+    placeholder: 'e.g. Staying on top of AI news without the noise' },
+  { id: 'topics', question: "What topics are you most interested in?",
+    placeholder: 'e.g. AI, design, climate, cooking' },
+  { id: 'home', question: "Where's home? Your city and country set your weather and local news.",
+    placeholder: 'e.g. San Francisco, USA' },
+  { id: 'goal', question: "What's your primary goal when browsing?",
+    placeholder: 'e.g. Research for work, keeping up with friends' },
+  { id: 'teams', question: "Which teams or leagues do you follow, if any?",
+    placeholder: 'e.g. Lakers, Arsenal, Formula 1 — or none' },
+  { id: 'format', question: "Do you prefer summaries or detailed articles?",
+    placeholder: 'e.g. Summaries first, details when I ask' },
+  { id: 'markets', question: "Any stocks, crypto or currencies you want to keep an eye on?",
+    placeholder: 'e.g. TSLA, NVDA, bitcoin, GBP — or none' },
+  { id: 'media', question: "How do you like your news: articles, videos, or a mix? Include local stories?",
+    placeholder: 'e.g. Mostly articles, a few videos, yes to local' },
 ]
+
+const INTERVIEW_QUESTIONS = INTERVIEW.map((item) => item.question)
 
 export const useOnboardingStore = create<OnboardingState>()(
   persist(
     (set, _get) => ({
-      mode: null,
-      currentStep: 'mode-selection',
+      mode: 'type',
+      currentStep: 'interview',
       currentQuestionIndex: 0,
       answers: [],
       isComplete: false,
@@ -72,30 +100,16 @@ export const useOnboardingStore = create<OnboardingState>()(
 
       nextStep: () => {
         set(state => {
-          const steps: OnboardingStep[] = [
-            'mode-selection',
-            'interview',
-            'reasoning',
-            'calibration',
-            'complete'
-          ]
-          const currentIndex = steps.indexOf(state.currentStep)
-          const nextStep = steps[Math.min(currentIndex + 1, steps.length - 1)]
+          const currentIndex = ONBOARDING_STEPS.indexOf(state.currentStep)
+          const nextStep = ONBOARDING_STEPS[Math.min(currentIndex + 1, ONBOARDING_STEPS.length - 1)]
           return { currentStep: nextStep }
         })
       },
 
       previousStep: () => {
         set(state => {
-          const steps: OnboardingStep[] = [
-            'mode-selection',
-            'interview',
-            'reasoning',
-            'calibration',
-            'complete'
-          ]
-          const currentIndex = steps.indexOf(state.currentStep)
-          const previousStep = steps[Math.max(currentIndex - 1, 0)]
+          const currentIndex = ONBOARDING_STEPS.indexOf(state.currentStep)
+          const previousStep = ONBOARDING_STEPS[Math.max(currentIndex - 1, 0)]
           return { currentStep: previousStep }
         })
       },
@@ -161,8 +175,8 @@ export const useOnboardingStore = create<OnboardingState>()(
 
       resetOnboarding: () => {
         set({
-          mode: null,
-          currentStep: 'mode-selection',
+          mode: 'type',
+          currentStep: 'interview',
           currentQuestionIndex: 0,
           answers: [],
           isComplete: false,
@@ -173,7 +187,7 @@ export const useOnboardingStore = create<OnboardingState>()(
     {
       name: 'onboarding-storage',
       storage: createJSONStorage(() => localStorage),
-      version: 1,
+      version: 2,
       partialize: (state) => ({
         mode: state.mode,
         currentStep: state.currentStep,
@@ -181,10 +195,41 @@ export const useOnboardingStore = create<OnboardingState>()(
         isComplete: state.isComplete,
         answers: state.answers,
       }),
-      migrate: (persisted) => persisted as Partial<OnboardingState>,
+      migrate: (persisted, version) => migrateOnboardingState(persisted, version),
     }
   )
 )
 
+/**
+ * v1 → v2: the voice/type mode-selection step is gone and four interview questions were
+ * replaced with Discover-specific ones. Users mid-interview restart at the interview step;
+ * answers to retired questions are dropped (they were never read anywhere).
+ */
+export function migrateOnboardingState(persisted: unknown, version: number): Partial<OnboardingState> {
+  const state = (persisted ?? {}) as Record<string, unknown>
+  if (version >= 2) return state as Partial<OnboardingState>
+  const answers = Array.isArray(state.answers)
+    ? (state.answers as OnboardingAnswer[]).filter((item) => INTERVIEW_QUESTIONS.includes(item.question))
+    : []
+  const currentStep = state.currentStep === 'mode-selection' || !ONBOARDING_STEPS.includes(state.currentStep as OnboardingStep)
+    ? 'interview'
+    : (state.currentStep as OnboardingStep)
+  return {
+    ...state,
+    mode: 'type',
+    currentStep,
+    currentQuestionIndex: currentStep === 'interview' ? 0 : (state.currentQuestionIndex as number) ?? 0,
+    answers,
+  }
+}
+
+/** Look up the stored answer for a question id (undefined when unanswered or blank). */
+export function answerFor(answers: OnboardingAnswer[], id: InterviewQuestionId): string | undefined {
+  const question = INTERVIEW.find((item) => item.id === id)?.question
+  const answer = question ? answers.find((item) => item.question === question)?.answer.trim() : undefined
+  return answer || undefined
+}
+
 // Export interview questions for use in components
-export { INTERVIEW_QUESTIONS }
+export { INTERVIEW, INTERVIEW_QUESTIONS }
+export type { OnboardingAnswer }

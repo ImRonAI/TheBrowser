@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { ArrowRight, ChevronLeft, ChevronRight, Pause, Play } from 'lucide-react'
-import { useOnboardingStore } from '@/stores/onboardingStore'
+import { useDiscoverProfile } from '@/stores/discoverProfileStore'
 import { useNavigationStore } from '@/stores/navigationStore'
 import { KanbanBoard, CalendarView } from '@/components/board'
 import { ErrorBoundary } from '@/components/ui/ErrorBoundary'
@@ -20,9 +20,9 @@ import localData from '../../data/local.json'
 type CalendarMode = 'day' | 'week' | 'month' | 'quarter'
 export function HomePage() {
   const activeTab = useNavigationStore((state) => state.activeTab)
-  const answers = useOnboardingStore((state) => state.answers)
+  const profile = useDiscoverProfile()
   const [calendarMode, setCalendarMode] = useState<CalendarMode>('week')
-  const topics = (answers?.find((answer) => answer.question.includes('topics'))?.answer || 'Technology, AI, Design').split(',').map((topic) => topic.trim()).slice(0, 4)
+  const topics = profile.topics.slice(0, 4)
   return <div className="h-full overflow-auto bg-surface-0 text-ink dark:bg-surface-900 dark:text-ink-inverse">
     {activeTab === 'discover' && <DiscoverContent topics={topics} />}
     {activeTab === 'execute' && <ErrorBoundary componentName="KanbanBoard"><KanbanBoard /></ErrorBoundary>}

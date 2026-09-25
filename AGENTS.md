@@ -33,6 +33,7 @@ agent/                  Python backend and agent stack
     endpoints/
       chat.py           Agent Panel HTTP surface (POST /chat, sessions, steer/cancel, /models, efforts)
       articles.py       POST /articles/extract (SSRF-guarded)
+      discover.py       Discover homepage: /discover/status, /feed, /pois, /assist/* (Brave Search, key server-side)
       projects.py       Projects/issues CRUD + issue-agent routes
     core/
       panel_runtime.py  PanelRuntimeManager: server-owned sessions/runs, versioned SSE envelopes
@@ -42,6 +43,7 @@ agent/                  Python backend and agent stack
       panel_storage.py  Ephemeral vs HuggingFace Buckets storage, memory config
       perplexity_model.py  PerplexityResponsesModel (function-argument recovery)
       panel_a2a.py      Opt-in native Strands A2A server/client
+      brave_search.py   BraveClient (shared token bucket, typed BraveSearchError), DiscoverItem normalizers, build_feed
       issue_agents.py   Durable per-issue agents (A2A + SnapshotSessionManager + GoalLoop)
       projects.py / guest_projects.py   Supabase RLS persistence / guest SQLite workspaces
       config.py         All env-driven config; loads .env from repo root
@@ -52,7 +54,7 @@ agent/                  Python backend and agent stack
   docs/                 panel-storage.md + vendored Strands SDK reference docs (ground truth)
   prompts/, sops/, templates/, docker/, MemoryOpenSource/   Supporting assets
 electron/
-  main.ts               Main process: TabsManager, WebContentsView tabs, MCP registration, IPC, voice agent
+  main.ts               Main process: TabsManager, WebContentsView tabs, MCP registration, IPC
   preload.ts            contextBridge window.electron API (no automation here by design)
   agent.md              Electron runbook (automation boundaries)
 src/                    React renderer (browser chrome + agent panel)
@@ -107,6 +109,8 @@ These boundaries are load-bearing; do not casually cross them. `docs/panel-runti
 - **Electron tabs**: in `electron/main.ts`, every tab must use the `persist:default` session partition so MCP cookie/storage tools see the same store. Preserve `setActiveWebContentsSupplier` for foreground-tab automation; keep automation out of the preload bridge (preload exposes only UI/theme/tab/window IPC, guarded by `validateIpcSender`).
 - **Automation probes**: real electron-playwright-mcp HTTP probes are `GET :3000/electron/app/isReady`, `GET :3000/electron/app/version`, `GET :8931/mcp/tabs`, `GET :9222/json/version`. There is no `/electron/tabs`. Under `xvfb-run`, `Failed to connect to the bus` and GPU-process errors in `journalctl -u ron-browser` are expected noise.
 - **Browser-tool QA** must select a native provider (e.g. `"provider": "xai"`): the default Perplexity catalogue model `xai/grok-4.5` narrates but does not emit tool calls, so `browser_unavailable` never fires and runs sit in `running` until `POST /sessions/{id}/cancel`. A `ron-api` restart mid-run yields `recovery_required: true` by design; nothing is replayed.
+- **Discover / Brave Search** (`agent/api/core/brave_search.py`, `endpoints/discover.py`): `BRAVE_SEARCH_API_KEY` is backend-only — never mirror it as `VITE_*`; the renderer calls `POST /discover/feed` and receives normalized `DiscoverItem` records (`kind`: article/video/image/place/discussion/web/rich) plus per-section `{status, error}` so one failing source never blanks the page. Verified live 2026-09-25 on the Search plan: `/web/search`, `/news/search`, `/videos/search`, `/images/search`, `/local/place_search` (**not** `/places/search`, which 301s to marketing HTML), `/local/pois`, `/local/descriptions`, `/llm/context`, `/web/rich` return 200; `/suggest/search`, `/spellcheck/search` return `400 OPTION_NOT_IN_PLAN` (separate subscriptions) and surface as `code: not_in_plan`. **Rich Search** is a two-step flow implemented in `BraveClient.rich_hint` → `rich` (`answer` chains both): `GET /web/search?enable_rich_callback=true&result_filter=web&count=1` with `Cache-Control: no-cache` is the cheapest call that still yields `rich.hint.{vertical,callback_key}` (`result_filter=query` suppresses it); then `GET /web/rich?callback_key=` (keys replay; an unknown/expired key returns `200 {results: []}`, not an error). Live verticals: weather (OpenWeatherMap, metric regardless of `units`), stocks (FMP), cryptocurrency (CoinGecko), currency (Fixer), calculator, unitconversion (units only, no computed value), unixtimestamp, definitions (Wordnik), sports (API-Sports; payload keyed by sport name, e.g. `basketball`/`football`). `normalize_rich` returns `RichAnswer{vertical, subtype, provider, card, raw}` where `card` is a compact provider-agnostic contract (sparklines downsampled to `SPARKLINE_POINTS`=60) and unknown subtypes still ship `raw`. Surfaces: `POST /discover/answer {q}` → `{answers: RichAnswer[]}` (`[]` when no vertical), and `{kind: "rich", q}` feed sections → `DiscoverItem(kind="rich", rich=RichAnswer)`; `/discover/status.rich_verticals` lists the card builders. Plan policy header is `50;w=1, 0;w=2592000` (50 req/s, no monthly cap); `BRAVE_SEARCH_RPS` (default 10) caps the shared client-side bucket. Place browsing without `q` needs coordinates or `location` (else 422). Tests: `agent/tests/test_discover.py` (offline, `httpx.MockTransport`).
+- **Onboarding → Discover profile** (`src/stores/onboardingStore.ts`, `src/lib/discover-profile.ts`, `src/stores/discoverProfileStore.ts`): onboarding is a typed interview only (the voice/`talk` mode, `VoiceOnboardingScene`, `useVoiceAgent` and the `voice-agent:*` IPC that spawned a non-existent `agents/voice_onboarding/agent.py` were removed; persist version 2 migrates old state). `INTERVIEW` is the typed script (`id`, `question`, `placeholder`); answers persist keyed by question text, so read them with `answerFor(answers, id)`, never by substring. `buildProfile()` parses free text into `DiscoverProfile{topics, location, country, teams, stocks, crypto, currencies, media}`; `buildFeedRequest()` turns it into the `POST /discover/feed` body (≤ `MAX_FEED_SECTIONS`=12); `interestSeeds()` seeds the Interests orb (`interestsStore.initializeFromOnboarding`). `useDiscoverProfile()`/`getDiscoverProfile()` layer persisted per-field `overrides` (`discover-profile-storage`) over the parsed answers. Pure lib files use relative `.ts` imports so `node --experimental-strip-types` can run them. Spec for the persistent interests agent behind the orb: `docs/interests-agent.md`.
 - **Public ngrok endpoint** (`agent/api/core/public_tunnel.py`): off unless `RON_NGROK=1`; opened/closed in the FastAPI lifespan per ngrok's FastAPI guide, forwards `localhost:$API_PORT`, optional `NGROK_URL` domain (else the account dev domain). A Traffic Policy denies (404 at ngrok's edge) every path except `RON_NGROK_ALLOW_PATHS` (default `/telnyx/webhook`). ngrok's `verify-webhook` has no Telnyx provider, so each allowed route must verify Telnyx Ed25519 signatures itself. `ngrok` is not in `requirements.txt`. Never widen the allowlist to `/chat` or `/sessions`: those run host shell tools.
 
 ## Testing
@@ -118,9 +122,10 @@ These boundaries are load-bearing; do not casually cross them. `docs/panel-runti
   - `test_panel_composition.py` / `test_panel_api.py` / `test_panel_end_to_end.py` — composition root and HTTP→Strands→SSE integration, fully offline.
   - `test_panel_browser.py` — browser targets, `BrowserAvailabilityHook`, `mcp.json` parity.
   - `test_panel_prompt.py` — per-browser system-prompt composition.
+  - `test_discover.py` — Brave-backed Discover feed: normalizers, per-section error isolation, rate limiter, plan-entitlement mapping, HTTP surface (`httpx.MockTransport`, no network).
   - `test_perplexity_model.py`, `test_panel_providers.py`, `test_mistral_model.py`, `test_panel_storage.py`, `test_issue_agents.py`, `test_guest_projects.py`, `test_projects_api.py`, `test_articles.py`, `test_browser_mcp_experience.py`.
   - Tests run offline against the real installed Strands SDK; mock provider clients and network I/O.
-- **Renderer**: colocated `node:test` files with TS type stripping, e.g. `node --experimental-strip-types --test src/lib/panel-stream.test.ts` (also `src/lib/articles.test.ts`, `project-*.test.ts`, `src/stores/*.test.ts`). `tests/issue-ron/` is a separate standalone harness.
+- **Renderer**: colocated `node:test` files with TS type stripping, e.g. `node --experimental-strip-types --test src/lib/panel-stream.test.ts` (also `src/lib/articles.test.ts`, `src/lib/discover-profile.test.ts`, `project-*.test.ts`, `src/stores/*.test.ts`). `tests/issue-ron/` is a separate standalone harness.
 - **Shell**: `shellcheck deploy/*.sh deploy/local/*.sh`.
 - Live Supabase RLS and VPS behavior need separate acceptance tests; unit tests use SQLite/in-memory doubles.
 

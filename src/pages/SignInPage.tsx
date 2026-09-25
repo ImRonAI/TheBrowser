@@ -327,7 +327,7 @@ export function SignInPage() {
             // Reset onboarding to start fresh
             useOnboardingStore.setState({
               isComplete: false,
-              currentStep: 'mode-selection',
+              currentStep: 'interview',
               currentQuestionIndex: 0,
               answers: [],
             })

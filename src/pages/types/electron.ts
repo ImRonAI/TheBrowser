@@ -89,18 +89,6 @@ export interface ElectronWindow {
       onStreamAborted: (callback: (streamId: string) => void) => () => void
     }
 
-    // Voice Agent
-    voiceAgent: {
-      start: (apiKey?: string) => Promise<{ success: boolean; pid?: number }>
-      stop: () => Promise<{ success: boolean }>
-
-      // Event listeners
-      onEvent: (callback: (event: unknown) => void) => () => void
-      onOutput: (callback: (output: string) => void) => () => void
-      onError: (callback: (error: string) => void) => () => void
-      onStopped: (callback: (data: { code: number | null; signal?: NodeJS.Signals | null }) => void) => () => void
-    }
-
     // Browser Navigation
     browser: BrowserAPI
 

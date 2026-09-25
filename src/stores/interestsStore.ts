@@ -1,6 +1,8 @@
 import { create } from 'zustand'
 import { createJSONStorage, persist } from 'zustand/middleware'
-import { useOnboardingStore } from './onboardingStore'
+import { answerFor, useOnboardingStore } from './onboardingStore'
+import { getDiscoverProfile } from './discoverProfileStore'
+import { interestSeeds } from '../lib/discover-profile'
 
 // ============================================
 // Types
@@ -184,47 +186,24 @@ export const useInterestsStore = create<InterestsState>()(
         const { isInitialized } = get()
         if (isInitialized) return
 
-        const onboardingState = useOnboardingStore.getState()
-        const { answers } = onboardingState
+        const { answers } = useOnboardingStore.getState()
 
         if (answers.length === 0) return
 
         const newNodes: InterestNode[] = []
         const newConnections: InterestConnection[] = []
 
-        // Extract interests from relevant questions
-        for (const answer of answers) {
-          const question = answer.question.toLowerCase()
-          let weight = 0.5
-          let extractedInterests: string[] = []
+        // Structured Discover inputs first (topics, teams, markets, home city), then the
+        // free-text intent/goal answers as lower-weight extras.
+        const seeds: Array<{ label: string; weight: number }> = interestSeeds(getDiscoverProfile())
+        for (const id of ['intent', 'goal'] as const) {
+          const answer = answerFor(answers, id)
+          if (!answer) continue
+          for (const label of parseInterestsFromAnswer(answer)) seeds.push({ label, weight: id === 'intent' ? 0.7 : 0.6 })
+        }
 
-          // "What topics are you most interested in?" - highest weight
-          if (question.includes('topics') || question.includes('interested')) {
-            weight = 0.9
-            extractedInterests = parseInterestsFromAnswer(answer.answer)
-          }
-          // "What brings you to Ron Browser today?" - high weight
-          else if (question.includes('brings you') || question.includes('today')) {
-            weight = 0.7
-            extractedInterests = parseInterestsFromAnswer(answer.answer)
-          }
-          // "What's your primary goal when browsing?" - medium weight
-          else if (question.includes('goal') || question.includes('browsing')) {
-            weight = 0.6
-            extractedInterests = parseInterestsFromAnswer(answer.answer)
-          }
-          // Other questions - lower weight, extract keywords
-          else {
-            weight = 0.4
-            // Extract meaningful words from the answer
-            const words = answer.answer.split(/\s+/)
-            extractedInterests = words
-              .filter(w => w.length > 4) // Only longer words
-              .slice(0, 3)
-          }
-
-          // Create nodes for extracted interests
-          for (const interest of extractedInterests) {
+        for (const { label: interest, weight } of seeds) {
+          {
             // Check if this interest already exists
             const existingNode = newNodes.find(
               n => n.label.toLowerCase() === interest.toLowerCase()

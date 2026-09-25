@@ -69,38 +69,6 @@ const electronAPI = {
     },
   },
 
-  voiceAgent: {
-    start: (apiKey?: string) =>
-      ipcRenderer.invoke('voice-agent:start', apiKey),
-
-    stop: () =>
-      ipcRenderer.invoke('voice-agent:stop'),
-
-    onEvent: (callback: (event: unknown) => void) => {
-      const handler = (_: unknown, event: unknown) => callback(event)
-      ipcRenderer.on('voice-agent:event', handler)
-      return () => ipcRenderer.removeListener('voice-agent:event', handler)
-    },
-
-    onOutput: (callback: (output: string) => void) => {
-      const handler = (_: unknown, output: string) => callback(output)
-      ipcRenderer.on('voice-agent:output', handler)
-      return () => ipcRenderer.removeListener('voice-agent:output', handler)
-    },
-
-    onError: (callback: (error: string) => void) => {
-      const handler = (_: unknown, error: string) => callback(error)
-      ipcRenderer.on('voice-agent:error', handler)
-      return () => ipcRenderer.removeListener('voice-agent:error', handler)
-    },
-
-    onStopped: (callback: (data: { code: number | null; signal?: NodeJS.Signals | null }) => void) => {
-      const handler = (_: unknown, data: { code: number | null; signal?: NodeJS.Signals | null }) => callback(data)
-      ipcRenderer.on('voice-agent:stopped', handler)
-      return () => ipcRenderer.removeListener('voice-agent:stopped', handler)
-    },
-  },
-
   browser: {
     navigate: (url: string) => ipcRenderer.invoke('browser:navigate', url),
     search: (query: string) => ipcRenderer.invoke('browser:search', query),

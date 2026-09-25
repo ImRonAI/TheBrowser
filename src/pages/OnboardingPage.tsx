@@ -1,19 +1,15 @@
 import { useEffect, useState, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { useOnboardingStore, INTERVIEW_QUESTIONS } from '@/stores/onboardingStore'
+import { useOnboardingStore, INTERVIEW } from '@/stores/onboardingStore'
 import { useAuthStore } from '@/stores/authStore'
-import { VoiceOnboardingScene } from '@/components/voice-agent'
 
 const EASE = [0.16, 1, 0.3, 1] as const
 
 export function OnboardingPage() {
   const { user } = useAuthStore()
   const {
-    mode,
     currentStep,
     currentQuestionIndex,
-    setMode,
-    nextStep,
     nextQuestion,
     setAnswer,
     completeOnboarding,
@@ -35,8 +31,7 @@ export function OnboardingPage() {
     e?.preventDefault()
     if (!inputValue.trim()) return
 
-    const currentQuestion = INTERVIEW_QUESTIONS[currentQuestionIndex]
-    setAnswer(currentQuestion, inputValue)
+    setAnswer(INTERVIEW[currentQuestionIndex].question, inputValue)
     setInputValue('')
     nextQuestion()
   }
@@ -106,66 +101,8 @@ export function OnboardingPage() {
       <div className="max-w-2xl w-full z-10">
         <AnimatePresence mode="wait">
           
-          {/* STEP 1: MODE SELECTION */}
-          {currentStep === 'mode-selection' && (
-            <motion.div
-              key="mode-selection"
-              variants={pageVariants}
-              initial="initial"
-              animate="animate"
-              exit="exit"
-              transition={{ duration: 0.6, ease: EASE }}
-              className="space-y-12 text-center"
-            >
-              {/* Welcome text */}
-              <div className="space-y-4">
-                <motion.div 
-                  className="w-12 h-1 bg-accent dark:bg-accent-light mx-auto rounded-full"
-                  initial={{ width: 0 }}
-                  animate={{ width: 48 }}
-                  transition={{ duration: 0.6, delay: 0.2, ease: EASE }}
-                />
-                <h1 className="text-display-xl font-display text-ink dark:text-ink-inverse">
-                  Welcome, {user?.name || 'Explorer'}<span className="text-accent dark:text-accent-light">.</span>
-                </h1>
-                <p className="text-body-xl text-ink-secondary dark:text-ink-inverse-secondary">
-                  How would you like to set up your experience?
-                </p>
-              </div>
-
-              {/* Mode selection cards */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                <ModeCard
-                  onClick={() => setMode('type')}
-                  icon={
-                    <svg className="w-8 h-8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-                    </svg>
-                  }
-                  title="Text Interview"
-                  description="Answer a few questions at your own pace to personalize your feed."
-                  delay={0.3}
-                />
-                <ModeCard
-                  onClick={() => setMode('talk')}
-                  icon={
-                    <svg className="w-8 h-8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
-                      <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
-                      <line x1="12" y1="19" x2="12" y2="23" />
-                      <line x1="8" y1="23" x2="16" y2="23" />
-                    </svg>
-                  }
-                  title="Voice Calibration"
-                  description="Have a natural conversation with our AI agent to set up your profile."
-                  delay={0.4}
-                />
-              </div>
-            </motion.div>
-          )}
-
-          {/* STEP 2: INTERVIEW - TEXT MODE */}
-          {currentStep === 'interview' && mode === 'type' && (
+          {/* STEP 1: INTERVIEW */}
+          {currentStep === 'interview' && (
             <motion.div
               key={`question-${currentQuestionIndex}`}
               variants={pageVariants}
@@ -177,11 +114,16 @@ export function OnboardingPage() {
             >
               {/* Progress indicator */}
                <div className="space-y-2">
+                {currentQuestionIndex === 0 && (
+                  <p className="text-body-lg text-ink-secondary dark:text-ink-inverse-secondary">
+                    Welcome, {user?.name || 'Explorer'}. A few quick questions personalize your home page.
+                  </p>
+                )}
                 <span className="text-label uppercase tracking-wider text-accent dark:text-accent-light">
-                    Question {currentQuestionIndex + 1} of {INTERVIEW_QUESTIONS.length}
+                    Question {currentQuestionIndex + 1} of {INTERVIEW.length}
                 </span>
                 <h2 className="text-display-md font-display text-ink dark:text-ink-inverse leading-tight">
-                    {INTERVIEW_QUESTIONS[currentQuestionIndex]}
+                    {INTERVIEW[currentQuestionIndex].question}
                 </h2>
                </div>
 
@@ -196,7 +138,7 @@ export function OnboardingPage() {
                         type="text"
                         value={inputValue}
                         onChange={(e) => setInputValue(e.target.value)}
-                        placeholder="Type your answer here..."
+                        placeholder={INTERVIEW[currentQuestionIndex].placeholder}
                         className="
                           min-w-full bg-transparent
                           border-b-2 border-surface-200 dark:border-surface-700
@@ -245,15 +187,7 @@ export function OnboardingPage() {
             </motion.div>
           )}
 
-          {/* STEP 2: INTERVIEW - VOICE MODE */}
-          {currentStep === 'interview' && mode === 'talk' && (
-            <VoiceOnboardingScene
-              onComplete={() => nextStep()}
-              onSkip={() => setMode('type')}
-            />
-          )}
-
-          {/* STEP 3: REASONING */}
+          {/* STEP 2: REASONING */}
           {currentStep === 'reasoning' && (
             <motion.div
               key="reasoning"
@@ -331,78 +265,10 @@ export function OnboardingPage() {
         <motion.div 
           className="absolute bottom-0 left-0 h-1 bg-accent dark:bg-accent-light"
           initial={{ width: 0 }}
-          animate={{ width: `${((currentQuestionIndex) / INTERVIEW_QUESTIONS.length) * 100}%` }}
+          animate={{ width: `${((currentQuestionIndex) / INTERVIEW.length) * 100}%` }}
           transition={{ duration: 0.5, ease: EASE }}
         />
       )}
     </div>
-  )
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// MODE CARD COMPONENT
-// ─────────────────────────────────────────────────────────────────────────────
-
-interface ModeCardProps {
-  onClick: () => void
-  icon: React.ReactNode
-  title: string
-  description: string
-  delay: number
-}
-
-function ModeCard({ onClick, icon, title, description, delay }: ModeCardProps) {
-  return (
-    <motion.button
-      onClick={onClick}
-      initial={{ opacity: 0, y: 24 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.6, delay, ease: EASE }}
-      whileHover={{ y: -4, scale: 1.02 }}
-      whileTap={{ scale: 0.98 }}
-      className="
-        group relative p-8 rounded-2xl text-left space-y-4
-        bg-surface-0 dark:bg-surface-850
-        border border-surface-200 dark:border-surface-700
-        hover:border-accent/50 dark:hover:border-accent-light/50
-        shadow-soft dark:shadow-dark-soft
-        hover:shadow-bold dark:hover:shadow-dark-bold
-        transition-all duration-300
-      "
-    >
-      {/* Icon */}
-      <div className="
-        p-3 rounded-xl w-fit
-        bg-surface-100 dark:bg-surface-800
-        group-hover:bg-accent/10 dark:group-hover:bg-accent-light/10
-        transition-colors duration-300
-      ">
-        <div className="text-ink dark:text-ink-inverse group-hover:text-accent dark:group-hover:text-accent-light transition-colors">
-          {icon}
-        </div>
-      </div>
-      
-      {/* Content */}
-      <div>
-        <h3 className="text-body-xl font-semibold text-ink dark:text-ink-inverse">
-          {title}
-        </h3>
-        <p className="mt-2 text-body-sm text-ink-secondary dark:text-ink-inverse-secondary">
-          {description}
-        </p>
-      </div>
-
-      {/* Arrow indicator */}
-      <motion.div 
-        className="absolute top-8 right-8 text-ink-muted dark:text-ink-inverse-muted group-hover:text-accent dark:group-hover:text-accent-light"
-        initial={{ x: 0 }}
-        whileHover={{ x: 4 }}
-        transition={{ duration: 0.2 }}
-      >
-        <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <polyline points="9 18 15 12 9 6" />
-        </svg>
-      </motion.div>
-    </motion.button>
   )
 }
