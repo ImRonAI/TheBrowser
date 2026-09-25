@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { createProjectsStore, issuePatch } from './projects-state.ts'
 import { allProjectPages, createProjectsRequest, type ProjectsRequest } from '../lib/projects-api.ts'
+import { RON_ASSIGNEE } from '../types/projects.ts'
 
 const projectRow = { id: 'p', key: 'PR', name: 'Project', type: 'research', version: 3,
   lifecycle: 'active', settings: { allowCrossProjectParents: false, fields: [] },
@@ -239,4 +240,12 @@ test('network failure and FastAPI validation errors are visible without retrying
   const invalid = createProjectsRequest('http://localhost:8765', session, 'alice', async () =>
     Response.json({ detail: [{ msg: 'Invalid project key' }] }, { status: 422 }))
   await assert.rejects(invalid('', 'POST', {}), /Invalid project key/)
+})
+test('assignee options are only the signed-in user and Ron', () => {
+  const { store } = setup()
+  assert.deepEqual(store.getState().people.map((p) => p.id), ['alice', RON_ASSIGNEE.id])
+  store.getState().setIdentity({ id: 'guest:abc', name: 'Guest' })
+  assert.deepEqual(store.getState().people.map((p) => p.id), [RON_ASSIGNEE.id])
+  store.getState().setIdentity(null)
+  assert.deepEqual(store.getState().people, [])
 })

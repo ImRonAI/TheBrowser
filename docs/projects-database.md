@@ -121,8 +121,9 @@ numbers, and versions. No write is automatically retried. Failed saves leave
 confirmed state unchanged and show an error; creation/reparent dialogs stay
 open. Reload before retrying ambiguous connection failures or conflicts.
 Activity is the latest 200 server audit records, refreshed on reload; the
-frontend no longer manufactures audit entries. Assignee selection currently
-includes only the signed-in user, not a complete member directory.
+frontend no longer manufactures audit entries. Assignees are limited, on purpose, to the signed-in user and Ron (the agent,
+fixed id `004d28ef-3a52-540d-96ea-ff0627040b8e`); the API rejects anyone else
+with 422. Guest workspaces can assign only Ron. A member directory comes later.
 
 Reproducible offline checks (from the repository root):
 

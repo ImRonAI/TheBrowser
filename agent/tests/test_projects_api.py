@@ -6,7 +6,7 @@ from uuid import uuid4
 import httpx
 from fastapi import FastAPI
 
-from agent.api.core.projects import ProjectIdentity, ProjectService, project_identity
+from agent.api.core.projects import RON_ASSIGNEE_ID, ProjectIdentity, ProjectService, project_identity
 from agent.api.endpoints.projects import router
 
 
@@ -113,3 +113,27 @@ def test_collection_reads_are_paginated_without_owner_filter(monkeypatch):
             assert (await client.get('/projects?limit=501')).status_code == 422
             assert (await client.get('/projects?offset=-1')).status_code == 422
     asyncio.run(scenario())
+
+
+def test_assignees_limited_to_signed_in_user_and_ron(monkeypatch):
+    async def scenario():
+        identity = ProjectIdentity(str(uuid4()), 'user-token', 'https://offline.invalid', 'public-key')
+        app = FastAPI()
+        app.include_router(router)
+        app.dependency_overrides[project_identity] = lambda: identity
+        request = AsyncMock(return_value=[{'id': str(uuid4()), 'version': 1}])
+        monkeypatch.setattr(ProjectService, 'request', request)
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+            project_id, issue_id = str(uuid4()), str(uuid4())
+            allowed = [identity.user_id, RON_ASSIGNEE_ID]
+            create = {'project_id': project_id, 'type': 'task', 'title': 'T'}
+            assert (await client.post('/projects/issues', json={**create, 'assignees': allowed})).status_code == 200
+            assert (await client.patch(f'/projects/issues/{issue_id}', json={'version': 1, 'assignees': allowed})).status_code == 200
+            assert (await client.patch(f'/projects/issues/{issue_id}', json={'version': 1, 'assignees': []})).status_code == 200
+            request.reset_mock()
+            stranger = [str(uuid4())]
+            assert (await client.post('/projects/issues', json={**create, 'assignees': stranger})).status_code == 422
+            assert (await client.patch(f'/projects/issues/{issue_id}', json={'version': 1, 'assignees': stranger})).status_code == 422
+            request.assert_not_awaited()
+    asyncio.run(scenario())
+

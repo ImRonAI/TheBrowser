@@ -33,6 +33,9 @@ export interface Person {
   title?: string
 }
 
+/** Ron, the built-in agent. A fixed UUID so it fits the uuid[] assignees column. Mirrors RON_ASSIGNEE_ID in agent/api/core/projects.py. */
+export const RON_ASSIGNEE: Person = { id: '004d28ef-3a52-540d-96ea-ff0627040b8e', name: 'Ron (agent)', initials: 'R' }
+
 export interface ProjectTypeScheme {
   key: ProjectTypeKey
   label: string

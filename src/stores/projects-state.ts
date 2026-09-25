@@ -1,5 +1,5 @@
 import { createStore } from 'zustand/vanilla'
-import type { ActivityLogEntry, Issue, IssueLink, IssueLinkType, IssueStatus, Person, Project, ProjectTypeKey } from '../types/projects.ts'
+import { RON_ASSIGNEE, type ActivityLogEntry, type Issue, type IssueLink, type IssueLinkType, type IssueStatus, type Person, type Project, type ProjectTypeKey } from '../types/projects.ts'
 import { allProjectPages, type ProjectsRequest } from '../lib/projects-api.ts'
 
 type Row = Record<string, any>
@@ -68,6 +68,13 @@ export function issuePatch(updates: Partial<Issue>): Record<string, unknown> {
     .map(([key, column]) => [column, updates[key as keyof typeof fields] ?? null]))
 }
 
+/** Assignees are deliberately limited to the signed-in user and Ron; the API enforces the same rule. */
+export function assignablePeople(user: { id: string; name: string } | null): Person[] {
+  if (!user) return []
+  if (user.id.startsWith('guest:')) return [RON_ASSIGNEE]
+  return [{ id: user.id, name: user.name, initials: user.name.split(/\s+/).map((part) => part[0]).join('').slice(0, 2) }, RON_ASSIGNEE]
+}
+
 const emptyData = () => ({ projects: [] as Project[], issues: [] as Issue[], issueLinks: [] as IssueLink[],
   activity: [] as ActivityLogEntry[], people: [] as Person[] })
 
@@ -113,8 +120,7 @@ export function createProjectsStore(requestForUser: (userId: string) => Projects
         generation++
         queue = Promise.resolve()
         set({ ...emptyData(), userId: user?.id ?? null, isInitialized: false, isLoading: false,
-          pendingSaves: 0, error: null, people: user && !user.id.startsWith('guest:') ? [{ id: user.id, name: user.name,
-            initials: user.name.split(/\s+/).map((part) => part[0]).join('').slice(0, 2) }] : [] })
+          pendingSaves: 0, error: null, people: assignablePeople(user) })
       },
       initialize: async () => {
         if (!get().isInitialized && !get().isLoading) await get().refreshFromServer()

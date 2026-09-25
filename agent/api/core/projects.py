@@ -12,6 +12,10 @@ import httpx
 from fastapi import HTTPException, Request
 
 
+# Ron, the built-in agent, as an assignee. Mirrors RON_ASSIGNEE in src/types/projects.ts.
+RON_ASSIGNEE_ID = "004d28ef-3a52-540d-96ea-ff0627040b8e"
+
+
 @dataclass(frozen=True)
 class ProjectIdentity:
     user_id: str
@@ -100,11 +104,19 @@ class ProjectService:
         return {"issue": issue, "children": children, "related": related, "links": links,
                 "activity": activity, "events": events}
 
+    def check_assignees(self, values: dict):
+        """For now only the signed-in user and Ron can be assigned."""
+        allowed = {self.identity.user_id, RON_ASSIGNEE_ID}
+        if set(map(str, values.get("assignees") or [])) - allowed:
+            raise HTTPException(422, "Issues can only be assigned to you or Ron")
+
     async def create_issue(self, values: dict):
+        self.check_assignees(values)
         rows = await self.request("POST", "issues", body={**values, "created_by": self.identity.user_id})
         return rows[0]
 
     async def update_issue(self, issue_id: str, version: int, values: dict):
+        self.check_assignees(values)
         rows = await self.request("PATCH", "issues", params={"id": f"eq.{UUID(issue_id)}", "version": f"eq.{version}"}, body=values)
         if not rows:
             raise HTTPException(409, "Issue changed or access was removed. Reload before saving again.")
