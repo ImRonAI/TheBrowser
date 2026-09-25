@@ -2,6 +2,23 @@ import { useEffect, useState, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useOnboardingStore, INTERVIEW } from '@/stores/onboardingStore'
 import { useAuthStore } from '@/stores/authStore'
+import { useInterestsStore } from '@/stores/interestsStore'
+import { useDiscoverFeedStore } from '@/stores/discoverFeedStore'
+import { useDiscoverProfileStore } from '@/stores/discoverProfileStore'
+
+/**
+ * Apply freshly-answered interview to everything derived from it: the Interests orb is
+ * re-seeded, homepage per-field overrides are dropped (the new answers win), and the cached
+ * feed is cleared so Discover fetches for the new profile immediately.
+ */
+function applyOnboardingAnswers() {
+  useDiscoverProfileStore.getState().resetOverrides()
+  useDiscoverFeedStore.getState().clear()
+  const interests = useInterestsStore.getState()
+  interests.resetInterests()
+  interests.initializeFromOnboarding()
+  if (window.location.hash === '#onboarding') window.location.hash = ''
+}
 
 const EASE = [0.16, 1, 0.3, 1] as const
 
@@ -18,6 +35,12 @@ export function OnboardingPage() {
   
   const [inputValue, setInputValue] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
+
+  // Opened via #onboarding while a previous run is already complete → start a fresh interview.
+  useEffect(() => {
+    const { isComplete, resetOnboarding } = useOnboardingStore.getState()
+    if (isComplete && window.location.hash === '#onboarding') resetOnboarding()
+  }, [])
 
   // Focus input on step change
   useEffect(() => {
@@ -53,7 +76,10 @@ export function OnboardingPage() {
       timeoutIds.push(setTimeout(() => {
         addReasoningStep(step.type, step.content)
         if (index === steps.length - 1) {
-          timeoutIds.push(setTimeout(completeOnboarding, 1000))
+          timeoutIds.push(setTimeout(() => {
+            applyOnboardingAnswers()
+            completeOnboarding()
+          }, 1000))
         }
       }, delay))
     })

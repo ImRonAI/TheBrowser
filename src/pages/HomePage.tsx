@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
-import { ArrowRight, ChevronLeft, ChevronRight, Pause, Play, RefreshCw } from 'lucide-react'
+import { ArrowRight, ChevronLeft, ChevronRight, Pause, Play, RefreshCw, Sparkles } from 'lucide-react'
 import { useDiscoverProfile } from '@/stores/discoverProfileStore'
+import { useOnboardingStore } from '@/stores/onboardingStore'
 import { useDiscoverFeedStore } from '@/stores/discoverFeedStore'
 import { useInterestsStore } from '@/stores/interestsStore'
 import { failedSections, formatRelative, richAnswers, sectionsToStoryGroups } from '@/lib/discover-feed'
@@ -73,6 +74,10 @@ function DiscoverContent() {
   const topics = profile.topics.slice(0, 4)
   const { sections, loading, error, fetchedAt, load } = useDiscoverFeedStore()
   const recordInteraction = useInterestsStore((state) => state.recordInteraction)
+  const hasAnswers = useOnboardingStore((state) => state.answers.length > 0)
+  const resetOnboarding = useOnboardingStore((state) => state.resetOnboarding)
+  // Re-run the interview: clear answers, then route via #onboarding (App.tsx shows the page for guests too).
+  const personalize = () => { resetOnboarding(); window.location.hash = '#onboarding' }
   useEffect(() => { void load(profile) }, [profile, load])
   const liveGroups = useMemo(() => sectionsToStoryGroups(sections), [sections])
   const groups = liveGroups.length ? liveGroups : FALLBACK_GROUPS
@@ -108,6 +113,7 @@ function DiscoverContent() {
       <div className="flex flex-wrap items-end justify-between gap-5">
         <div><h1 className="font-display text-4xl tracking-tight sm:text-5xl">A little more perspective.</h1><p className="mt-3 text-sm text-ink-muted dark:text-ink-inverse-muted">Your interests, worth a closer look. Read something. Make something of it.</p></div>
         <div className="flex items-center gap-2">
+          <button onClick={personalize} aria-label={hasAnswers ? 'Redo the interests interview' : 'Personalize your feed'} className="flex items-center gap-2 rounded-full border border-surface-200 px-4 py-2 text-xs hover:bg-surface-100 dark:border-surface-700 dark:hover:bg-surface-800"><Sparkles size={12} />{hasAnswers ? 'Redo interview' : 'Personalize'}</button>
           <button onClick={() => void load(profile, { force: true })} disabled={loading} aria-label="Refresh feed" className="flex items-center gap-2 rounded-full border border-surface-200 px-4 py-2 text-xs hover:bg-surface-100 disabled:opacity-50 dark:border-surface-700 dark:hover:bg-surface-800"><RefreshCw size={12} className={loading ? 'animate-spin' : ''} />Refresh</button>
           <button onClick={() => setPaused((value) => !value)} disabled={Boolean(reducedMotion)} aria-pressed={!paused && !reducedMotion} className="flex items-center gap-2 rounded-full border border-surface-200 px-4 py-2 text-xs hover:bg-surface-100 disabled:opacity-50 dark:border-surface-700 dark:hover:bg-surface-800">{paused || reducedMotion ? <Play size={12} /> : <Pause size={12} />}{paused || reducedMotion ? 'Auto-play off' : 'Pause stories'}</button>
         </div>

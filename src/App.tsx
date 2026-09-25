@@ -41,6 +41,8 @@ export function App() {
   const { isComplete } = useOnboardingStore()
   const [hasHydrated, setHasHydrated] = useState(false)
   const [showSignIn, setShowSignIn] = useState(() => window.location.hash === '#signin')
+  // `#onboarding` lets a guest (or a returning user via "Personalize") run the interview.
+  const [showOnboarding, setShowOnboarding] = useState(() => window.location.hash === '#onboarding')
   const { activeTab } = useNavigationStore()
   const searchStore = useSearchStore()
   const { 
@@ -74,7 +76,10 @@ export function App() {
   }, [])
 
   useEffect(() => {
-    const update = () => setShowSignIn(window.location.hash === '#signin')
+    const update = () => {
+      setShowSignIn(window.location.hash === '#signin')
+      setShowOnboarding(window.location.hash === '#onboarding')
+    }
     window.addEventListener('hashchange', update)
     return () => window.removeEventListener('hashchange', update)
   }, [])
@@ -249,8 +254,9 @@ export function App() {
     )
   }
 
-  // If not onboarded, show onboarding page
-  if (isAuthenticated && !isComplete) {
+  // If not onboarded (signed in), or explicitly requested via #onboarding, show the interview.
+  // Answers feed `useDiscoverProfile()` → Discover homepage + Interests orb.
+  if ((isAuthenticated && !isComplete) || showOnboarding) {
     return (
       <RouteShell>
         <OnboardingPage />
