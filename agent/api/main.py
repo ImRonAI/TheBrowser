@@ -11,6 +11,7 @@ if _project_root not in sys.path:
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from agent.api.core import public_tunnel
 from agent.api.core.config import CORS_ORIGINS, SESSION_STORAGE_DIR
 from agent.api.endpoints import chat
 from agent.api.endpoints import articles
@@ -52,9 +53,12 @@ async def lifespan(app: FastAPI):
                 mounted_routes = [route for route in app.routes if route not in previous]
             else:
                 logging.getLogger(__name__).warning("PANEL_A2A_ENABLED: no provider configured; A2A is unavailable")
+        # Opt-in (RON_NGROK=1); only allow-listed webhook paths are reachable.
+        app.state.public_url = await public_tunnel.start()
         yield
     finally:
         try:
+            await public_tunnel.stop()
             await manager.shutdown()
         finally:
             try:
