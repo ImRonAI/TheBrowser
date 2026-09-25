@@ -22,6 +22,15 @@ NVIDIA_NIM_API_KEY = os.getenv("NVIDIA_NIM_API_KEY")
 PERPLEXITY_API_KEY = os.getenv("PERPLEXITY_API_KEY")
 MISTRAL_API_KEY = os.getenv("MISTRAL_API_KEY")
 
+# Brave Search API (Discover homepage feed: web/news/images/videos/places,
+# suggest/spellcheck, local POIs/descriptions, rich search). Backend-only:
+# the renderer must never receive this key (no VITE_* mirror).
+BRAVE_SEARCH_API_KEY = os.getenv("BRAVE_SEARCH_API_KEY")
+BRAVE_SEARCH_BASE_URL = "https://api.search.brave.com/res/v1"
+# Client-side ceiling for the shared token bucket. Verified plan policy is
+# 50 req/s with no monthly cap (x-ratelimit-policy "50;w=1, 0;w=2592000").
+BRAVE_SEARCH_RPS = float(os.getenv("BRAVE_SEARCH_RPS", "10"))
+
 # Perplexity Agent API. GET /v1/models is the model catalogue that backs the
 # picker; POST /v1/responses runs a turn (OpenAI Responses wire format).
 # Verified live 2026-08-09: /v1/models returns 39 ids. This is PINNED, not
