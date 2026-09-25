@@ -20,6 +20,7 @@ export interface BrowserAPI {
   canGoForward: () => Promise<boolean>
   setPanelOpen: (isOpen: boolean) => Promise<{ success: boolean }>
   setDrawerHeight: (height: number) => Promise<{ success: boolean }>
+  setChromeHeight: (height: number) => Promise<{ success: boolean }>
   setInterestMenu: (payload: InterestMenuPayload) => Promise<{ success: boolean }>
   setInterestInset: (width: number) => Promise<{ success: boolean }>
   onInterestAction: (callback: (action: InterestAction) => void) => () => void

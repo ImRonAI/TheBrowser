@@ -24,6 +24,7 @@ const CHROME_HEIGHT = 108
 const COLLAPSED_DRAWER_HEIGHT = 32
 let agentPanelWidth = 420
 let drawerHeight = COLLAPSED_DRAWER_HEIGHT
+let chromeHeight = CHROME_HEIGHT
 let interestInset = 0
 
 type InterestMenuPayload = {
@@ -79,15 +80,19 @@ function validateIpcSender(frame: Electron.WebFrameMain | null): boolean {
 }
 
 function calculateWebContentsViewBounds(): { x: number; y: number; width: number; height: number } {
-  if (!mainWindow) return { x: 0, y: CHROME_HEIGHT + drawerHeight, width: 800, height: 600 }
-  const [windowWidth, windowHeight] = mainWindow.getSize()
-  const rightReserve = Math.max(isAgentPanelOpen ? agentPanelWidth : 0, interestInset)
-  const top = CHROME_HEIGHT + drawerHeight
+  if (!mainWindow || mainWindow.isDestroyed()) return { x: 0, y: CHROME_HEIGHT + drawerHeight, width: 800, height: 600 }
+  const [windowWidth, windowHeight] = mainWindow.getContentSize()
+  // The chrome reports its layout in CSS pixels; the WebContentsView is placed in
+  // window DIPs. When the shell is zoomed (Cmd +/-) those differ, and an unscaled
+  // view would cover the navigation drawer and the agent panel.
+  const zoom = mainWindow.webContents.isDestroyed() ? 1 : mainWindow.webContents.getZoomFactor() || 1
+  const rightReserve = Math.ceil(Math.max(isAgentPanelOpen ? agentPanelWidth : 0, interestInset) * zoom)
+  const top = Math.ceil((chromeHeight + drawerHeight) * zoom)
   return {
     x: 0,
     y: top,
-    width: windowWidth - rightReserve,
-    height: windowHeight - top,
+    width: Math.max(0, windowWidth - rightReserve),
+    height: Math.max(0, windowHeight - top),
   }
 }
 
@@ -710,6 +715,15 @@ ipcMain.handle('browser:set-panel-open', (event, isOpen: boolean) => {
 ipcMain.handle('browser:set-drawer-height', (event, height: number) => {
   if (!validateIpcSender(event.senderFrame)) return
   drawerHeight = Number.isFinite(height) && height >= 0 ? height : COLLAPSED_DRAWER_HEIGHT
+  updateWebContentsViewBounds()
+  return { success: true }
+})
+
+// Measured header (toolbar + tab strip) height in CSS px. Also sent on every
+// renderer resize, which is how shell zoom changes reach the view bounds.
+ipcMain.handle('browser:set-chrome-height', (event, height: number) => {
+  if (!validateIpcSender(event.senderFrame)) return { success: false }
+  chromeHeight = Number.isFinite(height) && height > 0 ? height : CHROME_HEIGHT
   updateWebContentsViewBounds()
   return { success: true }
 })

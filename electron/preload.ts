@@ -112,6 +112,7 @@ const electronAPI = {
     canGoForward: () => ipcRenderer.invoke('browser:can-go-forward'),
     setPanelOpen: (isOpen: boolean) => ipcRenderer.invoke('browser:set-panel-open', isOpen),
     setDrawerHeight: (height: number) => ipcRenderer.invoke('browser:set-drawer-height', height),
+    setChromeHeight: (height: number) => ipcRenderer.invoke('browser:set-chrome-height', height),
     setInterestMenu: (payload: unknown) => ipcRenderer.invoke('interests:set-menu', payload),
     setInterestInset: (width: number) => ipcRenderer.invoke('interests:set-inset', width),
     onInterestAction: (callback: (action: unknown) => void) => {

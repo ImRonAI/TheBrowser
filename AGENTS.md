@@ -22,7 +22,7 @@ RON_VPS_HOST=<host> bash deploy/local/install-tunnel.sh    # launchd SSH tunnel;
 - Manual Electron launches require `unset ELECTRON_RUN_AS_NODE`; npm handles this.
 - `test_chat.py` covers guards/catalogue/effort caching; `test_panel_*.py` covers native runtime, storage, tools, composition and HTTP streaming; `test_panel_browser.py` covers browser targets, `BrowserAvailabilityHook`, and `mcp.json` parity; `test_panel_prompt.py` covers per-browser prompt composition. Renderer transport tests use `node --experimental-strip-types --test src/lib/panel-stream.test.ts`.
 - Pyright is not installed in `venv/`; use `npx -y pyright@latest <files>`. `panel_agent.py`, `panel_tools.py`, and `chat.py` carry pre-existing pyright errors — compare error sets against the previous commit rather than requiring zero.
-- Fresh venvs must pin `fastmcp==3.4.0` and `mcp==1.26.0` before `pip install --no-deps -e ../electron-playwright-mcp`: its unbounded `fastmcp>=3.2.0` resolves to fastmcp 4 / mcp 2.2, which violates Strands' `mcp<2.2` pin and removes `fastmcp.tools.tool`. `deploy/vps-install.sh` does this and runs `pip check`.
+- Fresh venvs must pin `fastmcp[apps]==3.4.0` (the `apps` extra brings `prefab-ui`, which `electron_playwright_mcp.server` imports via `fastmcp.apps.approval`; without it every browser-tool load fails with "unhandled errors in a TaskGroup") and `mcp==1.26.0` **before** `pip install --no-deps -e ../electron-playwright-mcp`: its unbounded `fastmcp>=3.2.0` resolves to fastmcp 4 / mcp 2.2, which violates Strands' `mcp<2.2` pin and removes `fastmcp.tools.tool`. `deploy/vps-install.sh` does this and runs `pip check`.
 
 ## Runtime boundaries
 

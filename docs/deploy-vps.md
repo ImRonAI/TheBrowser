@@ -14,8 +14,12 @@ an SSH `-L` forward, so the renderer's `http://localhost:8765` is unchanged.
 
 ## Prerequisites
 
-* An Ubuntu LTS server (verified on 26.04; the scripts use the distro `python3`,
-  currently 3.14, and distro or NodeSource Node 22) with root login by SSH key.
+* An Ubuntu LTS server (verified on 26.04 with Python 3.14, and on 24.04 with Python 3.12
+  — the GCP `strands` VM; the scripts use the distro `python3` and distro or NodeSource
+  Node 22) with root login by SSH key. On GCP (no root SSH) log in as a `google-sudoers`
+  user and run the bootstrap with `ssh ron@$RON_VPS_HOST 'sudo bash -s' < deploy/vps-bootstrap.sh`.
+  Other workloads that bind only loopback ports other than 3000/8931/9222/8765/13000/18931/19222
+  (e.g. OpenClaw's docker on 18789/18790) can coexist; note the bootstrap enables `ufw`.
 * The Mac key at `~/.ssh/ronbrowser_upcloud_ed25519` (override with `RON_SSH_KEY`).
 * The sibling `../electron-playwright-mcp` checkout next to this repo (it is rsynced too).
 * A Hugging Face account/org that can own a private bucket, and a write token.

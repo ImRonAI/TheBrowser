@@ -108,20 +108,22 @@ export function NavigationDrawer() {
     return () => cancelAnimationFrame(frame)
   }, [isDrawerExpanded, articles])
   
-  // Notify Electron of drawer height changes so WebContentsView can adjust bounds
+  // Notify Electron of every drawer height change (expand/collapse animation,
+  // attachments, wrapping, shell zoom) so the WebContentsView never covers it.
   useEffect(() => {
-    const updateDrawerHeight = () => {
-      if (drawerRef.current && typeof window !== 'undefined' && window.electron?.browser?.setDrawerHeight) {
-        const height = drawerRef.current.offsetHeight
-        window.electron.browser.setDrawerHeight(height)
-      }
+    const drawer = drawerRef.current
+    const setDrawerHeight = window.electron?.browser?.setDrawerHeight
+    if (!drawer || !setDrawerHeight) return
+    const report = () => { void setDrawerHeight(drawer.getBoundingClientRect().height) }
+    report()
+    const observer = new ResizeObserver(report)
+    observer.observe(drawer)
+    window.addEventListener('resize', report)
+    return () => {
+      observer.disconnect()
+      window.removeEventListener('resize', report)
     }
-    
-    // Update after animation completes
-    const timeout = setTimeout(updateDrawerHeight, 350) // slightly longer than animation duration (300ms)
-    
-    return () => clearTimeout(timeout)
-  }, [isDrawerExpanded, articles.length])
+  }, [])
 
   // Handle search submission
   const handleSearch = async (e?: React.FormEvent) => {

@@ -1,4 +1,4 @@
-import { ReactNode, useState, useEffect } from 'react'
+import { ReactNode, useState, useEffect, useRef } from 'react'
 import { motion } from 'framer-motion'
 import { ChromeToolbar } from '@/components/chrome/ChromeToolbar'
 import { TabBar } from '@/components/chrome/TabBar'
@@ -27,6 +27,7 @@ export function BrowserLayout({ children }: BrowserLayoutProps) {
 function BrowserLayoutContent({ children }: BrowserLayoutProps) {
   const { isPanelOpen, startAskRon } = useAgentUi()
   const [isExternalMode, setIsExternalMode] = useState(false)
+  const chromeRef = useRef<HTMLDivElement>(null)
   const [contextMenu, setContextMenu] = useState<{
     x: number
     y: number
@@ -62,6 +63,23 @@ function BrowserLayoutContent({ children }: BrowserLayoutProps) {
     }
   }, [startAskRon])
 
+  // Keep the native WebContentsView below the real chrome: report the measured
+  // header height on layout changes and on shell zoom (which fires `resize`).
+  useEffect(() => {
+    const header = chromeRef.current
+    const setChromeHeight = window.electron?.browser?.setChromeHeight
+    if (!header || !setChromeHeight) return
+    const report = () => { void setChromeHeight(header.getBoundingClientRect().height) }
+    report()
+    const observer = new ResizeObserver(report)
+    observer.observe(header)
+    window.addEventListener('resize', report)
+    return () => {
+      observer.disconnect()
+      window.removeEventListener('resize', report)
+    }
+  }, [])
+
   // Handle right-click to show context menu
   useEffect(() => {
     const handleContextMenu = (e: MouseEvent) => {
@@ -91,7 +109,7 @@ function BrowserLayoutContent({ children }: BrowserLayoutProps) {
       {/* Browser Tool Glow Effect - persists across entire app */}
       <BrowserGlowBorder />
       {/* Browser Chrome - Elevated Header */}
-      <div className={cn(
+      <div ref={chromeRef} className={cn(
         "flex-shrink-0 relative z-[100]",
         // Background
         "bg-surface-0/95 dark:bg-surface-900/95",

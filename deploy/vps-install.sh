@@ -20,8 +20,11 @@ venv/bin/pip install -q -r agent/api/requirements.txt
 # electron-playwright-mcp declares fastmcp>=3.2.0 with no upper bound; fastmcp 4.x pulls mcp 2.x,
 # which breaks strands-agents' mcp<2.2 pin and removes fastmcp.tools.tool. Pin the versions the
 # dev machine runs, then install the package itself without re-resolving its dependencies.
+# The [apps] extra is required: server.py imports fastmcp.apps.approval, which needs prefab-ui
+# (without it the stdio server dies at import and every browser tool load fails).
 # It also declares requires-python <3.14; it runs on 3.14 (verified on the dev machine).
-venv/bin/pip install -q 'fastmcp==3.4.0' 'mcp==1.26.0' 'pyyaml>=6.0.3' 'httpx>=0.28.1'
+venv/bin/pip install -q 'fastmcp[apps]==3.4.0' 'mcp==1.26.0' 'pyyaml>=6.0.3' 'httpx>=0.28.1'
+venv/bin/python -c 'import fastmcp.apps.approval' || { echo "fastmcp[apps] (prefab-ui) missing" >&2; exit 1; }
 venv/bin/pip install -q --ignore-requires-python --no-deps -e "$MCP_ROOT"
 venv/bin/pip check
 test -x venv/bin/electron-playwright-mcp
