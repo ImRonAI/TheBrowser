@@ -11,6 +11,7 @@ type SlashCommandMenuRef = {
 
 export const SLASH_COMMANDS = [
   { id: 'ask-ron', label: 'Ask Ron', icon: 'sparkles', action: 'askRon' },
+  { id: 'goal', label: 'Goal', icon: 'sparkles', action: 'goal' },
   { id: 'upload', label: 'Upload File', icon: 'upload', action: 'fileUpload' },
   { id: 'text', label: 'Text', icon: 'T', action: 'paragraph' },
   { id: 'h1', label: 'Heading 1', icon: 'H1', action: 'heading', level: 1 },
@@ -29,6 +30,7 @@ export const SlashCommand = Extension.create({
 
   addOptions() {
     return {
+      onAskRon: null as ((goal: boolean) => void) | null,
       suggestion: {
         char: '/',
         command: ({ editor, range, props }: { editor: any, range: any, props: any }) => {

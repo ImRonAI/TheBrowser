@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "npm run dev:vite",
     "dev:vite": "kill -9 $(lsof -t -i:3000,8931,9222) 2>/dev/null || true; unset ELECTRON_RUN_AS_NODE; electron-vite dev",
-    "dev:backend": "kill -9 $(lsof -t -i:8765) 2>/dev/null || true; ./venv/bin/python agent/api/main.py",
+    "dev:backend": "bash deploy/local/dev-backend.sh",
     "electron:dev": "concurrently -n backend,electron -c blue,green \"npm run dev:backend\" \"npm run dev:vite\"",
     "build": "electron-vite build",
     "start": "bash -c 'unset ELECTRON_RUN_AS_NODE; electron .'",

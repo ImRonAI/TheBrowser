@@ -136,10 +136,10 @@ tool_catalog(action="load", name="{server}")
 
 After load, the chrome tab strip is the only browser:
 - {prefix}List_tabs / {prefix}Manage_tabs — same tabs as the UI (list / new / close / select).
-- {prefix}Navigate_to_a_URL_or_perform_navigation_actions — loads the active tab and updates the strip.
+- {prefix}browser_navigate — loads the active tab and updates the strip.
 - {prefix}browser_snapshot — bounded text and interactive refs of that tab; selector scopes content, offset pages refs.
 - {prefix}Click_an_element / type / fill — on those refs, not Playwright locators.
-- {prefix}Capture_a_screenshot_of_the_page_or_element — returns an actual viewport image; inspect it after first navigation and when visual state is unclear.
+- {prefix}browser_take_screenshot — returns an actual viewport image; inspect it after first navigation and when visual state is unclear.
 An already-loaded server and already-loaded tools are success, not reasons to
 load again. Load again only after an actual transport failure. A stale
 ref or obscured element is a page-state problem: inspect a scoped snapshot or

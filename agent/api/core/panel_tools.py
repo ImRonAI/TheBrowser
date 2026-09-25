@@ -522,6 +522,43 @@ def adapt_native_tool(value: AgentTool) -> AgentTool:
     return value
 
 
+class _IdempotentMCPTool(_AsyncNativeTool):
+    """Avoid setup retries without replacing native MCP execution or registration.
+
+    Installed strands_tools treats an active connection as an error. It also
+    re-registers every tool on load_tools. Check the *calling agent's* registry,
+    not just the process-global connection list (children have separate tools).
+    """
+
+    async def stream(self, tool_use, invocation_state, **kwargs):
+        from strands_tools import mcp_client as module
+
+        inputs = tool_use.get("input", {})
+        connection_id = inputs.get("connection_id")
+        connection = module._get_connection(connection_id)
+        action = inputs.get("action")
+        agent = kwargs.get("agent")
+        ready = False
+        if connection and connection.is_active:
+            if action == "connect":
+                ready = True
+            elif action == "load_tools" and agent is not None:
+                names = set(connection.loaded_tool_names)
+                registry = agent.tool_registry.registry
+                ready = bool(names) and all(
+                    getattr(registry.get(name), "_connection_id", None) == connection_id for name in names
+                )
+        if ready:
+            yield {"toolUseId": tool_use["toolUseId"], "status": "success", "content": [{"text":
+                f"Connection {connection_id!r} is active. " +
+                ("Tools are already callable in this agent; execute the next browser action."
+                 if action == "load_tools" else "Reuse it; load_tools only if tools are not in your registry.")}]}
+            return
+        async with aclosing(super().stream(tool_use, invocation_state, **kwargs)) as stream:
+            async for event in stream:
+                yield event
+
+
 def _vendored_module_name(root: Path, path: Path) -> str:
     relative = path.resolve().relative_to(root.resolve()).with_suffix("")
     # Directory names like `meta-tooling` are not identifiers; normalise for import.
@@ -732,7 +769,7 @@ def build_core_tools(project_tools_dir: Path) -> list[AgentTool]:
         loaded = [t for t in load_tools_from_module(module, short) if t.tool_name == short]
         if not loaded:
             raise RuntimeError(f"strands_tools.{short} did not export a tool named {short!r}")
-        tools.append(adapt_native_tool(loaded[0]))
+        tools.append(_IdempotentMCPTool(loaded[0]) if short == "mcp_client" else adapt_native_tool(loaded[0]))
     root = project_tools_dir.expanduser().resolve()
     search_module = import_vendored_module(root, root / "research" / "perplexity_search_api.py")
     search = next(t for t in load_tools_from_module(search_module, "perplexity_search_api")
@@ -1001,12 +1038,13 @@ class GraphSpec:
     nodes: Mapping[str, ChildSpec | GraphSpec | SwarmSpec]
     edges: tuple[tuple[str, str], ...] = ()
     entry_points: tuple[str, ...] = ()
-    max_node_executions: int = 20
-    execution_timeout: float = 900.0
-    node_timeout: float = 300.0
+    max_node_executions: int | None = None
+    execution_timeout: float | None = None
+    node_timeout: float | None = None
 
     def __post_init__(self) -> None:
-        if self.max_node_executions < 1 or self.execution_timeout <= 0 or self.node_timeout <= 0:
+        if any(value is not None and value <= 0 for value in
+               (self.max_node_executions, self.execution_timeout, self.node_timeout)):
             raise ValueError("Graph execution limits must be positive")
 
 
@@ -1014,13 +1052,14 @@ class GraphSpec:
 class SwarmSpec:
     name: str
     children: tuple[ChildSpec, ...]
-    max_handoffs: int = 20
-    max_iterations: int = 20
-    execution_timeout: float = 900.0
-    node_timeout: float = 300.0
+    max_handoffs: int | None = None
+    max_iterations: int | None = None
+    execution_timeout: float | None = None
+    node_timeout: float | None = None
 
     def __post_init__(self) -> None:
-        if self.max_handoffs < 1 or self.max_iterations < 1 or self.execution_timeout <= 0 or self.node_timeout <= 0:
+        if any(value is not None and value <= 0 for value in
+               (self.max_handoffs, self.max_iterations, self.execution_timeout, self.node_timeout)):
             raise ValueError("Swarm execution limits must be positive")
 
 
@@ -1061,16 +1100,22 @@ def create_formation_tool(
             return Swarm(
                 children,
                 id=node.name,
-                max_handoffs=node.max_handoffs,
-                max_iterations=node.max_iterations,
-                execution_timeout=node.execution_timeout,
+                # SDK 1.56 compares these directly (None is unsupported), and
+                # logs counts with %d. Use the platform maximum integer rather
+                # than infinity for counts; graph limits natively accept None.
+                max_handoffs=node.max_handoffs if node.max_handoffs is not None else sys.maxsize,
+                max_iterations=node.max_iterations if node.max_iterations is not None else sys.maxsize,
+                execution_timeout=node.execution_timeout if node.execution_timeout is not None else float("inf"),
                 node_timeout=node.node_timeout,
             )
         builder = GraphBuilder()
         builder.set_graph_id(node.name)
-        builder.set_max_node_executions(node.max_node_executions)
-        builder.set_execution_timeout(node.execution_timeout)
-        builder.set_node_timeout(node.node_timeout)
+        if node.max_node_executions is not None:
+            builder.set_max_node_executions(node.max_node_executions)
+        if node.execution_timeout is not None:
+            builder.set_execution_timeout(node.execution_timeout)
+        if node.node_timeout is not None:
+            builder.set_node_timeout(node.node_timeout)
         for name, child_spec in node.nodes.items():
             builder.add_node(await build(child_spec, owned), name)
         for source, target in node.edges:

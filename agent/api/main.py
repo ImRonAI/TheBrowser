@@ -15,6 +15,7 @@ from agent.api.core import public_tunnel
 from agent.api.core.config import CORS_ORIGINS, SESSION_STORAGE_DIR
 from agent.api.endpoints import chat
 from agent.api.endpoints import articles
+from agent.api.endpoints import projects
 
 
 @asynccontextmanager
@@ -23,6 +24,8 @@ async def lifespan(app: FastAPI):
     logging.basicConfig(level=logging.INFO)
     SESSION_STORAGE_DIR.mkdir(parents=True, exist_ok=True)
     manager = chat.create_runtime_manager()
+    from agent.api.core.issue_agents import IssueAgentRuntime
+    app.state.issue_agents = IssueAgentRuntime()
     app.state.panel_runtime = manager
     app.state.panel_a2a = None
     mounted_routes = []
@@ -59,6 +62,7 @@ async def lifespan(app: FastAPI):
     finally:
         try:
             await public_tunnel.stop()
+            await app.state.issue_agents.shutdown()
             await manager.shutdown()
         finally:
             try:
@@ -88,6 +92,7 @@ app.add_middleware(
 
 app.include_router(chat.router, tags=["chat"])
 app.include_router(articles.router, tags=["articles"])
+app.include_router(projects.router, tags=["projects"])
 
 
 @app.get("/health")
@@ -133,3 +138,4 @@ def run() -> None:
 
 if __name__ == "__main__":
     run()
+

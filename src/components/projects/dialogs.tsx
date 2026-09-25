@@ -1,5 +1,6 @@
-import { useMemo, useState, useEffect } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
+import { useMemo, useState, useEffect, useId, cloneElement, isValidElement } from 'react'
+import { Dialog as DialogRoot, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog'
+import { Button } from '@/components/ui/button'
 import { useProjectsStore, projectSelectors } from '@/stores/projectsStore'
 import {
   IssuePriority,
@@ -13,6 +14,8 @@ import {
 } from '@/types/projects'
 import { cn } from '@/utils/cn'
 import { X, FolderKanban, CheckSquare } from 'lucide-react'
+import { fromLocalDateTime } from '@/lib/project-issue-utils'
+import { ProjectFieldInput } from './ProjectFieldInput'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CREATE PROJECT DIALOG
@@ -24,13 +27,16 @@ interface CreateProjectDialogProps {
 }
 
 export function CreateProjectDialog({ isOpen, onClose }: CreateProjectDialogProps) {
-  const { createProject } = useProjectsStore()
+  const { createProject, userId } = useProjectsStore()
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const [name, setName] = useState('')
   const [key, setKey] = useState('')
   const [type, setType] = useState<ProjectTypeKey>('software-development')
   const [summary, setSummary] = useState('')
 
   const reset = () => {
+    setError(null)
     setName('')
     setKey('')
     setType('software-development')
@@ -38,14 +44,20 @@ export function CreateProjectDialog({ isOpen, onClose }: CreateProjectDialogProp
   }
 
   const handleClose = () => {
+    if (saving) return
     reset()
     onClose()
   }
 
-  const handleSubmit = () => {
-    if (!name.trim()) return
-    createProject({ name: name.trim(), key: key.trim() || undefined, type, summary })
-    handleClose()
+  const handleSubmit = async () => {
+    if (saving || !name.trim()) return
+    setSaving(true)
+    setError(null)
+    const result = await createProject({ name: name.trim(), key: key.trim() || undefined, type, summary })
+    setSaving(false)
+    if (result.error) { setError(result.error); return }
+    reset()
+    onClose()
   }
 
   return (
@@ -57,7 +69,8 @@ export function CreateProjectDialog({ isOpen, onClose }: CreateProjectDialogProp
         onClose={handleClose}
       />
       
-      <div className="p-6 space-y-5">
+      <div className="min-h-0 overflow-y-auto p-4 sm:p-6 space-y-5">
+        {error && <p role="alert" className="text-rose-500">{error}</p>}
         {/* Project Name */}
         <FormField label="Project Name">
           <input
@@ -70,7 +83,7 @@ export function CreateProjectDialog({ isOpen, onClose }: CreateProjectDialogProp
         </FormField>
 
         {/* Key & Type Row */}
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <FormField label="Key (optional)">
             <input
               value={key}
@@ -109,8 +122,8 @@ export function CreateProjectDialog({ isOpen, onClose }: CreateProjectDialogProp
       <DialogFooter
         onCancel={handleClose}
         onConfirm={handleSubmit}
-        confirmText="Create Project"
-        confirmDisabled={!name.trim()}
+        confirmText={saving ? 'Saving…' : 'Create Project'}
+        confirmDisabled={saving || !userId || !name.trim()}
       />
     </Dialog>
   )
@@ -130,7 +143,13 @@ interface CreateIssueDialogProps {
   allowParentSelection?: boolean
 }
 
-export function CreateIssueDialog({
+export function CreateIssueDialog(props: CreateIssueDialogProps) {
+  const { userId } = useProjectsStore()
+  if (!props.isOpen) return null
+  return <CreateIssueForm key={`${userId}:${props.projectId}:${props.parentId}:${props.initialType}:${props.initialStatus}`} {...props} />
+}
+
+function CreateIssueForm({
   isOpen,
   onClose,
   projectId,
@@ -139,7 +158,8 @@ export function CreateIssueDialog({
   initialType,
   allowParentSelection = false,
 }: CreateIssueDialogProps) {
-  const { projects, issues, people, createIssue } = useProjectsStore()
+  const { projects, issues, people, createIssue, userId } = useProjectsStore()
+  const [saving, setSaving] = useState(false)
   const [selectedProjectId, setSelectedProjectId] = useState(projectId || projects[0]?.id || '')
   const [selectedType, setSelectedType] = useState<IssueTypeKey>(initialType || 'task')
   const [title, setTitle] = useState('')
@@ -148,6 +168,7 @@ export function CreateIssueDialog({
   const [priority, setPriority] = useState<IssuePriority>('medium')
   const [assignee, setAssignee] = useState<string>('')
   const [dueDate, setDueDate] = useState('')
+  const [customFields, setCustomFields] = useState<Record<string, unknown>>({})
   const [parent, setParent] = useState<string | null>(parentId ?? null)
   const [error, setError] = useState<string | null>(null)
 
@@ -156,16 +177,30 @@ export function CreateIssueDialog({
 
   const allowedTypes = useMemo(() => {
     if (!scheme) return []
+    const configured = selectedProject?.settings.issueTypes
+    if (configured) {
+      if (!parent) return configured.filter((type) => type.level < 5).map((type) => type.key)
+      const parentIssue = issues.find((issue) => issue.id === parent)
+      const parentLevel = configured.find((type) => type.key === parentIssue?.type)?.level
+      return configured.filter((type) => parentLevel !== undefined && type.level === parentLevel + 1).map((type) => type.key)
+    }
     if (parent) {
       const parentIssue = issues.find((issue) => issue.id === parent)
       if (!parentIssue) return []
       return projectSelectors.getAllowedChildTypes(parentIssue.type)
     }
     return scheme.issueTypes.filter((type) => projectSelectors.isRootTypeAllowed(type))
-  }, [scheme, parent, issues])
+  }, [scheme, selectedProject, parent, issues])
 
   const parentOptions = useMemo(() => {
     if (!selectedProject) return []
+    if (!allowParentSelection) return []
+    const configured = selectedProject.settings.issueTypes
+    if (configured) {
+      const level = configured.find((type) => type.key === selectedType)?.level
+      return issues.filter((issue) => issue.projectId === selectedProject.id &&
+        configured.some((type) => type.key === issue.type && level !== undefined && type.level === level - 1))
+    }
     const requiredParentType = STANDARD_PARENT_BY_CHILD[selectedType]
     if (!allowParentSelection || !requiredParentType) return []
     return issues.filter((issue) =>
@@ -173,6 +208,10 @@ export function CreateIssueDialog({
       issue.type === requiredParentType
     )
   }, [selectedProject, selectedType, issues, allowParentSelection])
+
+  useEffect(() => {
+    if (!selectedProjectId && projects.length) setSelectedProjectId(projectId || projects[0].id)
+  }, [selectedProjectId, projects, projectId])
 
   useEffect(() => {
     if (allowedTypes.length === 0) return
@@ -190,22 +229,30 @@ export function CreateIssueDialog({
     setPriority('medium')
     setAssignee('')
     setDueDate('')
+    setCustomFields({})
     setParent(parentId ?? null)
     setError(null)
   }
 
   const handleClose = () => {
+    if (saving) return
     reset()
     onClose()
   }
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
+    if (saving) return
     if (!title.trim()) {
       setError('Title is required.')
       return
     }
 
-    const result = createIssue({
+    let due: string | undefined
+    try { due = fromLocalDateTime(dueDate) }
+    catch (cause) { setError((cause as Error).message); return }
+    setSaving(true)
+    setError(null)
+    const result = await createIssue({
       projectId: selectedProjectId,
       title: title.trim(),
       type: selectedType,
@@ -213,16 +260,20 @@ export function CreateIssueDialog({
       status,
       priority,
       assignees: assignee ? [assignee] : [],
-      dueDate: dueDate || undefined,
+      dueDate: due,
+      customFields: Object.fromEntries(Object.entries(customFields).filter(([key]) =>
+        selectedProject?.settings.fields?.some((field) => field.key === key && !field.archived && (!field.issueTypes?.length || field.issueTypes.includes(selectedType))))),
       parentId: parent || undefined,
     })
 
+    setSaving(false)
     if (result.error) {
       setError(result.error)
       return
     }
 
-    handleClose()
+    reset()
+    onClose()
   }
 
   return (
@@ -234,13 +285,14 @@ export function CreateIssueDialog({
         onClose={handleClose}
       />
       
-      <div className="p-6 space-y-5">
+      <div className="min-h-0 overflow-y-auto p-4 sm:p-6 space-y-5">
         {/* Project & Type Row */}
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <FormField label="Project">
             <select
               value={selectedProjectId}
-              onChange={(e) => setSelectedProjectId(e.target.value)}
+              disabled={Boolean(parentId) || saving}
+              onChange={(e) => { setSelectedProjectId(e.target.value); setParent(null); setCustomFields({}) }}
               className={selectClasses}
             >
               {projects.map((project) => (
@@ -258,7 +310,7 @@ export function CreateIssueDialog({
             >
               {allowedTypes.map((type) => (
                 <option key={type} value={type}>
-                  {ISSUE_TYPE_CONFIG[type]?.label ?? type}
+                  {selectedProject?.settings.issueTypes?.find((definition) => definition.key === type)?.label ?? ISSUE_TYPE_CONFIG[type]?.label ?? type}
                 </option>
               ))}
             </select>
@@ -306,7 +358,7 @@ export function CreateIssueDialog({
         </FormField>
 
         {/* Status & Priority Row */}
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <FormField label="Status">
             <select
               value={status}
@@ -336,7 +388,7 @@ export function CreateIssueDialog({
         </div>
 
         {/* Assignee & Due Date Row */}
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <FormField label="Assignee">
             <select
               value={assignee}
@@ -353,7 +405,8 @@ export function CreateIssueDialog({
           </FormField>
           <FormField label="Due Date">
             <input
-              type="date"
+              type="datetime-local"
+              aria-label={`Due time in ${Intl.DateTimeFormat().resolvedOptions().timeZone}`}
               value={dueDate}
               onChange={(e) => setDueDate(e.target.value)}
               className={inputClasses}
@@ -362,6 +415,9 @@ export function CreateIssueDialog({
         </div>
 
         {/* Error */}
+        {(selectedProject?.settings.fields ?? []).filter((field) => !field.archived && (!field.issueTypes?.length || field.issueTypes.includes(selectedType))).map((field) => <FormField key={field.key} label={`${field.label}${field.required ? ' *' : ''}`}>
+          <ProjectFieldInput field={field} value={Object.hasOwn(customFields, field.key) ? customFields[field.key] : field.default} people={people} issues={issues} disabled={saving} onChange={(value) => setCustomFields((current) => ({ ...current, [field.key]: value }))} />
+        </FormField>)}
         {error && (
           <div className={cn(
             "rounded-lg px-4 py-3 text-body-sm",
@@ -376,8 +432,8 @@ export function CreateIssueDialog({
       <DialogFooter
         onCancel={handleClose}
         onConfirm={handleSubmit}
-        confirmText="Create Issue"
-        confirmDisabled={!title.trim()}
+        confirmText={saving ? 'Saving…' : 'Create Issue'}
+        confirmDisabled={saving || !userId || !selectedProjectId || !allowedTypes.includes(selectedType) || !title.trim()}
       />
     </Dialog>
   )
@@ -402,42 +458,13 @@ function Dialog({ open, onClose, children, size = 'md' }: DialogProps) {
   }
 
   return (
-    <AnimatePresence>
-      {open && (
-        <>
-          {/* Backdrop */}
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.2 }}
-            className="fixed inset-0 z-[200] bg-surface-900/50 dark:bg-surface-950/70 backdrop-blur-sm"
-            onClick={onClose}
-          />
-          
-          {/* Modal */}
-          <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
-            <motion.div
-              initial={{ opacity: 0, scale: 0.96, y: 16 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.96, y: 16 }}
-              transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
-              className={cn(
-                "w-full",
-                sizeClasses[size],
-                "bg-surface-0 dark:bg-surface-900",
-                "rounded-2xl",
-                "border border-surface-200 dark:border-surface-800",
-                "shadow-2xl shadow-surface-900/20",
-                "overflow-hidden"
-              )}
-            >
-              {children}
-            </motion.div>
-          </div>
-        </>
-      )}
-    </AnimatePresence>
+    <DialogRoot open={open} onOpenChange={(next) => { if (!next) onClose() }}>
+      <DialogContent showCloseButton={false}
+        overlayClassName="z-[220] bg-surface-900/50 backdrop-blur-sm"
+        className={cn('z-[221] flex flex-col gap-0 p-0 w-[calc(100%-2rem)] max-h-[calc(100dvh-2rem)] overflow-hidden rounded-2xl bg-surface-0 dark:bg-surface-900 text-ink dark:text-ink-inverse', sizeClasses[size])}>
+        {children}
+      </DialogContent>
+    </DialogRoot>
   )
 }
 
@@ -455,7 +482,7 @@ interface DialogHeaderProps {
 function DialogHeader({ icon, title, subtitle, onClose }: DialogHeaderProps) {
   return (
     <div className={cn(
-      "flex items-start justify-between",
+      "flex shrink-0 items-start justify-between gap-2",
       "px-6 py-5",
       "border-b border-surface-200 dark:border-surface-800",
       "bg-surface-50/50 dark:bg-surface-850/50"
@@ -470,17 +497,17 @@ function DialogHeader({ icon, title, subtitle, onClose }: DialogHeaderProps) {
           {icon}
         </div>
         <div>
-          <h2 className="text-lg font-semibold text-ink dark:text-ink-inverse">
+          <DialogTitle className="text-lg font-semibold text-ink dark:text-ink-inverse">
             {title}
-          </h2>
+          </DialogTitle>
           {subtitle && (
-            <p className="text-body-sm text-ink-muted dark:text-ink-inverse-muted">
+            <DialogDescription className="text-body-sm text-ink-muted dark:text-ink-inverse-muted">
               {subtitle}
-            </p>
+            </DialogDescription>
           )}
         </div>
       </div>
-      <button
+      <Button type="button" variant="ghost" size="icon" aria-label="Close dialog"
         onClick={onClose}
         className={cn(
           "p-2 rounded-lg",
@@ -490,7 +517,7 @@ function DialogHeader({ icon, title, subtitle, onClose }: DialogHeaderProps) {
         )}
       >
         <X className="w-5 h-5" />
-      </button>
+      </Button>
     </div>
   )
 }
@@ -505,12 +532,12 @@ interface DialogFooterProps {
 function DialogFooter({ onCancel, onConfirm, confirmText, confirmDisabled }: DialogFooterProps) {
   return (
     <div className={cn(
-      "flex items-center justify-end gap-3",
+      "flex shrink-0 flex-wrap items-center justify-end gap-3",
       "px-6 py-4",
       "border-t border-surface-200 dark:border-surface-800",
       "bg-surface-50/50 dark:bg-surface-850/50"
     )}>
-      <button
+      <Button type="button" variant="ghost"
         onClick={onCancel}
         className={cn(
           "px-4 py-2 rounded-xl",
@@ -522,8 +549,8 @@ function DialogFooter({ onCancel, onConfirm, confirmText, confirmDisabled }: Dia
         )}
       >
         Cancel
-      </button>
-      <button
+      </Button>
+      <Button type="button"
         onClick={onConfirm}
         disabled={confirmDisabled}
         className={cn(
@@ -536,7 +563,7 @@ function DialogFooter({ onCancel, onConfirm, confirmText, confirmDisabled }: Dia
         )}
       >
         {confirmText}
-      </button>
+      </Button>
     </div>
   )
 }
@@ -546,12 +573,13 @@ function DialogFooter({ onCancel, onConfirm, confirmText, confirmDisabled }: Dia
 // ─────────────────────────────────────────────────────────────────────────────
 
 function FormField({ label, children }: { label: string; children: React.ReactNode }) {
+  const id = useId()
   return (
-    <div className="space-y-1.5">
-      <label className="text-[11px] font-semibold uppercase tracking-wider text-ink-muted dark:text-ink-inverse-muted">
+    <div className="min-w-0 space-y-1.5">
+      <label htmlFor={id} className="text-[11px] font-semibold uppercase tracking-wider text-ink-muted dark:text-ink-inverse-muted">
         {label}
       </label>
-      {children}
+      {isValidElement<{ id?: string }>(children) && typeof children.type === 'string' ? cloneElement(children, { id }) : children}
     </div>
   )
 }
@@ -584,5 +612,6 @@ const STANDARD_PARENT_BY_CHILD: Record<IssueTypeKey, IssueTypeKey | null> = {
   epic: 'initiative',
   story: 'epic',
   task: 'story',
+  bug: 'story',
   subtask: 'task',
 }

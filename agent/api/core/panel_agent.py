@@ -24,8 +24,8 @@ Composition configuration (read at construction):
   other servers use native load_servers. Browser command/args/env/cwd support
   ${VAR} and ${env:VAR} references, failing on missing variables.
 
-GoalLoop uses a separate judge model, 3 attempts, a 120s native loop budget and
-preserve_context=True. SDK 1.56 checks that budget between validations, not as a
+GoalLoop uses a separate judge model, no attempt/time cutoff and
+preserve_context=True. SDK 1.56 checks optional budgets between validations, not as a
 hard request deadline; it also validates pauses. The runtime's order-200 hook
 prevents goal feedback from resuming a pause. Standalone construction installs
 the same final-result gate, but does not provide the runtime's durable journal.
@@ -434,6 +434,7 @@ def build_model(
     provider: ProviderName,
     model_id: str,
     reasoning_effort: str | None = None,
+    *, hosted_tools: bool = True,
 ) -> Any:
     """Construct the SDK (or community) model instance for ``provider``.
 
@@ -452,7 +453,7 @@ def build_model(
             if reasoning_effort not in OPENAI_REASONING_EFFORTS:
                 raise ValueError("Invalid OpenAI reasoning_effort.")
             openai_params["reasoning"] = {"effort": reasoning_effort}
-        tools = openai_hosted_tools(model_id)
+        tools = openai_hosted_tools(model_id) if hosted_tools else []
         if tools:
             openai_params["tools"] = tools
         return OpenAIResponsesModel(
@@ -473,7 +474,7 @@ def build_model(
             "model_id": model_id,
             "max_tokens": _env_integer("ANTHROPIC_MAX_TOKENS", 8192, minimum=1),
         }
-        hosted = anthropic_hosted_tools()
+        hosted = anthropic_hosted_tools() if hosted_tools else []
         if hosted:
             kwargs["anthropic_tools"] = hosted
         return AnthropicModel(**kwargs)
@@ -489,23 +490,20 @@ def build_model(
             params["reasoning"] = {"effort": reasoning_effort}
         if model_id.startswith("anthropic/"):
             params["max_output_tokens"] = PERPLEXITY_MAX_OUTPUT_TOKENS
-        hosted = perplexity_hosted_tools()
+        hosted = perplexity_hosted_tools() if hosted_tools else []
         if hosted:
             params["tools"] = hosted
         return PerplexityResponsesModel(
             client_args={
                 "api_key": provider_api_key("perplexity"),
                 "base_url": PERPLEXITY_API_BASE_URL,
-                # Observed live (Sept 2026): ~50% of Agent API tool-call streams stop
-                # emitting after the first output_text deltas and never close, on
-                # every model. The OpenAI client default read timeout is 600s, which
-                # presented as an indefinite hang. Bound each stream read; the
-                # adapter maps APITimeoutError to a retryable throttle so the native
-                # ModelRetryStrategy re-issues the call (the retry succeeds).
+                # Reasoning/server-side tools can legitimately emit no bytes for
+                # minutes. Do not abort them after 30s. An explicit positive env
+                # override retains the retryable stall watchdog; 0 disables it.
                 "timeout": httpx.Timeout(
                     _env_integer("PERPLEXITY_TIMEOUT", 120, minimum=1),
                     connect=10.0,
-                    read=float(_env_integer("PERPLEXITY_READ_TIMEOUT", 30, minimum=1)),
+                    read=_env_integer("PERPLEXITY_READ_TIMEOUT", 0) or None,
                 ),
                 "max_retries": 0,  # retries belong to the Strands retry strategy, not the HTTP client
             },
@@ -529,7 +527,7 @@ def build_model(
             "client_args": {"api_key": provider_api_key("xai")},
             "model_id": model_id,
         }
-        if XAI_NATIVE_TOOLS_ENABLED:
+        if hosted_tools and XAI_NATIVE_TOOLS_ENABLED:
             from xai_sdk.tools import code_execution, collections_search, web_search, x_search
 
             xai_tools: list[Any] = [web_search(), x_search(), code_execution()]
@@ -556,7 +554,7 @@ def build_model(
         return GeminiModel(
             client_args={"api_key": provider_api_key("gemini")},
             model_id=model_id,
-            gemini_tools=gemini_hosted_tools(),
+            gemini_tools=gemini_hosted_tools() if hosted_tools else [],
             params={
                 # Gemini rejects built-in tools combined with function calling
                 # unless this is set (400 INVALID_ARGUMENT). The adapter honours
@@ -756,13 +754,13 @@ def create_panel_agent(
     from strands.hooks.events import AfterInvocationEvent
     from strands.session import SnapshotSessionManager
     from strands.tools.executors import ConcurrentToolExecutor, SequentialToolExecutor
+    from strands.tools.mcp.mcp_agent_tool import MCPAgentTool
+    from strands.vended_plugins.goal import GoalLoop, JudgeConfig
+
     # Validate the browser target before any model/catalog construction.
     selected_browser = default_browser() if browser is None else browser
     if selected_browser not in BROWSERS:
         raise ValueError(f"browser must be one of {BROWSERS!r}, got {browser!r}")
-    from strands.tools.mcp.mcp_agent_tool import MCPAgentTool
-    from strands.vended_plugins.goal import GoalLoop, JudgeConfig
-
     path = config_path(provider)
     options, runtime = dict(options or {}), dict(runtime_options or {})
     unknown = options.keys() - {"context", "tool_execution", "checkpointing", "background", "goal"}
@@ -826,7 +824,7 @@ def create_panel_agent(
         if goal:
             plugins.append(GoalLoop(goal=goal, judge=JudgeConfig(model=model_factory("goal-judge"))
                                     if isinstance(goal, str) else None,
-                                    max_attempts=3, timeout=120, preserve_context=True))
+                                    preserve_context=True))
 
         def pause_gate(event: AfterInvocationEvent) -> None:
             if event.result is None or event.result.stop_reason not in ("end_turn", "stop_sequence"):

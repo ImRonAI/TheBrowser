@@ -319,6 +319,42 @@ def test_native_formations_execute_each_stream_once_and_serialize(kind):
     asyncio.run(scenario())
 
 
+def test_graph_runs_more_than_twenty_nodes():
+    async def scenario():
+        names = [f"step_{index}" for index in range(25)]
+        spec = GraphSpec("long_graph",
+            {name: ChildSpec(name, "Complete this step", ()) for name in names},
+            tuple(zip(names, names[1:])), (names[0],))
+        assert spec.max_node_executions is spec.execution_timeout is spec.node_timeout is None
+        models = []
+
+        def factory(name):
+            model = OfflineModel(name)
+            models.append(model)
+            return model
+
+        value = create_formation_tool(spec, model_factory=factory, description="Long graph")
+        _, result = await call_tool(value, {"prompt": "Complete every step"})
+        assert result["status"] == "success", result
+        assert sum(len(model.calls) for model in models) == 25
+
+    asyncio.run(scenario())
+
+
+@pytest.mark.parametrize("spec_type, fields", [
+    (GraphSpec, ("max_node_executions", "execution_timeout", "node_timeout")),
+    (SwarmSpec, ("max_handoffs", "max_iterations", "execution_timeout", "node_timeout")),
+])
+def test_formation_limits_are_opt_in(spec_type, fields):
+    spec = spec_type("team", {} if spec_type is GraphSpec else ())
+    assert all(getattr(spec, field) is None for field in fields)
+    for field in fields:
+        limited = spec_type("team", {} if spec_type is GraphSpec else (), **{field: 2})
+        assert getattr(limited, field) == 2
+        with pytest.raises(ValueError, match="must be positive"):
+            spec_type("team", {} if spec_type is GraphSpec else (), **{field: 0})
+
+
 def test_formation_missing_result_does_not_reexecute(monkeypatch):
     calls = 0
     async def broken(self, prompt):

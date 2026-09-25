@@ -237,13 +237,73 @@ def test_default_native_formations_execute_and_release_children(offline, monkeyp
     assert all(cleanup.call_count == 1 for cleanup in cleanups)
 
 
+def test_long_run_keeps_tools_and_host_files_across_turns(offline, tmp_path):
+    build, _, _, _, storage = offline
+    calls = []
+    artifact = tmp_path / "progress.txt"
+
+    @tool
+    def record_step(step: int) -> str:
+        """Persist one completed step and return its number."""
+        calls.append(step)
+        with artifact.open("a") as handle:
+            handle.write(f"{step}\n")
+        return str(step)
+
+    class LongModel(OfflineModel):
+        async def stream(self, messages, tool_specs=None, system_prompt=None, **kwargs):
+            # Reuse the native streaming fixture but request one fresh tool on
+            # each model cycle, rather than stopping after the first result.
+            self.uses = [("record_step", {"step": len(calls) + 1})] if len(calls) < 30 else ()
+            assert any(spec["name"] == "record_step" for spec in tool_specs or [])
+            async for event in super().stream([messages[0]], tool_specs, system_prompt, **kwargs):
+                yield event
+
+    async def factory(**kwargs):
+        return await asyncio.to_thread(build, extra_tools=[record_step],
+            runtime_options={**kwargs["runtime_options"], "model": LongModel()})
+
+    async def scenario():
+        manager = PanelRuntimeManager(factory=factory, storage_factory=lambda user: storage)
+        try:
+            session = await manager.start("user", "session", "Complete thirty steps")
+            await asyncio.wait_for(session.wait(), 30)
+            assert session.status == "completed", session.error
+            assert calls == list(range(1, 31))
+            assert len(session.agent.model.calls) == 31
+            original_agent = session.agent
+            await manager.start("user", "session", "Check the completed work")
+            await asyncio.wait_for(session.wait(), 30)
+            assert session.status == "completed"
+            assert session.agent is original_agent
+            assert artifact.read_text().splitlines() == [str(step) for step in range(1, 31)]
+        finally:
+            await manager.shutdown()
+
+    asyncio.run(scenario())
+
+
+def test_goal_continues_beyond_three_attempts(offline):
+    build, _, _, _, _ = offline
+    validations = []
+
+    def goal(response, agent):
+        validations.append(response)
+        return len(validations) == 5
+
+    agent = build(options={"goal": goal})
+    result = asyncio.run(agent.invoke_async("Finish the task"))
+    assert result.stop_reason == "end_turn"
+    assert len(validations) == 5
+
+
 def test_goal_judge_fresh_and_background_delegation_foreground_only(offline):
     build, models, _, constructed, _ = offline
     agent = build(options={"goal": "Be concise", "background": True, "checkpointing": True})
     kwargs = constructed[-1][1]
     goal = next(plugin for plugin in kwargs["plugins"] if isinstance(plugin, GoalLoop))
     assert goal._judge_model is not agent.model
-    assert goal._max_attempts == 3 and goal._timeout == 120 and goal._preserve_context
+    assert goal._max_attempts == float("inf") and goal._timeout == float("inf") and goal._preserve_context
     assert len(models) == 2  # parent + fresh judge
     background = kwargs["background_tasks"]
     assert background["agentic"] == ["*"] and background["wait_for_completion"] is True
@@ -258,7 +318,7 @@ def test_native_question_pause_preserved_with_goal_and_runtime(offline, checkpoi
 
     def goal(response, agent):
         validations.append(response)
-        return False
+        return len(validations) > 1
 
     async def factory(**kwargs):
         agent = await asyncio.to_thread(build, options={"checkpointing": checkpoint, "goal": goal},

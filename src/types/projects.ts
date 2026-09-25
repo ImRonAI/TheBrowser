@@ -8,9 +8,22 @@ export type ProjectTypeKey =
   | 'personal-goals'
   | 'product-discovery'
 
-export type IssueTypeKey = 'initiative' | 'epic' | 'story' | 'task' | 'subtask'
+export type IssueTypeKey = 'initiative' | 'epic' | 'story' | 'task' | 'bug' | 'subtask' | (string & {})
 export type IssueStatus = 'backlog' | 'in-progress' | 'review' | 'blocked' | 'done'
 export type IssuePriority = 'critical' | 'high' | 'medium' | 'low'
+
+export type ProjectFieldType = 'text' | 'rich-text' | 'number' | 'currency' | 'checkbox' | 'date' | 'datetime' | 'single-select' | 'multi-select' | 'person' | 'url' | 'issue'
+export interface ProjectField {
+  key: string
+  label: string
+  type: ProjectFieldType
+  options?: string[]
+  required?: boolean
+  archived?: boolean
+  issueTypes?: string[]
+  default?: unknown
+  [key: string]: unknown
+}
 
 export interface Person {
   id: string
@@ -33,6 +46,8 @@ export interface ProjectTypeScheme {
 
 export interface Project {
   id: string
+  version: number
+  lifecycle: 'active' | 'paused' | 'completed' | 'archived'
   key: string
   name: string
   type: ProjectTypeKey
@@ -42,11 +57,18 @@ export interface Project {
   updatedAt: number
   settings: {
     allowCrossProjectParents: boolean
+    issueTypes?: { key: IssueTypeKey; label: string; level: number }[]
+    fields?: ProjectField[]
+    [key: string]: unknown
   }
 }
 
 export interface Issue {
   id: string
+  number: number
+  version: number
+  customFields: Record<string, unknown>
+  workProducts: Record<string, unknown>[]
   projectId: string
   type: IssueTypeKey
   parentId?: string | null
@@ -66,7 +88,7 @@ export interface Issue {
   rank: number
 }
 
-export type IssueLinkType = 'blocks' | 'blocked-by' | 'relates' | 'duplicates'
+export type IssueLinkType = 'blocks' | 'enables' | 'implements' | 'fixes' | 'duplicates' | 'discovers' | 'relates'
 
 export interface IssueLink {
   id: string
@@ -96,10 +118,11 @@ export const STANDARD_HIERARCHY: Record<IssueTypeKey, IssueTypeKey | null> = {
   epic: 'story',
   story: 'task',
   task: 'subtask',
+  bug: 'subtask',
   subtask: null,
 }
 
-export const ROOT_ISSUE_TYPES: IssueTypeKey[] = ['initiative', 'epic', 'story', 'task']
+export const ROOT_ISSUE_TYPES: IssueTypeKey[] = ['initiative', 'epic', 'story', 'task', 'bug']
 
 export const PROJECT_TYPE_SCHEMES: Record<ProjectTypeKey, ProjectTypeScheme> = {
   'software-development': {
@@ -182,6 +205,7 @@ export const ISSUE_TYPE_CONFIG: Record<IssueTypeKey, { label: string; level: num
   epic: { label: 'Epic', level: 2, color: 'bg-violet-500/15 text-violet-700 dark:text-violet-300' },
   story: { label: 'Story', level: 3, color: 'bg-purple-500/15 text-purple-700 dark:text-purple-300' },
   task: { label: 'Task', level: 4, color: 'bg-indigo-400/15 text-indigo-600 dark:text-indigo-400' },
+  bug: { label: 'Bug', level: 4, color: 'bg-rose-500/15 text-rose-700 dark:text-rose-300' },
   subtask: { label: 'Subtask', level: 5, color: 'bg-surface-300/50 text-surface-600 dark:text-surface-400' },
 }
 
@@ -200,12 +224,15 @@ export const ISSUE_PRIORITY_CONFIG: Record<IssuePriority, { label: string; color
   low: { label: 'Low', color: 'bg-surface-400/20 text-surface-600 dark:text-surface-400' },
 }
 
-export const ISSUE_LINK_INVERSE: Record<IssueLinkType, IssueLinkType> = {
-  blocks: 'blocked-by',
-  'blocked-by': 'blocks',
+export const ISSUE_LINK_INVERSE: Record<IssueLinkType, string> = {
+  blocks: 'blocked by',
+  enables: 'enabled by',
+  implements: 'implemented by',
+  fixes: 'fixed by',
+  discovers: 'discovered by',
   relates: 'relates',
   duplicates: 'duplicates',
 }
 
-export const INTERNAL_PROJECT_VIEWS = ['dashboard', 'backlog', 'board', 'list', 'timeline', 'docs', 'settings'] as const
+export const INTERNAL_PROJECT_VIEWS = ['dashboard', 'backlog', 'board', 'list', 'calendar', 'timeline', 'docs', 'settings'] as const
 export type ProjectView = typeof INTERNAL_PROJECT_VIEWS[number]

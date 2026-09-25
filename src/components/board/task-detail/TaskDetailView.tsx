@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { cn } from '@/utils/cn'
@@ -35,9 +35,18 @@ interface TaskDetailViewProps {
   onClose: () => void
   onUpdate?: (task: Task) => void
   onTaskClick?: (taskId: string) => void
+  /** Canonical callers explicitly provide every pane; legacy stores are never mounted. */
+  workspace?: {
+    banner: ReactNode
+    sidebar: ReactNode
+    description: ReactNode
+    ron: ReactNode
+    comms: ReactNode
+    history: ReactNode
+  }
 }
 
-export function TaskDetailView({ task, onClose, onUpdate, onTaskClick }: TaskDetailViewProps) {
+export function TaskDetailView({ task, onClose, onUpdate, onTaskClick, workspace }: TaskDetailViewProps) {
   const [activeTab, setActiveTab] = useState<TabId>('description')
   const [viewMode, setViewMode] = useState<ViewMode>('normal')
 
@@ -64,6 +73,9 @@ export function TaskDetailView({ task, onClose, onUpdate, onTaskClick }: TaskDet
 
       {/* Modal Container */}
       <motion.div
+        role="dialog"
+        aria-modal="true"
+        aria-label={task.title}
         initial={{ opacity: 0, scale: 0.96, y: 20 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.96, y: 20 }}
@@ -76,7 +88,7 @@ export function TaskDetailView({ task, onClose, onUpdate, onTaskClick }: TaskDet
             ? "w-screen h-screen max-w-none max-h-none rounded-none border-0"
             : [
                 "w-full max-w-5xl",
-                "max-h-[88vh] min-h-0",
+                "h-[88dvh] max-h-[88dvh] min-h-0",
                 "rounded-2xl",
                 "border border-indigo-200/20 dark:border-indigo-900/40",
                 "shadow-2xl shadow-indigo-500/10 dark:shadow-[0_0_80px_rgba(99,102,241,0.12)]",
@@ -109,11 +121,12 @@ export function TaskDetailView({ task, onClose, onUpdate, onTaskClick }: TaskDet
           onClose={onClose}
           onToggleFullscreen={toggleFullscreen}
         />
+        {workspace && <div className="relative z-[2]">{workspace.banner}</div>}
 
         {/* Main Content - Two Column Layout */}
-        <div className="relative z-[1] flex-1 flex overflow-hidden min-h-0">
+        <div className={cn('relative z-[1] flex-1 flex min-h-0', workspace ? 'flex-col lg:flex-row overflow-y-auto lg:overflow-hidden' : 'overflow-hidden')}>
           {/* Left Panel - Tabbed Content */}
-          <div className="flex-1 flex flex-col min-w-0 border-r border-surface-200 dark:border-white/[0.05]">
+          <div className={cn('flex-1 flex flex-col min-w-0 border-r border-surface-200 dark:border-white/[0.05]', workspace && 'min-h-[400px] lg:min-h-0')}>
             {/* Tab Navigation */}
             <TabNavigation
               tabs={TABS}
@@ -123,6 +136,12 @@ export function TaskDetailView({ task, onClose, onUpdate, onTaskClick }: TaskDet
 
             {/* Tab Content */}
             <div className="flex-1 overflow-hidden min-h-0">
+              {workspace ? <>
+                <div hidden={activeTab !== 'description'} className="h-full">{workspace.description}</div>
+                <div hidden={activeTab !== 'ron'} className="h-full"><ErrorBoundary componentName="RonTab">{workspace.ron}</ErrorBoundary></div>
+                <div hidden={activeTab !== 'comms'} className="h-full">{workspace.comms}</div>
+                <div hidden={activeTab !== 'history'} className="h-full">{workspace.history}</div>
+              </> : (
               <AnimatePresence mode="wait">
                 {activeTab === 'description' && (
                   <TabPanel key="description">
@@ -151,15 +170,16 @@ export function TaskDetailView({ task, onClose, onUpdate, onTaskClick }: TaskDet
                   </TabPanel>
                 )}
               </AnimatePresence>
+              )}
             </div>
           </div>
 
           {/* Right Panel - Metadata Sidebar */}
-          <TaskMetadataSidebar
+          {workspace ? workspace.sidebar : <TaskMetadataSidebar
             task={task}
             onUpdate={onUpdate}
             onTaskClick={onTaskClick}
-          />
+          />}
         </div>
       </motion.div>
     </motion.div>
@@ -315,7 +335,7 @@ function TabNavigation({ tabs, activeTab, onTabChange }: TabNavigationProps) {
       "border-b border-surface-200 dark:border-white/[0.05]",
       "bg-surface-50/50 dark:bg-surface-900/30"
     )}>
-      <div className="flex items-center gap-0.5">
+      <div className="flex items-center gap-0.5 overflow-x-auto">
         {tabs.map((tab) => (
           <motion.button
             key={tab.id}

@@ -72,7 +72,15 @@ export const SlashCommandMenu = forwardRef((props: any, ref) => {
       case 'fileUpload':
         inputRef.current?.click()
         break
-      case 'askRon':
+      case 'goal':
+      case 'askRon': {
+        const callback = editor.extensionManager.extensions.find((extension: { name: string }) => extension.name === 'slashCommand')?.options.onAskRon
+        if (callback) {
+          editor.chain().focus().deleteRange(range).run()
+          callback(item.action === 'goal')
+          break
+        }
+        if (item.action === 'goal') break
         editor.chain().focus().deleteRange(range).insertContent({
             type: 'askRon',
             attrs: {
@@ -80,6 +88,7 @@ export const SlashCommandMenu = forwardRef((props: any, ref) => {
             }
         }).run()
         break
+      }
       case 'heading':
         editor.chain().focus().deleteRange(range).setNode('heading', { level: item.level }).run()
         break

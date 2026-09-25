@@ -107,14 +107,28 @@ the `user_id` field itself is not an authentication mechanism.
 | `tool_execution` | Native `concurrent` (default) or `sequential` executor. |
 | `checkpointing` | Root native checkpoints; default false. Resume through the runtime. |
 | `background` | Native background execution; default false. Always waits for completion. Discovery/loading, editor, questions, skills, subagents and formations stay foreground-only. |
-| `goal` | Nonempty text enables native GoalLoop with a fresh judge model, 3 attempts, 120-second loop budget and preserved history. |
+| `goal` | Nonempty text enables native GoalLoop with a fresh judge model, no attempt/time cutoff and preserved history. User cancellation remains available. |
 
 `ask_user(question)` uses native `ToolContext.interrupt`; there is no custom
 handoff package. GoalLoop 1.56 may validate a paused invocation and incur a judge
 call. The final-result gate prevents goal feedback from bypassing an interrupt or
 checkpoint. Its timeout is checked between validations, not a hard provider-call
-deadline. Callable goals are supported by trusted Python construction, not JSON
+deadline (Ron leaves it unbounded). Callable goals are supported by trusted Python construction, not JSON
 HTTP options.
+
+Ron imposes no per-turn tool-call quota or overall root-run deadline. Native
+context management remains enabled so long conversations can offload/compact
+content rather than fail at the provider's context window. Host files are not
+reset between turns. In-memory session storage is still lost on backend restart;
+this is distinct from host-file persistence.
+
+Perplexity has no read-idle timeout by default, allowing long reasoning and
+server-side tool execution. `PERPLEXITY_READ_TIMEOUT=0` also disables it; a
+positive number opts into a retryable read-idle watchdog in seconds. Connection
+and write timeouts and finite transient-error retries remain. A genuinely hung
+stream now requires user cancellation unless the watchdog is explicitly set.
+Provider context/output caps and provider-managed tool/sandbox lifecycles are
+not controlled by these settings. Unbounded work can incur ongoing API costs.
 
 Retries use the public `from strands import ModelRetryStrategy` facade. Optional
 `PANEL_RETRY_MAX_ATTEMPTS`, `PANEL_RETRY_INITIAL_DELAY` and `PANEL_RETRY_MAX_DELAY`
@@ -267,7 +281,11 @@ hosted capabilities remain model-dependent, not filesystem grants.
 ```
 
 Graphs accept recursive graph/swarm/agent nodes. Swarms use `children` containing
-agent specs, with optional `max_handoffs` and `max_iterations`. Agent specs require
+agent specs, with optional `max_handoffs` and `max_iterations`. Omitted or null
+formation count/time limits are unbounded by default; positive values explicitly
+opt into limits (the example above is bounded). Native Graph uses `None`; SDK
+1.56 Swarm requires numeric comparisons, so omitted counts use `sys.maxsize`,
+total time uses infinity, and node timeout uses `None`. Agent specs require
 explicit `tools`. Unknown fields are rejected. `[]` removes default formations;
 formations only. Formation and skill runs stream through
 native executors and clean up their children, but **have no durable child resume**.

@@ -3,6 +3,7 @@ import { Grid2x2, List, Plus } from 'lucide-react'
 import { useProjectsStore } from '@/stores/projectsStore'
 import { ProjectTypeBadge } from '@/components/projects/badges'
 import { CreateProjectDialog } from '@/components/projects/dialogs'
+import { ProjectsSyncStatus } from '@/components/projects/ProjectsSyncStatus'
 import { Button } from '@catalyst/button'
 import { PageBackground } from '@/components/shared/PageBackground'
 import { cn } from '@/utils/cn'
@@ -48,6 +49,7 @@ export function ProjectsIndexPage() {
     <div className="min-h-full relative overflow-hidden bg-surface-0 dark:bg-surface-900">
       <PageBackground />
       <div className="relative z-10 px-10 py-8 space-y-8">
+        <ProjectsSyncStatus initialize />
         <div className="rounded-3xl glass-card border border-white/10 p-8 shadow-soft">
           <div className="flex flex-wrap items-center justify-between gap-6">
             <div>
@@ -105,7 +107,7 @@ export function ProjectsIndexPage() {
         {filteredMetrics.map(({ project, openIssues, blocked, dueSoon }) => (
           <button
             key={project.id}
-            onClick={() => navigateInternal(`ron://project/${project.key.toLowerCase()}`)}
+            onClick={() => navigateInternal(`ron://project/${project.id}`)}
             className={cn(
               'group relative overflow-hidden rounded-3xl glass-card border border-white/10 p-6 text-left transition',
               'hover:border-accent/40 dark:hover:border-accent-light/40 hover:shadow-soft'

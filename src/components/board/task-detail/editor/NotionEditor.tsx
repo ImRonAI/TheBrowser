@@ -33,6 +33,8 @@ interface NotionEditorProps {
   placeholder?: string
   users?: { id: string; name: string }[]
   readOnly?: boolean
+  canonical?: boolean
+  onAskRon?: (goal: boolean) => void
 }
 
 export function NotionEditor({ 
@@ -41,7 +43,9 @@ export function NotionEditor({
   onSave, 
   placeholder = 'Type / for commands...', 
   users = [],
-  readOnly = false
+  readOnly = false,
+  canonical = false,
+  onAskRon
 }: NotionEditorProps) {
   
   const editor = useEditor({
@@ -86,10 +90,11 @@ export function NotionEditor({
         lowlight,
       }),
       SlashCommand.configure({
-        suggestion: suggestionOptions,
+        onAskRon,
+        suggestion: canonical ? { ...suggestionOptions, items: (args: { query: string }) =>
+          suggestionOptions.items(args).filter((item) => item.id !== 'upload' && (!!onAskRon || !['ask-ron', 'goal'].includes(item.id))) } : suggestionOptions,
       }),
-      FileAttachmentExtension,
-      AskRonExtension,
+      ...(!canonical ? [FileAttachmentExtension, AskRonExtension] : []),
     ],
     content,
     shouldRerenderOnTransaction: false,
@@ -110,6 +115,12 @@ export function NotionEditor({
       }
     },
   })
+
+  useEffect(() => {
+    // A lock transition is not a document edit. Emitting onUpdate here can
+    // overwrite the final streamed draft with the editor's previous chunk.
+    editor?.setEditable(!readOnly, false)
+  }, [editor, readOnly])
 
   useEffect(() => {
     if (!editor) return
@@ -185,6 +196,7 @@ export function NotionEditor({
 function MenuButton({ children, isActive, onClick }: { children: React.ReactNode, isActive: boolean, onClick: () => void }) {
   return (
     <button
+      type="button"
       onClick={onClick}
       className={`
         p-1.5 rounded-md hover:bg-surface-100 dark:hover:bg-surface-800 transition-colors

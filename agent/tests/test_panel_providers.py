@@ -254,6 +254,17 @@ def test_perplexity_keeps_argument_recovery_adapter(monkeypatch):
     }
 
 
+@pytest.mark.parametrize("configured, expected", [(None, None), ("0", None), ("180", 180)])
+def test_perplexity_read_timeout_is_opt_in(monkeypatch, configured, expected):
+    monkeypatch.setattr(app_config, "PERPLEXITY_API_KEY", "test-key")
+    monkeypatch.delenv("PERPLEXITY_READ_TIMEOUT", raising=False)
+    if configured is not None:
+        monkeypatch.setenv("PERPLEXITY_READ_TIMEOUT", configured)
+    model = panel_agent.build_model("perplexity", "openai/gpt-5")
+    assert model.client_args["timeout"].read == expected
+    assert model.client_args["timeout"].connect == 10
+
+
 def test_perplexity_hosted_tools_env_override(monkeypatch):
     monkeypatch.setattr(app_config, "PERPLEXITY_API_KEY", "test-key")
     monkeypatch.setenv("PERPLEXITY_HOSTED_TOOLS", "web_search,finance_search")

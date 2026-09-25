@@ -11,6 +11,8 @@ import { BrowserLayout } from '@/layouts/BrowserLayout'
 import { AuthPageLayout } from '@/layouts/AuthPageLayout'
 import { HomePage } from '@/pages/HomePage'
 import { ExecutePage } from '@/pages/ExecutePage'
+import { ProjectsIndexPage } from '@/pages/ProjectsIndexPage'
+import { ProjectHomePage } from '@/pages/ProjectHomePage'
 import { BuildWorkbenchPage } from '@/components/build'
 import { SignInPage } from '@/pages/SignInPage'
 import { OnboardingPage } from '@/pages/OnboardingPage'
@@ -38,6 +40,7 @@ export function App() {
   const { tabs, createTab } = useTabStore()
   const { isComplete } = useOnboardingStore()
   const [hasHydrated, setHasHydrated] = useState(false)
+  const [showSignIn, setShowSignIn] = useState(() => window.location.hash === '#signin')
   const { activeTab } = useNavigationStore()
   const searchStore = useSearchStore()
   const { 
@@ -68,6 +71,12 @@ export function App() {
     return window.electron?.onDeepLink?.((url) => {
       handleDeepLinkCallback(url).catch(console.error)
     })
+  }, [])
+
+  useEffect(() => {
+    const update = () => setShowSignIn(window.location.hash === '#signin')
+    window.addEventListener('hashchange', update)
+    return () => window.removeEventListener('hashchange', update)
   }, [])
 
   useEffect(() => {
@@ -164,10 +173,10 @@ export function App() {
 
   // Initialize with at least one tab
   useEffect(() => {
-    if (isAuthenticated && isComplete && tabs.length === 0) {
+    if (isInitialized && (!isAuthenticated || isComplete) && tabs.length === 0) {
       createTab('ron://home', true)
     }
-  }, [isAuthenticated, isComplete, tabs.length, createTab])
+  }, [isInitialized, isAuthenticated, isComplete, tabs.length, createTab])
 
   // Apply theme class to document
   useEffect(() => {
@@ -228,19 +237,20 @@ export function App() {
     )
   }
 
-  // If not authenticated, show sign in page
-  if (!isAuthenticated) {
+  // Signing in is optional. A fresh install opens the browser and guest workspace.
+  if (showSignIn && !isAuthenticated) {
     return (
       <RouteShell>
         <AuthPageLayout>
           <SignInPage />
+          <button type="button" onClick={() => { window.location.hash = ''; setShowSignIn(false) }}>Continue without an account</button>
         </AuthPageLayout>
       </RouteShell>
     )
   }
 
   // If not onboarded, show onboarding page
-  if (!isComplete) {
+  if (isAuthenticated && !isComplete) {
     return (
       <RouteShell>
         <OnboardingPage />
@@ -313,6 +323,13 @@ function RouteShell({ children }: { children: ReactNode }) {
 
 // Route content based on navigation tab
 function MainContent({ activeTab }: { activeTab: string }) {
+  const url = useTabStore((state) => state.tabs.find((tab) => tab.id === state.activeTabId)?.url)
+  const userId = useAuthStore((state) => state.user?.id)
+  if (url === 'ron://projects' || url === 'ron://projects/') {
+    return <ProjectsIndexPage key={userId} />
+  }
+  const projectRoute = url?.match(/^ron:\/\/project\/([^/?#]+)\/?$/)
+  if (projectRoute) return <ProjectHomePage key={`${userId}:${projectRoute[1]}`} projectKey={projectRoute[1]} />
   switch (activeTab) {
     case 'execute':
       return <ExecutePage />

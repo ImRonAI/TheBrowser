@@ -1,6 +1,6 @@
 import { useMemo, useState, useEffect } from 'react'
 import { ChevronDown, ChevronRight, Plus, ArrowUp, ArrowDown } from 'lucide-react'
-import { useProjectsStore, projectSelectors } from '@/stores/projectsStore'
+import { useProjectsStore, projectSelectors, projectUtils } from '@/stores/projectsStore'
 import { useNavigationStore } from '@/stores/navigationStore'
 import {
   INTERNAL_PROJECT_VIEWS,
@@ -9,14 +9,18 @@ import {
   IssueStatus,
   IssueTypeKey,
   ProjectTypeKey,
+  Project,
   IssuePriority,
   ISSUE_STATUS_CONFIG,
   ISSUE_TYPE_CONFIG,
   PROJECT_TYPE_SCHEMES,
-  STANDARD_HIERARCHY,
 } from '@/types/projects'
 import { IssueCard } from '@/components/projects/IssueCard'
 import { IssueDrawer } from '@/components/projects/IssueDrawer'
+import { ProjectCalendar } from '@/components/projects/ProjectCalendar'
+import { ProjectConfigurationEditor } from '@/components/projects/ProjectConfigurationEditor'
+import { fromLocalDateTime, toLocalDateTime } from '@/lib/project-issue-utils'
+import { ProjectsSyncStatus } from '@/components/projects/ProjectsSyncStatus'
 import { ProjectTypeBadge, IssueTypeBadge, IssueStatusBadge } from '@/components/projects/badges'
 import { CreateIssueDialog } from '@/components/projects/dialogs'
 import { Button } from '@catalyst/button'
@@ -28,7 +32,7 @@ interface ProjectHomePageProps {
 }
 
 export function ProjectHomePage({ projectKey }: ProjectHomePageProps) {
-  const { projects, issues, activity, updateProject, people } = useProjectsStore()
+  const { projects, issues, activity, updateProject, people, isInitialized, isLoading, userId } = useProjectsStore()
   const { setActiveTab } = useNavigationStore()
   const project = projectSelectors.getProjectByKey(projects, projectKey)
   const [activeView, setActiveView] = useState<ProjectView>('backlog')
@@ -49,8 +53,9 @@ export function ProjectHomePage({ projectKey }: ProjectHomePageProps) {
       <div className="min-h-full relative overflow-hidden bg-surface-0 dark:bg-surface-900">
         <PageBackground />
         <div className="relative z-10 px-10 py-8">
+          <ProjectsSyncStatus initialize />
           <div className="rounded-3xl glass-card border border-white/10 p-8 shadow-soft">
-            <h1 className="text-2xl font-display text-ink dark:text-ink-inverse">Project not found</h1>
+            <h1 className="text-2xl font-display text-ink dark:text-ink-inverse">{isLoading || !isInitialized ? 'Loading project' : 'Project not found'}</h1>
             <p className="mt-2 text-body-sm text-ink-muted dark:text-ink-inverse-muted">
               Double-check the project key and try again.
             </p>
@@ -66,6 +71,7 @@ export function ProjectHomePage({ projectKey }: ProjectHomePageProps) {
     <div className="min-h-full relative overflow-hidden bg-surface-0 dark:bg-surface-900">
       <PageBackground />
       <div className="relative z-10 px-10 py-8 space-y-8">
+        <ProjectsSyncStatus initialize />
         <div className="rounded-3xl glass-card border border-white/10 p-8 shadow-soft">
           <div className="flex flex-wrap items-start justify-between gap-6">
             <div>
@@ -142,6 +148,7 @@ export function ProjectHomePage({ projectKey }: ProjectHomePageProps) {
             onIssueSelect={setSelectedIssueId}
           />
         )}
+        {activeView === 'calendar' && <ProjectCalendar issues={projectIssues} onIssueSelect={setSelectedIssueId} />}
         {activeView === 'timeline' && (
           <ProjectTimelineView
             projectIssues={projectIssues}
@@ -155,8 +162,10 @@ export function ProjectHomePage({ projectKey }: ProjectHomePageProps) {
         )}
         {activeView === 'settings' && (
           <ProjectSettingsView
-            allowCrossProjectParents={project.settings.allowCrossProjectParents}
-            onToggle={(value) => updateProject(project.id, { settings: { allowCrossProjectParents: value } })}
+            key={`${userId}:${project.id}`}
+            project={project}
+            canEdit={project.ownerId === userId}
+            onLifecycleChange={async (lifecycle) => { await updateProject(project.id, { lifecycle }) }}
           />
         )}
         </div>
@@ -230,7 +239,7 @@ function ProjectDashboardView({
             {Object.keys(ISSUE_TYPE_CONFIG).map((type) => (
               <div key={type} className="rounded-2xl glass-subtle border border-white/10 dark:border-white/10 px-4 py-3">
                 <p className="text-xs font-semibold text-ink dark:text-ink-inverse">
-                  {ISSUE_TYPE_CONFIG[type as IssueTypeKey].label}
+                  {ISSUE_TYPE_CONFIG[type as IssueTypeKey]?.label ?? type}
                 </p>
                 <p className="mt-2 text-lg font-semibold text-ink dark:text-ink-inverse">
                   {typeCounts[type] || 0}
@@ -314,7 +323,9 @@ function ProjectBacklogView({
   projectIssues: Issue[]
   onIssueSelect: (issueId: string) => void
 }) {
-  const { moveIssueInParent, reparentIssue, swapIssueRank } = useProjectsStore()
+  const { moveIssueInParent, reparentIssue, swapIssueRank, projects, pendingSaves } = useProjectsStore()
+  const definitions = projects.find((project) => project.id === projectId)?.settings.issueTypes
+  const hierarchyLevel = (type: IssueTypeKey) => definitions?.find((definition) => definition.key === type)?.level ?? ISSUE_TYPE_CONFIG[type]?.level
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
   const [activeParentId, setActiveParentId] = useState<string | null>(null)
   const [showCreateChild, setShowCreateChild] = useState(false)
@@ -370,27 +381,28 @@ function ProjectBacklogView({
 
   const rootIssues = childrenMap.get(null) || []
 
-  const handleDropOnIssue = (targetId: string, draggedId: string) => {
-    if (targetId === draggedId) return
+  const handleDropOnIssue = async (targetId: string, draggedId: string) => {
+    if (pendingSaves || targetId === draggedId) return
     const dragged = projectIssues.find((item) => item.id === draggedId)
     const target = projectIssues.find((item) => item.id === targetId)
     if (!dragged || !target) return
 
-    if (STANDARD_HIERARCHY[target.type] === dragged.type) {
-      reparentIssue(dragged.id, target.id)
+    if ((hierarchyLevel(target.type) ?? -2) + 1 === hierarchyLevel(dragged.type)) {
+      await reparentIssue(dragged.id, target.id)
       return
     }
 
     if ((dragged.parentId || null) === (target.parentId || null)) {
-      swapIssueRank(dragged.id, target.id)
+      await swapIssueRank(dragged.id, target.id)
     }
   }
 
-  const handleDropToRoot = (draggedId: string) => {
+  const handleDropToRoot = async (draggedId: string) => {
+    if (pendingSaves) return
     const dragged = projectIssues.find((item) => item.id === draggedId)
     if (!dragged) return
-    if (!projectSelectors.isRootTypeAllowed(dragged.type)) return
-    reparentIssue(dragged.id, null)
+    if ((hierarchyLevel(dragged.type) ?? 5) >= 5) return
+    await reparentIssue(dragged.id, null)
   }
 
   return (
@@ -491,7 +503,10 @@ function BacklogNode({
   const isExpanded = expanded[issue.id] ?? true
   const rollup = rollups.get(issue.id) || { total: 0, done: 0, blocked: 0 }
   const percentDone = rollup.total > 0 ? Math.round((rollup.done / rollup.total) * 100) : 0
-  const canHaveChildren = STANDARD_HIERARCHY[issue.type] !== null
+  const { projects } = useProjectsStore()
+  const typeLevel = projects.find((project) => project.id === issue.projectId)?.settings.issueTypes
+    ?.find((type) => type.key === issue.type)?.level ?? ISSUE_TYPE_CONFIG[issue.type]?.level
+  const canHaveChildren = (typeLevel ?? 5) < 5
 
   return (
     <div>
@@ -502,6 +517,7 @@ function BacklogNode({
         onDragStart={(event) => event.dataTransfer.setData('text/plain', issue.id)}
         onDragOver={(event) => event.preventDefault()}
         onDrop={(event) => {
+          event.stopPropagation()
           const draggedId = event.dataTransfer.getData('text/plain')
           if (draggedId) onDropIssue(issue.id, draggedId)
         }}
@@ -584,27 +600,28 @@ function ReparentDialog({
   issues: Issue[]
   onClose: () => void
 }) {
-  const { reparentIssue } = useProjectsStore()
+  const { reparentIssue, pendingSaves, projects } = useProjectsStore()
   const [selectedParent, setSelectedParent] = useState(issue.parentId || '')
-  const requiredParentType = REQUIRED_PARENT_BY_CHILD[issue.type]
-  const allowNoParent = requiredParentType === null
+  const definitions = projects.find((project) => project.id === issue.projectId)?.settings.issueTypes
+  const level = definitions?.find((type) => type.key === issue.type)?.level ?? ISSUE_TYPE_CONFIG[issue.type]?.level
+  const allowNoParent = level !== 5
 
-  const availableParents = requiredParentType
-    ? issues.filter((candidate) => candidate.type === requiredParentType && candidate.id !== issue.id)
-    : []
+  const availableParents = issues.filter((candidate) => candidate.projectId === issue.projectId && candidate.id !== issue.id &&
+    (definitions?.find((type) => type.key === candidate.type)?.level ?? ISSUE_TYPE_CONFIG[candidate.type]?.level) === (level ?? 0) - 1)
 
-  const handleSubmit = () => {
-    if (!allowNoParent && !selectedParent) return
-    reparentIssue(issue.id, selectedParent || null)
-    onClose()
+  const handleSubmit = async () => {
+    if (pendingSaves || (!allowNoParent && !selectedParent)) return
+    const result = await reparentIssue(issue.id, selectedParent || null)
+    if (!result.error) onClose()
   }
 
   return (
     <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/40">
       <div className="w-full max-w-lg rounded-3xl glass-card border border-white/10 p-6 shadow-2xl">
         <h3 className="text-body-sm font-semibold text-ink dark:text-ink-inverse">Reparent Issue</h3>
+        <ProjectsSyncStatus />
         <p className="mt-2 text-body-xs text-ink-muted dark:text-ink-inverse-muted">
-          Select a valid parent ({requiredParentType || 'none'}).
+          Select a parent from the preceding hierarchy level in this project.
         </p>
         <select
           value={selectedParent}
@@ -620,19 +637,11 @@ function ReparentDialog({
         </select>
         <div className="mt-6 flex justify-end gap-3">
           <Button outline onClick={onClose}>Cancel</Button>
-          <Button color="indigo" onClick={handleSubmit}>Update Parent</Button>
+          <Button color="indigo" disabled={pendingSaves > 0} onClick={handleSubmit}>Update Parent</Button>
         </div>
       </div>
     </div>
   )
-}
-
-const REQUIRED_PARENT_BY_CHILD: Record<IssueTypeKey, IssueTypeKey | null> = {
-  initiative: null,
-  epic: 'initiative',
-  story: 'epic',
-  task: 'story',
-  subtask: 'task',
 }
 
 function ProjectBoardView({
@@ -646,17 +655,18 @@ function ProjectBoardView({
   projectIssues: Issue[]
   onIssueSelect: (issueId: string) => void
 }) {
-  const { moveIssueStatus } = useProjectsStore()
-  const scheme = PROJECT_TYPE_SCHEMES[projectType as keyof typeof PROJECT_TYPE_SCHEMES]
-  const [visibleTypes, setVisibleTypes] = useState<IssueTypeKey[]>(scheme.boardIssueTypes)
+  const { moveIssueStatus, projects, pendingSaves } = useProjectsStore()
+  const project = projects.find((item) => item.id === projectId)
+  const scheme = project ? projectUtils.getProjectScheme(project) : PROJECT_TYPE_SCHEMES[projectType]
+  const [visibleTypes, setVisibleTypes] = useState<IssueTypeKey[]>(scheme.issueTypes)
   const [createStatus, setCreateStatus] = useState<IssueStatus | null>(null)
 
   const columns = scheme.statuses
 
   const boardIssues = projectIssues.filter((issue) => visibleTypes.includes(issue.type))
 
-  const handleDrop = (status: IssueStatus, issueId: string) => {
-    moveIssueStatus(issueId, status)
+  const handleDrop = async (status: IssueStatus, issueId: string) => {
+    if (!pendingSaves) await moveIssueStatus(issueId, status)
   }
 
   const toggleType = (type: IssueTypeKey) => {
@@ -678,7 +688,7 @@ function ProjectBoardView({
                 : 'glass-subtle border border-white/10 dark:border-white/10 text-ink-muted dark:text-ink-inverse-muted'
             )}
           >
-            {ISSUE_TYPE_CONFIG[type].label}
+            {project?.settings.issueTypes?.find((definition) => definition.key === type)?.label ?? ISSUE_TYPE_CONFIG[type]?.label ?? type}
           </button>
         ))}
       </div>
@@ -799,9 +809,16 @@ function ProjectListView({
               </td>
               <td className="py-3">
                 <input
-                  type="date"
-                  value={issue.dueDate ? issue.dueDate.slice(0, 10) : ''}
-                  onChange={(e) => updateIssue(issue.id, { dueDate: e.target.value || undefined })}
+                  type="datetime-local"
+                  aria-label={`Due time in ${Intl.DateTimeFormat().resolvedOptions().timeZone}`}
+                  value={toLocalDateTime(issue.dueDate)}
+                  onChange={(e) => {
+                    try {
+                      const dueDate = fromLocalDateTime(e.target.value)
+                      e.target.setCustomValidity('')
+                      void updateIssue(issue.id, { dueDate }, issue.version)
+                    } catch (error) { e.target.setCustomValidity((error as Error).message); e.target.reportValidity() }
+                  }}
                   className="rounded-lg glass-subtle border border-white/10 dark:border-white/10 px-2 py-1"
                 />
               </td>
@@ -868,34 +885,36 @@ function ProjectTimelineView({
 }
 
 function ProjectSettingsView({
-  allowCrossProjectParents,
-  onToggle,
+  project,
+  canEdit,
+  onLifecycleChange,
 }: {
-  allowCrossProjectParents: boolean
-  onToggle: (value: boolean) => void
+  project: Project
+  canEdit: boolean
+  onLifecycleChange: (value: Project['lifecycle']) => Promise<void>
 }) {
+  const { pendingSaves } = useProjectsStore()
   return (
     <div className="rounded-3xl glass-card border border-white/10 p-6 shadow-soft">
       <h3 className="text-body-sm font-semibold text-ink dark:text-ink-inverse">Project Settings</h3>
       <div className="mt-4 flex items-center justify-between rounded-2xl glass-subtle border border-white/10 dark:border-white/10 px-4 py-4">
         <div>
-          <p className="text-body-sm font-semibold text-ink dark:text-ink-inverse">Allow cross-project parenting</p>
+          <p className="text-body-sm font-semibold text-ink dark:text-ink-inverse">Project lifecycle</p>
           <p className="mt-1 text-body-xs text-ink-muted dark:text-ink-inverse-muted">
-            Disabled by default to keep hierarchy clean.
+            Hierarchies stay within a project. Use relationships to connect issues across projects.
           </p>
         </div>
-        <button
-          onClick={() => onToggle(!allowCrossProjectParents)}
-          className={cn(
-            'px-4 py-2 rounded-full text-[11px] font-semibold uppercase tracking-wider',
-            allowCrossProjectParents
-              ? 'bg-accent/20 text-accent dark:text-accent-light'
-              : 'glass-subtle border border-white/10 dark:border-white/10 text-ink-muted dark:text-ink-inverse-muted'
-          )}
+        <select
+          aria-label="Project lifecycle"
+          value={project.lifecycle}
+          disabled={!canEdit || pendingSaves > 0}
+          onChange={(event) => void onLifecycleChange(event.target.value as Project['lifecycle'])}
+          className="rounded-xl bg-surface-0 dark:bg-surface-900 px-3 py-2 text-body-sm disabled:opacity-50"
         >
-          {allowCrossProjectParents ? 'Enabled' : 'Disabled'}
-        </button>
+          {(['active', 'paused', 'completed', 'archived'] as const).map((value) => <option key={value} value={value}>{value}</option>)}
+        </select>
       </div>
+      <ProjectConfigurationEditor project={project} canEdit={canEdit} />
     </div>
   )
 }
