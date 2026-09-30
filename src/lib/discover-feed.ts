@@ -99,10 +99,16 @@ const STORY_KINDS = new Set<ItemKind>(['article', 'web', 'video', 'discussion'])
 
 export function itemToStory(item: DiscoverItem, topic: string): Story | null {
   if (!STORY_KINDS.has(item.kind) || !item.title || !/^https?:\/\//i.test(item.url)) return null
-  let hostname = item.source
-  if (!hostname) { try { hostname = new URL(item.url).hostname } catch { hostname = '' } }
+  let hostname = ''
+  try { hostname = new URL(item.url).hostname } catch { hostname = item.source || '' }
   return { title: stripMarkup(item.title), url: item.url, description: stripMarkup(item.description || ''), age: item.age || '', topic,
-    hostname, thumbnail: item.thumbnail || '' }
+    hostname,
+    thumbnail: item.thumbnail || '',
+    source: item.source || hostname,
+    favicon: item.favicon || '',
+    published: item.published || '',
+    kind: item.kind === 'video' ? 'video' : item.kind === 'discussion' ? 'discussion' : item.kind === 'web' ? 'web' : 'article',
+  }
 }
 
 /** Story groups for the cinematic grid: one group per successful non-rich section, deduplicated by URL. */

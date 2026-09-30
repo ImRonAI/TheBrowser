@@ -27,7 +27,9 @@ test('stripMarkup drops Brave <strong> highlights and entities', () => {
 
 test('itemToStory keeps articles/web/video with http urls, derives hostname, drops rich/images', () => {
   const story = itemToStory(item({ title: '<strong>AI</strong> news', source: '', description: 'a &lt; b', age: '2h' }), 'AI')!
-  assert.deepEqual(story, { title: 'AI news', url: 'https://ex.com/a', description: 'a < b', age: '2h', topic: 'AI', hostname: 'ex.com', thumbnail: '' })
+  assert.deepEqual(story, { title: 'AI news', url: 'https://ex.com/a', description: 'a < b', age: '2h', topic: 'AI', hostname: 'ex.com', thumbnail: '', source: 'ex.com', favicon: '', published: '', kind: 'article' })
+  const videoStory = itemToStory(item({ kind: 'video', source: 'YouTube', favicon: 'https://f', published: '2026-01-01T00:00:00' }), 'Video')!
+  assert.deepEqual(videoStory, { title: 'T', url: 'https://ex.com/a', description: '', age: '', topic: 'Video', hostname: 'ex.com', thumbnail: '', source: 'YouTube', favicon: 'https://f', published: '2026-01-01T00:00:00', kind: 'video' })
   assert.equal(itemToStory(item({ kind: 'rich' }), 'x'), null)
   assert.equal(itemToStory(item({ kind: 'image' }), 'x'), null)
   assert.equal(itemToStory(item({ url: 'javascript:alert(1)' }), 'x'), null)

@@ -19,7 +19,7 @@ beforeEach(() => {
 })
 
 test('drafts remain isolated by user and destination and survive rehydration', async () => {
-  for (const user of ['alice', 'bob']) for (const destination of ['panel', 'search', 'build'] as const) {
+  for (const user of ['alice', 'bob']) for (const destination of ['panel', 'search', 'build', 'voice'] as const) {
     const key = articleDraftKey(user, destination)
     useArticleDraftStore.getState().setText(key, key)
     assert.equal(useArticleDraftStore.getState().attach(key, article(key)), true)
@@ -30,7 +30,7 @@ test('drafts remain isolated by user and destination and survive rehydration', a
   storage.set('ron-article-drafts', saved)
   await useArticleDraftStore.persist.rehydrate()
   assert.deepEqual(useArticleDraftStore.getState().drafts, expected)
-  assert.equal(Object.keys(expected).length, 6)
+  assert.equal(Object.keys(expected).length, 8)
 })
 
 test('attachment limit rejects a fourth source without silently removing drafts', () => {
