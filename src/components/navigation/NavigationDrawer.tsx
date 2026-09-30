@@ -7,8 +7,8 @@
  * - Collapse/expand animation
  */
 import { useState, useRef, useEffect } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
-import { ChevronUp, ChevronDown } from 'lucide-react'
+import { motion, AnimatePresence, LayoutGroup } from 'framer-motion'
+import { ChevronUp, ChevronDown, Compass } from 'lucide-react'
 import { useNavigationStore, type HomeTab } from '@/stores/navigationStore'
 import { useSearchStore } from '@/stores/searchStore'
 import { useAuthStore } from '@/stores/authStore'
@@ -219,13 +219,13 @@ export function NavigationDrawer() {
             className="overflow-hidden"
           >
             <div className={cn(
-              "px-6 py-3",
+              "px-6 pt-2 pb-1.5",
               "bg-surface-0/95 dark:bg-surface-900/95",
               "backdrop-blur-xl",
               "border-b border-surface-200/50 dark:border-surface-700/50",
             )}>
               {/* Search Input Row */}
-              <div className="max-w-2xl mx-auto mb-3">
+              <div className="max-w-2xl mx-auto mb-2">
                 {articles.map((article) => <ArticleAttachmentCard key={article.id} article={article}
                   onRemove={() => useArticleDraftStore.getState().remove(draftKey, article.id)} />)}
                 {/* Text Attachments */}
@@ -344,54 +344,44 @@ export function NavigationDrawer() {
                 </form>
               </div>
 
-              {/* Tab Navigation - Premium Frosted Glass */}
+              {/* Tab Navigation - Segmented Frosted Pill */}
               <div className="flex justify-center">
-                <div className="
-                  relative flex items-center justify-center gap-2 px-3 py-2
-                  rounded-2xl
-                  bg-white/70 dark:bg-surface-800/60
-                  backdrop-blur-xl
-                  border border-indigo-300/30 dark:border-surface-700/50
-                  shadow-[0_4px_32px_rgba(79,70,229,0.12)] dark:shadow-dark-soft
-                ">
-                  {TAB_CONFIG.map((tab) => {
-                    const isActive = activeTab === tab.id
-                    return (
-                      <motion.button
-                        key={tab.id}
-                        onClick={() => handleTabClick(tab.id)}
-                        whileHover={{ scale: 1.02 }}
-                        whileTap={{ scale: 0.98 }}
-                        className={`
-                          group relative flex items-center justify-center gap-2.5
-                          px-5 py-2.5 rounded-xl
-                          text-body-sm font-medium
-                          transition-all duration-300 ease-out
-                          ${isActive
-                            ? 'bg-gradient-to-r from-indigo-600 to-indigo-800 text-white shadow-lg shadow-indigo-700/30'
-                            : 'bg-white/50 dark:bg-surface-800/50 text-ink-secondary dark:text-ink-inverse-secondary hover:text-ink dark:hover:text-ink-inverse hover:bg-white/80 dark:hover:bg-surface-700/80 border border-transparent hover:border-indigo-300/30 dark:hover:border-surface-600'
-                          }
-                        `}
-                      >
-                        <span 
-                          className={`
-                            w-4 h-4 flex-shrink-0
-                            transition-all duration-300
-                            group-hover:animate-[spin-slow_0.6s_ease-in-out]
-                            ${isActive ? 'text-white' : 'text-indigo-600 dark:text-indigo-400'}
-                          `}
+                <LayoutGroup id="nav-tabs">
+                  <div className="relative flex items-center gap-1 rounded-full border border-surface-200/80 bg-white/70 p-1 backdrop-blur-xl shadow-sm dark:border-surface-700/60 dark:bg-surface-800/60">
+                    {TAB_CONFIG.map((tab) => {
+                      const isActive = activeTab === tab.id
+                      return (
+                        <motion.button
+                          key={tab.id}
+                          onClick={() => handleTabClick(tab.id)}
+                          whileTap={{ scale: 0.97 }}
+                          className={cn(
+                            'relative flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-medium transition-colors duration-200',
+                            isActive
+                              ? 'text-white'
+                              : 'text-ink-secondary hover:text-ink dark:text-ink-inverse-secondary dark:hover:text-ink-inverse',
+                          )}
                         >
-                          {tab.icon}
-                        </span>
-                        <span>{tab.label}</span>
-                      </motion.button>
-                    )
-                  })}
-                </div>
+                          {isActive && (
+                            <motion.span
+                              layoutId="nav-active-pill"
+                              className="absolute inset-0 -z-[1] rounded-full bg-indigo-600 shadow-md shadow-indigo-600/30"
+                              transition={{ type: 'spring', stiffness: 420, damping: 34 }}
+                            />
+                          )}
+                          <span className="h-3.5 w-3.5 shrink-0">
+                            {tab.icon}
+                          </span>
+                          <span>{tab.label}</span>
+                        </motion.button>
+                      )
+                    })}
+                  </div>
+                </LayoutGroup>
               </div>
 
               {/* Collapse Handle */}
-              <div className="flex justify-center mt-2">
+              <div className="flex justify-center mt-1">
                 <motion.button
                   onClick={toggleDrawer}
                   whileHover={{ scale: 1.1 }}
@@ -399,7 +389,7 @@ export function NavigationDrawer() {
                   className="p-1 rounded-md text-ink-muted/40 dark:text-ink-inverse-muted/40 hover:text-ink-muted dark:hover:text-ink-inverse-muted transition-colors"
                   aria-label="Collapse navigation"
                 >
-                  <ChevronUp className="w-4 h-4" />
+                  <ChevronUp className="w-3.5 h-3.5" />
                 </motion.button>
               </div>
             </div>
@@ -416,8 +406,8 @@ export function NavigationDrawer() {
               onClick={toggleDrawer}
               whileHover={{ backgroundColor: 'rgba(99, 102, 241, 0.1)' }}
               className={cn(
-                "w-full flex items-center justify-center gap-2",
-                "h-8 px-4",
+                "w-full flex items-center justify-center gap-1.5",
+                "h-7 px-4",
                 "bg-surface-0/95 dark:bg-surface-900/95",
                 "backdrop-blur-xl",
                 "border-b border-surface-200/50 dark:border-surface-700/50",
@@ -426,8 +416,11 @@ export function NavigationDrawer() {
                 "transition-colors",
               )}
             >
-              <span className="text-[10px] font-medium uppercase tracking-wider">Navigation</span>
-              <ChevronDown className="w-3.5 h-3.5" />
+              <Compass className="w-3 h-3 text-indigo-500" />
+              <span className="text-[10px] font-medium uppercase tracking-wider">
+                {TAB_CONFIG.find((t) => t.id === activeTab)?.label ?? 'Navigation'}
+              </span>
+              <ChevronDown className="w-3 h-3" />
             </motion.button>
           </motion.div>
         )}
