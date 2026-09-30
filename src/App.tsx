@@ -10,6 +10,7 @@ import { getSearchQueryFromRonUrl } from '@/components/chrome/UrlBar'
 import { BrowserLayout } from '@/layouts/BrowserLayout'
 import { AuthPageLayout } from '@/layouts/AuthPageLayout'
 import { HomePage } from '@/pages/HomePage'
+import { ArticleReaderPage } from '@/pages/ArticleReaderPage'
 import { ExecutePage } from '@/pages/ExecutePage'
 import { ProjectsIndexPage } from '@/pages/ProjectsIndexPage'
 import { ProjectHomePage } from '@/pages/ProjectHomePage'
@@ -336,6 +337,7 @@ function MainContent({ activeTab }: { activeTab: string }) {
   }
   const projectRoute = url?.match(/^ron:\/\/project\/([^/?#]+)\/?$/)
   if (projectRoute) return <ProjectHomePage key={`${userId}:${projectRoute[1]}`} projectKey={projectRoute[1]} />
+  if (url?.startsWith('ron://read?')) return <ArticleReaderPage key={url} href={url} />
   switch (activeTab) {
     case 'execute':
       return <ExecutePage />
