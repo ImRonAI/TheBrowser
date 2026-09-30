@@ -86,6 +86,9 @@ importers:
       '@rive-app/react-webgl2':
         specifier: ^4.26.1
         version: 4.34.3(react@19.3.0)
+      '@rive-app/webgl2':
+        specifier: 2.42.2
+        version: 2.42.2
       '@streamdown/cjk':
         specifier: ^1.0.1
         version: 1.0.3(@types/mdast@4.0.4)(micromark-util-types@2.0.2)(micromark@4.0.2(supports-color@8.1.1))(react@19.3.0)(supports-color@8.1.1)(unified@11.0.5)
