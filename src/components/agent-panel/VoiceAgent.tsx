@@ -14,6 +14,8 @@ import { recordingCanSend, recordingMimeType } from '@/lib/bidi-recording'
 import pcmWorkletUrl from '@/lib/bidi-pcm.worklet.js?url'
 import { RuntimeLoader } from '@rive-app/react-webgl2'
 import riveWasmUrl from '@rive-app/webgl2/rive.wasm?url'
+import { articleDraftKey, EMPTY_ARTICLE_DRAFT, useArticleDraftStore } from '@/stores/articleDraftStore'
+import { ArticleAttachmentCard } from '@/components/interests/ArticleAttachmentCard'
 
 // Rive defaults to fetching its runtime from unpkg/jsdelivr, which the app CSP
 // (connect-src 'self' …) blocks, so the Persona never rendered. Serve the
@@ -36,6 +38,8 @@ export function VoiceAgent({ userId = 'default', agentScope = 'panel', browser =
   const [text, setText] = useState('')
   const [journal, setJournal] = useState('')
   const [journalSaved, setJournalSaved] = useState(false)
+  const draftKey = articleDraftKey(userId, 'voice')
+  const attached = useArticleDraftStore((s) => (s.drafts[draftKey] || EMPTY_ARTICLE_DRAFT).articles)
   const socket = useRef<WebSocket | null>(null)
   const capture = useRef<Capture | null>(null)
   const capturePending = useRef(false)
@@ -274,6 +278,14 @@ export function VoiceAgent({ userId = 'default', agentScope = 'panel', browser =
         </details>}
       </div>
       <footer className="relative z-[1] flex-shrink-0 border-t border-indigo-100/50 bg-white/60 p-4 dark:border-surface-800/80 dark:bg-surface-900/60">
+        {attached.length > 0 && (
+          <section aria-label="Attached articles" data-voice-attachments={attached.length} className="mb-3 max-h-44 overflow-y-auto scrollbar-thin">
+            <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-ink-muted dark:text-ink-inverse-muted">Attached for this voice session · not sent</p>
+            {attached.map((a) => (
+              <ArticleAttachmentCard key={a.id} article={a} onRemove={() => useArticleDraftStore.getState().remove(draftKey, a.id)} />
+            ))}
+          </section>
+        )}
         <form className={cn('flex items-center gap-2 rounded-2xl border bg-white px-3 py-2 transition-all dark:bg-surface-850', text ? 'border-indigo-300 shadow-md shadow-indigo-500/10 ring-2 ring-indigo-500/10 dark:border-indigo-700' : 'border-surface-200/80 shadow-sm dark:border-surface-700')}
           onSubmit={event => {
             event.preventDefault()
