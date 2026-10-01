@@ -337,3 +337,123 @@ def test_agent_memory_init_and_snapshot_session_isolation():
 def test_user_id_required(user_id):
     with pytest.raises(ValueError, match="user_id"):
         panel.create_memory_config(user_id)
+
+
+ENTRY = """<start_entry>
+<topic_name>{topic}<topic_name/>
+<subject>{subject}<subject/>
+<created_at>{created}<created_at/>
+<tags>{tags}</tags>
+{body}
+<end_entry/>"""
+
+
+def _entry(topic, subject, created, tags, body):
+    return ENTRY.format(topic=topic, subject=subject, created=created, tags=tags, body=body)
+
+
+def test_journal_entries_become_per_topic_files(monkeypatch):
+    """Dreamed entries are one file each under <topic>/, named by timestamp and subject; plain
+    content keeps the SDK's slug-and-append behaviour."""
+    backend = InMemoryStorage()
+    monkeypatch.setattr(panel, "_storage", backend)
+
+    async def run():
+        store = panel.create_memory_config("u").stores[0] if hasattr(panel.create_memory_config("u"), "stores") \
+            else panel.create_memory_config("u")["stores"][0]
+        key = await store.add(_entry("ToDo's", "Mom's birthday dinner plan", "2026-10-01T14:03:09",
+                                     "todo, family, food, birthday, schedule, reminder, deadline, home, decision, goal",
+                                     "Book Thai place for Friday; invite Aunt May."))
+        assert key == "todo-s/20261001T140309-mom-s-birthday-dinner-plan.md"
+        plain = await store.add("# Preferences\nlikes coffee")
+        assert plain == "preferences.md"
+        text = (await store._storage.read(key)).decode()
+        assert text.startswith("<start_entry>") and text.rstrip().endswith("<end_entry/>")
+        parsed = panel.parse_entry(text)
+        assert parsed.topic == "ToDo's" and parsed.subject == "Mom's birthday dinner plan"
+        assert parsed.created_at == "2026-10-01T14:03:09"
+        assert parsed.tags == ["todo", "family", "food", "birthday", "schedule", "reminder", "deadline", "home", "decision", "goal"]
+
+    asyncio.run(run())
+
+
+def test_entry_grammar_is_validated():
+    with pytest.raises(ValueError, match="subject"):
+        panel.parse_entry(_entry("ToDo's", "One", "2026-10-01T00:00:00", "a, b", "x"))
+    with pytest.raises(ValueError, match="subject"):
+        panel.parse_entry(_entry("ToDo's", "one two three four five six seven eight nine", "2026-10-01T00:00:00", "a, b", "x"))
+    with pytest.raises(ValueError, match="topic"):
+        panel.parse_entry(_entry("Random", "Two words", "2026-10-01T00:00:00", "a, b", "x"))
+    with pytest.raises(ValueError, match="created_at"):
+        panel.parse_entry(_entry("ToDo's", "Two words", "yesterday", "a, b", "x"))
+    assert panel.parse_entry(_entry("Feedback", "Two words", "2026-10-01T00:00:00", "", "x")).tags == []
+
+
+def test_nested_search_filters_in_agent_chosen_order(monkeypatch):
+    """The agent nests filters (time → tags → topic → subject) in any order; results are identical,
+    the traversal order is honoured and an unknown filter name is rejected."""
+    backend = InMemoryStorage()
+    monkeypatch.setattr(panel, "_storage", backend)
+
+    async def run():
+        store = panel.create_memory_config("u")["stores"][0]
+        await store.add(_entry("ToDo's", "Mom's birthday dinner plan", "2026-10-01T14:03:09",
+                               "todo, family, food, birthday", "Book Thai place for Friday."))
+        await store.add(_entry("LearnedAboutUser", "Prefers Thai food", "2026-09-20T09:00:00",
+                               "preference, food, family", "User's mom loves Thai food."))
+        await store.add(_entry("Feedback", "Shorter answers please", "2026-10-01T15:00:00",
+                               "feedback, style", "User asked for shorter replies."))
+
+        both = await store.search("Thai", {"order": ["tags", "topic"], "tags": ["food"]})
+        assert sorted(e.metadata["topic"] for e in both) == ["LearnedAboutUser", "ToDo's"]
+        assert all(e.metadata["subject"] and e.metadata["created_at"] and e.metadata["tags"] for e in both)
+
+        recent = await store.search("", {"order": ["since", "tags"], "since": "2026-10-01T00:00:00", "tags": ["food"]})
+        assert [e.metadata["topic"] for e in recent] == ["ToDo's"]
+        same = await store.search("", {"order": ["tags", "since"], "since": "2026-10-01T00:00:00", "tags": ["food"]})
+        assert [e.metadata["topic"] for e in same] == ["ToDo's"]
+        assert recent[0].metadata["filter_order"] == ["since", "tags"] and same[0].metadata["filter_order"] == ["tags", "since"]
+
+        by_subject = await store.search("", {"order": ["topic", "subject"], "topic": "Feedback", "subject": "shorter"})
+        assert [e.metadata["subject"] for e in by_subject] == ["Shorter answers please"]
+        assert await store.search("", {"order": ["until"], "until": "2026-09-01T00:00:00"}) == []
+        with pytest.raises(ValueError, match="order"):
+            await store.search("", {"order": ["colour"]})
+
+    asyncio.run(run())
+
+
+def test_search_memories_tool_exposes_nested_filters(monkeypatch):
+    backend = InMemoryStorage()
+    monkeypatch.setattr(panel, "_storage", backend)
+
+    async def run():
+        config = panel.create_memory_config("u")
+        store = config["stores"][0]
+        await store.add(_entry("ToDo's", "Mom's birthday dinner plan", "2026-10-01T14:03:09",
+                               "todo, family, food", "Book Thai place."))
+        tool_instance = panel.create_search_memories_tool(config["stores"])
+        assert tool_instance.tool_name == "search_memories"
+        spec = tool_instance.tool_spec["inputSchema"]["json"]["properties"]
+        assert {"query", "order", "since", "until", "tags", "topic", "subject", "max_results"} <= set(spec)
+        payload = await tool_instance._tool_func(query="Thai", order=["topic", "tags"], topic="ToDo's", tags=["food"])
+        assert payload[0]["topic"] == "ToDo's" and payload[0]["subject"] == "Mom's birthday dinner plan"
+        assert payload[0]["filter_order"] == ["topic", "tags"]
+
+    asyncio.run(run())
+
+
+def test_entry_with_native_heading_line_is_still_an_entry(monkeypatch):
+    """The dream prompt asks for a ``# Topic | Subject`` heading (the native add_memory slug line);
+    the store strips it and still files the entry per topic."""
+    monkeypatch.setattr(panel, "_storage", InMemoryStorage())
+
+    async def run():
+        store = panel.create_memory_config("u")["stores"][0]
+        content = "# ToDo's | Two words\n" + _entry("ToDo's", "Two words", "2026-10-01T00:00:01", "a, b", "body")
+        assert panel.is_entry(content)
+        key = await store.add(content)
+        assert key == "todo-s/20261001T000001-two-words.md"
+        assert (await store._storage.read(key)).decode().startswith("<start_entry>")
+
+    asyncio.run(run())

@@ -35,3 +35,6 @@ slack_events/
 # OS / editor
 .DS_Store
 .idea/
+
+# Agent journal (vendored strands_tools journal tool; consolidated into memory by dreaming)
+journal/

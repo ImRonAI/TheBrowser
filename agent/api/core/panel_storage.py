@@ -16,11 +16,14 @@ import threading
 from collections.abc import Callable
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from dataclasses import dataclass
+from datetime import datetime
 from typing import Any, TypeVar
 from weakref import WeakValueDictionary
 
+from strands import tool
 from strands.memory import MemoryManagerConfig
-from strands.memory.types import Metadata
+from strands.memory.types import MemoryEntry, Metadata, SearchOptions
 from strands.storage import InMemoryStorage, Storage
 from strands.storage.search import KeywordSearchStrategy
 from strands.storage.storage import StorageSearchResult
@@ -233,16 +236,108 @@ def get_user_session_storage(user_id: str) -> Storage:
     return _ScopedStorage(get_panel_storage(), _user_scope(user_id))
 
 
+# --- Journal entry grammar -------------------------------------------------------
+#: Topics the panel/think agents journal under; the dreaming pass keeps them verbatim.
+ENTRY_TOPICS = ("ToDo's", "LearnedAboutUser", "Feedback", "UserStatement", "WorthyMemory")
+#: Nested-filter names the agent may order freely in ``search_memories``.
+FILTER_NAMES = ("since", "until", "tags", "topic", "subject")
+_TAG = re.compile(r"<(topic_name|subject|created_at)>(.*?)<\1/>", re.S)
+_TAGS = re.compile(r"<tags>(.*?)</tags>", re.S)
+
+
+@dataclass(frozen=True)
+class ParsedEntry:
+    topic: str
+    subject: str
+    created_at: str
+    tags: list[str]
+    body: str
+
+    @property
+    def key(self) -> str:
+        stamp = self.created_at.replace("-", "").replace(":", "")
+        return f"{_slug(self.topic)}/{stamp}-{_slug(self.subject)}.md"
+
+
+def _slug(value: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "-", value.lower()).strip("-")[:60]
+
+
+def _strip_heading(content: str) -> str:
+    """Drop an optional leading ``# Topic | Subject`` heading line (the native add_memory slug line)."""
+    text = content.strip()
+    if text.startswith("#"):
+        first, _, rest = text.partition("\n")
+        if rest.lstrip().startswith("<start_entry>"):
+            return rest.strip()
+    return text
+
+
+def is_entry(content: str) -> bool:
+    return _strip_heading(content).startswith("<start_entry>")
+
+
+def parse_entry(content: str) -> ParsedEntry:
+    """Validate and parse one ``<start_entry>...<end_entry/>`` journal entry."""
+    text = _strip_heading(content)
+    if not text.startswith("<start_entry>") or not text.endswith("<end_entry/>"):
+        raise ValueError("entry must begin with <start_entry> and end with <end_entry/>")
+    fields = {name: value.strip() for name, value in _TAG.findall(text)}
+    topic = fields.get("topic_name", "")
+    if topic not in ENTRY_TOPICS:
+        raise ValueError(f"topic_name must be one of {ENTRY_TOPICS}, got {topic!r}")
+    subject = fields.get("subject", "")
+    if not 2 <= len(subject.split()) <= 8:
+        raise ValueError("subject must be two to eight words")
+    created = fields.get("created_at", "")
+    try:
+        datetime.strptime(created, "%Y-%m-%dT%H:%M:%S")
+    except ValueError:
+        raise ValueError("created_at must be YYYY-MM-DDTHH:MM:SS") from None
+    raw_tags = _TAGS.search(text)
+    tags = [t.strip() for t in raw_tags.group(1).replace("\n", " ").split(",") if t.strip()] if raw_tags else []
+    body = _TAGS.sub("", _TAG.sub("", text[len("<start_entry>"):-len("<end_entry/>")])).strip()
+    return ParsedEntry(topic=topic, subject=subject, created_at=created, tags=tags, body=body)
+
+
+class EntrySearchOptions(SearchOptions, total=False):
+    """Store-specific nested filters; ``order`` is the agent's chosen traversal order."""
+
+    order: list[str]
+    since: str
+    until: str
+    tags: list[str]
+    topic: str
+    subject: str
+
+
+def _apply_filter(name: str, options: EntrySearchOptions, entries: list[ParsedEntry]) -> list[ParsedEntry]:
+    if name == "since" and options.get("since"):
+        return [e for e in entries if e.created_at >= options["since"]]
+    if name == "until" and options.get("until"):
+        return [e for e in entries if e.created_at <= options["until"]]
+    if name == "tags" and options.get("tags"):
+        wanted = {t.lower() for t in options["tags"]}
+        return [e for e in entries if wanted & {t.lower() for t in e.tags}]
+    if name == "topic" and options.get("topic"):
+        return [e for e in entries if e.topic.lower() == options["topic"].lower()]
+    if name == "subject" and options.get("subject"):
+        return [e for e in entries if options["subject"].lower() in e.subject.lower()]
+    return entries
+
+
 class SerializedFileMemoryStore(FileMemoryStore):
     """Serialize native add's full read/append/write across instances and loops.
 
     All writers of a user namespace must use this factory in ONE process. HF
     Buckets provide no compare-and-swap here; multiple workers can lose updates.
-    The native implementation still owns slugging, merging and serialization.
+    The native implementation still owns slugging, merging and serialization for
+    plain content. A journal ``<start_entry>`` becomes ONE file per entry under
+    ``<topic>/<timestamp>-<subject>.md`` and is searchable by nested filters.
     """
 
-    def __init__(self, *, lock_key: str, storage: Storage) -> None:
-        super().__init__(name="panel-memory", storage=storage, extraction=False)
+    def __init__(self, *, lock_key: str, storage: Storage, name: str = "panel-memory") -> None:
+        super().__init__(name=name, storage=storage, extraction=False)
         with _memory_locks_guard:
             lock = _memory_locks.get(lock_key)
             if lock is None:
@@ -256,9 +351,123 @@ class SerializedFileMemoryStore(FileMemoryStore):
         while not self._process_lock.acquire(blocking=False):
             await asyncio.sleep(0.005)
         try:
+            if is_entry(content):
+                entry = parse_entry(content)
+                await self._storage.write(entry.key, _strip_heading(content).encode("utf-8"))
+                return entry.key
             return await super().add(content, metadata)
         finally:
             self._process_lock.release()
+
+    async def search(self, query: str, options: SearchOptions | None = None) -> list[MemoryEntry]:
+        """Keyword search, with agent-ordered nested filters over journal entries.
+
+        Without filter options this is the native search. With any of
+        ``since``/``until``/``tags``/``topic``/``subject`` the journal entries are
+        narrowed in the ``order`` given (every named filter still applies; the order
+        is the agent's chosen traversal and is echoed in ``metadata.filter_order``),
+        then ranked by the query when one is given.
+        """
+        opts: EntrySearchOptions = dict(options or {})  # type: ignore[assignment]
+        order = list(opts.get("order") or [])
+        unknown = [name for name in order if name not in FILTER_NAMES]
+        if unknown:
+            raise ValueError(f"order must only name {FILTER_NAMES}, got {unknown}")
+        active = [name for name in FILTER_NAMES if opts.get(name)]
+        traversal = order + [name for name in active if name not in order]
+        limit = opts.get("max_search_results") or self.max_search_results or 10
+        if limit < 1:
+            raise ValueError("max_search_results must be >= 1")
+        entries = await self._entries()
+        if not entries and not traversal:
+            return await super().search(query, options)
+        parsed = [entry for _, entry in entries]
+        for name in traversal:
+            parsed = _apply_filter(name, opts, parsed)
+        keep = {id(entry) for entry in parsed}
+        selected = [(key, entry) for key, entry in entries if id(entry) in keep]
+        if query.strip():
+            needles = {n for n in re.split(r"\W+", query.lower()) if len(n) > 1}
+            scored = []
+            for key, entry in selected:
+                words = set(re.split(r"\W+", f"{entry.subject} {entry.body} {' '.join(entry.tags)} {entry.topic}".lower()))
+                score = len(needles & words)
+                if score:
+                    scored.append((score, key, entry))
+            selected = [(key, entry) for _, key, entry in sorted(scored, key=lambda item: (-item[0], item[2].created_at))]
+        else:
+            selected.sort(key=lambda item: item[1].created_at, reverse=True)
+        results = [MemoryEntry(content=entry.body, metadata={
+            "path": key, "topic": entry.topic, "subject": entry.subject, "created_at": entry.created_at,
+            "tags": entry.tags, "filter_order": traversal}) for key, entry in selected[:limit]]
+        if not traversal and query.strip() and len(results) < limit:
+            # Plain query: journal entries first, then whatever the native keyword search finds
+            # among non-entry files (e.g. SDK-extracted notes), without duplicating entry paths.
+            seen = {r.metadata["path"] for r in results if r.metadata}
+            for native in await super().search(query, {"max_search_results": limit}):
+                if native.metadata and native.metadata.get("path") not in seen and not is_entry(native.content):
+                    results.append(native)
+        return results[:limit]
+
+    async def _entries(self) -> list[tuple[str, ParsedEntry]]:
+        found: list[tuple[str, ParsedEntry]] = []
+        for key in await self._storage.list(""):
+            if not key.endswith(".md"):
+                continue
+            raw = await self._storage.read(key)
+            text = raw.decode("utf-8", errors="replace") if raw else ""
+            if is_entry(text):
+                try:
+                    found.append((key, parse_entry(text)))
+                except ValueError:
+                    continue
+        return found
+
+
+def create_search_memories_tool(stores: builtins.list[Any]) -> Any:
+    """``search_memories``: nested, agent-ordered filtering over the user's journal memories.
+
+    Complements the native ``search_memory`` (plain keyword search). ``order`` is the
+    hierarchy the agent chooses at call time, e.g. ``["since", "tags", "topic"]``; it is
+    not hardwired and every listed filter still applies.
+    """
+    entry_stores = [store for store in stores if isinstance(store, SerializedFileMemoryStore)]
+
+    @tool
+    async def search_memories(
+        query: str = "",
+        order: builtins.list[str] | None = None,
+        since: str | None = None,
+        until: str | None = None,
+        tags: builtins.list[str] | None = None,
+        topic: str | None = None,
+        subject: str | None = None,
+        max_results: int = 10,
+    ) -> builtins.list[dict[str, Any]]:
+        """Search long-term memories with nested filters in the order you choose.
+
+        Args:
+            query: Keywords to rank by; empty returns newest first.
+            order: Filter hierarchy to apply, any order of: since, until, tags, topic, subject.
+            since: Only entries created at or after this YYYY-MM-DDTHH:MM:SS.
+            until: Only entries created at or before this YYYY-MM-DDTHH:MM:SS.
+            tags: Entries carrying any of these tags.
+            topic: One of ToDo's, LearnedAboutUser, Feedback, UserStatement, WorthyMemory.
+            subject: Substring of the two-to-eight-word subject.
+            max_results: Maximum entries to return.
+        """
+        options: EntrySearchOptions = {"max_search_results": max_results}
+        for name, value in (("order", order), ("since", since), ("until", until), ("tags", tags),
+                            ("topic", topic), ("subject", subject)):
+            if value:
+                options[name] = value  # type: ignore[literal-required]
+        results: builtins.list[dict[str, Any]] = []
+        for store in entry_stores:
+            for entry in await store.search(query, options):
+                results.append({"content": entry.content, "store": store.name, **(entry.metadata or {})})
+        return results[:max_results]
+
+    return search_memories
 
 
 def create_memory_config(user_id: str) -> MemoryManagerConfig:
