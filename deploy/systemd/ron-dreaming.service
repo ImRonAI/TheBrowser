@@ -1,0 +1,8 @@
+[Unit]
+Description=Ron dreaming tick: consolidate the journal into memory once idle (POST /memory/dream)
+After=ron-api.service
+
+[Service]
+Type=oneshot
+User=ron
+ExecStart=/usr/bin/curl -fsS -m 20 -X POST -H 'Content-Type: application/json' -d '{"user_id":"default"}' http://127.0.0.1:8765/memory/dream

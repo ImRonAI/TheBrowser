@@ -58,7 +58,7 @@ no IP or token is committed anywhere in this repository.
    ```
 5. **Units** — install and start the two services:
    ```bash
-   ssh root@$RON_VPS_HOST 'install -m644 /opt/ron/RonBrowserRebuild/deploy/systemd/*.service /etc/systemd/system/ && systemctl daemon-reload && systemctl enable --now ron-api ron-browser'
+   ssh root@$RON_VPS_HOST 'install -m644 /opt/ron/RonBrowserRebuild/deploy/systemd/*.service /opt/ron/RonBrowserRebuild/deploy/systemd/*.timer /etc/systemd/system/ && systemctl daemon-reload && systemctl enable --now ron-api ron-browser ron-dreaming.timer'
    ```
 6. **Tunnel** (Mac) — renders and loads a `launchd` agent that keeps the SSH tunnel up:
    ```bash
@@ -88,7 +88,7 @@ stays on loopback even if the file is edited.
 
 | Port | Role |
 | --- | --- |
-| 8765 | Ron agent API (`ron-api.service`), reached from the Mac via `-L 8765` |
+| 8765 | Ron agent API (`ron-api.service`), reached from the Mac via `-L 8765`. `ron-dreaming.timer` POSTs `/memory/dream` on loopback every minute; the endpoint consolidates the journal into memory only after `RON_MEMORY_IDLE_SECONDS` (300) of panel idleness. On a Mac, `deploy/local/install-dreaming.sh` installs the launchd equivalent (macOS blocks non-interactive `crontab` behind TCC). |
 | 3000 / 8931 / 9222 | Cloud Ron: Electron surface / Playwright MCP surface / CDP (`ron-browser.service`, under `xvfb-run`) |
 | 13000 / 18931 / 19222 | The Mac's Ron (3000 / 8931 / 9222) via `-R` reverse forwards |
 | 22 | SSH — the only port open in `ufw` |

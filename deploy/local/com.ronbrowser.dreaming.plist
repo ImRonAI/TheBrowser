@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.ronbrowser.dreaming</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/bin/curl</string>
+    <string>-fsS</string><string>-m</string><string>20</string>
+    <string>-X</string><string>POST</string>
+    <string>-H</string><string>Content-Type: application/json</string>
+    <string>-d</string><string>{"user_id":"default"}</string>
+    <string>http://127.0.0.1:8765/memory/dream</string>
+  </array>
+  <key>StartInterval</key><integer>60</integer>
+  <key>RunAtLoad</key><true/>
+  <key>StandardOutPath</key><string>__HOME__/Library/Logs/ron-dreaming.log</string>
+  <key>StandardErrorPath</key><string>__HOME__/Library/Logs/ron-dreaming.log</string>
+</dict>
+</plist>
