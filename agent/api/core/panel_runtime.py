@@ -55,6 +55,7 @@ import copy
 import hashlib
 import json
 import threading
+import time
 import uuid
 from collections import deque
 from collections.abc import AsyncIterator, Awaitable, Callable, Mapping
@@ -757,6 +758,24 @@ class PanelRuntimeManager:
         self._sessions: dict[tuple[str, str], SessionRun] = {}
         self._locks: dict[tuple[str, str], asyncio.Lock] = {}
         self._closed = False
+        #: Monotonic time of each user's last panel activity (start/steer/cancel); the
+        #: dreaming endpoint's idle gate reads this, nothing else does.
+        self._last_activity: dict[str, float] = {}
+
+    def touch(self, user_id: str) -> None:
+        self._last_activity[user_id] = time.monotonic()
+
+    def idle_seconds(self, user_id: str) -> float | None:
+        """Seconds since the user's last activity, or ``None`` when never seen this process."""
+        seen = self._last_activity.get(user_id)
+        if seen is None:
+            return None
+        if any(key[0] == user_id and run.active for key, run in self._sessions.items()):
+            return 0.0
+        return time.monotonic() - seen
+
+    def known_users(self) -> list[str]:
+        return sorted(self._last_activity)
 
     def _key(self, user_id: str, session_id: str) -> tuple[str, str]:
         if not isinstance(user_id, str) or not user_id.strip():
@@ -797,6 +816,7 @@ class PanelRuntimeManager:
         key = self._key(user_id, session_id)
         if action not in ("message", "resume", "interrupt"):
             raise ValueError("action must be message, resume, or interrupt")
+        self.touch(user_id)
         async with self._locks.setdefault(key, asyncio.Lock()):
             session = await self._get_locked(key, factory, create=True)
             assert session is not None
@@ -845,6 +865,7 @@ class PanelRuntimeManager:
     ) -> dict[str, Any]:
         if not isinstance(message, str) or not message.strip():
             raise ValueError("Steering message must be nonempty")
+        self.touch(user_id)
         session = await self.get(user_id, session_id)
         if session is None:
             raise KeyError("Unknown session")
@@ -866,6 +887,7 @@ class PanelRuntimeManager:
             return copy.deepcopy(record)
 
     async def cancel(self, user_id: str, session_id: str) -> dict[str, Any]:
+        self.touch(user_id)
         session = await self.get(user_id, session_id)
         if session is None:
             raise KeyError("Unknown session")

@@ -971,7 +971,8 @@ concrete conclusion the orchestrator can act on: findings, evidence, and a
 recommended next step. Do not address the user directly."""
 
 
-def create_think_tool(*, model_factory: ModelFactory, system_prompt: str) -> AgentTool:
+def create_think_tool(*, model_factory: ModelFactory, system_prompt: str,
+                      plugins: Sequence[Any] = ()) -> AgentTool:
     """Perplexity-only `think`: a streaming child agent with the parent's tools and model.
 
     Each call builds a fresh child Agent (fresh model via model_factory, the
@@ -1007,7 +1008,9 @@ def create_think_tool(*, model_factory: ModelFactory, system_prompt: str) -> Age
             tools=tuple(inherited),
             description="Interleaved reasoning agent with the orchestrator's tools",
         )
-        child = await create_child_agent(spec, model_factory=model_factory)
+        # Shared plugins (e.g. the RecallPlugin) reach the child so memory is
+        # recalled before the think agent produces output, like the parent.
+        child = await create_child_agent(spec, model_factory=model_factory, plugins=plugins)
         try:
             result = None
             async with aclosing(child.stream_async(thought)) as stream:
