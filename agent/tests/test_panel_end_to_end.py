@@ -91,6 +91,27 @@ class PanelModel(Model):
                             "metrics": {"latencyMs": 1}}}
 
 
+class MemoryChainModel(Model):
+    """The memory agent's candidate: ends every recall with inject_memory("n/a")."""
+
+    def get_config(self):
+        return {"model_id": "offline-memory", "stateful": False}
+
+    def update_config(self, **kwargs):
+        pass
+
+    async def structured_output(self, *args, **kwargs):
+        raise NotImplementedError
+        yield
+
+    async def stream(self, messages, tool_specs=None, system_prompt=None, **kwargs):
+        yield {"messageStart": {"role": "assistant"}}
+        yield {"contentBlockStart": {"contentBlockIndex": 0, "start": {"toolUse": {"toolUseId": "recall-na", "name": "inject_memory"}}}}
+        yield {"contentBlockDelta": {"contentBlockIndex": 0, "delta": {"toolUse": {"input": json.dumps({"content": "n/a"})}}}}
+        yield {"contentBlockStop": {"contentBlockIndex": 0}}
+        yield {"messageStop": {"stopReason": "tool_use"}}
+
+
 @pytest.fixture
 def offline(monkeypatch, tmp_path):
     # No dotenv, real MCP configuration, saved credentials, skill config or disk
@@ -116,11 +137,16 @@ def offline(monkeypatch, tmp_path):
     monkeypatch.setattr(main, "SESSION_STORAGE_DIR", tmp_path)
     script = Script()
 
-    def build_model(*args):
-        assert args[0] in ("openai", "perplexity") and args[1:] == ("offline-panel", None)
+    def build_model(*args, hosted_tools=True):
+        assert args[0] in ("openai", "perplexity")
+        if args[1:] != ("offline-panel", None):
+            # The shared Memory Agent's fast-model chain (memory_agent.build_model):
+            # a quiet model that always declines to inject.
+            return MemoryChainModel()
         model = PanelModel(script)
         script.models.append(model)
         return model
+
 
     def build_shell():
         @tool

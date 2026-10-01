@@ -17,6 +17,7 @@ from agent.api.endpoints import chat
 from agent.api.endpoints import articles
 from agent.api.endpoints import projects
 from agent.api.endpoints import discover
+from agent.api.endpoints import memory
 
 
 @asynccontextmanager
@@ -95,6 +96,7 @@ app.include_router(chat.router, tags=["chat"])
 app.include_router(articles.router, tags=["articles"])
 app.include_router(projects.router, tags=["projects"])
 app.include_router(discover.router, tags=["discover"])
+app.include_router(memory.router, tags=["memory"])
 
 
 @app.get("/health")

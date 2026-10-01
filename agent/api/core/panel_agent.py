@@ -96,6 +96,27 @@ PROJECT_ROOT = Path(__file__).resolve().parents[3]
 #: Project tool library browsed/loaded by tool_catalog (never added to sys.path).
 PROJECT_TOOLS_DIR = PROJECT_ROOT / "agent" / "tools" / "strands_tools"
 
+#: Journal-first memory discipline shared by the panel agent and its think child. The
+#: entry grammar is the one the dreaming pass consumes (memory_agent.ENTRY_FORMAT).
+MEMORY_JOURNAL_DIRECTIVE = """
+
+## Journal and memory
+Use the `journal` tool for everything worth remembering: to-dos, worthy memories, feedback the
+user gives you, user statements, and anything you learn or observe about the user. Write an entry
+the moment it happens; do not batch. Every entry is wrapped exactly like this:
+<start_entry>
+<topic_name>ToDo's<topic_name/>
+<subject>Two to eight words<subject/>
+<created_at>YYYY-MM-DDTHH:MM:SS<created_at/>
+...the entry...
+<end_entry/>
+Topics: ToDo's, LearnedAboutUser, Feedback, UserStatement, WorthyMemory. The subject is two to
+eight words, no more, no less. Do NOT add <tags>: tags are assigned later by the dreaming pass.
+Relevant long-term memories are delivered to you automatically before you answer (inside
+<recall>); you may also call search_memory (nest filters in any order that helps: time, tags,
+topic, subject) and add_memory yourself whenever it helps. The think agent should lean on the
+journal and memory the most and relay the important memories in its conclusion."""
+
 # Hosted (server-side) tools live on the MODEL config, never in Agent.tools.
 # Every entry below is grounded in (a) the provider's official docs and (b) what
 # the INSTALLED Strands adapter actually sends/handles. Env overrides are comma
@@ -729,6 +750,24 @@ def _default_formations() -> list[GraphSpec | SwarmSpec]:
     return [graph, swarm, nested]
 
 
+def user_memory_config(user_id: str, agent_scope: str = "panel") -> dict[str, Any]:
+    """The user's cross-session memory config (agent-scoped stores are appended by callers)."""
+    return create_memory_config(user_id)
+
+
+def user_memory_manager(user_id: str, agent_scope: str = "panel") -> Any:
+    """A writable ``MemoryManager`` over the same stores the panel agent uses (no injection:
+    the Memory Agent recalls explicitly)."""
+    from strands.memory import MemoryManager
+
+    memory = user_memory_config(user_id)
+    # Dreamed entries belong to the user's cross-session memory store only; the learned-skills
+    # store stays searchable but is not an add_memory target here.
+    return MemoryManager(stores=list(memory["stores"]), search_tool_config=True,
+                         add_tool_config={"wait_for_writes": True, "stores": [memory["stores"][0].name]},
+                         injection=False)
+
+
 def create_panel_agent(
     *,
     provider: ProviderName,
@@ -816,11 +855,27 @@ def create_panel_agent(
         tools_dir = PROJECT_TOOLS_DIR
         core = build_core_tools(tools_dir)
         catalog.add_tools([*core, create_tool_catalog(catalog, tools_dir), ask_user])
+        storage = get_user_session_storage(user_id)
+        memory = user_memory_config(user_id)
+        system_prompt += MEMORY_JOURNAL_DIRECTIVE
+        # The shared Memory Agent (recall before every model call, dreaming while idle)
+        # owns the SAME stores through its own writable MemoryManager; the panel keeps
+        # native search_memory/add_memory and injection, so both may use memory freely.
+        from agent.api.core.memory_agent import RecallPlugin, memory_agent_for
+        memory_agent = memory_agent_for(user_id, lambda: user_memory_manager(user_id))
+        recall = RecallPlugin(memory_agent)
+        # Journal (vendored strands_tools) and the nested-filter search live beside the
+        # native search_memory/add_memory, so agent and think child use memory freely.
+        from agent.api.core.memory_agent import journal_tool
+        from agent.api.core.panel_storage import create_search_memories_tool
+        catalog.add_tools([journal_tool(), create_search_memories_tool(memory["stores"])])
         if provider == "perplexity":
-            catalog.add_tools([create_think_tool(model_factory=model_factory, system_prompt=system_prompt)])
+            catalog.add_tools([create_think_tool(model_factory=model_factory, system_prompt=system_prompt,
+                                                 plugins=[recall])])
 
         skills = skills_from_env()
         plugins = [skills] if skills is not None else []
+        plugins.append(recall)
         if goal:
             plugins.append(GoalLoop(goal=goal, judge=JudgeConfig(model=model_factory("goal-judge"))
                                     if isinstance(goal, str) else None,
@@ -830,12 +885,11 @@ def create_panel_agent(
             if event.result is None or event.result.stop_reason not in ("end_turn", "stop_sequence"):
                 event.resume = None
 
-        storage = get_user_session_storage(user_id)
         kwargs: dict[str, Any] = {
             "model": model_factory("panel"), "system_prompt": system_prompt, "tools": [catalog],
             "agent_id": "panel-" + hashlib.sha256(user_id.encode()).hexdigest()[:32],
             "session_manager": SnapshotSessionManager(session_id, storage=storage),
-            "storage": storage, "memory_manager": create_memory_config(user_id),
+            "storage": storage, "memory_manager": memory,
             "callback_handler": None, "load_tools_from_directory": False,
             "context_manager": context if context != "sliding" else False,
             "tool_executor": ConcurrentToolExecutor() if execution == "concurrent" else SequentialToolExecutor(),
