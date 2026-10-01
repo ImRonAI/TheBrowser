@@ -101,3 +101,14 @@ AWS_REGION = os.getenv("AWS_REGION", "us-east-1")
 # Browser / sandbox
 AGENT_SANDBOX_ROOT = Path(os.getenv("RON_AGENT_SANDBOX_ROOT", str(Path.home() / ".ronbrowser" / "sandbox")))
 AGENT_SANDBOX_ROOT.mkdir(parents=True, exist_ok=True)
+
+# --- Shared Memory Agent (recall before every model call; dreaming while idle) ---
+#: Ordered Perplexity Agent API fast-model chain for the memory agent (native ModelRouter fallback).
+RON_MEMORY_AGENT_MODELS = os.getenv("RON_MEMORY_AGENT_MODELS",
+    "google/gemini-3.5-flash-lite,openai/gpt-5.4-nano,perplexity/sonar,perplexity/nemotron-3-ultra-550b-a55b")
+#: Max seconds the host waits for recall before a model call proceeds without it (fail open).
+RON_MEMORY_AGENT_TIMEOUT_S = float(os.getenv("RON_MEMORY_AGENT_TIMEOUT_S", "6.0"))
+#: Idle seconds before POST /memory/dream consolidates the journal (cron/launchd ticks each minute).
+RON_MEMORY_IDLE_SECONDS = float(os.getenv("RON_MEMORY_IDLE_SECONDS", "300"))
+#: Set to 0 to disable the memory agent entirely.
+RON_MEMORY_AGENT = os.getenv("RON_MEMORY_AGENT", "1")
