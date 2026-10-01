@@ -136,6 +136,33 @@ override native defaults 6/4/240 seconds. Provider client retries are separate.
 
 ## Storage and memory
 
+### Shared Memory Agent (recall + dreaming)
+
+One `MemoryAgent` per user (`memory_agent.memory_agent_for`) owns a writable `MemoryManager`
+over the same stores as the panel agent. It is built with `strands_harness.create_harness()`
+(`builtin_tools=[]`, `builtin_plugins=[]`, `session=False`, explicit `memory_manager` and
+`system_prompt`) on a native `ModelRouter(FallbackStrategy)` of fast Perplexity Agent API
+models. Recall is delivered through the SAME `InvokeModelStage.Input` boundary as
+`request_context`/steering — a separate ephemeral trailing user message, never folded into a
+tool result and never persisted. The `RecallPlugin` instance is shared by the panel agent and
+every `think` child. `n/a` from the memory agent's `inject_memory` tool means no injection.
+Dreaming (`POST /memory/dream`, loopback) consolidates the journal after
+`RON_MEMORY_IDLE_SECONDS` of idleness; `PanelRuntimeManager.touch/idle_seconds` is the only
+idle signal. See AGENTS.md for the entry grammar and the nested `search_memories` filters.
+
+* **Default `PANEL_STORAGE=memory` is ephemeral across process restarts.** It shares
+  native `InMemoryStorage` within the process; it is not disk persistence.
+* `PANEL_STORAGE=huggingface` uses an existing `HF_BUCKET_ID=namespace/bucket-name`
+  and optional `HF_TOKEN`. It does not create a bucket or silently fall back to
+  memory. Restart after changing storage environment settings.
+* Session snapshots, runtime journals and cross-session memory are user-scoped.
+  Native memory search/add tools and injection are enabled. Add writes are awaited;
+  **automatic model-based memory extraction is disabled**.
+* Memory search is keyword-based over the scoped namespace, not vector search.
+  Per-user append locks coordinate writers within one process only.
+
+See [storage implementation details](../agent/docs/panel-storage.md).
+
 * **Default `PANEL_STORAGE=memory` is ephemeral across process restarts.** It shares
   native `InMemoryStorage` within the process; it is not disk persistence.
 * `PANEL_STORAGE=huggingface` uses an existing `HF_BUCKET_ID=namespace/bucket-name`
