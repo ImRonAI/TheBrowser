@@ -71,14 +71,16 @@ const electronAPI = {
 
   browser: {
     navigate: (url: string) => ipcRenderer.invoke('browser:navigate', url),
-    search: (query: string) => ipcRenderer.invoke('browser:search', query),
+    search: (query: string, level?: string) => ipcRenderer.invoke('browser:search', query, level),
     goBack: () => ipcRenderer.invoke('browser:go-back'),
     goForward: () => ipcRenderer.invoke('browser:go-forward'),
     reload: () => ipcRenderer.invoke('browser:reload'),
     getUrl: () => ipcRenderer.invoke('browser:get-url'),
+    screenshot: () => ipcRenderer.invoke('browser:screenshot'),
     canGoBack: () => ipcRenderer.invoke('browser:can-go-back'),
     canGoForward: () => ipcRenderer.invoke('browser:can-go-forward'),
     setPanelOpen: (isOpen: boolean) => ipcRenderer.invoke('browser:set-panel-open', isOpen),
+    setAgentCursor: (point: { x: number; y: number }) => ipcRenderer.invoke('browser:set-agent-cursor', point),
     setDrawerHeight: (height: number) => ipcRenderer.invoke('browser:set-drawer-height', height),
     setChromeHeight: (height: number) => ipcRenderer.invoke('browser:set-chrome-height', height),
     setInterestMenu: (payload: unknown) => ipcRenderer.invoke('interests:set-menu', payload),

@@ -1,0 +1,154 @@
+- generic [ref=e3]:
+  - generic [ref=e4]:
+    - generic [ref=e6]:
+      - generic [ref=e7]:
+        - button "Home" [ref=e8] [cursor=pointer]
+        - button "Go back" [disabled] [ref=e13]
+        - button "Go forward" [disabled] [ref=e17]
+        - button "Reload page" [ref=e21] [cursor=pointer]
+      - generic [ref=e27]:
+        - generic [ref=e29]:
+          - img "Ron" [ref=e30]
+          - generic [ref=e31]: ron
+        - textbox "Search or enter URL..." [ref=e33]: ron://home
+        - button "Search or navigate" [ref=e34] [cursor=pointer]
+      - generic [ref=e38]:
+        - 'button "Theme: dark (click to toggle)" [ref=e39] [cursor=pointer]'
+        - button "New Tab" [ref=e52] [cursor=pointer]
+        - button "Open Agent Panel" [ref=e55] [cursor=pointer]
+        - button "U" [ref=e59] [cursor=pointer]
+    - generic [ref=e66]:
+      - button "New Tab" [ref=e67] [cursor=pointer]
+      - generic [ref=e69]:
+        - generic [ref=e70] [cursor=pointer]:
+          - img "Ron" [ref=e71]
+          - generic [ref=e72]: Home
+          - button "Close Tab" [ref=e73]
+        - generic [ref=e77] [cursor=pointer]:
+          - img "Ron" [ref=e79]
+          - generic [ref=e80]: Home
+          - button "Close Tab" [ref=e81]
+  - generic [ref=e88]:
+    - generic [ref=e91]:
+      - button "Add Context" [ref=e93] [cursor=pointer]
+      - textbox "Ask anything..." [ref=e99]
+      - button [disabled] [ref=e100]
+    - generic [ref=e104]:
+      - button "Discover" [ref=e105] [cursor=pointer]
+      - button "Execute" [ref=e111] [cursor=pointer]
+      - button "Calendar" [ref=e118] [cursor=pointer]
+      - button "Vibe" [ref=e123] [cursor=pointer]
+      - button "Build" [ref=e130] [cursor=pointer]
+    - button "Collapse navigation" [ref=e136] [cursor=pointer]
+  - main [ref=e142]:
+    - generic [ref=e143]:
+      - generic [ref=e144]:
+        - generic [ref=e145]: Ron / Discover
+        - generic [ref=e146]: Selected for the curious
+      - generic [ref=e147]:
+        - generic [ref=e148]:
+          - heading "A little more perspective." [level=1] [ref=e149]
+          - paragraph [ref=e150]: Your interests, worth a closer look. Read something. Make something of it.
+        - generic [ref=e151]:
+          - button "Personalize your feed" [ref=e152] [cursor=pointer]: Personalize
+          - button "Refresh feed" [disabled] [ref=e156]: Refresh
+          - button "Auto-play off" [ref=e162] [cursor=pointer]
+      - generic [ref=e165]:
+        - generic [ref=e166]: Technology
+        - generic [ref=e167]: AI
+        - generic [ref=e168]: Design
+        - status [ref=e169]: Loading your feed…
+    - region "Stories by interest" [ref=e170]:
+      - generic [ref=e171]:
+        - button "AI & moving images www.youtube.com · November 30, 2025 Top 15 New AI Advancements (This Year) - YouTube What if the biggest breakthroughs in artificial intelligence are happening faster than anyone expected? In this video, we reveal the Top 15 New AI Advancemen... Read story" [ref=e174] [cursor=pointer]:
+          - generic [ref=e175]: AI & moving images
+          - generic [ref=e177]:
+            - paragraph [ref=e178]: www.youtube.com · November 30, 2025
+            - heading "Top 15 New AI Advancements (This Year) - YouTube" [level=3] [ref=e179]
+            - paragraph [ref=e180]: What if the biggest breakthroughs in artificial intelligence are happening faster than anyone expected? In this video, we reveal the Top 15 New AI Advancemen...
+            - generic [ref=e181]: Read story
+        - generic [ref=e184]:
+          - generic [ref=e185]: 01 / 20 in AI & moving images
+          - generic [ref=e186]:
+            - button "Previous AI & moving images story" [ref=e187] [cursor=pointer]
+            - button "Next AI & moving images story" [ref=e190] [cursor=pointer]
+      - generic [ref=e193]:
+        - button "On the field www.nytimes.com · 1 day ago Bills’ thin wide receiver room faces a ‘next man up’ test against the Broncos - The Athletic ORCHARD PARK, N.Y. — Buffalo Bills offensive coordinator Joe Brady said his play sheet Sunday “looked like a Picasso painting,” fragmented and disjointed, every new line scratching out his options. The Bills’ offense has gotten even sketchier for Saturday’s second-round playoff game ... Read story" [ref=e196] [cursor=pointer]:
+          - generic [ref=e197]: On the field
+          - generic [ref=e199]:
+            - paragraph [ref=e200]: www.nytimes.com · 1 day ago
+            - heading "Bills’ thin wide receiver room faces a ‘next man up’ test against the Broncos - The Athletic" [level=3] [ref=e201]
+            - paragraph [ref=e202]: ORCHARD PARK, N.Y. — Buffalo Bills offensive coordinator Joe Brady said his play sheet Sunday “looked like a Picasso painting,” fragmented and disjointed, every new line scratching out his options. The Bills’ offense has gotten even sketchier for Saturday’s second-round playoff game ...
+            - generic [ref=e203]: Read story
+        - generic [ref=e206]:
+          - generic [ref=e207]: 01 / 20 in On the field
+          - generic [ref=e208]:
+            - button "Previous On the field story" [ref=e209] [cursor=pointer]
+            - button "Next On the field story" [ref=e212] [cursor=pointer]
+      - generic [ref=e215]:
+        - button "The thrill of it www.nytimes.com · 1 week ago Riding the Roller Coaster Beat - The New York Times Mekado Murphy, the assistant film editor for The New York Times, moonlights as the newspaper’s unofficial roller coaster correspondent. Read story" [ref=e218] [cursor=pointer]:
+          - generic [ref=e219]: The thrill of it
+          - generic [ref=e221]:
+            - paragraph [ref=e222]: www.nytimes.com · 1 week ago
+            - heading "Riding the Roller Coaster Beat - The New York Times" [level=3] [ref=e223]
+            - paragraph [ref=e224]: Mekado Murphy, the assistant film editor for The New York Times, moonlights as the newspaper’s unofficial roller coaster correspondent.
+            - generic [ref=e225]: Read story
+        - generic [ref=e228]:
+          - generic [ref=e229]: 01 / 20 in The thrill of it
+          - generic [ref=e230]:
+            - button "Previous The thrill of it story" [ref=e231] [cursor=pointer]
+            - button "Next The thrill of it story" [ref=e234] [cursor=pointer]
+      - generic [ref=e237]:
+        - button "At the table cooking.nytimes.com · 2 weeks ago 21 Easy, Healthy Recipes for Busy, Tired People These weeknight-friendly recipes will help you eat well even when you’re short on time. Read story" [ref=e240] [cursor=pointer]:
+          - generic [ref=e241]: At the table
+          - generic [ref=e243]:
+            - paragraph [ref=e244]: cooking.nytimes.com · 2 weeks ago
+            - heading "21 Easy, Healthy Recipes for Busy, Tired People" [level=3] [ref=e245]
+            - paragraph [ref=e246]: These weeknight-friendly recipes will help you eat well even when you’re short on time.
+            - generic [ref=e247]: Read story
+        - generic [ref=e250]:
+          - generic [ref=e251]: 01 / 20 in At the table
+          - generic [ref=e252]:
+            - button "Previous At the table story" [ref=e253] [cursor=pointer]
+            - button "Next At the table story" [ref=e256] [cursor=pointer]
+      - generic [ref=e259]:
+        - button "Somewhere new www.nytimes.com · 3 days ago Tips to Avoid Stomach Trouble When You Travel - The New York Times Some people have guts of steel, while others are … a little more sensitive. Here are tips for preventing stomach discomfort and motion sickness on trips. Read story" [ref=e262] [cursor=pointer]:
+          - generic [ref=e263]: Somewhere new
+          - generic [ref=e265]:
+            - paragraph [ref=e266]: www.nytimes.com · 3 days ago
+            - heading "Tips to Avoid Stomach Trouble When You Travel - The New York Times" [level=3] [ref=e267]
+            - paragraph [ref=e268]: Some people have guts of steel, while others are … a little more sensitive. Here are tips for preventing stomach discomfort and motion sickness on trips.
+            - generic [ref=e269]: Read story
+        - generic [ref=e272]:
+          - generic [ref=e273]: 01 / 20 in Somewhere new
+          - generic [ref=e274]:
+            - button "Previous Somewhere new story" [ref=e275] [cursor=pointer]
+            - button "Next Somewhere new story" [ref=e278] [cursor=pointer]
+      - generic [ref=e281]:
+        - button "Closer to home www.visitsaltlake.com · December 2, 2025 Salt Lake City Events | Things to Do In Salt Lake City, UT Make your next visit an adventure you'll never forget. Browse all the events below. View All ... Jan. 15, 2026 · Be a part of the action as the Utah Mammoth play at the Delta Center in Salt Lake City.This calendar listing is brought to you by NowPlayingUtah.com, Utah's one-stop, online… Read story" [ref=e284] [cursor=pointer]:
+          - generic [ref=e285]: Closer to home
+          - generic [ref=e287]:
+            - paragraph [ref=e288]: www.visitsaltlake.com · December 2, 2025
+            - heading "Salt Lake City Events | Things to Do In Salt Lake City, UT" [level=3] [ref=e289]
+            - paragraph [ref=e290]: Make your next visit an adventure you'll never forget. Browse all the events below. View All ... Jan. 15, 2026 · Be a part of the action as the Utah Mammoth play at the Delta Center in Salt Lake City.This calendar listing is brought to you by NowPlayingUtah.com, Utah's one-stop, online…
+            - generic [ref=e291]: Read story
+        - generic [ref=e294]:
+          - generic [ref=e295]: 01 / 20 in Closer to home
+          - generic [ref=e296]:
+            - button "Previous Closer to home story" [ref=e297] [cursor=pointer]
+            - button "Next Closer to home story" [ref=e300] [cursor=pointer]
+      - generic [ref=e303]:
+        - button "Health & discovery Health & discovery www.ncbi.nlm.nih.gov Legal Implications of Utilization Review - Controlling Costs and Changing Patient Care? - NCBI Bookshelf The recent decade has seen a dramatic increase in the use of utilization review (UR) programs in an effort to stem the tide of rising health care costs. UR serves to verify the medical necessity of hospital admissions and specific medical procedures. Read story" [ref=e306] [cursor=pointer]:
+          - generic [ref=e307]:
+            - generic [ref=e308]: Health & discovery
+            - generic [ref=e310]: Health & discovery
+          - generic [ref=e311]:
+            - paragraph [ref=e312]: www.ncbi.nlm.nih.gov
+            - heading "Legal Implications of Utilization Review - Controlling Costs and Changing Patient Care? - NCBI Bookshelf" [level=3] [ref=e313]
+            - paragraph [ref=e314]: The recent decade has seen a dramatic increase in the use of utilization review (UR) programs in an effort to stem the tide of rising health care costs. UR serves to verify the medical necessity of hospital admissions and specific medical procedures.
+            - generic [ref=e315]: Read story
+        - generic [ref=e318]:
+          - generic [ref=e319]: 01 / 20 in Health & discovery
+          - generic [ref=e320]:
+            - button "Previous Health & discovery story" [ref=e321] [cursor=pointer]
+            - button "Next Health & discovery story" [ref=e324] [cursor=pointer]

@@ -42,6 +42,7 @@ import { PreviewPanel } from '@/components/ai-elements/preview-panel'
 import { usePreviewStore } from '@/stores/previewStore'
 import type { Citation } from '@/components/ai-elements/response-with-citations'
 import { Message, MessageAvatar, MessageContent } from '@/components/ai-elements/message'
+import { API_BASE_URL } from '@/lib/api-base'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TYPES & CONSTANTS
@@ -58,8 +59,7 @@ interface UrlAttachment {
   favicon: string
 }
 
-// API endpoint for task agent (project manager flavor)
-const TASK_AGENT_API = 'http://localhost:8765/agents/task/stream'
+const TASK_AGENT_API = `${API_BASE_URL}/agents/task/stream`
 
 const LARGE_PASTE_THRESHOLD_CHARS = 2000
 const URL_REGEX = /https?:\/\/[^\s<>"{}|\\^`\[\]]+/gi

@@ -30,6 +30,7 @@ import { usePreviewStore } from '@/stores/previewStore'
 
 // Context
 import { ContextPicker, type ContextItem } from '@/components/agent-panel/ContextPicker'
+import { API_BASE_URL } from '@/lib/api-base'
 import { fileToDataUrl, makePastedTextFilename } from '@/utils/file-utils'
 
 import type { UIMessage } from '@ai-sdk/react'
@@ -49,7 +50,8 @@ interface UrlAttachment {
 
 const EASE = [0.16, 1, 0.3, 1] as const
 const LARGE_PASTE_THRESHOLD_CHARS = 2000
-const CHAT_API = 'http://localhost:8765/chat'
+
+const CHAT_API = `${API_BASE_URL}/chat`
 const SUPERAGENT_SESSION_STORAGE_KEY = 'ron.superagent.session_id'
 const URL_REGEX = /https?:\/\/[^\s<>"{}|\\^`\[\]]+/gi
 type SuperAgentStatus = 'ready' | 'submitted' | 'streaming' | 'error'

@@ -265,6 +265,13 @@ def test_perplexity_read_timeout_is_opt_in(monkeypatch, configured, expected):
     assert model.client_args["timeout"].connect == 10
 
 
+def test_perplexity_default_hosted_tools_include_image_search(monkeypatch):
+    monkeypatch.setattr(app_config, "PERPLEXITY_API_KEY", "test-key")
+    monkeypatch.delenv("PERPLEXITY_HOSTED_TOOLS", raising=False)
+    types = [t["type"] for t in panel_agent.build_model("perplexity", "openai/gpt-5").config["params"]["tools"]]
+    assert "image_search" in types
+
+
 def test_perplexity_hosted_tools_env_override(monkeypatch):
     monkeypatch.setattr(app_config, "PERPLEXITY_API_KEY", "test-key")
     monkeypatch.setenv("PERPLEXITY_HOSTED_TOOLS", "web_search,finance_search")

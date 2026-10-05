@@ -14,6 +14,7 @@ MCP_ROOT=/opt/ron/electron-playwright-mcp
 cd "$RON_ROOT"
 
 log "python venv"
+bash "$RON_ROOT/deploy/prepare-strands.sh"
 [ -x venv/bin/python ] || python3 -m venv venv
 venv/bin/pip install -q -U pip
 venv/bin/pip install -q -r agent/api/requirements.txt

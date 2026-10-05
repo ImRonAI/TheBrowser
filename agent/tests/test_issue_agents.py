@@ -103,6 +103,23 @@ class Service:
         return values
 
 
+#: Issue-scoped tools every issue agent carries: the private issue tools, the learned-skill
+#: pair (teaching.create_learned_skill_tools) and the native memory search tool exposed by the
+#: per-issue memory_manager ``search_tool_config``. Not shell/browser/delegation.
+ISSUE_AGENT_TOOLS = {'read_issue', 'update_issue', 'edit_issue', 'create_child', 'read_issue_context', 'link_issue',
+                     'save_work_product', 'list_learned_skills', 'use_skill', 'search_memory'}
+
+
+@pytest.fixture(autouse=True)
+def isolated_teaching_service(monkeypatch, tmp_path):
+    # Issue agents now build learned-skill tools and a per-issue memory store through the
+    # TeachingService process singleton, rooted at .sessions/teaching by default. Keep every
+    # test's stores under tmp_path and start each test from a fresh singleton.
+    from agent.api.core import teaching
+    monkeypatch.setenv('TEACHING_STORAGE_DIR', str(tmp_path / 'teaching'))
+    monkeypatch.setattr(teaching, '_service', None)
+
+
 def configured(monkeypatch):
     monkeypatch.setattr(issue_agents, 'default_selection', lambda: ('openai', 'offline'))
 
@@ -152,6 +169,8 @@ def test_native_a2a_durable_restart_task_and_user_isolation(monkeypatch):
         models = []
 
         def model_factory(provider, model_id, **kwargs):
+            # hosted_tools=True is the worker; the learned-skill runner's model factory
+            # (hosted_tools=False) is only invoked when a skill actually executes.
             assert kwargs == {'hosted_tools': True}
             model = OfflineModel('task reply')
             models.append(model)
@@ -164,7 +183,9 @@ def test_native_a2a_durable_restart_task_and_user_isolation(monkeypatch):
         assert db.runs[record['run']['id']]['output'] == 'task reply'
         assert any('snapshot_latest' in key for _, key in db.blobs)
         assert any(key.startswith('a2a/') for _, key in db.blobs)
-        assert {t['name'] for t in models[0].calls[0]['tools']} == {'read_issue', 'update_issue', 'edit_issue', 'create_child', 'read_issue_context', 'link_issue', 'save_work_product'}
+        from agent.api.core.a2a_tools import A2A_TOOL_NAMES
+        # Every Ron agent also carries the native A2A client tools.
+        assert {t['name'] for t in models[0].calls[0]['tools']} == ISSUE_AGENT_TOOLS | set(A2A_TOOL_NAMES)
         await runtime.shutdown()
 
         restarted = IssueAgentRuntime(model_factory)

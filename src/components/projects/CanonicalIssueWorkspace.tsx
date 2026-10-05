@@ -140,7 +140,7 @@ export function CanonicalIssueWorkspace({ issue, project, onClose, onNavigate }:
   return <>
     <TaskDetailView task={task} onClose={() => void navigate(onClose)} workspace={{ banner, sidebar,
       description: <div className="h-full overflow-y-auto p-6 space-y-6 text-ink dark:text-ink-inverse">
-        <IssueDescriptionRon issueId={issue.id} disabled={disabled || conflict} beforeStart={save}
+        <IssueDescriptionRon issueId={issue.id} issueTitle={issue.title} currentDescription={draft.description ?? ''} disabled={disabled || conflict} beforeStart={save}
           onPreview={(description) => edit({ description })} onRunning={setDescriptionRunning} />
         <NotionEditor canonical content={draft.description ?? ''} readOnly={disabled} onChange={(description) => edit({ description })} onSave={() => void save()}
           onAskRon={(goal) => window.dispatchEvent(new CustomEvent('issue-description-ron', { detail: { issueId: issue.id, goal } }))} />
@@ -152,7 +152,7 @@ export function CanonicalIssueWorkspace({ issue, project, onClose, onNavigate }:
         <IssueRelationships issue={issue} onNavigate={(id) => void navigate(() => onNavigate(id))} />
         <IssueWorkProducts products={issue.workProducts} />
       </div>,
-      ron: <IssueRonPane issueId={issue.id} hasUnsavedChanges={dirty || saving} draft={ronDraft} onDraftChange={setRonDraft}
+      ron: <IssueRonPane issueId={issue.id} issue={{ title: issue.title, description: issue.description }} hasUnsavedChanges={dirty || saving} draft={ronDraft} onDraftChange={setRonDraft}
         needsReview={ronNeedsReview} onReviewChange={setRonNeedsReview} />,
       comms: <div className="p-6 text-sm">Canonical communications and attachment storage are not configured. Legacy messages, attachments, and conversations are not imported or written into custom fields.</div>,
       history: <div className="h-full overflow-y-auto p-6 space-y-3"><button disabled={disabled} className="text-indigo-500" onClick={() => void refreshFromServer()}>Refresh activity</button>

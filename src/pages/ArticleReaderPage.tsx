@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type UIEvent } from 'react'
 import { ArrowLeft, ArrowUpRight } from 'lucide-react'
 import { NewsArticle } from '@/components/home/NewsArticle'
 import { InterestsActionMenu } from '@/components/interests/InterestInteraction'
+import { API_BASE_URL } from '@/lib/api-base'
 import { previewArticle, storyFromReadUrl } from '@/lib/articles'
 import { useTabStore } from '@/stores/tabStore'
 
@@ -30,7 +31,7 @@ export function ArticleReaderPage({ href }: { href: string }) {
     const controller = new AbortController()
     setLoading(true)
     setNotice('')
-    void fetch('http://localhost:8765/articles/extract', {
+    void fetch(`${API_BASE_URL}/articles/extract`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ url: story.url }), signal: controller.signal,
     }).then(async (response) => {

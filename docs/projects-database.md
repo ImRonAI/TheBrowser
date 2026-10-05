@@ -38,13 +38,10 @@ The September 22 creation failure was a split backend: the local API held
 in the Mac SQLite database, but writes reached the VPS database. Neither database
 should be reset or merged to resolve this.
 
-`npm run dev:backend` now refuses an occupied port instead of killing its owner.
-For local guest Projects alongside the VPS tunnel, run
-`API_HOST=127.0.0.1 API_PORT=8766 npm run dev:backend` and explicitly pin the browser's
-`ron-project-api-url-v1` local-storage value to `http://localhost:8766` before
-reloading Projects. The existing workspace capability is unchanged. Both Projects
-and issue Ron use this endpoint; signed-in requests still use the normal API.
-The local API is a development process, not a launchd-managed service.
+`npm run electron:dev` starts one local API and sets `VITE_API_BASE_URL` so Projects,
+issue Ron, chat, and live all use the same origin (8765 when free, 8766 when the
+SSH tunnel holds 8765). Clear a stale `ron-project-api-url-v1` pin if it no longer
+matches that origin. The local API is a development process, not a launchd-managed service.
 
 ### Issue Ron editing and deliverables
 

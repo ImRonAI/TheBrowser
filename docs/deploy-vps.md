@@ -44,12 +44,26 @@ no IP or token is committed anywhere in this repository.
    ```bash
    RON_VPS_HOST=<host> bash deploy/sync-to-vps.sh          # prints SYNC OK
    ```
-3. **Install** as `ron` — venv, requirements, the MCP package (with pinned
+3. **Install** as `ron` — pinned Strands GitHub checkout, venv, requirements, the MCP package (with pinned
    `fastmcp==3.4.0` / `mcp==1.26.0` so Strands' `mcp<2.2` bound holds), both npm
    builds, and the `chrome-sandbox` setuid bit (Chromium's sandbox stays on):
    ```bash
-   ssh ron@$RON_VPS_HOST 'bash /opt/ron/RonBrowserRebuild/deploy/vps-install.sh'   # INSTALL OK
-   ```
+    ssh ron@$RON_VPS_HOST 'bash /opt/ron/RonBrowserRebuild/deploy/vps-install.sh'   # INSTALL OK
+    ```
+
+   `vps-install.sh` runs `deploy/prepare-strands.sh` before pip. It reconstructs
+   `agent/api/core/harness-sdk` directly from GitHub at the recorded SHA and applies
+   `deploy/strands-bidi.patch`; the nested checkout is excluded from rsync.
+   Existing source with a different origin/revision is rejected, never reset.
+   For a new SDK pin or changed native patch, stop the API, inspect the existing
+   checkout's `git status`/`git diff`, then **move the directory aside to a unique
+   backup path** and rerun `bash deploy/prepare-strands.sh` and the requirements
+   install. Keep that backup until local work is reviewed and the new source is
+   validated; do not delete or reset it. Editable installs require the new install
+   before restarting the API.
+   Both Chat and Live install the same complete Python SDK from this checkout.
+   Screen/camera WebM ingress requires `ffmpeg` on the API host; bootstrap installs
+   it for fresh servers. Existing servers must install it before using Live video.
 4. **Env file** — fill `/etc/ronbrowser/ron.env` (`root:ron`, mode `640`) from
    `deploy/ron.env.example`: `HF_TOKEN`, `HF_BUCKET_ID`, provider keys. Build it in a
    temp file on your Mac, `scp` it, then delete the temp file. Create the bucket once:
@@ -58,7 +72,7 @@ no IP or token is committed anywhere in this repository.
    ```
 5. **Units** — install and start the two services:
    ```bash
-   ssh root@$RON_VPS_HOST 'install -m644 /opt/ron/RonBrowserRebuild/deploy/systemd/*.service /opt/ron/RonBrowserRebuild/deploy/systemd/*.timer /etc/systemd/system/ && systemctl daemon-reload && systemctl enable --now ron-api ron-browser ron-dreaming.timer'
+   ssh root@$RON_VPS_HOST 'install -m644 /opt/ron/RonBrowserRebuild/deploy/systemd/*.service /etc/systemd/system/ && systemctl daemon-reload && systemctl enable --now ron-api ron-browser'
    ```
 6. **Tunnel** (Mac) — renders and loads a `launchd` agent that keeps the SSH tunnel up:
    ```bash
@@ -88,7 +102,7 @@ stays on loopback even if the file is edited.
 
 | Port | Role |
 | --- | --- |
-| 8765 | Ron agent API (`ron-api.service`), reached from the Mac via `-L 8765`. `ron-dreaming.timer` POSTs `/memory/dream` on loopback every minute; the endpoint consolidates the journal into memory only after `RON_MEMORY_IDLE_SECONDS` (300) of panel idleness. On a Mac, `deploy/local/install-dreaming.sh` installs the launchd equivalent (macOS blocks non-interactive `crontab` behind TCC). |
+| 8765 | Ron agent API (`ron-api.service`), reached from the Mac via `-L 8765`. Memory consolidation ("dreaming") is the SDK's native extraction inside this process (every 5 turns and at session close/shutdown via `memory_manager.flush()`); there is no timer or endpoint. A previously installed `ron-dreaming.timer` (VPS) or `com.ronbrowser.dreaming` launchd job (Mac) should be disabled: `systemctl disable --now ron-dreaming.timer` / `launchctl unload ~/Library/LaunchAgents/com.ronbrowser.dreaming.plist`. |
 | 3000 / 8931 / 9222 | Cloud Ron: Electron surface / Playwright MCP surface / CDP (`ron-browser.service`, under `xvfb-run`) |
 | 13000 / 18931 / 19222 | The Mac's Ron (3000 / 8931 / 9222) via `-R` reverse forwards |
 | 22 | SSH — the only port open in `ufw` |

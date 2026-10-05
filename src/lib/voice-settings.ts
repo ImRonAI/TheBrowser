@@ -1,12 +1,33 @@
 /**
- * Pure voice-panel settings: Gemini Live prebuilt voices, reasoning-effort
- * levels, microphone constraints and Persona presence helpers.
+ * Pure voice-panel settings: Gemini Live models, prebuilt voices,
+ * reasoning-effort levels, microphone constraints and Persona presence
+ * helpers.
  *
- * UI state only — nothing here is sent to the voice API. The single
- * functional hookup is `micConstraints`, which threads the chosen input
+ * `model`, `voice` and `effort` are sent as `/bidi` query parameters by
+ * `liveQuery` (voice-events.ts); `micConstraints` threads the chosen input
  * device into `getUserMedia`. No React, no `@/` imports so `node --test`
  * can run the colocated test.
  */
+
+export type LiveModelId = 'gemini-3.8-live-extended-thinking' | 'gemini-3.8-live'
+export const EXTENDED_LIVE_MODEL: LiveModelId = 'gemini-3.8-live-extended-thinking'
+export const REGULAR_LIVE_MODEL: LiveModelId = 'gemini-3.8-live'
+// Regular Live is the default: Extended Thinking usually skips the browser toolCall and reports a
+// "system error" instead (see agent/api/endpoints/bidi.py DEFAULT_MODEL).
+export const DEFAULT_LIVE_MODEL: LiveModelId = REGULAR_LIVE_MODEL
+
+/** Mirrors `LIVE_MODEL_IDS` in agent/api/core/bidi_agent.py. */
+export const LIVE_MODELS: readonly { id: LiveModelId; label: string; description: string; thinking: boolean }[] = [
+  { id: EXTENDED_LIVE_MODEL, label: 'Gemini 3.8 Live · Extended Thinking', description: 'Deeper reasoning with a selectable effort; tools run non-blocking.', thinking: true },
+  { id: REGULAR_LIVE_MODEL, label: 'Gemini 3.8 Live', description: 'Lowest latency. No thinking configuration.', thinking: false },
+]
+
+export function isLiveModel(value: unknown): value is LiveModelId {
+  return typeof value === 'string' && LIVE_MODELS.some((model) => model.id === value)
+}
+
+export const liveModelLabel = (id: LiveModelId): string => LIVE_MODELS.find((model) => model.id === id)?.label ?? id
+export const supportsEffort = (id: LiveModelId): boolean => LIVE_MODELS.find((model) => model.id === id)?.thinking ?? false
 
 export type ReasoningEffort = 'low' | 'medium' | 'high'
 
@@ -18,8 +39,8 @@ export const REASONING_EFFORTS: readonly { id: ReasoningEffort; label: string; d
 
 export const DEFAULT_REASONING_EFFORT: ReasoningEffort = 'high'
 
-/** Caption only; the model itself is selected by the backend. */
-export const VOICE_MODEL_LABEL = 'Gemini 3.8 Live · Extended Thinking'
+/** Default caption; the live caption comes from `liveModelLabel(selected model)`. */
+export const VOICE_MODEL_LABEL = liveModelLabel(DEFAULT_LIVE_MODEL)
 
 export type GeminiVoiceId = 'Puck' | 'Charon' | 'Kore' | 'Fenrir' | 'Aoede' | 'Leda' | 'Orus' | 'Zephyr'
 

@@ -24,7 +24,7 @@ subclass captures ``item.arguments`` from the two documented output_item
 events instead. The OpenAI-dialect delta events are still honored when
 present, so the provider remains correct for servers that emit them.
 
-Server-side (native) tools -- ``web_search``, ``fetch_url``, ``sandbox``,
+Server-side (native) tools -- ``web_search``, ``image_search``, ``fetch_url``, ``sandbox``,
 ``people_search``, ``finance_search``, ``mcp``, connectors, skills -- run
 inside the Agent API's own loop. Their results arrive as Perplexity-only
 ``response.reasoning.*`` events and as ``response.output_item.done`` items
@@ -82,7 +82,7 @@ logger = logging.getLogger(__name__)
 #: output_text deltas) and so is ``function_call`` (handled as a normal toolUse).
 #: https://docs.perplexity.ai/api-reference/agent-post
 NATIVE_OUTPUT_ITEM_TYPES: frozenset[str] = frozenset({
-    "search_results", "people_search_results", "finance_results", "fetch_url_results",
+    "search_results", "image_search_results", "people_search_results", "finance_results", "fetch_url_results",
     "sandbox_results", "sandbox_glob", "sandbox_grep", "sandbox_read_file", "sandbox_write_file",
     "sandbox_edit_file", "sandbox_apply_patch", "share_file", "mcp_call", "mcp_list_tools",
     "skill_loaded", "advisor_result",

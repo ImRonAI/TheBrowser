@@ -44,6 +44,8 @@ export interface ContextItem {
   favicon?: string // URL to favicon image (for tabs)
   url?: string // Complete URL for tabs
   title?: string // Complete title for tabs
+  /** Populated on send when the user attached an open tab from the context picker. */
+  tab_context?: import('@/pages/types/electron').TabContext
 }
 
 interface ContextCategory {
@@ -66,13 +68,6 @@ interface ContextPickerProps {
 // ─────────────────────────────────────────────────────────────────────────────
 // SAMPLE DATA - In production, this would come from stores/APIs
 // ─────────────────────────────────────────────────────────────────────────────
-
-const SAMPLE_TABS: ContextItem[] = [
-  { id: 'tab-1', type: 'tab', name: 'GitHub - ronbrowser', description: 'github.com', meta: 'Active', color: 'bg-emerald-500' },
-  { id: 'tab-2', type: 'tab', name: 'Stack Overflow - React Hooks', description: 'stackoverflow.com', meta: '5m ago' },
-  { id: 'tab-3', type: 'tab', name: 'MDN Web Docs', description: 'developer.mozilla.org', meta: '12m ago' },
-  { id: 'tab-4', type: 'tab', name: 'Tailwind CSS Documentation', description: 'tailwindcss.com', meta: '1h ago' },
-]
 
 const SAMPLE_CONVERSATIONS: ContextItem[] = [
   { id: 'conv-1', type: 'conversation', name: 'API Integration Help', description: 'Discussed REST endpoints', meta: 'Today' },
@@ -195,8 +190,8 @@ export function ContextPicker({ selectedContexts, onContextsChange, className, a
       id: 'tabs',
       name: 'Open Tabs',
       icon: GlobeAltIcon,
-      description: `${(openTabs?.length ?? 0) || SAMPLE_TABS.length} tabs open`,
-      items: openTabs.length ? openTabs : SAMPLE_TABS,
+      description: openTabs.length ? `${openTabs.length} tabs open` : 'No tabs loaded',
+      items: openTabs,
     },
     {
       id: 'conversations',

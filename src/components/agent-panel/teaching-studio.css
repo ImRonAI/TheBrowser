@@ -1,0 +1,105 @@
+.teaching-launch-button { @apply flex w-full items-center gap-3 px-4 py-3 text-left text-accent dark:text-accent-subtle; }
+.teaching-studio,.teaching-dock { @apply font-normal; }
+.teaching-launch-button span { @apply flex flex-1 flex-col gap-0.5; }
+.teaching-launch-button strong { @apply text-xs font-semibold; }
+.teaching-launch-button small { @apply text-label text-ink-secondary dark:text-surface-400; }
+.teaching-studio {
+  @apply flex h-full max-w-full flex-col gap-0 overflow-hidden rounded-none border-y-0 border-r-0 border-l border-indigo-200/50 bg-white/95 p-0 text-ink shadow-2xl backdrop-blur-xl dark:border-indigo-900/50 dark:bg-surface-900/95 dark:text-ink-inverse;
+}
+.teaching-header { @apply flex items-start gap-3 border-b border-indigo-100/50 bg-gradient-to-r from-white/50 via-indigo-50/30 to-white/50 px-4 py-4 dark:border-surface-800 dark:from-surface-900/50 dark:via-indigo-950/20 dark:to-surface-900/50; }
+.teaching-mark { @apply flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 via-indigo-600 to-violet-700 font-display text-white shadow-lg shadow-indigo-600/30; }
+.teaching-meta { @apply inline-flex items-center gap-2 font-mono text-label font-normal uppercase tracking-[0.1em] text-ink-secondary dark:text-surface-400; }
+.teaching-title.teaching-title { @apply mt-0.5 text-lg font-semibold leading-tight tracking-normal; }
+.teaching-description.teaching-description { @apply mt-0.5 text-[11px] leading-relaxed text-ink-muted dark:text-ink-inverse-muted; }
+.teaching-actions { @apply flex shrink-0 items-center gap-1; }
+.teaching-icon { @apply inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-ink-secondary transition-colors hover:bg-surface-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-40 dark:text-surface-300 dark:hover:bg-surface-700; }
+.teaching-stages { @apply grid shrink-0 grid-cols-4 gap-1 border-y border-indigo-100/50 px-4 dark:border-surface-800; }
+.teaching-stages li { @apply flex flex-col items-start gap-0.5 border-b-2 border-transparent py-2 text-[10px] text-ink-secondary dark:text-surface-400; }
+.teaching-stages li span { @apply font-mono text-label; }
+.teaching-stages li[aria-current] { @apply border-accent font-semibold text-accent dark:border-accent-muted dark:text-accent-subtle; }
+.teaching-stages li[data-complete=true] { @apply text-success; }
+.teaching-body { @apply min-h-0 overflow-y-auto; }
+.teaching-desk { @apply grid grid-cols-1; }
+.teaching-brief { @apply p-4; }
+.teaching-studio h2 { @apply mt-1 text-base font-semibold leading-snug; }
+.teaching-muted { @apply mb-7 mt-3 text-xs leading-relaxed text-ink-secondary dark:text-surface-400; }
+.teaching-studio label,.teaching-commentary label { @apply mb-2 mt-5 block text-xs font-semibold; }
+.teaching-studio input:not([type=checkbox]),.teaching-studio textarea,.teaching-commentary textarea { @apply block w-full rounded-xl border border-surface-300 bg-white px-3 py-2.5 text-xs leading-relaxed text-ink outline-none transition-colors placeholder:text-surface-500 focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400 disabled:opacity-60 dark:border-surface-700 dark:bg-surface-900 dark:text-surface-100 dark:placeholder:text-surface-400 dark:focus:border-indigo-500; }
+.teaching-studio textarea { @apply resize-y; }
+.teaching-optional { @apply ml-1 font-normal text-ink-secondary dark:text-surface-400; }
+.teaching-capture-actions { @apply mt-6 flex flex-wrap gap-2; }
+.teaching-button { @apply inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border border-surface-300 px-4 py-2.5 text-xs font-semibold transition-colors hover:bg-surface-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-500 disabled:cursor-not-allowed disabled:opacity-40 dark:border-surface-700 dark:hover:bg-surface-800; }
+.teaching-button.primary { @apply border-transparent bg-gradient-to-r from-indigo-500 via-indigo-600 to-violet-700 text-white shadow-lg shadow-indigo-600/30 hover:from-indigo-600 hover:to-violet-800 dark:border-transparent; }
+.teaching-footnote { @apply mt-3 text-label leading-relaxed text-ink-secondary dark:text-surface-400; }
+.teaching-observation { @apply min-w-0 border-t border-indigo-100/50 bg-transparent p-4 dark:border-surface-800; }
+.teaching-section-heading { @apply flex items-center justify-between gap-3; }
+.teaching-section-heading h3 { @apply text-xs font-semibold; }
+.teaching-preview { @apply mt-4 flex aspect-video items-center justify-center overflow-hidden rounded-lg border border-surface-200 bg-surface-200/50 dark:border-surface-700 dark:bg-surface-800; }
+.teaching-preview>div { @apply flex max-w-64 flex-col items-center gap-3 px-4 text-center text-ink-secondary dark:text-surface-400; }
+.teaching-preview h3 { @apply font-display text-lg text-ink dark:text-surface-200; }
+.teaching-preview p { @apply text-label leading-relaxed; }
+.teaching-preview video,.teaching-preview img { @apply h-full w-full object-contain; }
+.teaching-source { @apply mt-2 truncate font-mono text-label text-ink-secondary dark:text-surface-400; }
+.teaching-capture-status { @apply my-3 text-label leading-relaxed text-ink-secondary dark:text-surface-400; }
+.teaching-journal { @apply mt-6 border-t border-surface-200 pt-5 dark:border-surface-700; }
+.teaching-journal ol { @apply mt-4 max-h-64 overflow-auto; }
+.teaching-journal li { @apply relative border-l border-surface-300 pb-4 pl-4 dark:border-surface-600; }
+.teaching-journal li p { @apply mt-1 whitespace-pre-wrap break-words text-xs leading-relaxed; }
+.teaching-empty { @apply flex flex-col items-start gap-2 py-5 text-ink-secondary dark:text-surface-400; }
+.teaching-empty p { @apply text-xs font-medium; }
+.teaching-empty span { @apply text-label leading-relaxed; }
+.teaching-commentary>div { @apply flex items-end gap-2; }
+.teaching-transcript { @apply mt-4 whitespace-pre-wrap text-xs leading-relaxed; }
+.teaching-error { @apply mx-4 mt-4 break-words rounded-xl border border-rose-200 bg-rose-50 p-4 text-xs leading-relaxed text-rose-900 dark:border-rose-900 dark:bg-rose-950/50 dark:text-rose-200; }
+.teaching-error p { @apply my-1; }
+.teaching-error small { @apply text-label; }
+.teaching-progress { @apply mx-4 mt-4 flex items-center gap-3 rounded-xl bg-indigo-50 p-4 text-xs text-accent dark:bg-indigo-950 dark:text-indigo-200; }
+.teaching-progress p { @apply mt-1 text-label; }
+.teaching-review { @apply p-4; }
+.teaching-review>.teaching-section-heading { @apply mb-5 flex-wrap; }
+.teaching-document { @apply w-full rounded-md border border-surface-300 bg-white; height: 52vh; min-height: 280px; }
+.teaching-review-controls { @apply grid grid-cols-1 gap-6; }
+.teaching-review-controls .teaching-button { @apply mt-3; }
+.teaching-approval { @apply mt-0 border-t border-surface-200 pt-4 dark:border-surface-700; }
+.teaching-approval label { @apply mt-0 flex items-start gap-3 leading-relaxed; }
+.teaching-approval input { @apply mt-0.5 h-4 w-4 shrink-0 accent-indigo-700; }
+.teaching-approval p { @apply mt-3 text-label leading-relaxed text-ink-secondary dark:text-surface-400; }
+.teaching-saved { @apply flex flex-col items-center gap-4 px-8 py-12 text-center; }
+.teaching-saved>svg { @apply text-success; }
+.teaching-saved>p:not(.teaching-meta) { @apply max-w-lg text-sm leading-relaxed text-ink-secondary dark:text-surface-400; }
+.teaching-saved-assets { @apply mb-3 flex flex-wrap justify-center gap-6; }
+.teaching-saved-assets span { @apply flex items-center gap-2 text-xs; }
+.teaching-library { @apply grid grid-cols-1 gap-5 border-t border-indigo-100/50 px-4 py-4 dark:border-surface-800; }
+.teaching-library summary { @apply cursor-pointer text-xs font-medium; }
+.teaching-library summary span { @apply ml-2 font-mono text-label text-ink-secondary dark:text-surface-400; }
+.teaching-library p { @apply my-3 text-xs leading-relaxed text-ink-secondary dark:text-surface-400; }
+.teaching-library li button { @apply mt-2 flex w-full items-center gap-2 border-b border-surface-200 py-2 text-left text-xs disabled:opacity-40 dark:border-surface-700; }
+.teaching-library li button span { @apply flex-1; }
+.teaching-library li small { @apply text-label text-ink-secondary dark:text-surface-400; }
+.teaching-library article { @apply mt-5; }
+.teaching-library h3 { @apply text-xs font-semibold; }
+.teaching-files { @apply flex flex-wrap gap-2; }
+.teaching-files button { @apply inline-flex items-center gap-1 break-all text-label text-accent underline underline-offset-4 dark:text-accent-subtle; }
+.teaching-artifact { @apply m-4 rounded-xl border border-surface-200 p-4 dark:border-surface-700; }
+.teaching-artifact pre { @apply mt-3 max-h-80 overflow-auto whitespace-pre-wrap break-words text-xs; }
+.teaching-dock { @apply m-3 space-y-3 rounded-lg border border-surface-300 bg-surface-50 p-3 text-xs text-ink dark:border-surface-700 dark:bg-surface-850 dark:text-surface-100; }
+.teaching-dock-entry { @apply max-h-20 overflow-auto text-label leading-relaxed text-ink-secondary dark:text-surface-400; }
+.teaching-dock .teaching-error { @apply m-0; }
+.teaching-document { color-scheme: light; }
+.dark .teaching-document { color-scheme: dark; }
+.teaching-preview { position: relative; }
+.teaching-preview .teaching-camera-pip {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  width: 72px;
+  height: 72px;
+  max-width: 72px;
+  aspect-ratio: 1;
+  border-radius: 9999px;
+  object-fit: cover;
+  border: 2px solid #fff;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35);
+  background: #111;
+}
+.teaching-camera-dock { position: static; width: 72px; height: 72px; max-width: 72px; margin-top: 8px; border-radius: 9999px; object-fit: cover; border: 2px solid #fff; }

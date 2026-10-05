@@ -1,0 +1,115 @@
+- generic [ref=e3]:
+  - generic [ref=e4]:
+    - generic [ref=e6]:
+      - generic [ref=e7]:
+        - button "Home" [ref=e8] [cursor=pointer]
+        - button "Go back" [disabled] [ref=e13]
+        - button "Go forward" [disabled] [ref=e17]
+        - button "Reload page" [ref=e21] [cursor=pointer]
+      - generic [ref=e27]:
+        - generic [ref=e29]:
+          - img "Ron" [ref=e30]
+          - generic [ref=e31]: ron
+        - textbox "Search or enter URL..." [ref=e33]: ron://home
+        - button "Search or navigate" [ref=e34] [cursor=pointer]
+      - generic [ref=e38]:
+        - 'button "Theme: dark (click to toggle)" [ref=e39] [cursor=pointer]'
+        - button "New Tab" [ref=e52] [cursor=pointer]
+        - button "Open Agent Panel" [ref=e55] [cursor=pointer]
+        - button "U" [ref=e59] [cursor=pointer]
+    - generic [ref=e66]:
+      - button "New Tab" [ref=e67] [cursor=pointer]
+      - generic [ref=e69]:
+        - generic [ref=e70] [cursor=pointer]:
+          - img "Ron" [ref=e71]
+          - generic [ref=e72]: Home
+          - button "Close Tab" [ref=e73]
+        - generic [ref=e77] [cursor=pointer]:
+          - img "Ron" [ref=e79]
+          - generic [ref=e80]: Home
+          - button "Close Tab" [ref=e81]
+  - generic [ref=e88]:
+    - generic [ref=e91]:
+      - button "Add Context" [ref=e93] [cursor=pointer]
+      - textbox "Ask anything..." [ref=e99]
+      - button [disabled] [ref=e100]
+    - generic [ref=e104]:
+      - button "Discover" [ref=e105] [cursor=pointer]
+      - button "Execute" [ref=e111] [cursor=pointer]
+      - button "Calendar" [ref=e118] [cursor=pointer]
+      - button "Vibe" [ref=e123] [cursor=pointer]
+      - button "Build" [ref=e130] [cursor=pointer]
+    - button "Collapse navigation" [ref=e136] [cursor=pointer]
+  - main [ref=e142]:
+    - generic [ref=e143]:
+      - generic [ref=e144]:
+        - generic [ref=e145]: Ron / Discover
+        - generic [ref=e146]: Live from your interests
+      - generic [ref=e147]:
+        - generic [ref=e148]:
+          - heading "A little more perspective." [level=1] [ref=e149]
+          - paragraph [ref=e150]: Your interests, worth a closer look. Read something. Make something of it.
+        - generic [ref=e151]:
+          - button "Personalize your feed" [ref=e152] [cursor=pointer]: Personalize
+          - button "Refresh feed" [ref=e156] [cursor=pointer]: Refresh
+          - button "Auto-play off" [ref=e162] [cursor=pointer]
+      - generic [ref=e165]:
+        - generic [ref=e166]: Technology
+        - generic [ref=e167]: AI
+        - generic [ref=e168]: Design
+        - status [ref=e169]: Updated just now
+    - region "Stories by interest" [ref=e170]:
+      - generic [ref=e327]:
+        - button "Technology NYTimes · 2 days ago As A.I. Accelerates, Governments Are Increasingly Being Left Behind - The New York Times The gap between technology and policymaking has gotten wider than ever with artificial intelligence, leaving a global policy vacuum as A.I. models rapidly advance. Read story" [ref=e330] [cursor=pointer]:
+          - generic [ref=e331]: Technology
+          - generic [ref=e333]:
+            - paragraph [ref=e334]: NYTimes · 2 days ago
+            - heading "As A.I. Accelerates, Governments Are Increasingly Being Left Behind - The New York Times" [level=3] [ref=e335]
+            - paragraph [ref=e336]: The gap between technology and policymaking has gotten wider than ever with artificial intelligence, leaving a global policy vacuum as A.I. models rapidly advance.
+            - generic [ref=e337]: Read story
+        - generic [ref=e340]:
+          - generic [ref=e341]: 01 / 6 in Technology
+          - generic [ref=e342]:
+            - button "Previous Technology story" [ref=e343] [cursor=pointer]
+            - button "Next Technology story" [ref=e346] [cursor=pointer]
+      - generic [ref=e349]:
+        - button "AI Al Jazeera · 7 hours ago OpenAI cancels release of AI model GPT-6.1 Astra, citing safety concerns | Technology News | Al Jazeera AI giant says latest model failed to meet alignment standards during internal testing. Read story" [ref=e352] [cursor=pointer]:
+          - generic [ref=e353]: AI
+          - generic [ref=e355]:
+            - paragraph [ref=e356]: Al Jazeera · 7 hours ago
+            - heading "OpenAI cancels release of AI model GPT-6.1 Astra, citing safety concerns | Technology News | Al Jazeera" [level=3] [ref=e357]
+            - paragraph [ref=e358]: AI giant says latest model failed to meet alignment standards during internal testing.
+            - generic [ref=e359]: Read story
+        - generic [ref=e362]:
+          - generic [ref=e363]: 01 / 6 in AI
+          - generic [ref=e364]:
+            - button "Previous AI story" [ref=e365] [cursor=pointer]
+            - button "Next AI story" [ref=e368] [cursor=pointer]
+      - generic [ref=e371]:
+        - button "Design Design Yahoo! Finance · 17 hours ago Annex North Design Opens in Burlington MA Offering Custom ADU and Home Drafting Plans , a new residential drafting studio in Burlington, Massachusetts, measures every home in person and draws custom plans for ADUs, additions, remodels, conversions and permit sets for homeowners across eastern Massachusetts and the North Shore.BURLINGTON, MA / ACCESS Newswire / September 28, ... Read story" [ref=e374] [cursor=pointer]:
+          - generic [ref=e375]:
+            - generic [ref=e376]: Design
+            - generic [ref=e378]: Design
+          - generic [ref=e379]:
+            - paragraph [ref=e380]: Yahoo! Finance · 17 hours ago
+            - heading "Annex North Design Opens in Burlington MA Offering Custom ADU and Home Drafting Plans" [level=3] [ref=e381]
+            - paragraph [ref=e382]: ", a new residential drafting studio in Burlington, Massachusetts, measures every home in person and draws custom plans for ADUs, additions, remodels, conversions and permit sets for homeowners across eastern Massachusetts and the North Shore.BURLINGTON, MA / ACCESS Newswire / September 28, ..."
+            - generic [ref=e383]: Read story
+        - generic [ref=e386]:
+          - generic [ref=e387]: 01 / 6 in Design
+          - generic [ref=e388]:
+            - button "Previous Design story" [ref=e389] [cursor=pointer]
+            - button "Next Design story" [ref=e392] [cursor=pointer]
+      - generic [ref=e395]:
+        - 'button "AI · Video youtube.com · 3 weeks ago AI Simplified: 6 Concepts You Need to Know About Modern AI - YouTube Learn more about Artificial Intelligence (AI) here → https://ibm.biz/~yBSrYFMHUAI is everywhere, but the terminology can be confusing. Jeff Crume explains si... Read story" [ref=e398] [cursor=pointer]':
+          - generic [ref=e399]: AI · Video
+          - generic [ref=e401]:
+            - paragraph [ref=e402]: youtube.com · 3 weeks ago
+            - 'heading "AI Simplified: 6 Concepts You Need to Know About Modern AI - YouTube" [level=3] [ref=e403]'
+            - paragraph [ref=e404]: Learn more about Artificial Intelligence (AI) here → https://ibm.biz/~yBSrYFMHUAI is everywhere, but the terminology can be confusing. Jeff Crume explains si...
+            - generic [ref=e405]: Read story
+        - generic [ref=e408]:
+          - generic [ref=e409]: 01 / 4 in AI · Video
+          - generic [ref=e410]:
+            - button "Previous AI · Video story" [ref=e411] [cursor=pointer]
+            - button "Next AI · Video story" [ref=e414] [cursor=pointer]

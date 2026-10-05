@@ -1,0 +1,1128 @@
+- generic [ref=e2]:
+  - generic [ref=e3]:
+    - link "Skip to content" [ref=e4] [cursor=pointer]:
+      - /url: "#start-of-content"
+    - banner [ref=e9]:
+      - heading "Navigation Menu" [level=2] [ref=e10]
+      - generic [ref=e11]:
+        - link "Homepage" [ref=e13] [cursor=pointer]:
+          - /url: /
+        - generic [ref=e16]:
+          - navigation "Global" [ref=e17]:
+            - list [ref=e18]:
+              - listitem [ref=e19]:
+                - button "Platform" [ref=e21] [cursor=pointer]
+              - listitem [ref=e24]:
+                - button "Solutions" [ref=e26] [cursor=pointer]
+              - listitem [ref=e29]:
+                - button "Resources" [ref=e31] [cursor=pointer]
+              - listitem [ref=e34]:
+                - button "Open Source" [ref=e36] [cursor=pointer]
+              - listitem [ref=e39]:
+                - button "Enterprise" [ref=e41] [cursor=pointer]
+              - listitem [ref=e44]:
+                - link "Pricing" [ref=e45] [cursor=pointer]:
+                  - /url: https://github.com/pricing
+          - generic [ref=e46]:
+            - button "Search or jump to, type / to search" [ref=e48] [cursor=pointer]
+            - link "Sign in" [ref=e55] [cursor=pointer]:
+              - /url: /login?return_to=https%3A%2F%2Fgithub.com%2Fstrands-agents%2Fagent-sop
+            - link "Sign up" [ref=e58] [cursor=pointer]:
+              - /url: /signup?ref_cta=Sign+up&ref_loc=header+logged+out&ref_page=%2F%3Cuser-name%3E%2F%3Crepo-name%3E&source=header-repo&source_repo=strands-agents%2Fagent-sop
+            - button "Appearance settings" [ref=e61] [cursor=pointer]
+  - main [ref=e68]:
+    - generic [ref=e69]:
+      - generic [ref=e70]:
+        - generic [ref=e72]:
+          - link "strands-agents" [ref=e76] [cursor=pointer]:
+            - /url: /strands-agents
+          - generic [ref=e77]: /
+          - strong [ref=e78]:
+            - link "agent-sop" [ref=e79] [cursor=pointer]:
+              - /url: /strands-agents/agent-sop
+          - generic [ref=e80]: Public
+        - generic [ref=e81]:
+          - list:
+            - listitem [ref=e82]:
+              - link "You must be signed in to change notification settings" [ref=e83] [cursor=pointer]:
+                - /url: /login?return_to=%2Fstrands-agents%2Fagent-sop
+                - text: Notifications
+            - listitem [ref=e86]:
+              - link "Fork 129" [ref=e87] [cursor=pointer]:
+                - /url: /login?return_to=%2Fstrands-agents%2Fagent-sop
+                - text: Fork
+                - generic "129" [ref=e90]
+            - listitem [ref=e91]:
+              - link "You must be signed in to star a repository" [ref=e93] [cursor=pointer]:
+                - /url: /login?return_to=%2Fstrands-agents%2Fagent-sop
+                - text: Star
+                - generic "1170 users starred this repository" [ref=e96]: 1.2k
+      - navigation "Repository" [ref=e97]:
+        - list [ref=e98]:
+          - listitem [ref=e99]:
+            - link "Code" [ref=e100] [cursor=pointer]:
+              - /url: /strands-agents/agent-sop
+          - listitem [ref=e104]:
+            - link "Issues 6" [ref=e105] [cursor=pointer]:
+              - /url: /strands-agents/agent-sop/issues
+              - generic [ref=e109]: Issues
+              - generic "6" [ref=e110]
+          - listitem [ref=e111]:
+            - link "Pull requests 3" [ref=e112] [cursor=pointer]:
+              - /url: /strands-agents/agent-sop/pulls
+              - generic [ref=e115]: Pull requests
+              - generic "3" [ref=e116]
+          - listitem [ref=e117]:
+            - link "Actions" [ref=e118] [cursor=pointer]:
+              - /url: /strands-agents/agent-sop/actions
+          - listitem [ref=e122]:
+            - link "Security and quality" [ref=e123] [cursor=pointer]:
+              - /url: /strands-agents/agent-sop/security
+          - listitem [ref=e127]:
+            - link "Insights" [ref=e128] [cursor=pointer]:
+              - /url: /strands-agents/agent-sop/pulse
+    - generic [ref=e145]:
+      - generic [ref=e148]:
+        - generic [ref=e149]:
+          - generic [ref=e150]:
+            - button "main branch" [ref=e152] [cursor=pointer]:
+              - generic [ref=e153]: main
+            - generic [ref=e157]:
+              - link "Branches" [ref=e158] [cursor=pointer]:
+                - /url: /strands-agents/agent-sop/branches
+              - link "Tags" [ref=e161] [cursor=pointer]:
+                - /url: /strands-agents/agent-sop/tags
+          - generic [ref=e164]:
+            - combobox "Go to file" [ref=e172]
+            - button "Code" [ref=e173] [cursor=pointer]
+        - generic [ref=e176]:
+          - generic [ref=e177]:
+            - generic [ref=e179]:
+              - heading "Latest commit" [level=2] [ref=e180]
+              - generic [ref=e183]:
+                - heading "History" [level=2] [ref=e184]
+                - link "53 Commits" [ref=e185] [cursor=pointer]:
+                  - /url: /strands-agents/agent-sop/commits/main/
+            - heading "Folders and files" [level=2] [ref=e188]
+            - table "Folders and files" [ref=e189]:
+              - rowgroup:
+                - row "Name Last commit message Last commit date":
+                  - columnheader "Name"
+                  - columnheader "Last commit message"
+                  - columnheader "Last commit date"
+              - rowgroup [ref=e190]:
+                - row ".claude-plugin, (Directory)" [ref=e191]:
+                  - cell [ref=e192]:
+                    - link ".claude-plugin, (Directory)" [ref=e199] [cursor=pointer]:
+                      - /url: /strands-agents/agent-sop/tree/main/.claude-plugin
+                      - text: .claude-plugin
+                  - cell [ref=e200]
+                  - cell [ref=e202]
+                - row ".github, (Directory)" [ref=e205]:
+                  - cell [ref=e206]:
+                    - link ".github, (Directory)" [ref=e213] [cursor=pointer]:
+                      - /url: /strands-agents/agent-sop/tree/main/.github
+                      - text: .github
+                  - cell [ref=e214]
+                  - cell [ref=e216]
+                - row "agent-sops, (Directory)" [ref=e219]:
+                  - cell [ref=e220]:
+                    - link "agent-sops, (Directory)" [ref=e227] [cursor=pointer]:
+                      - /url: /strands-agents/agent-sop/tree/main/agent-sops
+                      - text: agent-sops
+                  - cell [ref=e228]
+                  - cell [ref=e230]
+                - row "python, (Directory)" [ref=e233]:
+                  - cell [ref=e234]:
+                    - link "python, (Directory)" [ref=e241] [cursor=pointer]:
+                      - /url: /strands-agents/agent-sop/tree/main/python
+                      - text: python
+                  - cell [ref=e242]
+                  - cell [ref=e244]
+                - row "rules, (Directory)" [ref=e247]:
+                  - cell [ref=e248]:
+                    - link "rules, (Directory)" [ref=e255] [cursor=pointer]:
+                      - /url: /strands-agents/agent-sop/tree/main/rules
+                      - text: rules
+                  - cell [ref=e256]
+                  - cell [ref=e258]
+                - row "skills/agent-sop-author, (Directory)" [ref=e261]:
+                  - cell [ref=e262]:
+                    - link "skills/agent-sop-author, (Directory)" [ref=e269] [cursor=pointer]:
+                      - /url: /strands-agents/agent-sop/tree/main/skills/agent-sop-author
+                      - text: skills/agent-sop-author
+                  - cell [ref=e270]
+                  - cell [ref=e272]
+                - row "spec, (Directory)" [ref=e275]:
+                  - cell [ref=e276]:
+                    - link "spec, (Directory)" [ref=e283] [cursor=pointer]:
+                      - /url: /strands-agents/agent-sop/tree/main/spec
+                      - text: spec
+                  - cell [ref=e284]
+                  - cell [ref=e286]
+                - row ".gitignore, (File)" [ref=e289]:
+                  - cell [ref=e290]:
+                    - link ".gitignore, (File)" [ref=e297] [cursor=pointer]:
+                      - /url: /strands-agents/agent-sop/blob/main/.gitignore
+                      - text: .gitignore
+                  - cell [ref=e298]
+                  - cell [ref=e300]
+                - row "AGENTS.md, (File)" [ref=e303]:
+                  - cell [ref=e304]:
+                    - link "AGENTS.md, (File)" [ref=e311] [cursor=pointer]:
+                      - /url: /strands-agents/agent-sop/blob/main/AGENTS.md
+                      - text: AGENTS.md
+                  - cell [ref=e312]
+                  - cell [ref=e314]
+                - row "CODE_OF_CONDUCT.md, (File)" [ref=e317]:
+                  - cell [ref=e318]:
+                    - link "CODE_OF_CONDUCT.md, (File)" [ref=e325] [cursor=pointer]:
+                      - /url: /strands-agents/agent-sop/blob/main/CODE_OF_CONDUCT.md
+                      - text: CODE_OF_CONDUCT.md
+                  - cell [ref=e326]
+                  - cell [ref=e328]
+                - row "CONTRIBUTING.md, (File)" [ref=e331]:
+                  - cell [ref=e332]:
+                    - link "CONTRIBUTING.md, (File)" [ref=e339] [cursor=pointer]:
+                      - /url: /strands-agents/agent-sop/blob/main/CONTRIBUTING.md
+                      - text: CONTRIBUTING.md
+                  - cell [ref=e340]
+                  - cell [ref=e342]
+                - row "LICENSE, (File)" [ref=e345]:
+                  - cell [ref=e346]:
+                    - link "LICENSE, (File)" [ref=e353] [cursor=pointer]:
+                      - /url: /strands-agents/agent-sop/blob/main/LICENSE
+                      - text: LICENSE
+                  - cell [ref=e354]
+                  - cell [ref=e356]
+                - row "NOTICE, (File)" [ref=e359]:
+                  - cell [ref=e360]:
+                    - link "NOTICE, (File)" [ref=e367] [cursor=pointer]:
+                      - /url: /strands-agents/agent-sop/blob/main/NOTICE
+                      - text: NOTICE
+                  - cell [ref=e368]
+                  - cell [ref=e370]
+                - row "README.md, (File)" [ref=e373]:
+                  - cell [ref=e374]:
+                    - link "README.md, (File)" [ref=e381] [cursor=pointer]:
+                      - /url: /strands-agents/agent-sop/blob/main/README.md
+                      - text: README.md
+                  - cell [ref=e382]
+                  - cell [ref=e384]
+          - generic [ref=e388]:
+            - generic [ref=e389]:
+              - heading "Repository files navigation" [level=2] [ref=e390]
+              - navigation "Repository files" [ref=e391]:
+                - list [ref=e392]:
+                  - listitem [ref=e393]:
+                    - link "README" [ref=e394] [cursor=pointer]:
+                      - /url: "#"
+                  - listitem [ref=e396]:
+                    - link "Code of conduct" [ref=e397] [cursor=pointer]:
+                      - /url: "#"
+                  - listitem [ref=e399]:
+                    - link "Contributing" [ref=e400] [cursor=pointer]:
+                      - /url: "#"
+                  - listitem [ref=e402]:
+                    - link "Apache-2.0 license" [ref=e403] [cursor=pointer]:
+                      - /url: "#"
+                  - listitem [ref=e405]:
+                    - link "Security" [ref=e406] [cursor=pointer]:
+                      - /url: "#"
+              - button "Outline" [ref=e408] [cursor=pointer]
+            - article [ref=e412]:
+              - generic [ref=e413]:
+                - link [ref=e415] [cursor=pointer]:
+                  - /url: https://strandsagents.com
+                  - img "Strands" [ref=e418]
+                - generic [ref=e419]:
+                  - heading "Agent SOP" [level=1] [ref=e420]
+                  - 'link "Permalink: Agent SOP" [ref=e421] [cursor=pointer]':
+                    - /url: "#agent-sop"
+                - generic [ref=e424]:
+                  - heading "Natural language workflows that enable AI agents to perform complex, multi-step tasks with consistency and reliability." [level=2] [ref=e425]
+                  - 'link "Permalink: Natural language workflows that enable AI agents to perform complex, multi-step tasks with consistency and reliability." [ref=e426] [cursor=pointer]':
+                    - /url: "#natural-language-workflows-that-enable-ai-agents-to-perform-complex-multi-step-tasks-with-consistency-and-reliability"
+                - generic [ref=e429]:
+                  - link [ref=e430] [cursor=pointer]:
+                    - /url: https://pypi.org/project/strands-agents-sops/
+                    - img "PyPI" [ref=e431]
+                  - link [ref=e432] [cursor=pointer]:
+                    - /url: https://github.com/strands-agents/agent-sop/blob/main/LICENSE
+                    - img "License" [ref=e433]
+                - paragraph [ref=e434]:
+                  - link "Documentation" [ref=e435] [cursor=pointer]:
+                    - /url: https://strandsagents.com/
+                  - text: ◆
+                  - link "Python SDK" [ref=e436] [cursor=pointer]:
+                    - /url: https://github.com/strands-agents/sdk-python
+                  - text: ◆
+                  - link "Tools" [ref=e437] [cursor=pointer]:
+                    - /url: https://github.com/strands-agents/tools
+                  - text: ◆
+                  - link "Samples" [ref=e438] [cursor=pointer]:
+                    - /url: https://github.com/strands-agents/samples
+                  - text: ◆
+                  - link "MCP Server" [ref=e439] [cursor=pointer]:
+                    - /url: https://github.com/strands-agents/mcp-server
+                  - text: ◆
+                  - link "Agent Builder" [ref=e440] [cursor=pointer]:
+                    - /url: https://github.com/strands-agents/agent-builder
+              - generic [ref=e441]:
+                - heading "Agent SOPs" [level=1] [ref=e442]
+                - 'link "Permalink: Agent SOPs" [ref=e443] [cursor=pointer]':
+                  - /url: "#agent-sops"
+              - paragraph [ref=e446]: Agent SOPs (Standard Operating Procedures) are markdown-based instruction sets that guide AI agents through sophisticated workflows using natural language, parameterized inputs, and constraint-based execution. They transform complex processes into reusable, shareable workflows that work across different AI systems and teams.
+              - paragraph [ref=e447]:
+                - emphasis [ref=e448]: Lovingly nicknamed "Strands Operating Procedures" by the team.
+              - generic [ref=e449]:
+                - heading "What are Agent SOPs?" [level=2] [ref=e450]
+                - 'link "Permalink: What are Agent SOPs?" [ref=e451] [cursor=pointer]':
+                  - /url: "#what-are-agent-sops"
+              - paragraph [ref=e454]: "Agent SOPs use a standardized format to define:"
+              - list [ref=e455]:
+                - listitem [ref=e456]:
+                  - strong [ref=e457]: Clear objectives
+                  - text: with detailed overviews
+                - listitem [ref=e458]:
+                  - strong [ref=e459]: Parameterized inputs
+                  - text: for flexible reuse across different contexts
+                - listitem [ref=e460]:
+                  - strong [ref=e461]: Step-by-step instructions
+                  - text: with RFC 2119 constraints (MUST, SHOULD, MAY)
+                - listitem [ref=e462]:
+                  - strong [ref=e463]: Examples and troubleshooting
+                  - text: for reliable execution
+                - listitem [ref=e464]:
+                  - strong [ref=e465]: Multi-modal distribution
+                  - text: (MCP tools, Agent Skills, Python modules)
+              - generic [ref=e466]:
+                - heading "Example SOP Structure" [level=3] [ref=e467]
+                - 'link "Permalink: Example SOP Structure" [ref=e468] [cursor=pointer]':
+                  - /url: "#example-sop-structure"
+              - generic [ref=e471]:
+                - generic [ref=e472]:
+                  - generic [ref=e473]: "# Code Assist"
+                  - generic [ref=e474]: "## Overview"
+                  - text: This SOP guides the implementation of code tasks using test-driven development principles, following a structured Explore, Plan, Code, Commit workflow.
+                  - generic [ref=e475]: "## Parameters"
+                  - text: "- **task_description** (required): Description of the task to be implemented - **mode** (optional, default: \"interactive\"): \"interactive\" or \"fsc\" (Full Self-Coding)"
+                  - generic [ref=e476]: "## Steps"
+                  - generic [ref=e477]: "### 1. Setup"
+                  - text: Initialize the project environment and create necessary directory structures. **Constraints:** - You MUST validate and create the documentation directory structure - You MUST discover existing instruction files using find commands - You MUST NOT proceed if directory creation fails
+                  - generic [ref=e478]: "### 2. Explore Phase"
+                  - text: "[Additional steps with specific constraints...]"
+                - button "Copy code to clipboard" [ref=e480] [cursor=pointer]
+              - generic [ref=e484]:
+                - heading "Available SOPs" [level=2] [ref=e485]
+                - 'link "Permalink: Available SOPs" [ref=e486] [cursor=pointer]':
+                  - /url: "#available-sops"
+              - table [ref=e490]:
+                - rowgroup [ref=e491]:
+                  - row [ref=e492]:
+                    - columnheader "SOP" [ref=e493]
+                    - columnheader "Purpose" [ref=e494]
+                    - columnheader "Use Cases" [ref=e495]
+                - rowgroup [ref=e496]:
+                  - row [ref=e497]:
+                    - cell [ref=e498]:
+                      - strong [ref=e499]:
+                        - link "codebase-summary" [ref=e500] [cursor=pointer]:
+                          - /url: /strands-agents/agent-sop/blob/main/agent-sops/codebase-summary.sop.md
+                    - cell "Comprehensive codebase analysis and documentation generation" [ref=e501]
+                    - cell "Project onboarding, documentation creation, system understanding" [ref=e502]
+                  - row [ref=e503]:
+                    - cell [ref=e504]:
+                      - strong [ref=e505]:
+                        - link "pdd" [ref=e506] [cursor=pointer]:
+                          - /url: /strands-agents/agent-sop/blob/main/agent-sops/pdd.sop.md
+                    - cell "Prompt-driven development methodology" [ref=e507]
+                    - cell "Complex problem solving, architectural decisions, system design" [ref=e508]
+                  - row [ref=e509]:
+                    - cell [ref=e510]:
+                      - strong [ref=e511]:
+                        - link "code-task-generator" [ref=e512] [cursor=pointer]:
+                          - /url: /strands-agents/agent-sop/blob/main/agent-sops/code-task-generator.sop.md
+                    - cell "Intelligent task breakdown and planning from requirements" [ref=e513]
+                    - cell "Project planning, sprint preparation, requirement analysis" [ref=e514]
+                  - row [ref=e515]:
+                    - cell [ref=e516]:
+                      - strong [ref=e517]:
+                        - link "code-assist" [ref=e518] [cursor=pointer]:
+                          - /url: /strands-agents/agent-sop/blob/main/agent-sops/code-assist.sop.md
+                    - cell "TDD-based code implementation with structured workflow" [ref=e519]
+                    - cell "Feature development, bug fixes, refactoring" [ref=e520]
+                  - row [ref=e521]:
+                    - cell [ref=e522]:
+                      - strong [ref=e523]:
+                        - link "eval" [ref=e524] [cursor=pointer]:
+                          - /url: /strands-agents/agent-sop/blob/main/agent-sops/eval.sop.md
+                    - cell [ref=e525]:
+                      - text: Automated evaluation workflow for AI agents using
+                      - link "Strands Evals SDK" [ref=e526] [cursor=pointer]:
+                        - /url: https://github.com/strands-agents/evals
+                    - cell [ref=e527]:
+                      - text: Evaluation planning, test data generation, evaluation execution, and result analysis (
+                      - link "usage guide" [ref=e528] [cursor=pointer]:
+                        - /url: https://strandsagents.com/latest/documentation/docs/user-guide/evals-sdk/eval-sop/
+                      - text: )
+              - generic [ref=e529]:
+                - heading "Directory Structure" [level=2] [ref=e530]
+                - 'link "Permalink: Directory Structure" [ref=e531] [cursor=pointer]':
+                  - /url: "#directory-structure"
+              - paragraph [ref=e534]:
+                - text: The Prompt-Driven Development (PDD) family of SOPs (
+                - code [ref=e535]: codebase-summary
+                - text: ","
+                - code [ref=e536]: pdd
+                - text: ","
+                - code [ref=e537]: code-task-generator
+                - text: ","
+                - code [ref=e538]: code-assist
+                - text: ) write their artifacts to a
+                - code [ref=e539]: .agents/
+                - text: "directory with this default organizational structure:"
+              - generic [ref=e540]:
+                - code [ref=e542]: ".agents/ ├── summary/ # codebase-summary output (always commit) │ └── *.md ├── planning/ # pdd output (often worth committing) │ └── {project_name}/ │ ├── rough-idea.md │ ├── idea-honing.md │ ├── research/ │ ├── design/ │ └── implementation/ ├── tasks/ # code-task-generator output (optionally commit) │ └── {project_name}/ │ └── step01/ │ └── task-*.code-task.md └── scratchpad/ # code-assist working files (add to .gitignore) └── {project_name}/ └── {task_name}/"
+                - button "Copy code to clipboard" [ref=e544] [cursor=pointer]
+              - paragraph [ref=e548]:
+                - strong [ref=e549]: Why this structure?
+              - paragraph [ref=e550]: "The hierarchy is organized by what you're likely to want to commit:"
+              - list [ref=e551]:
+                - listitem [ref=e552]:
+                  - strong [ref=e553]:
+                    - code [ref=e554]: summary/
+                  - text: "- Documentation from"
+                  - code [ref=e555]: codebase-summary
+                  - text: . Useful for both humans and agents. Recommend always committing.
+                - listitem [ref=e556]:
+                  - strong [ref=e557]:
+                    - code [ref=e558]: planning/
+                  - text: "- Design docs from"
+                  - code [ref=e559]: pdd
+                  - text: . Captures decisions, alternatives considered, and rationale that tend to be lost in traditional software development. Often worth committing.
+                - listitem [ref=e560]:
+                  - strong [ref=e561]:
+                    - code [ref=e562]: tasks/
+                  - text: "- Code tasks from"
+                  - code [ref=e563]: code-task-generator
+                  - text: . May be committed or tracked in an issue tracker instead.
+                - listitem [ref=e564]:
+                  - strong [ref=e565]:
+                    - code [ref=e566]: scratchpad/
+                  - text: "- Working notes from"
+                  - code [ref=e567]: code-assist
+                  - text: . Transient implementation artifacts. Add to
+                  - code [ref=e568]: .gitignore
+                  - text: .
+              - paragraph [ref=e569]:
+                - strong [ref=e570]: "Note:"
+                - text: When project names are auto-generated, they are prefixed with the current date (YYYY-MM-DD) for easy identification and sorting (e.g.,
+                - code [ref=e571]: 2026-01-30-auth-system
+                - text: ).
+              - paragraph [ref=e572]: "This separation also enables you to focus your AI tools' context on useful reference docs. For example, in Kiro CLI, you can \"pin\" relevant files in the planning folder while implementing a project:"
+              - generic [ref=e573]:
+                - code [ref=e575]: "/context add .agents/planning/{project_name}/**/*.md"
+                - button "Copy code to clipboard" [ref=e577] [cursor=pointer]
+              - generic [ref=e581]:
+                - heading "Quick Start" [level=2] [ref=e582]
+                - 'link "Permalink: Quick Start" [ref=e583] [cursor=pointer]':
+                  - /url: "#quick-start"
+              - paragraph [ref=e586]:
+                - text: Install the
+                - code [ref=e587]: strands-agents-sops
+                - text: "package:"
+              - generic [ref=e588]:
+                - generic [ref=e589]:
+                  - generic [ref=e590]: "# Using Homebrew"
+                  - text: brew install strands-agents-sops
+                  - generic [ref=e591]: "# Or using pip"
+                  - text: pip install strands-agents-sops
+                - button "Copy code to clipboard" [ref=e593] [cursor=pointer]
+              - generic [ref=e597]:
+                - heading "Using with Strands Agents" [level=3] [ref=e598]
+                - 'link "Permalink: Using with Strands Agents" [ref=e599] [cursor=pointer]':
+                  - /url: "#using-with-strands-agents"
+              - paragraph [ref=e602]: "Install strands agents and the sops package:"
+              - generic [ref=e603]:
+                - generic [ref=e604]: brew install strands-agents-sops pip install strands-agents strands-agents-tools
+                - button "Copy code to clipboard" [ref=e606] [cursor=pointer]
+              - blockquote [ref=e610]:
+                - paragraph [ref=e611]:
+                  - strong [ref=e612]: "Note:"
+                  - text: See
+                  - link "Quick Start" [ref=e613] [cursor=pointer]:
+                    - /url: "#quick-start"
+                  - text: above for pip installation of
+                  - code [ref=e614]: strands-agents-sops
+                  - text: .
+              - paragraph [ref=e615]: "Create a simple cli coding agent:"
+              - generic [ref=e616]:
+                - generic [ref=e617]:
+                  - text: "from strands import Agent from strands_tools import editor, shell from strands_agents_sops import code_assist agent = Agent( system_prompt=code_assist, tools=[editor, shell] ) agent(\"Start code-assist sop\") while(True): agent(input("
+                  - generic [ref=e618]: "\"\\nInput: \""
+                  - text: ))
+                - button "Copy code to clipboard" [ref=e620] [cursor=pointer]
+              - generic [ref=e624]:
+                - heading "Using as MCP Server" [level=3] [ref=e625]
+                - 'link "Permalink: Using as MCP Server" [ref=e626] [cursor=pointer]':
+                  - /url: "#using-as-mcp-server"
+              - paragraph [ref=e629]: The MCP (Model Context Protocol) server exposes SOPs as prompts that AI assistants can discover and use on-demand.
+              - paragraph [ref=e630]:
+                - text: Some MCP clients start this command for you from their MCP configuration. For example, in Kiro CLI you usually add
+                - code [ref=e631]: strands-agents-sops mcp
+                - text: to
+                - code [ref=e632]: ~/.kiro/settings/mcp.json
+                - text: and let Kiro launch it automatically instead of starting a separate terminal process yourself.
+              - paragraph [ref=e633]: "The underlying server command is:"
+              - generic [ref=e634]:
+                - generic [ref=e635]:
+                  - generic [ref=e636]: "# Install the package (see Quick Start for pip alternative)"
+                  - text: brew install strands-agents-sops
+                  - generic [ref=e637]: "# Start MCP server with built-in SOPs only"
+                  - text: strands-agents-sops mcp
+                  - generic [ref=e638]: "# Load external SOPs from custom directories (sops in path must have `.sop.md` postfix)"
+                  - text: strands-agents-sops mcp --sop-paths ~/my-sops:/path/to/other-sops
+                  - generic [ref=e639]: "# External SOPs override built-in SOPs with same name"
+                  - text: strands-agents-sops mcp --sop-paths ~/custom-sops
+                  - generic [ref=e640]: "# Your custom code-assist.sop.md overrides built-in"
+                - button "Copy code to clipboard" [ref=e642] [cursor=pointer]
+              - generic [ref=e646]:
+                - heading "Kiro CLI Setup" [level=4] [ref=e647]
+                - 'link "Permalink: Kiro CLI Setup" [ref=e648] [cursor=pointer]':
+                  - /url: "#kiro-cli-setup"
+              - paragraph [ref=e651]: To use Agent SOPs in Kiro CLI, add the MCP server to your Kiro config.
+              - paragraph [ref=e652]: "For built-in SOPs only:"
+              - generic [ref=e653]:
+                - generic [ref=e654]:
+                  - text: "{ \"mcpServers\": { \"agent-sops\": { \"command\":"
+                  - generic [ref=e655]: "\"strands-agents-sops\""
+                  - text: ", \"args\": ["
+                  - generic [ref=e656]: "\"mcp\""
+                  - text: "], \"env\": {} } } }"
+                - button "Copy code to clipboard" [ref=e658] [cursor=pointer]
+              - paragraph [ref=e662]:
+                - text: To include external SOPs, add
+                - code [ref=e663]: "--sop-paths"
+                - text: "to the same config:"
+              - generic [ref=e664]:
+                - generic [ref=e665]:
+                  - text: "{ \"mcpServers\": { \"agent-sops\": { \"command\":"
+                  - generic [ref=e666]: "\"strands-agents-sops\""
+                  - text: ", \"args\": ["
+                  - generic [ref=e667]: "\"mcp\""
+                  - text: ","
+                  - generic [ref=e668]: "\"--sop-paths\""
+                  - text: ","
+                  - generic [ref=e669]: "\"~/my-sops\""
+                  - text: "], \"env\": {} } } }"
+                - button "Copy code to clipboard" [ref=e671] [cursor=pointer]
+              - paragraph [ref=e675]:
+                - text: The
+                - code [ref=e676]: agent-sops
+                - text: key is just an example label for the MCP server. You can use a different name if you prefer.
+              - paragraph [ref=e677]:
+                - text: After updating
+                - code [ref=e678]: ~/.kiro/settings/mcp.json
+                - text: ", restart Kiro CLI or reload MCP servers. Kiro will launch"
+                - code [ref=e679]: strands-agents-sops mcp
+                - text: for you, so you do not need to run it manually in another terminal.
+              - generic [ref=e680]:
+                - heading "Using SOPs in Different AI Tools" [level=4] [ref=e681]
+                - 'link "Permalink: Using SOPs in Different AI Tools" [ref=e682] [cursor=pointer]':
+                  - /url: "#using-sops-in-different-ai-tools"
+              - paragraph [ref=e685]: "The syntax for invoking MCP prompts varies between AI tools:"
+              - paragraph [ref=e686]:
+                - strong [ref=e687]: "Kiro:"
+              - generic [ref=e688]:
+                - code [ref=e690]: "@codebase-summary"
+                - button "Copy code to clipboard" [ref=e692] [cursor=pointer]
+              - paragraph [ref=e696]:
+                - strong [ref=e697]: "Claude Code:"
+              - generic [ref=e698]:
+                - code [ref=e700]: /strands-agents-sops:codebase-summary
+                - button "Copy code to clipboard" [ref=e702] [cursor=pointer]
+              - generic [ref=e706]:
+                - heading "External SOP Loading" [level=4] [ref=e707]
+                - 'link "Permalink: External SOP Loading" [ref=e708] [cursor=pointer]':
+                  - /url: "#external-sop-loading"
+              - paragraph [ref=e711]:
+                - text: The
+                - code [ref=e712]: "--sop-paths"
+                - text: "argument allows you to extend the MCP server with your own SOPs:"
+              - list [ref=e713]:
+                - listitem [ref=e714]:
+                  - strong [ref=e715]: File format
+                  - text: ": Only files with"
+                  - code [ref=e716]: .sop.md
+                  - text: postfix are recognized as SOPs
+                - listitem [ref=e717]:
+                  - strong [ref=e718]: Colon-separated paths
+                  - text: ":"
+                  - code [ref=e719]: ~/sops1:/absolute/path:relative/path
+                - listitem [ref=e720]:
+                  - strong [ref=e721]: Path expansion
+                  - text: ": Supports"
+                  - code [ref=e722]: ~
+                  - text: (home directory) and relative paths
+                - listitem [ref=e723]:
+                  - strong [ref=e724]: First-wins precedence
+                  - text: ": External SOPs override built-in SOPs with same name"
+                - listitem [ref=e725]:
+                  - strong [ref=e726]: Graceful error handling
+                  - text: ": Invalid paths or malformed SOPs are skipped with warnings"
+              - paragraph [ref=e727]:
+                - strong [ref=e728]: "Example workflow:"
+              - generic [ref=e729]:
+                - generic [ref=e730]:
+                  - generic [ref=e731]: "# Create your custom SOP"
+                  - text: mkdir ~/my-sops cat > ~/my-sops/custom-workflow.sop.md
+                  - generic [ref=e732]: << 'EOF'
+                  - text: "# Custom Workflow ## Overview My custom workflow for specific tasks. ## Steps ### 1. Custom Step Do something custom."
+                  - generic [ref=e733]: EOF
+                  - generic [ref=e734]: "# Use your custom SOPs with the MCP server command"
+                  - text: strands-agents-sops mcp --sop-paths ~/my-sops
+                - button "Copy code to clipboard" [ref=e736] [cursor=pointer]
+              - paragraph [ref=e740]:
+                - text: If your MCP client manages servers through configuration, use the same arguments there instead of starting the command manually. For example, in Kiro CLI this goes in
+                - code [ref=e741]: ~/.kiro/settings/mcp.json
+                - text: ":"
+              - generic [ref=e742]:
+                - generic [ref=e743]:
+                  - text: "{ \"mcpServers\": { \"agent-sops\": { \"command\":"
+                  - generic [ref=e744]: "\"strands-agents-sops\""
+                  - text: ", \"args\": ["
+                  - generic [ref=e745]: "\"mcp\""
+                  - text: ","
+                  - generic [ref=e746]: "\"--sop-paths\""
+                  - text: ","
+                  - generic [ref=e747]: "\"~/my-sops\""
+                  - text: "], \"env\": {} } } }"
+                - button "Copy code to clipboard" [ref=e749] [cursor=pointer]
+              - separator [ref=e753]
+              - generic [ref=e754]:
+                - heading "Cursor IDE Integration" [level=2] [ref=e755]
+                - 'link "Permalink: Cursor IDE Integration" [ref=e756] [cursor=pointer]':
+                  - /url: "#cursor-ide-integration"
+              - paragraph [ref=e759]:
+                - text: Agent SOPs can be converted to Cursor commands, allowing you to execute workflows directly within Cursor IDE using the
+                - code [ref=e760]: /
+                - text: command prefix.
+              - generic [ref=e761]:
+                - heading "Understanding Cursor Rules vs Commands" [level=3] [ref=e762]
+                - 'link "Permalink: Understanding Cursor Rules vs Commands" [ref=e763] [cursor=pointer]':
+                  - /url: "#understanding-cursor-rules-vs-commands"
+              - list [ref=e766]:
+                - listitem [ref=e767]:
+                  - strong [ref=e768]: Rules
+                  - text: (
+                  - code [ref=e769]: .cursor/rules
+                  - text: "): Provide persistent, system-level guidance that's automatically applied. Rules are static and don't support parameters."
+                - listitem [ref=e770]:
+                  - strong [ref=e771]: Commands
+                  - text: (
+                  - code [ref=e772]: .cursor/commands
+                  - text: "): Reusable workflows triggered with"
+                  - code [ref=e773]: /
+                  - text: prefix. Commands can prompt users for input, making them ideal for parameterized SOPs.
+              - paragraph [ref=e774]:
+                - text: Since Agent SOPs are parameterized workflows that need user input, they're best implemented as
+                - strong [ref=e775]: Commands
+                - text: rather than Rules.
+              - generic [ref=e776]:
+                - heading "Converting SOPs to Cursor Commands" [level=3] [ref=e777]
+                - 'link "Permalink: Converting SOPs to Cursor Commands" [ref=e778] [cursor=pointer]':
+                  - /url: "#converting-sops-to-cursor-commands"
+              - paragraph [ref=e781]: "Each Agent SOP can be automatically converted to Cursor command format:"
+              - generic [ref=e782]:
+                - generic [ref=e783]:
+                  - generic [ref=e784]: "# Generate Cursor commands from built-in SOPs (default output: .cursor/commands)"
+                  - text: strands-agents-sops commands --type cursor
+                  - generic [ref=e785]: "# Or specify custom output directory"
+                  - text: strands-agents-sops commands --type cursor --output-dir .cursor/commands
+                  - generic [ref=e786]: "# Load external SOPs from custom directories"
+                  - text: strands-agents-sops commands --type cursor --sop-paths ~/my-sops:/path/to/other-sops
+                  - generic [ref=e787]: "# External SOPs override built-in SOPs with same name"
+                  - text: strands-agents-sops commands --type cursor --sop-paths ~/custom-sops --output-dir .cursor/commands
+                - button "Copy code to clipboard" [ref=e789] [cursor=pointer]
+              - generic [ref=e793]:
+                - heading "External SOP Loading" [level=4] [ref=e794]
+                - 'link "Permalink: External SOP Loading" [ref=e795] [cursor=pointer]':
+                  - /url: "#external-sop-loading-1"
+              - paragraph [ref=e798]:
+                - text: The
+                - code [ref=e799]: "--sop-paths"
+                - text: "argument allows you to extend commands generation with your own SOPs:"
+              - list [ref=e800]:
+                - listitem [ref=e801]:
+                  - strong [ref=e802]: File format
+                  - text: ": Only files with"
+                  - code [ref=e803]: .sop.md
+                  - text: postfix are recognized as SOPs
+                - listitem [ref=e804]:
+                  - strong [ref=e805]: Colon-separated paths
+                  - text: ":"
+                  - code [ref=e806]: ~/sops1:/absolute/path:relative/path
+                - listitem [ref=e807]:
+                  - strong [ref=e808]: Path expansion
+                  - text: ": Supports"
+                  - code [ref=e809]: ~
+                  - text: (home directory) and relative paths
+                - listitem [ref=e810]:
+                  - strong [ref=e811]: First-wins precedence
+                  - text: ": External SOPs override built-in SOPs with same name"
+                - listitem [ref=e812]:
+                  - strong [ref=e813]: Graceful error handling
+                  - text: ": Invalid paths or malformed SOPs are skipped with warnings"
+              - paragraph [ref=e814]:
+                - strong [ref=e815]: "Example workflow:"
+              - generic [ref=e816]:
+                - generic [ref=e817]:
+                  - generic [ref=e818]: "# Create your custom SOP"
+                  - text: mkdir ~/my-sops cat > ~/my-sops/custom-workflow.sop.md
+                  - generic [ref=e819]: << 'EOF'
+                  - text: "# Custom Workflow ## Overview My custom workflow for specific tasks. ## Parameters - **task** (required): Description of task ## Steps ### 1. Custom Step Do something custom."
+                  - generic [ref=e820]: EOF
+                  - generic [ref=e821]: "# Generate Cursor commands with your custom SOPs"
+                  - text: strands-agents-sops commands --type cursor --sop-paths ~/my-sops
+                - button "Copy code to clipboard" [ref=e823] [cursor=pointer]
+              - paragraph [ref=e827]:
+                - text: This creates command files in
+                - code [ref=e828]: .cursor/commands/
+                - text: ":"
+              - generic [ref=e829]:
+                - code [ref=e831]: .cursor/commands/ ├── code-assist.sop.md ├── codebase-summary.sop.md ├── code-task-generator.sop.md ├── pdd.sop.md └── custom-workflow.sop.md
+                - button "Copy code to clipboard" [ref=e833] [cursor=pointer]
+              - generic [ref=e837]:
+                - heading "Using Commands in Cursor" [level=3] [ref=e838]
+                - 'link "Permalink: Using Commands in Cursor" [ref=e839] [cursor=pointer]':
+                  - /url: "#using-commands-in-cursor"
+              - list [ref=e842]:
+                - listitem [ref=e843]:
+                  - strong [ref=e844]: Generate commands
+                  - text: ": Run"
+                  - code [ref=e845]: strands-agents-sops commands --type cursor
+                  - text: in your project root
+                - listitem [ref=e846]:
+                  - strong [ref=e847]: Execute workflows
+                  - text: ": In Cursor chat, type"
+                  - code [ref=e848]: /
+                  - text: followed by the command name (e.g.,
+                  - code [ref=e849]: /code-assist.sop
+                  - text: )
+                - listitem [ref=e850]:
+                  - strong [ref=e851]: Provide parameters
+                  - text: ": When prompted, provide the required parameters for the workflow"
+              - paragraph [ref=e852]:
+                - strong [ref=e853]: "Example:"
+              - generic [ref=e854]:
+                - code [ref=e856]: "You: /code-assist.sop AI: I'll help you implement code using the code-assist workflow. Please provide the following required parameters: - task_description: [description of the task] - mode (optional, default: \"auto\"): \"interactive\" or \"auto\" You: task_description: \"Create a user authentication system\" mode: \"interactive\""
+                - button "Copy code to clipboard" [ref=e858] [cursor=pointer]
+              - generic [ref=e862]:
+                - heading "Command Format" [level=3] [ref=e863]
+                - 'link "Permalink: Command Format" [ref=e864] [cursor=pointer]':
+                  - /url: "#command-format"
+              - paragraph [ref=e867]: "Each generated command includes:"
+              - list [ref=e868]:
+                - listitem [ref=e869]: Clear usage instructions
+                - listitem [ref=e870]: Parameter documentation (required and optional)
+                - listitem [ref=e871]: Full SOP content for execution
+              - paragraph [ref=e872]: The commands handle parameters by prompting users when executed, since Cursor doesn't support explicit parameter passing. The SOP's "Constraints for parameter acquisition" section guides this interaction.
+              - generic [ref=e873]:
+                - heading "Parameter Handling" [level=3] [ref=e874]
+                - 'link "Permalink: Parameter Handling" [ref=e875] [cursor=pointer]':
+                  - /url: "#parameter-handling"
+              - paragraph [ref=e878]: "Since Cursor commands don't support explicit parameters, the generated commands include instructions to prompt users for required inputs. The AI assistant will:"
+              - list [ref=e879]:
+                - listitem [ref=e880]:
+                  - text: Read the command file when you type
+                  - code [ref=e881]: /command-name
+                - listitem [ref=e882]: Identify required and optional parameters from the SOP
+                - listitem [ref=e883]: Prompt you for all required parameters upfront
+                - listitem [ref=e884]: Execute the workflow with the provided parameters
+              - paragraph [ref=e885]: This approach maintains the parameterized nature of SOPs while working within Cursor's command system.
+              - separator [ref=e886]
+              - generic [ref=e887]:
+                - heading "Agent Skills Integration" [level=2] [ref=e888]
+                - 'link "Permalink: Agent Skills Integration" [ref=e889] [cursor=pointer]':
+                  - /url: "#agent-skills-integration"
+              - paragraph [ref=e892]:
+                - text: Agent SOPs can be generated as
+                - link "Agent Skills" [ref=e893] [cursor=pointer]:
+                  - /url: https://agentskills.io/
+                - text: ", the open"
+                - code [ref=e894]: SKILL.md
+                - text: format supported by Claude and other skill-compatible agents. This lets you teach agents specialized SOP workflows that can be reused across conversations and projects.
+              - generic [ref=e895]:
+                - heading "How SOPs Work as Skills" [level=3] [ref=e896]
+                - 'link "Permalink: How SOPs Work as Skills" [ref=e897] [cursor=pointer]':
+                  - /url: "#how-sops-work-as-skills"
+              - paragraph [ref=e900]:
+                - text: The key value of using SOPs as Skills is
+                - strong [ref=e901]: progressive disclosure of context
+                - text: . Instead of loading all workflow instructions into an agent's context upfront, you can provide many SOP skills, and the agent can load and execute the relevant workflow based on the task at hand.
+              - paragraph [ref=e902]: "This approach offers several advantages:"
+              - list [ref=e903]:
+                - listitem [ref=e904]:
+                  - strong [ref=e905]: Context Efficiency
+                  - text: ": Only relevant workflow instructions are loaded when needed"
+                - listitem [ref=e906]:
+                  - strong [ref=e907]: Scalable Expertise
+                  - text: ": Provide dozens of specialized workflows without overwhelming the context"
+                - listitem [ref=e908]:
+                  - strong [ref=e909]: Intelligent Selection
+                  - text: ": Agents can choose the most appropriate SOP for each task"
+                - listitem [ref=e910]:
+                  - strong [ref=e911]: Dynamic Loading
+                  - text: ": Complex workflows are only activated when the agent determines they're useful"
+              - paragraph [ref=e912]:
+                - text: For example, you might provide an agent with all Agent SOPs as skills. When asked to "implement user authentication," the agent can select and load the
+                - code [ref=e913]: code-assist
+                - text: skill. When asked to "document this codebase," it can choose the
+                - code [ref=e914]: codebase-summary
+                - text: skill instead.
+              - generic [ref=e915]:
+                - heading "Converting SOPs to Skills" [level=3] [ref=e916]
+                - 'link "Permalink: Converting SOPs to Skills" [ref=e917] [cursor=pointer]':
+                  - /url: "#converting-sops-to-skills"
+              - paragraph [ref=e920]: "Each Agent SOP can be automatically converted to Agent Skills format:"
+              - generic [ref=e921]:
+                - generic [ref=e922]:
+                  - generic [ref=e923]: "# Generate Agent Skills from built-in SOPs only"
+                  - text: strands-agents-sops skills
+                  - generic [ref=e924]: "# Or specify custom output directory"
+                  - text: strands-agents-sops skills --output-dir my-skills
+                  - generic [ref=e925]: "# Load external SOPs from custom directories"
+                  - text: strands-agents-sops skills --sop-paths ~/my-sops:/path/to/other-sops
+                  - generic [ref=e926]: "# External SOPs override built-in SOPs with same name"
+                  - text: strands-agents-sops skills --sop-paths ~/custom-sops --output-dir ./skills
+                - button "Copy code to clipboard" [ref=e928] [cursor=pointer]
+              - generic [ref=e932]:
+                - heading "External SOP Loading" [level=4] [ref=e933]
+                - 'link "Permalink: External SOP Loading" [ref=e934] [cursor=pointer]':
+                  - /url: "#external-sop-loading-2"
+              - paragraph [ref=e937]:
+                - text: The
+                - code [ref=e938]: "--sop-paths"
+                - text: "argument allows you to extend skills generation with your own SOPs:"
+              - list [ref=e939]:
+                - listitem [ref=e940]:
+                  - strong [ref=e941]: File format
+                  - text: ": Only files with"
+                  - code [ref=e942]: .sop.md
+                  - text: postfix are recognized as SOPs
+                - listitem [ref=e943]:
+                  - strong [ref=e944]: Colon-separated paths
+                  - text: ":"
+                  - code [ref=e945]: ~/sops1:/absolute/path:relative/path
+                - listitem [ref=e946]:
+                  - strong [ref=e947]: Path expansion
+                  - text: ": Supports"
+                  - code [ref=e948]: ~
+                  - text: (home directory) and relative paths
+                - listitem [ref=e949]:
+                  - strong [ref=e950]: First-wins precedence
+                  - text: ": External SOPs override built-in SOPs with same name"
+                - listitem [ref=e951]:
+                  - strong [ref=e952]: Graceful error handling
+                  - text: ": Invalid paths or malformed SOPs are skipped with warnings"
+              - paragraph [ref=e953]:
+                - strong [ref=e954]: "Example workflow:"
+              - generic [ref=e955]:
+                - generic [ref=e956]:
+                  - generic [ref=e957]: "# Create your custom SOP"
+                  - text: mkdir ~/my-sops cat > ~/my-sops/custom-workflow.sop.md
+                  - generic [ref=e958]: << 'EOF'
+                  - text: "# Custom Workflow ## Overview My custom workflow for specific tasks. ## Steps ### 1. Custom Step Do something custom."
+                  - generic [ref=e959]: EOF
+                  - generic [ref=e960]: "# Generate skills with your custom SOPs"
+                  - text: strands-agents-sops skills --sop-paths ~/my-sops --output-dir ./skills
+                - button "Copy code to clipboard" [ref=e962] [cursor=pointer]
+              - paragraph [ref=e966]: "This creates individual skill directories:"
+              - generic [ref=e967]:
+                - code [ref=e969]: skills/ ├── code-assist/ │ └── SKILL.md ├── codebase-summary/ │ └── SKILL.md ├── code-task-generator/ │ └── SKILL.md └── pdd/ └── SKILL.md
+                - button "Copy code to clipboard" [ref=e971] [cursor=pointer]
+              - paragraph [ref=e975]:
+                - text: Each generated
+                - code [ref=e976]: SKILL.md
+                - text: contains the SOP workflow in standard Agent Skills format.
+              - generic [ref=e977]:
+                - heading "Using Skills in Claude" [level=3] [ref=e978]
+                - 'link "Permalink: Using Skills in Claude" [ref=e979] [cursor=pointer]':
+                  - /url: "#using-skills-in-claude"
+              - generic [ref=e982]:
+                - heading "Claude.ai" [level=4] [ref=e983]
+                - 'link "Permalink: Claude.ai" [ref=e984] [cursor=pointer]':
+                  - /url: "#claudeai"
+              - list [ref=e987]:
+                - listitem [ref=e988]: Navigate to your Claude.ai account
+                - listitem [ref=e989]: Go to Skills settings
+                - listitem [ref=e990]:
+                  - text: Upload the generated
+                  - code [ref=e991]: SKILL.md
+                  - text: files
+                - listitem [ref=e992]: "Reference skills in conversations: \"Use the code-assist skill to implement user authentication\""
+              - generic [ref=e993]:
+                - heading "Claude API" [level=4] [ref=e994]
+                - 'link "Permalink: Claude API" [ref=e995] [cursor=pointer]':
+                  - /url: "#claude-api"
+              - generic [ref=e998]:
+                - generic [ref=e999]: "# Upload skill via API skill_content = open('skills/code-assist/SKILL.md').read() skill = client.skills.create( name=\"code-assist\", content=skill_content ) # Use skill in conversation response = client.messages.create( model=\"claude-3-5-sonnet-20241022\", skills=[skill.id], messages=[{ \"role\": \"user\", \"content\": \"Use the code-assist skill to implement a user authentication system\" }] )"
+                - button "Copy code to clipboard" [ref=e1001] [cursor=pointer]
+              - generic [ref=e1005]:
+                - heading "Claude Code" [level=4] [ref=e1006]
+                - 'link "Permalink: Claude Code" [ref=e1007] [cursor=pointer]':
+                  - /url: "#claude-code"
+              - paragraph [ref=e1010]:
+                - strong [ref=e1011]: Install via Vercel Skills CLI
+              - generic [ref=e1012]:
+                - generic [ref=e1013]: npx skills add https://github.com/strands-agents/agent-sop/tree/skills-dist
+                - button "Copy code to clipboard" [ref=e1015] [cursor=pointer]
+              - paragraph [ref=e1019]:
+                - strong [ref=e1020]: Install via marketplace
+              - generic [ref=e1021]:
+                - generic [ref=e1022]:
+                  - generic [ref=e1023]: "# Add the marketplace"
+                  - text: claude plugin marketplace add strands-agents/agent-sop
+                  - generic [ref=e1024]: "# Install all agent SOPs"
+                  - text: claude plugin install agent-sops@agent-sop
+                  - generic [ref=e1025]: "# Skills available as /code-assist, /pdd, /codebase-summary, /code-task-generator, /eval, /agent-sop-author"
+                - button "Copy code to clipboard" [ref=e1027] [cursor=pointer]
+              - paragraph [ref=e1031]:
+                - text: The skills are automatically generated and published to the
+                - code [ref=e1032]: skills-dist
+                - text: branch on each GitHub Release (and can be republished manually via workflow dispatch).
+              - paragraph [ref=e1033]:
+                - strong [ref=e1034]: "For Development:"
+              - paragraph [ref=e1035]: "If you want to use local skills for development or testing:"
+              - generic [ref=e1036]:
+                - generic [ref=e1037]:
+                  - generic [ref=e1038]: "# Clone the repo"
+                  - text: git clone https://github.com/strands-agents/agent-sop
+                  - generic [ref=e1039]: "# Generate local skills"
+                  - text: cd agent-sop pip install strands-agents-sops strands-agents-sops skills --output-dir ./skills
+                  - generic [ref=e1040]: "# Run Claude Code with the plugin"
+                  - text: claude --plugin-dir ./agent-sop
+                - button "Copy code to clipboard" [ref=e1042] [cursor=pointer]
+              - generic [ref=e1046]:
+                - heading "Skill Format" [level=3] [ref=e1047]
+                - 'link "Permalink: Skill Format" [ref=e1048] [cursor=pointer]':
+                  - /url: "#skill-format"
+              - paragraph [ref=e1051]: "Each generated skill includes proper frontmatter and instructions:"
+              - generic [ref=e1052]:
+                - generic [ref=e1053]:
+                  - text: "--- name: code-assist description: TDD-based code implementation with structured Explore, Plan, Code, Commit workflow ---"
+                  - generic [ref=e1054]: "# Code Assist"
+                  - text: This skill guides the implementation of code tasks using test-driven development principles, following a structured workflow that balances automation with user collaboration while adhering to existing package patterns. [Full SOP instructions follow...]
+                - button "Copy code to clipboard" [ref=e1056] [cursor=pointer]
+              - separator [ref=e1060]
+              - generic [ref=e1061]:
+                - heading "What Are Agent SOPs?" [level=2] [ref=e1062]
+                - 'link "Permalink: What Are Agent SOPs?" [ref=e1063] [cursor=pointer]':
+                  - /url: "#what-are-agent-sops-1"
+              - paragraph [ref=e1066]: "Agent SOPs use a standardized markdown format with key features that enable repeatable and understandable behavior from AI agents:"
+              - list [ref=e1067]:
+                - listitem [ref=e1068]:
+                  - strong [ref=e1069]:
+                    - text: Structured steps with
+                    - link "RFC 2119" [ref=e1070] [cursor=pointer]:
+                      - /url: https://datatracker.ietf.org/doc/html/rfc2119
+                    - text: constraints
+                  - text: "- Each workflow step uses"
+                  - link "RFC 2119" [ref=e1071] [cursor=pointer]:
+                    - /url: https://datatracker.ietf.org/doc/html/rfc2119
+                  - text: keywords like MUST, SHOULD, and MAY to provide precise control over agent behavior without rigid scripting, ensuring reliable execution while preserving the agent's reasoning ability.
+                - listitem [ref=e1072]:
+                  - strong [ref=e1073]: Parameterized inputs
+                  - text: "- Rather than hardcoding specific values, SOPs accept parameters that customize behavior for different projects, teams, or requirements. This transforms single-use prompts into flexible templates that can be applied broadly while maintaining consistency."
+                - listitem [ref=e1074]:
+                  - strong [ref=e1075]: Easy authoring through AI assistance
+                  - text: "- Teams can create new SOPs in minutes. Coding agents can read the SOP format specification and generate new workflows based on natural language descriptions, making the creation process accessible to anyone regardless of prompt engineering expertise."
+                - listitem [ref=e1076]:
+                  - strong [ref=e1077]: Progress tracking and resumability
+                  - text: "- Agent SOPs can instruct agents to document their progress as they work, making it easy to understand what's happening and resume if something breaks. This transparency was crucial for debugging prompts and building developer trust in AI automation."
+              - generic [ref=e1078]:
+                - heading "Creating Agent SOPs" [level=2] [ref=e1079]
+                - 'link "Permalink: Creating Agent SOPs" [ref=e1080] [cursor=pointer]':
+                  - /url: "#creating-agent-sops"
+              - paragraph [ref=e1083]: Agent SOPs can be authored in minutes simply by chatting with your favorite AI agent.
+              - generic [ref=e1084]:
+                - heading "Authoring with the Agent SOP Author Skill" [level=3] [ref=e1085]
+                - 'link "Permalink: Authoring with the Agent SOP Author Skill" [ref=e1086] [cursor=pointer]':
+                  - /url: "#authoring-with-the-agent-sop-author-skill"
+              - paragraph [ref=e1089]:
+                - text: The recommended way to create Agent SOPs is using the
+                - code [ref=e1090]: agent-sop-author
+                - text: "skill, which guides agents through the full authoring workflow including validation:"
+              - generic [ref=e1091]:
+                - generic [ref=e1092]:
+                  - generic [ref=e1093]: "# Install via Vercel Skills CLI"
+                  - text: npx skills add https://github.com/strands-agents/agent-sop/tree/skills-dist
+                  - generic [ref=e1094]: "# Or install via Claude Code marketplace"
+                  - text: claude plugin marketplace add strands-agents/agent-sop claude plugin install agent-sops@agent-sop
+                - button "Copy code to clipboard" [ref=e1096] [cursor=pointer]
+              - paragraph [ref=e1100]: Once installed, ask your agent to create a new SOP and it will use the skill to guide the process.
+              - generic [ref=e1101]:
+                - heading "Authoring with the Format Rule" [level=3] [ref=e1102]
+                - 'link "Permalink: Authoring with the Format Rule" [ref=e1103] [cursor=pointer]':
+                  - /url: "#authoring-with-the-format-rule"
+              - paragraph [ref=e1106]:
+                - text: Alternatively, you can author SOPs using the standard formatting rule. You can either copy the rule directly from this repo or use
+                - code [ref=e1107]: strands-agents-sops rule
+                - text: ":"
+              - generic [ref=e1108]:
+                - generic [ref=e1109]:
+                  - generic [ref=e1110]: "# Output the Agent SOP format rule"
+                  - text: strands-agents-sops rule
+                - button "Copy code to clipboard" [ref=e1112] [cursor=pointer]
+              - paragraph [ref=e1116]: "The rule can be used in various AI coding agents:"
+              - list [ref=e1117]:
+                - listitem [ref=e1118]:
+                  - strong [ref=e1119]: Kiro
+                  - text: "- Copy into your home directory or project as"
+                  - code [ref=e1120]: .kiro/steering/agent-sop-format.md
+                  - text: .
+                - listitem [ref=e1121]:
+                  - strong [ref=e1122]: Amazon Q Developer
+                  - text: "- Copy into your project as"
+                  - code [ref=e1123]: .amazonq/rules/agent-sop-format.md
+                  - text: .
+                - listitem [ref=e1124]:
+                  - strong [ref=e1125]: Claude Code
+                  - text: "- Instruct Claude Code to read the rule file."
+                - listitem [ref=e1126]:
+                  - strong [ref=e1127]: Cursor
+                  - text: "- Copy into your project as"
+                  - code [ref=e1128]: .cursor/rules/agent-sop-format.mdc
+                  - text: (Note the
+                  - code [ref=e1129]: .mdc
+                  - text: file extension).
+                - listitem [ref=e1130]:
+                  - strong [ref=e1131]: Cline
+                  - text: "- Copy into your project as"
+                  - code [ref=e1132]: .clinerules/agent-sop-format.md
+                  - text: .
+              - generic [ref=e1133]:
+                - heading "Basic Structure" [level=3] [ref=e1134]
+                - 'link "Permalink: Basic Structure" [ref=e1135] [cursor=pointer]':
+                  - /url: "#basic-structure"
+              - generic [ref=e1138]:
+                - generic [ref=e1139]:
+                  - generic [ref=e1140]: "# SOP Name"
+                  - generic [ref=e1141]: "## Overview"
+                  - text: Brief description of what this SOP accomplishes and when to use it.
+                  - generic [ref=e1142]: "## Parameters"
+                  - text: "- **required_param** (required): Description of required input - **optional_param** (optional, default: value): Description with default"
+                  - generic [ref=e1143]: "## Steps"
+                  - generic [ref=e1144]: "### 1. Step Name"
+                  - text: Description of what this step accomplishes. **Constraints:** - You MUST perform required actions - You SHOULD follow recommended practices - You MAY include optional enhancements
+                  - generic [ref=e1145]: "## Examples"
+                  - text: Concrete usage examples showing input and expected outcomes.
+                  - generic [ref=e1146]: "## Troubleshooting"
+                  - text: Common issues and their solutions.
+                - button "Copy code to clipboard" [ref=e1148] [cursor=pointer]
+              - generic [ref=e1152]:
+                - heading "License" [level=2] [ref=e1153]
+                - 'link "Permalink: License" [ref=e1154] [cursor=pointer]':
+                  - /url: "#license"
+              - paragraph [ref=e1157]:
+                - text: This project is licensed under the Apache License 2.0 - see the
+                - link "LICENSE" [ref=e1158] [cursor=pointer]:
+                  - /url: /strands-agents/agent-sop/blob/main/LICENSE
+                - text: file for details.
+              - generic [ref=e1159]:
+                - heading "Security" [level=2] [ref=e1160]
+                - 'link "Permalink: Security" [ref=e1161] [cursor=pointer]':
+                  - /url: "#security"
+              - paragraph [ref=e1164]:
+                - text: See
+                - link "CONTRIBUTING" [ref=e1165] [cursor=pointer]:
+                  - /url: /strands-agents/agent-sop/blob/main/CONTRIBUTING.md#security-issue-notifications
+                - text: for more information.
+      - generic [ref=e1168]:
+        - generic [ref=e1169]:
+          - heading "About" [level=2] [ref=e1170]
+          - paragraph [ref=e1171]: Natural language workflows that enable AI agents to perform complex, multi-step tasks with consistency and reliability.
+          - generic "https://aws.amazon.com/blogs/opensource/introducing-strands-agent-sops-natural-language-workflows-for-ai-agents/" [ref=e1175]:
+            - link "aws.amazon.com/blogs/opensource/introducing-strands-agent-sops-natural-language-workflows-for-ai-agents/" [ref=e1176] [cursor=pointer]:
+              - /url: https://aws.amazon.com/blogs/opensource/introducing-strands-agent-sops-natural-language-workflows-for-ai-agents/
+          - heading "Topics" [level=3] [ref=e1177]
+          - link "strands-agents" [ref=e1179] [cursor=pointer]:
+            - /url: /topics/strands-agents
+          - heading "Resources" [level=3] [ref=e1180]
+          - link "Readme" [ref=e1182] [cursor=pointer]:
+            - /url: "#readme-ov-file"
+          - link "Apache-2.0 license" [ref=e1186] [cursor=pointer]:
+            - /url: "#Apache-2.0-1-ov-file"
+          - heading "Code of conduct" [level=3] [ref=e1189]
+          - link "Code of conduct" [ref=e1191] [cursor=pointer]:
+            - /url: /strands-agents/agent-sop#coc-ov-file
+          - heading "Contributing" [level=3] [ref=e1194]
+          - link "Contributing" [ref=e1196] [cursor=pointer]:
+            - /url: "#contributing-ov-file"
+          - heading "Security policy" [level=3] [ref=e1199]
+          - link "Security policy" [ref=e1201] [cursor=pointer]:
+            - /url: "#security-ov-file"
+          - link "Activity" [ref=e1205] [cursor=pointer]:
+            - /url: /strands-agents/agent-sop/activity
+          - link "Custom properties" [ref=e1209] [cursor=pointer]:
+            - /url: /strands-agents/agent-sop/custom-properties
+          - heading "Stars" [level=3] [ref=e1212]
+          - generic [ref=e1214]:
+            - strong [ref=e1217]: 1.2k
+            - text: stars
+          - heading "Watchers" [level=3] [ref=e1218]
+          - generic [ref=e1220]:
+            - strong [ref=e1223]: "15"
+            - text: watching
+          - heading "Forks" [level=3] [ref=e1224]
+          - link [ref=e1226] [cursor=pointer]:
+            - /url: /strands-agents/agent-sop/forks
+            - strong [ref=e1230]: "129"
+            - text: forks
+          - link "Report repository" [ref=e1232] [cursor=pointer]:
+            - /url: /contact/report-content?content_url=https%3A%2F%2Fgithub.com%2Fstrands-agents%2Fagent-sop&report=strands-agents+%28user%29
+        - heading "Releases" [level=2] [ref=e1234]
+        - heading "Packages" [level=2] [ref=e1238]
+        - heading "Used by" [level=2] [ref=e1241]
+        - heading "Contributors" [level=2] [ref=e1244]
+        - heading "Languages" [level=2] [ref=e1247]
+        - generic [ref=e1250]:
+          - text: Generated from
+          - link "amazon-archives/__template_Apache-2.0" [ref=e1251] [cursor=pointer]:
+            - /url: /amazon-archives/__template_Apache-2.0
+  - contentinfo [ref=e1253]:
+    - heading "Footer" [level=2] [ref=e1254]
+    - generic [ref=e1255]:
+      - generic [ref=e1256]:
+        - link "GitHub Homepage" [ref=e1257] [cursor=pointer]:
+          - /url: https://github.com
+        - generic [ref=e1260]: © 2026 GitHub, Inc.
+      - navigation "Footer" [ref=e1261]:
+        - heading "Footer navigation" [level=3] [ref=e1262]
+        - list "Footer navigation" [ref=e1263]:
+          - listitem [ref=e1264]:
+            - link "Terms" [ref=e1265] [cursor=pointer]:
+              - /url: https://docs.github.com/site-policy/github-terms/github-terms-of-service
+          - listitem [ref=e1266]:
+            - link "Privacy" [ref=e1267] [cursor=pointer]:
+              - /url: https://docs.github.com/site-policy/privacy-policies/github-privacy-statement
+          - listitem [ref=e1268]:
+            - link "Security" [ref=e1269] [cursor=pointer]:
+              - /url: https://github.com/security
+          - listitem [ref=e1270]:
+            - link "Status" [ref=e1271] [cursor=pointer]:
+              - /url: https://www.githubstatus.com/
+          - listitem [ref=e1272]:
+            - link "Community" [ref=e1273] [cursor=pointer]:
+              - /url: https://github.community/
+          - listitem [ref=e1274]:
+            - link "Docs" [ref=e1275] [cursor=pointer]:
+              - /url: https://docs.github.com/
+          - listitem [ref=e1276]:
+            - link "Contact" [ref=e1277] [cursor=pointer]:
+              - /url: https://support.github.com?tags=dotcom-footer
+          - listitem [ref=e1278]:
+            - button "Manage cookies" [ref=e1280] [cursor=pointer]
+          - listitem [ref=e1281]:
+            - button "Do not share my personal information" [ref=e1283] [cursor=pointer]

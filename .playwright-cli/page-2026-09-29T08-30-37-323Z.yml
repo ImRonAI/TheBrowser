@@ -1,0 +1,123 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e3]:
+    - generic [ref=e4]:
+      - generic [ref=e6]:
+        - generic [ref=e7]:
+          - button "Home" [ref=e8] [cursor=pointer]
+          - button "Go back" [disabled] [ref=e13]
+          - button "Go forward" [disabled] [ref=e17]
+          - button "Reload page" [ref=e21] [cursor=pointer]
+        - generic [ref=e27]:
+          - textbox "Search or enter URL..." [ref=e34]: https://www.gaytravel4u.com/gay-palm-springs-events/
+          - button "Search or navigate" [ref=e35] [cursor=pointer]
+        - generic [ref=e39]:
+          - 'button "Theme: dark (click to toggle)" [ref=e40] [cursor=pointer]'
+          - button "New Tab" [ref=e53] [cursor=pointer]
+          - button "Open Agent Panel" [ref=e56] [cursor=pointer]
+          - button "U" [ref=e61] [cursor=pointer]
+      - generic [ref=e68]:
+        - button "New Tab" [ref=e69] [cursor=pointer]
+        - generic [ref=e71]:
+          - generic [ref=e72] [cursor=pointer]:
+            - generic [ref=e73]: Palm Springs Pride 2026
+            - button "Close Tab" [ref=e74]
+          - generic [ref=e78] [cursor=pointer]:
+            - generic [ref=e79]: Calendar | Palm Springs Pride
+            - button "Close Tab" [ref=e80]
+          - generic [ref=e84] [cursor=pointer]:
+            - generic [ref=e85]: Palm Springs Gay Pride, Trans Pride, Gay Events Palm Springs, LGBTQ, Trans Events
+            - button "Close Tab" [ref=e86]
+          - generic [ref=e90] [cursor=pointer]:
+            - generic [ref=e91]: LGBTQ+ Events | Events in Greater Palm Springs
+            - button "Close Tab" [ref=e92]
+          - generic [ref=e96] [cursor=pointer]:
+            - generic [ref=e97]: "Palm Springs Pride 2026: Events, Parade & Festival Guide"
+            - button "Close Tab" [ref=e98]
+          - generic [ref=e102] [cursor=pointer]:
+            - generic [ref=e103]: Ron
+            - button "Close Tab" [ref=e104]
+          - generic [ref=e108] [cursor=pointer]:
+            - generic [ref=e109]: Palm Springs Gay Pride, Trans Pride, Gay Events Palm Springs, LGBTQ, Trans Events
+            - button "Close Tab" [ref=e110]
+          - generic [ref=e114] [cursor=pointer]:
+            - generic [ref=e115]: Palm Springs Leather Pride 2026 October dates - Google Search
+            - button "Close Tab" [ref=e116]
+          - generic [ref=e120] [cursor=pointer]:
+            - generic [ref=e122]: Gay Palm Springs Events
+            - button "Close Tab" [ref=e123]
+          - generic [ref=e127] [cursor=pointer]:
+            - generic [ref=e128]: LGBTQ+ Events | Events in Greater Palm Springs
+            - button "Close Tab" [ref=e129]
+          - generic [ref=e133] [cursor=pointer]:
+            - generic [ref=e134]: gay Palm Springs events October November December 2026 Leather Pride Halloween holiday calendar - Google Search
+            - button "Close Tab" [ref=e135]
+    - button "Navigation" [ref=e142] [cursor=pointer]
+    - generic [ref=e146]:
+      - region "Agent Panel" [ref=e309]:
+        - generic [ref=e148]:
+          - generic [ref=e149]:
+            - generic [ref=e150]:
+              - generic [ref=e151]:
+                - generic [ref=e152]: R
+                - generic [ref=e153]:
+                  - heading "Agent Panel" [level=2] [ref=e310]
+                  - status [ref=e155]: Ready
+              - generic [ref=e156]:
+                - generic [ref=e157]:
+                  - generic [ref=e158]: Voice
+                  - switch "Voice agent" [ref=e311] [cursor=pointer]
+                - button "New chat" [ref=e312] [cursor=pointer]
+                - button "Close agent panel" [ref=e313] [cursor=pointer]
+            - generic [ref=e166]:
+              - 'button "Model configuration: Perplexity / xai/grok-4.5 / Provider default" [ref=e314] [cursor=pointer]':
+                - generic [ref=e168]: Perplexity / xai/grok-4.5 / Provider default
+              - group "Browser target" [ref=e315]:
+                - button "Your browser" [pressed] [ref=e316] [cursor=pointer]
+                - button "Cloud browser" [ref=e317] [cursor=pointer]
+            - group [ref=e174]:
+              - generic "Runtime · sliding context · concurrent tools" [ref=e318] [cursor=pointer]
+              - option "Automatic"
+              - option "Agentic"
+              - option "Sliding window" [selected]
+              - option "Concurrent" [selected]
+              - option "Sequential"
+          - generic [ref=e176]:
+            - button "Teach a skill Show Ron how you work" [expanded] [ref=e319] [cursor=pointer]:
+              - generic [ref=e180]:
+                - strong [ref=e181]: Teach a skill
+                - generic [ref=e182]: Show Ron how you work
+            - complementary "Teaching in progress" [ref=e320]:
+              - generic [ref=e321]:
+                - generic [ref=e322]: Teaching draft · 00:00
+                - button "Expand teaching studio" [ref=e323] [cursor=pointer]
+              - strong [ref=e329]: Prepare the weekly report
+              - paragraph [ref=e330]: Waiting for an observation.
+          - generic [ref=e186]:
+            - generic [ref=e187]: R
+            - heading "How can I help?" [level=3] [ref=e331]
+            - paragraph [ref=e189]: Browse, search, analyze, and accomplish.
+          - generic [ref=e190]:
+            - generic [ref=e192]:
+              - button "Add Context" [ref=e332] [cursor=pointer]
+              - textbox "Message Ron" [ref=e333]:
+                - /placeholder: Ask anything…
+              - button "Send message" [disabled] [ref=e334]: Send
+            - paragraph [ref=e199]: ↵ to send · Shift + ↵ for a new line
+      - button "AI Web Design 8" [ref=e335] [cursor=pointer]:
+        - generic [ref=e209]:
+          - generic [ref=e210]: AI
+          - generic [ref=e211]: Web Design
+        - generic [ref=e212]: "8"
+  - generic [ref=e338]:
+    - generic [ref=e339]: "[plugin:vite:import-analysis] Failed to resolve import \"./VoiceAgent\" from \"src/components/agent-panel/AgentPanel.tsx\". Does the file exist?"
+    - generic [ref=e340]: /Users/tims-stuff/RonBrowserRebuild/src/components/agent-panel/AgentPanel.tsx:22:27
+    - generic [ref=e341]: "22 | import { ArticleAttachmentCard } from \"@/components/interests/ArticleAttachmentCard\"; 23 | import { Switch } from \"@/components/ai-elements/switch\"; 24 | import { VoiceAgent } from \"./VoiceAgent\"; | ^ 25 | import { TeachSkill } from \"./TeachSkill\"; 26 | const compactInput = \"w-full rounded-lg border border-surface-200 bg-white/70 px-2 py-1.5 text-xs dark:border-surface..."
+    - generic [ref=e342]: at TransformPluginContext._formatLog (file:///Users/tims-stuff/RonBrowserRebuild/node_modules/.pnpm/vite@7.3.6_@types+node@25.9.7_jiti@1.21.7/node_modules/vite/dist/node/chunks/config.js:29079:43) at TransformPluginContext.error (file:///Users/tims-stuff/RonBrowserRebuild/node_modules/.pnpm/vite@7.3.6_@types+node@25.9.7_jiti@1.21.7/node_modules/vite/dist/node/chunks/config.js:29076:14) at normalizeUrl (file:///Users/tims-stuff/RonBrowserRebuild/node_modules/.pnpm/vite@7.3.6_@types+node@25.9.7_jiti@1.21.7/node_modules/vite/dist/node/chunks/config.js:27199:18) at process.processTicksAndRejections (node:internal/process/task_queues:103:5) at async file:///Users/tims-stuff/RonBrowserRebuild/node_modules/.pnpm/vite@7.3.6_@types+node@25.9.7_jiti@1.21.7/node_modules/vite/dist/node/chunks/config.js:27257:32 at async Promise.all (index 22) at async TransformPluginContext.transform (file:///Users/tims-stuff/RonBrowserRebuild/node_modules/.pnpm/vite@7.3.6_@types+node@25.9.7_jiti@1.21.7/node_modules/vite/dist/node/chunks/config.js:27225:4) at async EnvironmentPluginContainer.transform (file:///Users/tims-stuff/RonBrowserRebuild/node_modules/.pnpm/vite@7.3.6_@types+node@25.9.7_jiti@1.21.7/node_modules/vite/dist/node/chunks/config.js:28877:14) at async loadAndTransform (file:///Users/tims-stuff/RonBrowserRebuild/node_modules/.pnpm/vite@7.3.6_@types+node@25.9.7_jiti@1.21.7/node_modules/vite/dist/node/chunks/config.js:22746:26)
+    - generic [ref=e343]:
+      - text: Click outside, press Esc key, or fix the code to dismiss.You can also disable this overlay by setting
+      - code [ref=e344]: server.hmr.overlay
+      - text: to
+      - code [ref=e345]: "false"
+      - text: in
+      - code [ref=e346]: vite.config.js
+      - text: .

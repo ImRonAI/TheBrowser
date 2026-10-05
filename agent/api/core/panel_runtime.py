@@ -55,24 +55,22 @@ import copy
 import hashlib
 import json
 import threading
-import time
 import uuid
 from collections import deque
 from collections.abc import AsyncIterator, Awaitable, Callable, Mapping
 from contextlib import aclosing
-from dataclasses import replace
 from typing import Any, Protocol
 
 from strands import Agent
-from strands._middleware.stages import InvokeModelContext, InvokeModelStage
 from strands.agent.agent_result import AgentResult
 from strands.hooks.events import (
-    AgentInitializedEvent, AfterInvocationEvent, AfterModelCallEvent, AfterToolCallEvent, BeforeModelCallEvent,
+    AfterInvocationEvent, AfterModelCallEvent, AfterToolCallEvent, BeforeModelCallEvent,
 )
 from strands.hooks.registry import HookRegistry
 from strands.multiagent.base import MultiAgentResult, NodeResult
 from strands.session import SnapshotSessionManager
 from strands.storage import Storage
+from strands.vended_plugins.context_injector import ContextInjector, InjectionContext
 
 from .panel_storage import get_user_session_storage
 from .panel_tools import serializable_event
@@ -82,7 +80,8 @@ _HOOK_ORDER = 200
 _BACKGROUND_TOOL = "strands_manage_background_task"
 _BACKGROUND_STATE = "strands.background_tasks"
 _ACTIVE = {"starting", "running", "finishing"}
-_DURABLE_EVENTS = {"run_started", "steering_accepted", "steering_applied", "checkpoint", "interrupt", "run_finished", "error"}
+_DURABLE_EVENTS = {"run_started", "steering_accepted", "steering_applied", "checkpoint", "interrupt", "run_finished", "error",
+                   "tool_repair_proposed", "tool_repair_ready"}
 
 
 class RuntimeConflict(RuntimeError):
@@ -157,7 +156,7 @@ class SessionRun:
         self.messages: list[dict[str, Any]] = []
         self.input: Any = None
         # Per-run reference data (e.g. browser context). Injected ephemerally into
-        # the model input via InvokeModelStage; NEVER journaled, persisted, or
+        # the model input by the native ContextInjector; NEVER journaled, persisted, or
         # written to agent.messages/state, so it never surfaces in the UI.
         self.request_context: str | None = None
         self.checkpoint: Any = None
@@ -194,7 +193,6 @@ class SessionRun:
         return self.task is not None and not self.task.done()
 
     def register_hooks(self, registry: HookRegistry, **_: Any) -> None:
-        registry.add_callback(AgentInitializedEvent, self._initialize_context)
         registry.add_callback(AfterToolCallEvent, self._after_tool, order=_HOOK_ORDER)
         registry.add_callback(BeforeModelCallEvent, self._before_model, order=_HOOK_ORDER)
         registry.add_callback(AfterModelCallEvent, self._after_model, order=_HOOK_ORDER)
@@ -204,7 +202,9 @@ class SessionRun:
         return {
             "agent_id": self.agent_id,
             "session_manager": self.session_manager,
-            "plugins": [],
+            # Native ephemeral per-call context (browser context + queued steering), on every
+            # model call of the tool loop, like strands_harness's Todos injector.
+            "plugins": [ContextInjector(self._render_context, trigger="everyTurn", name="ron:request-context")],
             "hooks": [self],
             "callback_handler": self._callback,
         }
@@ -361,28 +361,21 @@ class SessionRun:
                     "options": copy.deepcopy(self.options), "result": copy.deepcopy(self.result),
                     "recovery_required": self.recovery_required, "error": copy.deepcopy(self.error)}
 
-    def _initialize_context(self, event: AgentInitializedEvent) -> None:
-        # Strands 1.56's ContextInjector uses this same per-call input boundary,
-        # but folds text into toolResult messages. Native provider formatters can
-        # emit that text BEFORE the replies. Deliver context separately instead;
-        # never rewrite provider requests or the agent's durable history.
-        event.agent._middleware_registry.add_middleware(InvokeModelStage.Input, self._inject_context)
+    async def _render_context(self, context: InjectionContext) -> str | None:
+        """``ContextInjector`` render: browser context plus queued steering for this model call.
 
-    async def _inject_context(self, context: InvokeModelContext) -> InvokeModelContext:
-        # Runs AFTER BeforeModel hooks/interrupt gates and the complete tool batch.
-        if self._cancel.is_set() or not any(m["role"] == "user" for m in context.messages):
-            return context
+        Runs after BeforeModel hooks/interrupt gates and the complete tool batch; the SDK folds
+        the text into this call's input only (never agent.messages, the session or the journal).
+        """
+        if self._cancel.is_set():
+            return None
         async with self._lock:
             pending = [record for record in self.steering if record["status"] == "queued"]
             self._injected = {record["id"] for record in pending}
             parts = [record["message"] for record in pending]
             if self.request_context:
                 parts.insert(0, self.request_context)
-            text = "\n\n".join(parts)
-            if not text:
-                return context
-            return replace(context, messages=[*context.messages, {"role": "user", "content": [{"text": text}]}],
-                           dynamic_trailing_blocks=1)
+            return "\n\n".join(parts) or None
 
     def _before_model(self, event: BeforeModelCallEvent) -> None:
         cycle = str(event.invocation_state["event_loop_cycle_id"])
@@ -486,6 +479,45 @@ class SessionRun:
         task.add_done_callback(self._callback_tasks.discard)
         task.add_done_callback(lambda done: None if done.cancelled() else done.exception())
 
+    async def _announce_repair_proposal(self) -> None:
+        """Emit ``tool_repair_proposed`` once per proposal recorded by ``ToolRepairTrigger``.
+
+        The trigger only writes ``agent.state``; the panel decides. Emitting here (after the native
+        stream ended) keeps the event out of the tool loop and lets the renderer show the Alert
+        with Repair / Not now. Nothing runs until ``POST /tools/repairs``.
+        """
+        if self.agent is None:
+            return
+        from agent.api.core.tool_repair import REPAIR_REQUEST_STATE_KEY, pending_proposal
+
+        proposal = pending_proposal(self.agent)
+        if proposal is None or proposal.get("announced"):
+            return
+        self.agent.state.set(REPAIR_REQUEST_STATE_KEY, {**proposal, "announced": True})
+        await self._emit("tool_repair_proposed", id=proposal["id"], tool=proposal["tool_name"],
+                         kind=proposal.get("kind", "library"),
+                         exception_class=proposal.get("exception_class"), count=proposal.get("count"),
+                         observation=proposal.get("observation", False), outcome=proposal.get("outcome"))
+
+    async def repair_event(self, payload: Mapping[str, Any]) -> None:
+        """Repair-service callback: child fixer events render as a ChainOfThought "Repair" under a
+        synthetic tool-use id (``repair:<revision>``); the final result is ``tool_repair_ready``."""
+        revision = str(payload.get("revision", ""))
+        tool_use = {"toolUseId": f"repair:{revision}", "name": "repair", "input": {"tool": payload.get("tool_name")}}
+        if "ready" in payload:
+            result = dict(payload["ready"])
+            await self._tool_result({"toolUseId": tool_use["toolUseId"], "status": "success" if result.get("status") in ("verified", "active") else "error",
+                                     "content": [{"json": _wire(result)}]}, (), name="repair")
+            await self._emit("tool_repair_ready", tool=result.get("tool_name"), rev=result.get("revision"),
+                             repair_kind=result.get("repair_kind"),
+                             status=result.get("status"), summary=result.get("summary", ""),
+                             demonstrations=result.get("demonstrations", []), sandbox=result.get("sandbox"),
+                             route=result.get("route"))
+            return
+        if "event" in payload:
+            await self._tool_input(tool_use, ())
+            await self._translate({"tool_stream_event": {"tool_use": tool_use, "data": payload["event"]}})
+
     async def _tool_result(self, result: dict[str, Any], path: tuple[str, ...], *, name: str | None = None) -> None:
         tool_id = result.get("toolUseId", "")
         key = (path, tool_id)
@@ -521,12 +553,10 @@ class SessionRun:
                 "event", "tool_stream_event", "current_tool_use", "message", "result", "delta",
                 "tool_result", "tool_interrupt_event",
             )) or str(data.get("type", "")).startswith("multiagent_")):
-                # panel_tools wraps formation/skill streams in {formation/skill, event}
-                # and the Perplexity think child in {think: True, event}. Child events
-                # are re-emitted under node_path=[<tool use id>[, <formation name>]].
-                if data.get("think") is True and isinstance(data.get("event"), Mapping):
-                    await self._translate(data["event"], child_path)
-                elif ("formation" in data or "skill" in data) and isinstance(data.get("event"), Mapping):
+                # panel_tools wraps formation/skill streams in {formation/skill, event}; native
+                # ToolStreamEvents (e.g. the `recall` harness subagent) carry the child's SDK event
+                # directly. Child events are re-emitted under node_path=[<tool use id>[, <formation name>]].
+                if ("formation" in data or "skill" in data) and isinstance(data.get("event"), Mapping):
                     await self._translate(data["event"], (*child_path, str(data.get("formation", data.get("skill")))))
                 else:
                     await self._translate(data, child_path)
@@ -597,6 +627,7 @@ class SessionRun:
                         await self._translate(event)
             async with self._lock:
                 self.status = "finishing"
+            await self._announce_repair_proposal()
             if final is None and not self._cancel.is_set():
                 raise RuntimeError("Native stream ended without an AgentResult")
             stop = final.stop_reason if final else "cancelled"
@@ -758,24 +789,6 @@ class PanelRuntimeManager:
         self._sessions: dict[tuple[str, str], SessionRun] = {}
         self._locks: dict[tuple[str, str], asyncio.Lock] = {}
         self._closed = False
-        #: Monotonic time of each user's last panel activity (start/steer/cancel); the
-        #: dreaming endpoint's idle gate reads this, nothing else does.
-        self._last_activity: dict[str, float] = {}
-
-    def touch(self, user_id: str) -> None:
-        self._last_activity[user_id] = time.monotonic()
-
-    def idle_seconds(self, user_id: str) -> float | None:
-        """Seconds since the user's last activity, or ``None`` when never seen this process."""
-        seen = self._last_activity.get(user_id)
-        if seen is None:
-            return None
-        if any(key[0] == user_id and run.active for key, run in self._sessions.items()):
-            return 0.0
-        return time.monotonic() - seen
-
-    def known_users(self) -> list[str]:
-        return sorted(self._last_activity)
 
     def _key(self, user_id: str, session_id: str) -> tuple[str, str]:
         if not isinstance(user_id, str) or not user_id.strip():
@@ -816,7 +829,6 @@ class PanelRuntimeManager:
         key = self._key(user_id, session_id)
         if action not in ("message", "resume", "interrupt"):
             raise ValueError("action must be message, resume, or interrupt")
-        self.touch(user_id)
         async with self._locks.setdefault(key, asyncio.Lock()):
             session = await self._get_locked(key, factory, create=True)
             assert session is not None
@@ -865,7 +877,6 @@ class PanelRuntimeManager:
     ) -> dict[str, Any]:
         if not isinstance(message, str) or not message.strip():
             raise ValueError("Steering message must be nonempty")
-        self.touch(user_id)
         session = await self.get(user_id, session_id)
         if session is None:
             raise KeyError("Unknown session")
@@ -887,7 +898,6 @@ class PanelRuntimeManager:
             return copy.deepcopy(record)
 
     async def cancel(self, user_id: str, session_id: str) -> dict[str, Any]:
-        self.touch(user_id)
         session = await self.get(user_id, session_id)
         if session is None:
             raise KeyError("Unknown session")

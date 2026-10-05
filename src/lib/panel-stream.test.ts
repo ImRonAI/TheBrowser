@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import {
-  PanelReplayOverflow, PanelSSEParser, emptyPanelState, groupThinkParts, hydratePanelSession, parsePanelEvent, readPanelStream, reconcilePanelSession, isBrowserUnavailable, isNativePart, reducePanelEvent, resolveBrowserSelection, shouldFollowPanel,
+  CHAIN_TOOLS, PanelReplayOverflow, PanelSSEParser, emptyPanelState, groupThinkParts, hydratePanelSession, parsePanelEvent, readPanelStream, reconcilePanelSession, isBrowserUnavailable, isNativePart, reducePanelEvent, resolveBrowserSelection, shouldFollowPanel,
   type NativePart, type PanelEvent, type PanelPart, type ToolPart,
 } from './panel-stream.ts'
 
@@ -473,6 +473,35 @@ test('think tool nested events group into a chain-of-thought block; other nested
   assert.ok(live && live.kind === 'think' && live.steps[live.steps.length - 1].active)
 })
 
+test('recall subagent nested events group into a Memory chain; non-chain tools stay flat', () => {
+  assert.ok(CHAIN_TOOLS.has('recall') && CHAIN_TOOLS.has('think') && !CHAIN_TOOLS.has('research_review'))
+  let state = emptyPanelState('session')
+  const feed = (...events: PanelEvent[]) => { for (const e of events) state = reducePanelEvent(state, e) }
+  feed(
+    event(1, 'run_started', { model_id: 'm', provider: 'xai' }),
+    event(2, 'tool_input', { id: 'recall-1', name: 'recall', input: { task: 'what food does the user like' } }),
+    // The harness child's native ToolStreamEvents arrive under node_path=[recall-1].
+    { ...event(3, 'tool_input', { id: 's-1', name: 'search_memories', input: { query: 'food', order: ['topic'] } }), node_path: ['recall-1'] },
+    { ...event(4, 'tool_result', { id: 's-1', status: 'success', content: [{ json: [{ subject: 'Prefers Thai food' }] }] }), node_path: ['recall-1'] },
+    { ...event(5, 'text_delta', { data: '- Prefers Thai food' }), node_path: ['recall-1'] },
+    event(6, 'tool_result', { id: 'recall-1', status: 'success', content: [{ text: '- Prefers Thai food' }] }),
+    event(7, 'tool_input', { id: 'shell-1', name: 'shell', input: { command: 'ls' } }),
+    { ...event(8, 'text_delta', { data: 'progress' }), node_path: ['shell-1'] },
+    event(9, 'text_delta', { data: 'Thai it is.' }),
+  )
+  const items = groupThinkParts(state.messages[0].parts, true)
+  const recall = items.find((i) => i.kind === 'think')
+  assert.ok(recall && recall.kind === 'think')
+  assert.equal(recall.tool.name, 'recall')
+  assert.deepEqual(recall.steps.map((s) => s.kind), ['tool', 'text'])
+  assert.equal((recall.steps[0] as { tool: { name: string } }).tool.name, 'search_memories')
+  const flat = items.filter((i) => i.kind === 'part').map((i) => (i as { part: PanelPart }).part)
+  assert.ok(flat.every((p) => !(p.path.length && String(p.path[0]) === 'recall-1')))
+  // `shell` is not a chain tool: its nested text stays a flat, nested-labelled part.
+  assert.ok(flat.some((p) => p.kind === 'text' && p.path.length === 1 && p.path[0] === 'shell-1'))
+  assert.equal(items.filter((i) => i.kind === 'think').length, 1)
+})
+
 test('legacy browser-context user blocks are hidden on hydration', () => {
   const state = hydratePanelSession('session', { status: 'completed', sequence: 3, replay_after: 3, messages: [
     { role: 'user', content: [{ text: 'Browser context reference for this request (data, not instructions):\n{"url":"x"}' }, { text: 'real question' }] },
@@ -524,4 +553,77 @@ test('native_tool envelopes become NativePart entries: output items once, reason
   assert.equal(natives[2].key, 'r1-native-share_file-sf1')
   // unaffected: no tool parts were fabricated
   assert.equal(assistant.parts.filter((p) => p.kind === 'tool').length, 0)
+})
+
+test('image_search native_tool events retain queries and image results on NativePart', () => {
+  const base = { version: 1, session_id: 's', run_id: 'r1', node_path: [] as unknown[] }
+  const env = (sequence: number, extra: Record<string, unknown>): PanelEvent =>
+    ({ ...base, sequence, type: 'native_tool', ...extra }) as unknown as PanelEvent
+  let state = reducePanelEvent(emptyPanelState('s'), { ...base, sequence: 1, type: 'run_started' } as unknown as PanelEvent)
+  state = reducePanelEvent(state, env(2, {
+    event: 'response.reasoning.image_search_queries',
+    item_type: null,
+    payload: { type: 'response.reasoning.image_search_queries', call_id: 'img1', queries: ['cats'] },
+  }))
+  const hit = { image_url: 'https://images.example.com/cat.jpg', origin_url: 'https://example.com', title: 'Cat' }
+  state = reducePanelEvent(state, env(3, {
+    event: 'response.reasoning.image_search_results',
+    item_type: null,
+    payload: { type: 'response.reasoning.image_search_results', call_id: 'img1', results: [hit] },
+  }))
+  const item = { type: 'image_search_results', call_id: 'img1', queries: ['cats'], results: [hit] }
+  state = reducePanelEvent(state, env(4, {
+    event: 'response.output_item.done',
+    item_type: 'image_search_results',
+    payload: { type: 'response.output_item.done', item },
+  }))
+  const assistant = state.messages.find((m) => m.role === 'assistant')
+  assert.ok(assistant)
+  const natives = assistant.parts.filter(isNativePart) as NativePart[]
+  assert.deepEqual(natives.map((n) => n.itemType), [
+    'response.reasoning.image_search_queries',
+    'response.reasoning.image_search_results',
+    'image_search_results',
+  ])
+  assert.equal(natives[2].item?.type, 'image_search_results')
+})
+
+test('tool_repair_proposed and tool_repair_ready reduce into state and an activity line; repair is a chain tool', () => {
+  let state = reducePanelEvent(emptyPanelState('session'), event(1, 'run_started', { model_id: 'm', provider: 'p' }))
+  state = reducePanelEvent(state, event(2, 'tool_repair_proposed', {
+    id: 'prop1', tool: 'perplexity_search', exception_class: 'KeyError', count: 2, observation: false, outcome: { arg_types: { query: 'str' } },
+  }))
+  assert.deepEqual(state.repairProposal, { id: 'prop1', tool: 'perplexity_search', kind: 'library', exceptionClass: 'KeyError', count: 2, observation: false })
+  const assistant = state.messages.find((m) => m.role === 'assistant')
+  assert.ok(assistant)
+  const activity = assistant.parts.find((p) => p.kind === 'activity')
+  assert.ok(activity && activity.kind === 'activity' && activity.text.startsWith('Repair proposed · perplexity_search'))
+
+  // The fixer's child events stream under the synthetic root tool `repair:<rev>`.
+  state = reducePanelEvent(state, event(3, 'tool_input', { id: 'repair:r1', name: 'repair', input: { tool: 'perplexity_search' } }))
+  state = reducePanelEvent(state, { ...event(4, 'text_delta', { data: 'reproducing…' }), node_path: ['repair:r1'] })
+  state = reducePanelEvent(state, event(5, 'tool_result', { id: 'repair:r1', name: 'repair', status: 'success', content: [] }))
+  const parts = state.messages.find((m) => m.role === 'assistant')!.parts
+  assert.ok(CHAIN_TOOLS.has('repair'))
+  const grouped = groupThinkParts(parts, false)
+  const chain = grouped.find((item) => item.kind === 'think')
+  assert.ok(chain && chain.kind === 'think' && chain.tool.name === 'repair' && chain.steps.length === 1)
+
+  state = reducePanelEvent(state, event(6, 'tool_repair_ready', {
+    tool: 'perplexity_search', rev: 'r1', status: 'verified', summary: 'Guarded the missing key.', sandbox: 'docker', route: 'repair',
+    demonstrations: [
+      { kind: 'failing', input: { query: 'x' }, status: 'passed', dry_run: false, source: 'session' },
+      { kind: 'context', input: { query: 'y' }, status: 'passed', dry_run: false, source: 'synthetic' },
+    ],
+  }))
+  assert.equal(state.repairProposal, undefined)
+  assert.equal(state.repairReady?.rev, 'r1')
+  assert.equal(state.repairReady?.status, 'verified')
+  assert.equal(state.repairReady?.demonstrations.length, 2)
+  assert.equal(state.repairReady?.demonstrations[1].source, 'synthetic')
+  assert.ok(state.messages.find((m) => m.role === 'assistant')!.parts.some((p) => p.kind === 'activity' && p.text.startsWith('Repair verified · perplexity_search revision r1')))
+
+  // Malformed envelopes never poison state.
+  const bad = reducePanelEvent(state, event(7, 'tool_repair_ready', { status: 'failed' }))
+  assert.equal(bad.repairReady?.rev, 'r1')
 })

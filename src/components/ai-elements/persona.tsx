@@ -13,6 +13,23 @@ import {
 } from "@rive-app/react-webgl2";
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 
+// Delays Rive initialization by one frame so that React Strict Mode's
+// immediate unmount cycle never creates a WebGL2 context. Only the
+// second (real) mount will initialise, avoiding context exhaustion.
+const useStrictModeSafeInit = () => {
+  const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    const id = requestAnimationFrame(() => setReady(true));
+    return () => {
+      cancelAnimationFrame(id);
+      setReady(false);
+    };
+  }, []);
+
+  return ready;
+};
+
 export type PersonaState =
   | "idle"
   | "listening"
@@ -151,7 +168,9 @@ const PersonaWithModel = memo(
         return;
       }
 
-      const [r, g, b] = theme === "dark" ? [255, 255, 255] : [0, 0, 0];
+      // Browser accent: --color-accent in light, --color-accent-light in dark.
+      // This is the Rive view-model tint only. The obsidian metal stays the .riv.
+      const [r, g, b] = theme === "dark" ? [99, 102, 241] : [55, 48, 163];
       viewModelInstanceColor.setRgb(r, g, b);
     }, [viewModelInstanceColor, theme, source.dynamicColor]);
 
@@ -231,17 +250,23 @@ export const Persona: FC<PersonaProps> = memo(
       []
     );
 
-    const { rive, RiveComponent } = useRive({
-      autoplay: true,
-      onLoad: stableCallbacks.onLoad,
-      onLoadError: stableCallbacks.onLoadError,
-      onPause: stableCallbacks.onPause,
-      onPlay: stableCallbacks.onPlay,
-      onRiveReady: stableCallbacks.onReady,
-      onStop: stableCallbacks.onStop,
-      src: source.source,
-      stateMachines: stateMachine,
-    });
+    const ready = useStrictModeSafeInit();
+
+    const { rive, RiveComponent } = useRive(
+      ready
+        ? {
+            autoplay: true,
+            onLoad: stableCallbacks.onLoad,
+            onLoadError: stableCallbacks.onLoadError,
+            onPause: stableCallbacks.onPause,
+            onPlay: stableCallbacks.onPlay,
+            onRiveReady: stableCallbacks.onReady,
+            onStop: stableCallbacks.onStop,
+            src: source.source,
+            stateMachines: stateMachine,
+          }
+        : null
+    );
 
     const listeningInput = useStateMachineInput(
       rive,

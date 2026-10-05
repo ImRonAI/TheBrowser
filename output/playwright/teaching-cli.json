@@ -1,0 +1,10 @@
+{
+  "browser": {
+    "browserName": "chromium",
+    "launchOptions": {
+      "headless": false,
+      "args": ["--auto-select-tab-capture-source-by-title=GitHub"]
+    }
+  },
+  "outputDir": "output/playwright"
+}

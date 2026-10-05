@@ -1,0 +1,47 @@
+- generic [ref=e3]:
+  - generic [ref=e4]:
+    - generic [ref=e6]:
+      - generic [ref=e7]:
+        - button "Home" [ref=e8] [cursor=pointer]
+        - button "Go back" [disabled] [ref=e13]
+        - button "Go forward" [disabled] [ref=e17]
+        - button "Reload page" [ref=e21] [cursor=pointer]
+      - generic [ref=e27]:
+        - generic [ref=e29]:
+          - img "Ron" [ref=e30]
+          - generic [ref=e31]: ron
+        - textbox "Search or enter URL..." [active] [ref=e33]: ron://projects
+        - button "Search or navigate" [ref=e34] [cursor=pointer]
+      - generic [ref=e38]:
+        - 'button "Theme: dark (click to toggle)" [ref=e39] [cursor=pointer]'
+        - button "New Tab" [ref=e52] [cursor=pointer]
+        - button "Open Agent Panel" [ref=e55] [cursor=pointer]
+        - button "U" [ref=e60] [cursor=pointer]
+    - generic [ref=e67]:
+      - button "New Tab" [ref=e68] [cursor=pointer]
+      - generic [ref=e71] [cursor=pointer]:
+        - img "Ron" [ref=e73]
+        - generic [ref=e74]: Ron
+        - button "Close Tab" [ref=e75]
+  - button "Navigation" [ref=e82] [cursor=pointer]
+  - generic [ref=e86]:
+    - generic [ref=e409]:
+      - generic [ref=e410]:
+        - alert [ref=e411]: Connection interrupted; no save was confirmed. Reload before retrying.
+        - button "Reload from server" [ref=e412] [cursor=pointer]
+      - generic [ref=e414]:
+        - generic [ref=e415]:
+          - paragraph [ref=e416]: Projects
+          - heading "Projects Index" [level=1] [ref=e417]
+          - paragraph [ref=e418]: Organize work into structured containers and navigate by type, status, and urgency.
+        - generic [ref=e419]:
+          - textbox "Search projects" [ref=e420]
+          - generic [ref=e421]:
+            - button "Grid view" [ref=e422] [cursor=pointer]
+            - button "List view" [ref=e425] [cursor=pointer]
+          - button "New Project" [ref=e427]
+    - button "AI Web Design 8" [ref=e381] [cursor=pointer]:
+      - generic [ref=e389]:
+        - generic [ref=e390]: AI
+        - generic [ref=e391]: Web Design
+      - generic [ref=e392]: "8"

@@ -15,7 +15,7 @@ It never starts a client and never reads ``.env`` itself (config.py loads it).
 from __future__ import annotations
 
 import os
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING, Final, Literal
 
@@ -25,6 +25,7 @@ from strands.hooks.events import BeforeToolCallEvent
 
 if TYPE_CHECKING:
     from strands.tools.mcp import MCPClient
+    from strands.tools.mcp.mcp_client import ToolFilters
 
 BrowserName = Literal["user", "cloud"]
 BROWSERS: Final[tuple[str, ...]] = ("user", "cloud")
@@ -93,13 +94,21 @@ def is_browser_tool(name: str) -> bool:
     return any(name.startswith(f"{server_name(browser)}_") for browser in BROWSERS)
 
 
-def browser_client_factory(browser: str) -> Callable[[], MCPClient]:
+def browser_client_factory(browser: str, *, tool_filters: ToolFilters | None = None,
+                           extra_env: Mapping[str, str] | Callable[[], Mapping[str, str]] | None = None) -> Callable[[], MCPClient]:
     """Factory for an UNSTARTED, prefixed ``MCPClient`` with the no-approval elicitation policy.
+
+    ``extra_env`` (mapping or zero-arg callable evaluated on every call of the factory) is merged
+    into the server process environment; the tool fixer uses it to put a user's repaired
+    ``electron_playwright_mcp`` package first on that user's server ``PYTHONPATH``
+    (``tool_repair.browser_server_env``), so one user's server repair never affects another's and a
+    restarted server picks up the revision active at restart time.
 
     electron-playwright-mcp's ApprovalRequiredMiddleware elicits on every mutating tool
     regardless of Electron's own ``requireApproval`` flag; ``MCPClient.load_servers`` builds
     clients without an elicitation callback, so the mcp default would answer "Elicitation
     not supported". The catalog calls this factory when the server is loaded by name.
+    ``tool_filters`` is the client's native filter, matched against unprefixed MCP tool names.
     """
     from mcp import StdioServerParameters, stdio_client
     from strands.tools.mcp import MCPClient
@@ -110,11 +119,12 @@ def browser_client_factory(browser: str) -> Callable[[], MCPClient]:
 
     def factory() -> MCPClient:
         config = browser_server_config(browser)[name]
-        params = StdioServerParameters(
-            command=str(config["command"]), args=list(config["args"]), env=dict(config["env"]),  # type: ignore[arg-type]
-        )
+        extra = extra_env() if callable(extra_env) else (extra_env or {})
+        env = {**dict(config["env"]), **dict(extra)}  # type: ignore[arg-type]
+        params = StdioServerParameters(command=str(config["command"]), args=list(config["args"]), env=env)  # type: ignore[arg-type]
         return MCPClient(
             lambda: stdio_client(params), prefix=name, elicitation_callback=accept_browser_elicitation,
+            tool_filters=tool_filters,
         )
 
     return factory

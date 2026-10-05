@@ -1,0 +1,12 @@
+[    2336ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=7c24feed:22164
+[    2740ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:8765/discover/feed:0
+[   24368ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:8765/models:0
+[   24368ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:8765/config:0
+[   24368ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:8765/sessions/agent-072f7fcd-c8e9-4258-a625-1eb61add688a?user_id=default:0
+[   24368ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:8765/models:0
+[   24368ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:8765/config:0
+[   24368ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:8765/sessions/agent-072f7fcd-c8e9-4258-a625-1eb61add688a?user_id=default:0
+[   79861ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:8765/teaching/sessions?user_id=default&agent_id=panel:0
+[   79861ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:8765/teaching/skills?user_id=default&agent_id=panel:0
+[  296167ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:8765/teaching/sessions?user_id=default&agent_id=panel:0
+[  296168ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:8765/teaching/skills?user_id=default&agent_id=panel:0

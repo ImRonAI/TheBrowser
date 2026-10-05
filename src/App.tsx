@@ -6,7 +6,8 @@ import { useOnboardingStore } from '@/stores/onboardingStore'
 import { useInterestsStore } from '@/stores/interestsStore'
 import { useSearchStore, selectShowFullResults, selectShowChat } from '@/stores/searchStore'
 import { useNavigationStore } from '@/stores/navigationStore'
-import { getSearchQueryFromRonUrl } from '@/components/chrome/UrlBar'
+import { getSearchLevelFromRonUrl, getSearchQueryFromRonUrl } from '@/components/chrome/UrlBar'
+import { DEFAULT_SEARCH_LEVEL, type SearchLevel } from '@/lib/search-api'
 import { BrowserLayout } from '@/layouts/BrowserLayout'
 import { AuthPageLayout } from '@/layouts/AuthPageLayout'
 import { HomePage } from '@/pages/HomePage'
@@ -18,7 +19,8 @@ import { BuildWorkbenchPage } from '@/components/build'
 import { SignInPage } from '@/pages/SignInPage'
 import { OnboardingPage } from '@/pages/OnboardingPage'
 import { AIElementsShowcase } from '@/pages/AIElementsShowcase'
-import { SearchThinkingOverlay, SearchChat, SearchAgentDisplay } from '@/components/search-results'
+import { SearchResultsPage } from '@/pages/SearchResultsPage'
+import { SearchChat } from '@/components/search-results'
 
 // ============================================
 // DEV MODE FLAGS
@@ -51,13 +53,13 @@ export function App() {
     query: searchQuery, 
     quickResult,
     isStreaming,
+    level: preferredSearchLevel,
     setPhase,
     clearSearch,
   } = searchStore
   
   const showFullResults = selectShowFullResults(searchStore)
   const showChat = selectShowChat(searchStore)
-  const showThinking = searchPhase === 'thinking'
   
   // Check URL hash for showcase mode
   const [showShowcase, setShowShowcase] = useState(() => {
@@ -69,6 +71,7 @@ export function App() {
     return window.location.hash === '#search' || window.location.hash === '#results'
   })
   const [searchRouteQuery, setSearchRouteQuery] = useState<string | null>(null)
+  const [searchRouteLevel, setSearchRouteLevel] = useState<SearchLevel | null>(null)
   
   useEffect(() => {
     return window.electron?.onDeepLink?.((url) => {
@@ -137,15 +140,15 @@ export function App() {
         e.preventDefault()
         setShowSearchResultsDev(prev => !prev)
       }
-      // ESC to clear search
-      if (e.key === 'Escape' && searchPhase !== 'idle') {
+      // ESC leaves search: back to home (and clear any legacy phase state)
+      if (e.key === 'Escape' && (searchPhase !== 'idle' || searchRouteQuery)) {
         e.preventDefault()
-        clearSearch()
+        handleSearchBack()
       }
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [searchPhase, clearSearch])
+  }, [searchPhase, searchRouteQuery, clearSearch])
 
   useEffect(() => {
     const updateSearchRoute = () => {
@@ -157,10 +160,12 @@ export function App() {
     const handleUrlChanged = (newUrl: string) => {
       if (!newUrl.startsWith('ron://search')) {
         setSearchRouteQuery(null)
+        setSearchRouteLevel(null)
         return
       }
       const query = getSearchQueryFromRonUrl(newUrl)
       setSearchRouteQuery(query && query.trim() ? query : null)
+      setSearchRouteLevel(getSearchLevelFromRonUrl(newUrl))
     }
 
     updateSearchRoute()
@@ -176,6 +181,14 @@ export function App() {
       if (cleanup) cleanup()
     }
   }, [])
+
+  // Search results page exit: return the tab to home and reset legacy search state.
+  const handleSearchBack = () => {
+    clearSearch()
+    if (typeof window !== 'undefined' && window.electron?.browser?.navigate) {
+      void window.electron.browser.navigate('ron://home')
+    }
+  }
 
   // Initialize with at least one tab
   useEffect(() => {
@@ -207,16 +220,17 @@ export function App() {
     )
   }
 
-  // DEV: Show Search Results Page (accessible from any state via #search or #results hash, or Cmd/Ctrl + Shift + R)
-  // Also show when full results phase is active
+  // Search results site: ron://search?q=…&level=… (also #search/#results hash, or
+  // the legacy full-results phase). The query/level in the tab URL win over prefs.
   if (showSearchResultsDev || showFullResults || searchRouteQuery) {
     return (
       <RouteShell>
         <BrowserLayout>
-          <div className="min-h-screen bg-surface-0 dark:bg-surface-900 p-8">
-            <SearchAgentDisplay
-              query={searchRouteQuery || searchQuery || "The Buffalo Bills"}
-              sessionId="search-page"
+          <div className="h-full overflow-y-auto">
+            <SearchResultsPage
+              query={searchRouteQuery || searchQuery || ''}
+              level={searchRouteLevel ?? preferredSearchLevel ?? DEFAULT_SEARCH_LEVEL}
+              onBack={handleSearchBack}
             />
           </div>
         </BrowserLayout>
@@ -265,30 +279,12 @@ export function App() {
     )
   }
 
-  // Main browser interface with search overlays
+  // Main browser interface
   return (
     <RouteShell>
-      <>
-        <BrowserLayout>
-        {/* If there's an active search, show SearchAgentDisplay */}
-        {searchQuery && searchPhase !== 'idle' ? (
-          <div className="h-full overflow-auto bg-surface-0 dark:bg-surface-900 p-8">
-            <SearchAgentDisplay
-              query={searchQuery}
-              sessionId="search-session"
-            />
-          </div>
-        ) : (
-          <MainContent activeTab={activeTab} />
-        )}
+      <BrowserLayout>
+        <MainContent activeTab={activeTab} />
       </BrowserLayout>
-
-      {/* Thinking overlay - shows during initial search animation */}
-        <SearchThinkingOverlay
-          isVisible={showThinking}
-          query={searchQuery}
-        />
-      </>
     </RouteShell>
   )
 }

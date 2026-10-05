@@ -1,0 +1,338 @@
+/**
+ * Renderer side of `POST /search/stream` (agent/api/endpoints/search.py). Pure functions
+ * only, so `node --experimental-strip-types` can test them; no DOM, no React.
+ *
+ * One search fans out to seven sources on the backend and streams SSE frames shaped
+ * `event: <name>\ndata: <json>\n\n` (same framing as the panel protocol). This module
+ * parses those frames, folds them into one immutable `SearchRunState` and merges the
+ * Perplexity Agent API's own `search_results` / `image_search_results` with the Brave
+ * sections for the Web and Images tabs.
+ */
+import type { DiscoverItem, FeedSection } from './discover-feed.ts'
+
+export type SearchLevel = 'fast' | 'low' | 'medium' | 'high' | 'xhigh'
+export const SEARCH_LEVELS: readonly SearchLevel[] = ['fast', 'low', 'medium', 'high', 'xhigh']
+export const DEFAULT_SEARCH_LEVEL: SearchLevel = 'low'
+
+export interface LevelInfo { id: SearchLevel; label: string; description: string }
+/** Preset descriptions per https://docs.perplexity.ai/docs/agent-api/presets */
+export const LEVEL_INFO: readonly LevelInfo[] = [
+  { id: 'fast', label: 'Fast', description: 'Single-fact lookups and quick summaries — latency first.' },
+  { id: 'low', label: 'Balanced', description: 'Everyday research with current info and inline citations.' },
+  { id: 'medium', label: 'Deep', description: 'Multi-hop browsing and wide aggregation across many sources.' },
+  { id: 'high', label: 'Research', description: 'Expert-level reasoning and exhaustive source coverage.' },
+  { id: 'xhigh', label: 'Max', description: 'Open-ended agentic work with long tool-use loops.' },
+]
+export function levelLabel(level: string): string {
+  return LEVEL_INFO.find((info) => info.id === level)?.label ?? level
+}
+
+import { API_BASE_URL } from './api-base'
+import { normalizeApiBaseUrl } from './api-origin'
+
+/** Defaults to the main API; `electron:dev` sets this to local :8766 when the VPS tunnel lacks `/search/*`. */
+export const SEARCH_API = normalizeApiBaseUrl(import.meta.env.VITE_SEARCH_API_URL, API_BASE_URL)
+
+export interface SearchRequestBody {
+  q: string
+  level?: SearchLevel
+  country?: string
+  shopping?: boolean
+}
+
+export interface AgentSearchResult { url: string; title?: string; snippet?: string; [key: string]: unknown }
+export interface AgentImageResult { url: string; width?: number | null; height?: number | null; [key: string]: unknown }
+export interface Citation { url: string; title: string }
+export interface SourceError { source: string; code: string; message: string; status?: number | null }
+
+export type SearchEvent =
+  | { event: 'meta'; data: { q: string; level: string; model: string; shopping_model: string | null; country: string } }
+  | { event: 'section'; data: FeedSection }
+  | { event: 'agent.delta'; data: { text: string } }
+  | { event: 'agent.reasoning'; data: { text: string } }
+  | { event: 'agent.citation'; data: Citation }
+  | { event: 'agent.sources'; data: { results: AgentSearchResult[] } }
+  | { event: 'agent.images'; data: { results: AgentImageResult[] } }
+  | { event: 'agent.fetched'; data: { results: AgentSearchResult[] } }
+  | { event: 'agent.done'; data: { usage?: Record<string, unknown> | null; model?: string | null; incomplete?: boolean } }
+  | { event: 'shopping.delta'; data: { text: string } }
+  | { event: 'shopping.reasoning'; data: { text: string } }
+  | { event: 'shopping.citation'; data: Citation }
+  | { event: 'shopping.sources'; data: { results: AgentSearchResult[] } }
+  | { event: 'shopping.images'; data: { results: AgentImageResult[] } }
+  | { event: 'shopping.fetched'; data: { results: AgentSearchResult[] } }
+  | { event: 'shopping.done'; data: { usage?: Record<string, unknown> | null; model?: string | null; incomplete?: boolean } }
+  | { event: 'source_error'; data: SourceError }
+  | { event: 'done'; data: { duration_ms: number } }
+
+export type SectionKind = 'web' | 'news' | 'videos' | 'images' | 'places'
+export const SECTION_KINDS: readonly SectionKind[] = ['web', 'news', 'videos', 'images', 'places']
+
+export type SourceStatus = 'idle' | 'streaming' | 'done' | 'error'
+
+export interface AgentRunState {
+  status: SourceStatus
+  text: string
+  reasoning: string
+  citations: Citation[]
+  sources: AgentSearchResult[]
+  images: AgentImageResult[]
+  fetched: AgentSearchResult[]
+  usage: Record<string, unknown> | null
+  model: string | null
+  error: SourceError | null
+}
+
+export interface SearchRunState {
+  meta: { q: string; level: string; model: string; shoppingModel: string | null; country: string } | null
+  sections: Partial<Record<SectionKind, FeedSection>>
+  agent: AgentRunState
+  shopping: AgentRunState
+  errors: SourceError[]
+  durationMs: number | null
+}
+
+function initialAgentRun(): AgentRunState {
+  return { status: 'idle', text: '', reasoning: '', citations: [], sources: [], images: [], fetched: [],
+    usage: null, model: null, error: null }
+}
+
+export function initialRunState(): SearchRunState {
+  return { meta: null, sections: {}, agent: initialAgentRun(), shopping: initialAgentRun(), errors: [], durationMs: null }
+}
+
+function mergeByUrl<T extends { url: string }>(existing: T[], incoming: T[]): T[] {
+  if (!incoming.length) return existing
+  const seen = new Set(existing.map((item) => item.url))
+  const merged = [...existing]
+  for (const item of incoming) {
+    if (!item.url || seen.has(item.url)) continue
+    seen.add(item.url)
+    merged.push(item)
+  }
+  return merged
+}
+
+function applyAgentEvent(run: AgentRunState, name: string, data: Record<string, unknown>): AgentRunState {
+  switch (name) {
+    case 'delta':
+      return { ...run, status: run.status === 'error' ? 'error' : 'streaming', text: run.text + (data.text as string) }
+    case 'reasoning':
+      return { ...run, status: run.status === 'error' ? 'error' : 'streaming', reasoning: run.reasoning + (data.text as string) }
+    case 'citation': {
+      const citation = data as unknown as Citation
+      if (!citation.url || run.citations.some((c) => c.url === citation.url)) return run
+      return { ...run, citations: [...run.citations, citation] }
+    }
+    case 'sources':
+      return { ...run, sources: mergeByUrl(run.sources, (data.results as AgentSearchResult[]) || []) }
+    case 'images':
+      return { ...run, images: mergeByUrl(run.images, (data.results as AgentImageResult[]) || []) }
+    case 'fetched':
+      return { ...run, fetched: mergeByUrl(run.fetched, (data.results as AgentSearchResult[]) || []) }
+    case 'done':
+      return { ...run, status: run.status === 'error' ? 'error' : 'done',
+        usage: (data.usage as Record<string, unknown> | null) ?? null, model: (data.model as string | null) ?? null }
+    default:
+      return run
+  }
+}
+
+export function applySearchEvent(state: SearchRunState, event: SearchEvent): SearchRunState {
+  if (event.event === 'meta') {
+    const { q, level, model, shopping_model, country } = event.data
+    return { ...state, meta: { q, level, model, shoppingModel: shopping_model, country } }
+  }
+  if (event.event === 'section') {
+    const section = event.data
+    const kind = section.kind as SectionKind
+    if (!SECTION_KINDS.includes(kind)) return state
+    return { ...state, sections: { ...state.sections, [kind]: section } }
+  }
+  if (event.event.startsWith('agent.')) {
+    return { ...state, agent: applyAgentEvent(state.agent, event.event.slice('agent.'.length), event.data as Record<string, unknown>) }
+  }
+  if (event.event.startsWith('shopping.')) {
+    return { ...state, shopping: applyAgentEvent(state.shopping, event.event.slice('shopping.'.length), event.data as Record<string, unknown>) }
+  }
+  if (event.event === 'source_error') {
+    const error = event.data
+    if (error.source === 'agent') return { ...state, agent: { ...state.agent, status: 'error', error } }
+    if (error.source === 'shopping') return { ...state, shopping: { ...state.shopping, status: 'error', error } }
+    return { ...state, errors: [...state.errors, error] }
+  }
+  if (event.event === 'done') {
+    return { ...state, durationMs: event.data.duration_ms }
+  }
+  return state
+}
+
+/** One SSE block (`event:` + `data:` lines) -> a typed event, or null. */
+export function parseSseBlock(block: string): SearchEvent | null {
+  let name: string | null = null
+  let data: string | null = null
+  for (const line of block.split('\n')) {
+    if (line.startsWith('event:')) name = line.slice('event:'.length).trim()
+    else if (line.startsWith('data:')) data = line.slice('data:'.length).trim()
+  }
+  if (!name || !data) return null
+  try {
+    return { event: name, data: JSON.parse(data) } as SearchEvent
+  } catch {
+    return null
+  }
+}
+
+export class SearchApiError extends Error {
+  readonly code: string
+  readonly status: number
+  constructor(message: string, code: string, status: number) {
+    super(message)
+    this.name = 'SearchApiError'
+    this.code = code
+    this.status = status
+  }
+}
+
+export type Fetcher = (input: string, init?: RequestInit) => Promise<Response>
+
+/** POST the search and invoke `onEvent` per SSE frame until the stream ends or aborts. */
+export async function streamSearch(
+  body: SearchRequestBody,
+  onEvent: (event: SearchEvent) => void,
+  signal?: AbortSignal,
+  fetcher: Fetcher = fetch,
+  api = SEARCH_API,
+): Promise<void> {
+  let response: Response
+  try {
+    response = await fetcher(`${api}/search/stream`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      signal,
+    })
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') throw error
+    throw new SearchApiError(error instanceof Error ? error.message : 'Backend unreachable', 'unreachable', 0)
+  }
+  if (!response.ok) {
+    const detail = await response.json().catch(() => null) as { detail?: { code?: string; message?: string } | string } | null
+    const info = detail && typeof detail.detail === 'object' ? detail.detail : null
+    throw new SearchApiError(info?.message || (typeof detail?.detail === 'string' ? detail.detail : `HTTP ${response.status}`),
+      info?.code || (response.status === 503 ? 'not_configured' : 'http_error'), response.status)
+  }
+  if (!response.body) throw new SearchApiError('Search stream had no body', 'malformed', response.status)
+
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+  const flush = (final: boolean) => {
+    let index: number
+    while ((index = buffer.indexOf('\n\n')) >= 0) {
+      const block = buffer.slice(0, index)
+      buffer = buffer.slice(index + 2)
+      const event = parseSseBlock(block)
+      if (event) onEvent(event)
+    }
+    if (final && buffer.trim()) {
+      const event = parseSseBlock(buffer)
+      if (event) onEvent(event)
+      buffer = ''
+    }
+  }
+  try {
+    for (;;) {
+      const { done, value } = await reader.read()
+      if (done) break
+      buffer += decoder.decode(value, { stream: true })
+      flush(false)
+    }
+    buffer += decoder.decode()
+    flush(true)
+  } finally {
+    reader.releaseLock()
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Tab projections
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface MergedResult {
+  url: string
+  title: string
+  snippet: string
+  /** 'agent' = only the Perplexity Agent API saw it, 'brave' = only Brave, 'both'. */
+  origin: 'agent' | 'brave' | 'both'
+  kind: 'web' | 'discussion'
+  favicon: string | null
+  age: string | null
+}
+
+/** Web tab: the Agent API's own `search_results` merged with Brave web + discussions, URL-deduped. */
+export function mergedWebResults(state: SearchRunState): MergedResult[] {
+  const byUrl = new Map<string, MergedResult>()
+  for (const source of state.agent.sources) {
+    if (!source.url) continue
+    byUrl.set(source.url, {
+      url: source.url, title: source.title || source.url, snippet: (source.snippet as string) || '',
+      origin: 'agent', kind: 'web', favicon: null, age: null,
+    })
+  }
+  const section = state.sections.web
+  if (section?.status === 'ok') {
+    for (const item of section.items) {
+      if (!item.url) continue
+      const kind = item.kind === 'discussion' ? 'discussion' : 'web'
+      const existing = byUrl.get(item.url)
+      if (existing) {
+        byUrl.set(item.url, { ...existing, origin: 'both', favicon: existing.favicon ?? item.favicon,
+          age: existing.age ?? item.age, snippet: existing.snippet || item.description || '' })
+      } else {
+        byUrl.set(item.url, { url: item.url, title: item.title || item.url, snippet: item.description || '',
+          origin: 'brave', kind, favicon: item.favicon, age: item.age })
+      }
+    }
+  }
+  return [...byUrl.values()]
+}
+
+export interface MergedImage {
+  url: string
+  pageUrl: string | null
+  title: string
+  width: number | null
+  height: number | null
+  origin: 'agent' | 'brave'
+}
+
+/** Images tab: Agent API `image_search_results` + Brave images, URL-deduped (agent first). */
+export function mergedImages(state: SearchRunState): MergedImage[] {
+  const seen = new Set<string>()
+  const out: MergedImage[] = []
+  for (const image of state.agent.images) {
+    if (!image.url || seen.has(image.url)) continue
+    seen.add(image.url)
+    out.push({ url: image.url, pageUrl: (image.page_url as string) || (image.source as string) || null,
+      title: (image.title as string) || '', width: image.width ?? null, height: image.height ?? null, origin: 'agent' })
+  }
+  const section = state.sections.images
+  if (section?.status === 'ok') {
+    for (const item of section.items) {
+      const url = item.image?.url || item.thumbnail || ''
+      if (!url || seen.has(url)) continue
+      seen.add(url)
+      out.push({ url, pageUrl: item.url || null, title: item.title || '',
+        width: item.image?.width ?? null, height: item.image?.height ?? null,
+        origin: 'brave' })
+    }
+  }
+  return out
+}
+
+/** Section items for the simple single-source tabs. */
+export function sectionItems(state: SearchRunState, kind: SectionKind): DiscoverItem[] {
+  const section = state.sections[kind]
+  return section?.status === 'ok' ? section.items : []
+}

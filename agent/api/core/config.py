@@ -102,13 +102,60 @@ AWS_REGION = os.getenv("AWS_REGION", "us-east-1")
 AGENT_SANDBOX_ROOT = Path(os.getenv("RON_AGENT_SANDBOX_ROOT", str(Path.home() / ".ronbrowser" / "sandbox")))
 AGENT_SANDBOX_ROOT.mkdir(parents=True, exist_ok=True)
 
-# --- Shared Memory Agent (recall before every model call; dreaming while idle) ---
-#: Ordered Perplexity Agent API fast-model chain for the memory agent (native ModelRouter fallback).
+# --- Memory: journal (add_memory) + dreaming (native extraction) + everyTurn injection + recall ---
+#: Perplexity Agent API model chain of the `recall` subagent (ModelRouter/FallbackStrategy); the
+#: first id is also the panel Agent's native aux_model, which runs the dreaming extraction.
 RON_MEMORY_AGENT_MODELS = os.getenv("RON_MEMORY_AGENT_MODELS",
     "google/gemini-3.5-flash-lite,openai/gpt-5.4-nano,perplexity/sonar,perplexity/nemotron-3-ultra-550b-a55b")
-#: Max seconds the host waits for recall before a model call proceeds without it (fail open).
-RON_MEMORY_AGENT_TIMEOUT_S = float(os.getenv("RON_MEMORY_AGENT_TIMEOUT_S", "6.0"))
-#: Idle seconds before POST /memory/dream consolidates the journal (cron/launchd ticks each minute).
-RON_MEMORY_IDLE_SECONDS = float(os.getenv("RON_MEMORY_IDLE_SECONDS", "300"))
-#: Set to 0 to disable the memory agent entirely.
-RON_MEMORY_AGENT = os.getenv("RON_MEMORY_AGENT", "1")
+#: RON_MEMORY_AGENT=0 drops the `recall` tool (memory_agent.RecallConfig.from_env).
+RON_MEMORY_AGENT = os.getenv("RON_MEMORY_AGENT", "1") != "0"
+
+# --- Tool repair (CAT-50/51): per-user fixer over sandboxed verification ---
+#: RON_TOOL_REPAIR=0 disables the repair trigger, endpoints stay inert (tool_repair.RepairConfig).
+RON_TOOL_REPAIR = os.getenv("RON_TOOL_REPAIR", "1") != "0"
+#: Same (tool, exception class) failures in one live session before a repair is proposed.
+RON_TOOL_REPAIR_THRESHOLD = int(os.getenv("RON_TOOL_REPAIR_THRESHOLD", "2"))
+#: Perplexity Agent API model(s) of the fixer: a strong coding model at maximum reasoning effort.
+#: Comma list = FallbackStrategy order; the effort applies to every candidate.
+RON_TOOL_REPAIR_MODELS = os.getenv("RON_TOOL_REPAIR_MODELS", "openai/gpt-6.1-sol")
+RON_TOOL_REPAIR_EFFORT = os.getenv("RON_TOOL_REPAIR_EFFORT", "max")
+#: Perplexity Agent API server-side tools on the fixer's model (docs.perplexity.ai/docs/agent-api/tools):
+#: built-ins by `type`, plus the managed GitHub connector (`{"type": "connector", "id": "connector_github"}`,
+#: must be connected on the Perplexity Project connectors page) and Context7's remote MCP server
+#: (`{"type": "mcp", "server_url": ...}`, Streamable HTTP; `CONTEXT7_API_KEY` is sent as `authorization`).
+RON_TOOL_REPAIR_HOSTED_TOOLS = os.getenv("RON_TOOL_REPAIR_HOSTED_TOOLS",
+                                         "web_search,fetch_url,image_search,sandbox,connector_github,context7")
+CONTEXT7_MCP_URL = os.getenv("CONTEXT7_MCP_URL", "https://mcp.context7.com/mcp")
+CONTEXT7_API_KEY = os.getenv("CONTEXT7_API_KEY", "")
+#: Extra A2A peers for the fixer only (every agent already gets a2a_tools.a2a_agent_urls()).
+RON_TOOL_REPAIR_A2A_AGENTS = os.getenv("RON_TOOL_REPAIR_A2A_AGENTS", "")
+
+# --- A2A (`core/a2a_tools.py`, `core/panel_a2a.py`) ---
+#: PANEL_A2A_ENABLED (default on) mounts Ron's native A2AServer at PANEL_A2A_URL
+#: (default http://127.0.0.1:<API_PORT>/a2a) and gives EVERY Ron agent the installed strands_tools
+#: A2AClientToolProvider tools over that server plus RON_A2A_AGENTS (comma list of HTTP(S) URLs).
+RON_A2A_AGENTS = os.getenv("RON_A2A_AGENTS", "")
+#: Wall-clock bound of one fixer run (seconds).
+RON_TOOL_REPAIR_TIMEOUT_S = int(os.getenv("RON_TOOL_REPAIR_TIMEOUT_S", "900"))
+
+# --- Browser search (`endpoints/search.py`, `core/search_agent.py`) ---
+#: Every search runs the Perplexity Agent API with preset=<level> and this model
+#: override. Must be a full provider/model id from GET /v1/models.
+RON_SEARCH_AGENT_MODEL = os.getenv("RON_SEARCH_AGENT_MODEL", "openai/gpt-6.1-sol")
+#: Shopping section model: no preset; tools restricted to web_search (domain-
+#: filtered), fetch_url and image_search.
+RON_SEARCH_SHOPPING_MODEL = os.getenv("RON_SEARCH_SHOPPING_MODEL", "openai/gpt-6-luna")
+#: Default search level when the client omits one (see search_agent.SEARCH_LEVELS).
+RON_SEARCH_DEFAULT_LEVEL = os.getenv("RON_SEARCH_DEFAULT_LEVEL", "low")
+#: Domains the shopping agent's web_search is restricted to (Agent API caps
+#: search_domain_filter at 20 entries).
+RON_SEARCH_SHOPPING_DOMAINS = [
+    d.strip().lower()
+    for d in os.getenv(
+        "RON_SEARCH_SHOPPING_DOMAINS",
+        "amazon.com,target.com,walmart.com,kohls.com,macys.com,ebay.com,etsy.com,"
+        "bestbuy.com,nordstrom.com,zappos.com,asos.com,gap.com,uniqlo.com,hm.com,"
+        "nike.com,adidas.com,wayfair.com,sephora.com,ulta.com,lego.com",
+    ).split(",")
+    if d.strip()
+][:20]

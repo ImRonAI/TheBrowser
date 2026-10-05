@@ -81,10 +81,11 @@ from agent.api.core.panel_browser import (
     server_name,
 )
 from agent.api.core.panel_storage import create_memory_config, get_user_session_storage
+from agent.api.core.tool_observation import ToolObservation, trace_attributes
 from agent.api.core.panel_tools import (
-    ChildSpec, GraphSpec, ManagedMCP, PanelToolCatalog, SwarmSpec,
+    ChildSpec, GraphSpec, ManagedMCP, PanelToolCatalog, SwarmSpec, ThinkToolsGuard,
     adapt_native_tool, build_core_tools, create_formation_tool,
-    create_skill_tool, create_think_tool, create_tool_catalog, skills_from_env,
+    create_skill_tool, create_tool_catalog, load_vendored_think, skills_from_env,
 )
 
 logger = logging.getLogger(__name__)
@@ -96,14 +97,23 @@ PROJECT_ROOT = Path(__file__).resolve().parents[3]
 #: Project tool library browsed/loaded by tool_catalog (never added to sys.path).
 PROJECT_TOOLS_DIR = PROJECT_ROOT / "agent" / "tools" / "strands_tools"
 
-#: Journal-first memory discipline shared by the panel agent and its think child. The
-#: entry grammar is the one the dreaming pass consumes (memory_agent.ENTRY_FORMAT).
+def memory_aux_model_id() -> str:
+    """The panel Agent's native ``aux_model`` (runs the dreaming extraction): the first
+    ``RON_MEMORY_AGENT_MODELS`` id, read at construction so tests and operators can change it."""
+    from agent.api.core.memory_agent import DEFAULT_MODELS
+
+    return os.getenv("RON_MEMORY_AGENT_MODELS", "").split(",")[0].strip() or DEFAULT_MODELS[0]
+
+
+#: Journal-first memory discipline shared by the panel agent and its think child. Entries are
+#: written with native add_memory (journal store); native extraction (dreaming) and everyTurn
+#: injection do the rest; `recall` is the deep, visible search.
 MEMORY_JOURNAL_DIRECTIVE = """
 
 ## Journal and memory
-Use the `journal` tool for everything worth remembering: to-dos, worthy memories, feedback the
-user gives you, user statements, and anything you learn or observe about the user. Write an entry
-the moment it happens; do not batch. Every entry is wrapped exactly like this:
+Journal everything worth remembering with add_memory: to-dos, worthy memories, feedback the user
+gives you, user statements, and anything you learn or observe about the user. Write an entry the
+moment it happens; do not batch. Every entry is wrapped exactly like this:
 <start_entry>
 <topic_name>ToDo's<topic_name/>
 <subject>Two to eight words<subject/>
@@ -111,11 +121,15 @@ the moment it happens; do not batch. Every entry is wrapped exactly like this:
 ...the entry...
 <end_entry/>
 Topics: ToDo's, LearnedAboutUser, Feedback, UserStatement, WorthyMemory. The subject is two to
-eight words, no more, no less. Do NOT add <tags>: tags are assigned later by the dreaming pass.
-Relevant long-term memories are delivered to you automatically before you answer (inside
-<recall>); you may also call search_memory (nest filters in any order that helps: time, tags,
-topic, subject) and add_memory yourself whenever it helps. The think agent should lean on the
-journal and memory the most and relay the important memories in its conclusion."""
+eight words, no more, no less. Do NOT add <tags>. The server stamps <created_at> with its own UTC
+time, so the value you write is only a placeholder.
+Relevant memories are delivered to you automatically before each step (inside <memory>), and the
+journal is consolidated into long-term memory automatically while you work. At the start of each
+task, before planning, call recall with a self-contained task describing what you need to remember
+about this user and request; call it again whenever a detail about the user would change your
+answer. You may also call search_memories (nest filters in any order that helps: time, tags, topic,
+subject) and search_memory yourself. When two memories disagree, the newest created_at wins. When
+you use think, put the memories that matter (from recall) into the thought."""
 
 # Hosted (server-side) tools live on the MODEL config, never in Agent.tools.
 # Every entry below is grounded in (a) the provider's official docs and (b) what
@@ -138,7 +152,7 @@ OPENAI_HOSTED_TOOLS_DEFAULT = ("web_search",)
 # {"perplexity": ...} stream events for the panel. With sandbox enabled the model may
 # also search/fetch from inside sandbox code via the preinstalled Perplexity SDK; those
 # results then arrive as sandbox_results. Both paths are real and both are rendered.
-PERPLEXITY_HOSTED_TOOLS = ("web_search", "fetch_url", "people_search", "finance_search", "sandbox")
+PERPLEXITY_HOSTED_TOOLS = ("web_search", "image_search", "fetch_url", "people_search", "finance_search", "sandbox")
 PERPLEXITY_HOSTED_TOOLS_DEFAULT = PERPLEXITY_HOSTED_TOOLS
 PERPLEXITY_SEARCH_CONTEXT_SIZES = ("low", "medium", "high")
 # Agent-API-only loop bound (docs: `max_steps`). Rides in extra_body on the wire.
@@ -172,6 +186,7 @@ NATIVE_PROVIDER_CAPABILITIES = {
         "env": "PERPLEXITY_HOSTED_TOOLS, PERPLEXITY_SEARCH_CONTEXT_SIZE",
         "hosted_tool_support": {
             "web_search": "sent as params.tools; url_citation annotations surfaced; search_results items ignored",
+            "image_search": "sent as params.tools; image_search_results + response.reasoning.image_search_* streamed as native_tool",
             "fetch_url": "sent; fetch_url_results items ignored by adapter (model still sees them)",
             "sandbox": "sent; executed code/stdout not surfaced to the panel",
             "finance_search": "opt-in; docs require max_steps>=3 without a preset",
@@ -750,22 +765,26 @@ def _default_formations() -> list[GraphSpec | SwarmSpec]:
     return [graph, swarm, nested]
 
 
-def user_memory_config(user_id: str, agent_scope: str = "panel") -> dict[str, Any]:
-    """The user's cross-session memory config (agent-scoped stores are appended by callers)."""
-    return create_memory_config(user_id)
+def user_memory_config(user_id: str, agent_scope: str = "panel", *, extraction: bool = True) -> dict[str, Any]:
+    """The user's cross-session memory config (long-term + journal) plus the agent's
+    learned-skills store (search only; ``add_memory`` targets the journal alone)."""
+    from agent.api.core.teaching import get_teaching_service
+
+    memory = create_memory_config(user_id, extraction=extraction)
+    memory["stores"].append(get_teaching_service().get_memory_store(user_id, agent_scope))
+    return memory
 
 
 def user_memory_manager(user_id: str, agent_scope: str = "panel") -> Any:
-    """A writable ``MemoryManager`` over the same stores the panel agent uses (no injection:
-    the Memory Agent recalls explicitly)."""
+    """A ``MemoryManager`` over the same stores the panel agent uses, for a host without plugins
+    (``BidiAgent``): native ``search_memory``/journal-only ``add_memory``/store ``search_memories``
+    tools, no injection, and ``extraction=False`` so the Live path never spawns extraction
+    without a flush owner."""
     from strands.memory import MemoryManager
 
-    memory = user_memory_config(user_id)
-    # Dreamed entries belong to the user's cross-session memory store only; the learned-skills
-    # store stays searchable but is not an add_memory target here.
+    memory = user_memory_config(user_id, agent_scope, extraction=False)
     return MemoryManager(stores=list(memory["stores"]), search_tool_config=True,
-                         add_tool_config={"wait_for_writes": True, "stores": [memory["stores"][0].name]},
-                         injection=False)
+                         add_tool_config=memory["add_tool_config"], injection=False)
 
 
 def create_panel_agent(
@@ -781,6 +800,7 @@ def create_panel_agent(
     runtime_options: dict | None = None,
     hooks: Sequence[HookProvider] = (),
     browser: str | None = None,
+    agent_scope: str = "panel",
 ) -> Agent:
     """Compose a native 1.56 agent; callers offload this synchronous constructor.
 
@@ -828,15 +848,29 @@ def create_panel_agent(
     if any(isinstance(value, MCPAgentTool) for value in extra_tools):
         raise ValueError("Pass the owning MCPClient in extra_tools, not unowned MCP tool references")
     local_tools = [adapt_native_tool(value) for value in extra_tools if not isinstance(value, MCPClient)]
+    from agent.api.core.tool_repair import (
+        RepairConfig, ToolRepairTrigger, adapt_tool, browser_server_env, revision_notice, revision_resolver,
+    )
+
+    repair_config = RepairConfig.from_env()
     # Exactly ONE browser MCP server is configured; it is staged on demand through
     # tool_catalog(action="load", name=<server>) with a prefixed, elicitation-accepting client.
     browser_server = server_name(selected_browser)
     catalog = _OwnedPanelCatalog(
         tools=local_tools, managed_mcp=[ManagedMCP(client) for client in clients],
         mcp_servers=browser_server_config(selected_browser),
-        mcp_client_factories={browser_server: browser_client_factory(selected_browser)},
+        # This user's browser MCP server runs their active `server` repair (PYTHONPATH), if any.
+        mcp_client_factories={browser_server: browser_client_factory(
+            selected_browser, extra_env=(lambda: browser_server_env(user_id)) if repair_config.enabled else None)},
     )
-    hooks = [*hooks, BrowserAvailabilityHook(selected_browser)]
+    hooks = [*hooks, BrowserAvailabilityHook(selected_browser), ToolObservation()]
+    if repair_config.enabled:
+        # Order 310 (after ToolObservation): proposes a user-scoped repair after repeated failures.
+        hooks.append(ToolRepairTrigger(repair_config))
+        # Dynamic loads honour this user's active repaired revisions (other users are unaffected):
+        # `file` revisions replace the vendored module, `adapter` revisions wrap any tool (incl. MCP).
+        catalog.set_revision_resolver(revision_resolver(user_id))
+        catalog.set_tool_adapter(lambda value: adapt_tool(user_id, value))
     agent = None
     try:
         def model_factory(_name: str) -> Any:
@@ -855,27 +889,45 @@ def create_panel_agent(
         tools_dir = PROJECT_TOOLS_DIR
         core = build_core_tools(tools_dir)
         catalog.add_tools([*core, create_tool_catalog(catalog, tools_dir), ask_user])
+        from agent.api.core.teaching import create_learned_skill_tools, get_teaching_service
+        def skill_tools() -> list[Any]:
+            available = list(agent.tool_registry.registry.values()) if agent is not None else [*core, *local_tools]
+            excluded = {"use_skill", "list_learned_skills", "think", "ask_user", "tool_catalog"}
+            return [value for value in available if value.tool_name not in excluded
+                    and not value.tool_name.startswith("strands_") and not is_browser_tool(value.tool_name)]
+
+        catalog.add_tools(create_learned_skill_tools(
+            user_id, agent_scope, model_factory, additional_tools=skill_tools(), tool_supplier=skill_tools,
+        ))
+        system_prompt += (
+            "\nYou can learn workflows from the user's Teach a skill screen demonstration. "
+            "Use list_learned_skills to discover this agent's saved skills, and use_skill to execute "
+            "their ordered SOPs. New skills become available immediately, including in this session."
+        )
         storage = get_user_session_storage(user_id)
-        memory = user_memory_config(user_id)
+        memory = user_memory_config(user_id, agent_scope)
         system_prompt += MEMORY_JOURNAL_DIRECTIVE
-        # The shared Memory Agent (recall before every model call, dreaming while idle)
-        # owns the SAME stores through its own writable MemoryManager; the panel keeps
-        # native search_memory/add_memory and injection, so both may use memory freely.
-        from agent.api.core.memory_agent import RecallPlugin, memory_agent_for
-        memory_agent = memory_agent_for(user_id, lambda: user_memory_manager(user_id))
-        recall = RecallPlugin(memory_agent)
-        # Journal (vendored strands_tools) and the nested-filter search live beside the
-        # native search_memory/add_memory, so agent and think child use memory freely.
-        from agent.api.core.memory_agent import journal_tool
-        from agent.api.core.panel_storage import create_search_memories_tool
-        catalog.add_tools([journal_tool(), create_search_memories_tool(memory["stores"])])
+        # The MemoryManager supplies native search_memory/add_memory (journal), the stores'
+        # search_memories, everyTurn injection and the dreaming extraction (on aux_model, below).
+        # `recall` is the harness subagent over fresh read-only views of the same stores.
+        from agent.api.core.memory_agent import create_recall_tool
+        recall = create_recall_tool(lambda: user_memory_config(user_id, agent_scope, extraction=False)["stores"])
+        if recall is not None:
+            catalog.add_tools([recall])
+        # Native A2A client tools over Ron's agents (panel A2A server + RON_A2A_AGENTS).
+        from agent.api.core.a2a_tools import a2a_tools
+        catalog.add_tools(a2a_tools())
+        plugins: list[Any] = []
+        if repair_config.enabled:
+            # userTurn note "<tool> was repaired and is active", once per live session (agent.state).
+            plugins.append(revision_notice(user_id))
         if provider == "perplexity":
-            catalog.add_tools([create_think_tool(model_factory=model_factory, system_prompt=system_prompt,
-                                                 plugins=[recall])])
+            catalog.add_tools([load_vendored_think(tools_dir)])
+            plugins.append(ThinkToolsGuard())
 
         skills = skills_from_env()
-        plugins = [skills] if skills is not None else []
-        plugins.append(recall)
+        if skills is not None:
+            plugins.append(skills)
         if goal:
             plugins.append(GoalLoop(goal=goal, judge=JudgeConfig(model=model_factory("goal-judge"))
                                     if isinstance(goal, str) else None,
@@ -891,10 +943,16 @@ def create_panel_agent(
             "session_manager": SnapshotSessionManager(session_id, storage=storage),
             "storage": storage, "memory_manager": memory,
             "callback_handler": None, "load_tools_from_directory": False,
+            # Copied by the SDK onto every agent/cycle/model/tool span (tool observation, CAT-49).
+            "trace_attributes": trace_attributes(session_id=session_id, user_id=user_id),
             "context_manager": context if context != "sliding" else False,
             "tool_executor": ConcurrentToolExecutor() if execution == "concurrent" else SequentialToolExecutor(),
             "retry_strategy": retry, "checkpointing": options.get("checkpointing", False),
             "background_tasks": False,
+            # Native aux_model: the dreaming extraction (and other side calls) on a fast model, not
+            # the panel model. Unset, the SDK falls back to the panel model.
+            "aux_model": (build_model("perplexity", memory_aux_model_id(), None, hosted_tools=False)
+                          if provider_api_key("perplexity") else None),
         }
         if context == "sliding":
             kwargs["conversation_manager"] = SlidingWindowConversationManager()

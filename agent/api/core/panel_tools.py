@@ -16,6 +16,7 @@ import inspect
 import os
 import sys
 import threading
+import weakref
 from collections.abc import AsyncIterator, Awaitable, Callable, Mapping, Sequence
 from contextlib import aclosing
 from dataclasses import dataclass
@@ -29,12 +30,14 @@ from mcp.shared.context import RequestContext
 from mcp.types import ElicitRequestParams, ElicitResult
 from strands import Agent, tool
 from strands.agent.agent_result import AgentResult
-from strands.hooks.events import AfterToolsEvent, BeforeInvocationEvent
+from strands.hooks.events import AfterToolsEvent, BeforeInvocationEvent, BeforeToolCallEvent
 from strands.models.model import Model
+from strands.plugins import Plugin
 from strands.multiagent import GraphBuilder, Swarm
 from strands.multiagent.graph import Graph
 from strands.multiagent.base import MultiAgentResult, NodeResult, Status
 from strands.tools import ToolProvider
+from strands.tools.loader import load_tools_from_module
 from strands.tools.decorator import DecoratedFunctionTool
 from strands.tools.mcp import MCPClient
 from strands.tools.mcp.mcp_agent_tool import MCPAgentTool
@@ -54,9 +57,10 @@ __all__ = [
     "SwarmSpec", "ToolAssignment", "create_child_agent",
     "create_formation_tool", "create_skill_tool", "create_subagent_tool",
     "list_mcp_tools", "serializable_event", "skills_from_env",
-    "adapt_native_tool", "accept_browser_elicitation", "create_think_tool", "THINK_EXCLUDED_TOOLS",
+    "adapt_native_tool", "accept_browser_elicitation", "load_vendored_think", "THINK_EXCLUDED_TOOLS",
+    "ThinkToolsGuard", "is_parent_only_tool",
     "CORE_TOOL_NAMES", "VENDORED_PACKAGE", "build_core_tools", "create_tool_catalog",
-    "import_vendored_module", "scan_vendored_tools",
+    "import_vendored_module", "import_vendored_revision", "load_library_tool", "scan_vendored_tools", "stamp_source",
 ]
 
 #: Always-registered tool names (user-mandated). `tool_catalog` is appended by
@@ -141,6 +145,10 @@ async def list_mcp_tools(
     return await asyncio.to_thread(discover)
 
 
+#: agent -> bound catalog (weak on the agent so closed sessions are collected).
+_BOUND_CATALOGS: "weakref.WeakKeyDictionary[Agent, PanelToolCatalog]" = weakref.WeakKeyDictionary()
+
+
 class PanelToolCatalog(ToolProvider):
     """One panel agent's explicit catalog, also a native managed ToolProvider.
 
@@ -190,6 +198,27 @@ class PanelToolCatalog(ToolProvider):
             raise ValueError(f"MCP client factories need configured server entries: {sorted(unknown)}")
         self._active_servers: set[str] = set()
         self._activation_lock = asyncio.Lock()
+        #: ``(tool_name, vendored_path) -> revision file | None``; set by the composition root
+        #: (``tool_repair.revision_resolver(user_id)``) so dynamic loads honour the user's active repair.
+        self._revision_resolver: Callable[[str, Path], Path | None] | None = None
+        self._tool_adapter: Callable[[AgentTool], AgentTool] | None = None
+        #: server name -> tool names of the process being replaced by restart_mcp_server.
+        self._restarting: dict[str, list[str]] = {}
+
+    def set_revision_resolver(self, resolver: Callable[[str, Path], Path | None] | None) -> None:
+        """Install the per-user active-revision lookup used by ``stage_tool``/``reload_tool``."""
+        self._revision_resolver = resolver
+
+    def set_tool_adapter(self, adapter: Callable[[AgentTool], AgentTool] | None) -> None:
+        """Install the per-user adapter wrapper (``tool_repair.adapt_tool``): applied to every tool
+        the catalog publishes — static, dynamically loaded and MCP provider tools — so a user's
+        active ``adapter`` revision wraps the tool from the first invocation of a new session."""
+        self._tool_adapter = adapter
+
+    def _adapted(self, tools: Sequence[AgentTool]) -> list[AgentTool]:
+        if self._tool_adapter is None:
+            return list(tools)
+        return [self._tool_adapter(value) for value in tools]
 
     def add_tools(self, tools: Sequence[AgentTool]) -> None:
         """Complete circular factory wiring before Agent(tools=[catalog])."""
@@ -277,7 +306,7 @@ class PanelToolCatalog(ToolProvider):
                              for entry, previous in zip(self._mcp, self._provider_tools, strict=True)]
             try:
                 dynamic = await self._loader() if self._loader else ()
-                snapshot = _validated([*self._static, *dynamic, *self._loaded.values(), *(t for p in providers for t in p)])
+                snapshot = _validated(self._adapted([*self._static, *dynamic, *self._loaded.values(), *(t for p in providers for t in p)]))
             except BaseException:
                 self._closed = True
                 await asyncio.to_thread(self._cleanup)
@@ -303,8 +332,14 @@ class PanelToolCatalog(ToolProvider):
             raise ValueError("Construct Agent(tools=[catalog, ...]) before binding the catalog")
         self._bound = True
         self._agent = agent
+        _BOUND_CATALOGS[agent] = self
         agent.add_hook(self._before_invocation, BeforeInvocationEvent)
         agent.add_hook(self._before_invocation, AfterToolsEvent)
+
+    @staticmethod
+    def for_agent(agent: Agent) -> PanelToolCatalog | None:
+        """The catalog bound to ``agent`` (public lookup; the SDK keeps providers private)."""
+        return _BOUND_CATALOGS.get(agent)
 
     async def _before_invocation(self, event: BeforeInvocationEvent | AfterToolsEvent) -> None:
         with self._lock:
@@ -323,7 +358,7 @@ class PanelToolCatalog(ToolProvider):
             list(await entry.refresh()) if entry.refresh else updates.get(entry.client, previous)
             for entry, previous in zip(entries, previous_tools, strict=True)
         ]
-        desired = _validated([*self._static, *dynamic, *loaded.values(), *(t for p in providers for t in p)])
+        desired = _validated(self._adapted([*self._static, *dynamic, *loaded.values(), *(t for p in providers for t in p)]))
         registry = event.agent.tool_registry
         # Check both maps before changing anything. SDK plugin/dynamic-only tools
         # and tools owned by other providers must never be overwritten.
@@ -370,20 +405,19 @@ class PanelToolCatalog(ToolProvider):
             raise RuntimeError("Dynamic loading is disabled by STRANDS_DISABLE_LOAD_TOOL")
 
         def load() -> AgentTool:
-            from strands.tools.loader import load_tools_from_module
-
-            staging = ToolRegistry()
             if root is not None:
-                module = import_vendored_module(root, path)
-                found = load_tools_from_module(module, path.stem)
-                for value in found:
-                    staging.register_tool(value)
-            else:
-                staging.load_tool_from_filepath(name, str(path))
+                # A user-scoped repaired revision (tool_repair.active_revision_file) replaces the
+                # vendored file for THIS user only; the module name stays the same so relative
+                # imports resolve. Other users keep importing the library file.
+                override = self._revision_resolver(name, path) if self._revision_resolver else None
+                return load_library_tool(root, path, name, revision_file=override)
+            staging = ToolRegistry()
+            staging.load_tool_from_filepath(name, str(path))
             if name not in staging.registry:
                 raise ValueError(f"File does not export tool {name!r}; found {list(staging.registry)}")
             adapted = adapt_native_tool(staging.registry[name])
             adapted.mark_dynamic()
+            stamp_source(adapted, path)
             return adapted
 
         value = await asyncio.to_thread(load)
@@ -400,6 +434,62 @@ class PanelToolCatalog(ToolProvider):
             self._loaded = proposed
             self._generation += 1
         return [name]
+
+    async def replace_tool(self, name: str, *, agent: Agent, build: Callable[[AgentTool], AgentTool]) -> bool:
+        """Replace catalog-owned tool ``name`` with ``build(current)`` through native ``ToolRegistry.replace``.
+
+        Covers static tools, dynamically loaded tools AND MCP provider tools (browser tools): the
+        provider list is updated so a later refresh re-applies the same wrapper. Effective at the
+        SDK's next invocation; an in-flight call finishes on the old implementation.
+        """
+        self._require_agent(agent)
+        with self._lock:
+            self._require_agent(agent)
+            registry = agent.tool_registry
+            current = registry.registry.get(name)
+            if current is None or self._snapshot.get(name) is not current:
+                return False
+            base = getattr(current, "wrapped", None) if type(current).__name__ == "_AdaptedTool" else current
+            value = build(base if base is not None else current)
+            if name in self._loaded:
+                self._loaded[name] = value
+            elif any(item.tool_name == name for item in self._static):
+                self._static = tuple(value if item.tool_name == name else item for item in self._static)
+            else:
+                self._provider_tools = [[value if item.tool_name == name else item for item in group]
+                                        for group in self._provider_tools]
+                for client, tools in self._provider_updates.items():
+                    self._provider_updates[client] = [value if item.tool_name == name else item for item in tools]
+            registry.replace(value)
+            self._snapshot[name] = value
+        return True
+
+    async def reload_tool(self, name: str, *, agent: Agent, root: Path, path: Path,
+                          revision_file: Path | None) -> bool:
+        """Swap a catalog-owned library tool for a (re)loaded implementation.
+
+        ``revision_file`` is a user-scoped repaired copy (or ``None`` to go back to the vendored
+        file). The module is re-executed under its vendored name, adapted and marked dynamic,
+        then handed to the native ``ToolRegistry.replace`` — which the SDK applies at the **next**
+        invocation, so an in-flight call completes on the old implementation. Returns ``False``
+        when this catalog does not own ``name`` (static core tools and foreign tools are left
+        alone; ``_loaded`` dynamic tools and static vendored tools it adapted are swapped).
+        """
+        self._require_agent(agent)
+        value = await asyncio.to_thread(load_library_tool, root, path, name, revision_file)
+        with self._lock:
+            self._require_agent(agent)
+            registry = agent.tool_registry
+            current = registry.registry.get(name)
+            if current is None or self._snapshot.get(name) is not current:
+                return False
+            if name in self._loaded:
+                self._loaded[name] = value
+            else:
+                self._static = tuple(value if item.tool_name == name else item for item in self._static)
+            registry.replace(value)
+            self._snapshot[name] = value
+        return True
 
     async def stage_mcp_server(self, name: str, *, agent: Agent) -> list[str]:
         """Activate only an application-configured server, with native provider ownership."""
@@ -444,7 +534,11 @@ class PanelToolCatalog(ToolProvider):
                 values = await asyncio.shield(startup)
                 with self._lock:
                     self._require_agent(agent)
-                    current = {**self._snapshot, **self._loaded}
+                    # A restarted server's previous tools are still in the published snapshot until the
+                    # next boundary swaps them; they are not duplicates of the respawned server's tools.
+                    retired = set(self._restarting.pop(name, ()))
+                    current = {key: value for key, value in self._snapshot.items() if key not in retired}
+                    current.update(self._loaded)
                     for tools in self._provider_tools:
                         current.update((value.tool_name, value) for value in tools)
                     _validated([*current.values(), *values])
@@ -461,12 +555,52 @@ class PanelToolCatalog(ToolProvider):
                 try:
                     await startup
                 finally:
+                    self._restarting.pop(name, None)
                     await asyncio.to_thread(registry.cleanup)
                     previous, installed = self._callbacks.pop(client)
                     if client.on_tools_changed is installed:
                         client.on_tools_changed = previous
                     self._provider_updates.pop(client, None)
                 raise
+
+    async def restart_mcp_server(self, name: str, *, agent: Agent) -> list[str]:
+        """Stop a catalog-staged MCP server (its stdio child process) and start a fresh one.
+
+        The new client is built by the same configured factory, so it picks up whatever the factory
+        reads at start time (e.g. this user's active ``server`` repair on ``PYTHONPATH``). The old
+        registry is cleaned up (process stopped) and the new tool list is published at the next
+        ``BeforeInvocationEvent``/``AfterToolsEvent`` boundary, exactly like the first load. Returns
+        the new tool names; a server that was never staged in this session returns ``[]``.
+        """
+        self._require_agent(agent)
+        async with self._activation_lock:
+            if name not in self._active_servers:
+                return []
+            with self._lock:
+                old_entry = next((entry for entry in self._mcp if any(
+                    value.tool_name.startswith(f"{name}_") for group in self._provider_tools
+                    for value in group if getattr(value, "mcp_client", None) is entry.client)), None)
+            if old_entry is None:
+                return []
+            old_client = old_entry.client
+            old_registry = next((reg for reg in self._extra_registries
+                                 if any(getattr(v, "mcp_client", None) is old_client for v in reg.registry.values())), None)
+            with self._lock:
+                index = self._mcp.index(old_entry)
+                self._mcp = tuple(entry for entry in self._mcp if entry is not old_entry)
+                retired = self._provider_tools.pop(index)
+                self._restarting[name] = [value.tool_name for value in retired]
+                self._provider_updates.pop(old_client, None)
+                if old_registry is not None:
+                    self._extra_registries.remove(old_registry)
+                previous, installed = self._callbacks.pop(old_client, (None, None))
+                if installed is not None and old_client.on_tools_changed is installed:
+                    old_client.on_tools_changed = previous
+                self._active_servers.discard(name)
+                self._generation += 1
+            if old_registry is not None:
+                await asyncio.to_thread(old_registry.cleanup)
+        return await self.stage_mcp_server(name, agent=agent)
 
     def child_tools(self, names: Sequence[str]) -> tuple[ToolAssignment, ...]:
         """Explicit local-tool assignment snapshot; assign MCP providers separately.
@@ -569,6 +703,51 @@ def _vendored_module_name(root: Path, path: Path) -> str:
 _vendored_import_lock = threading.Lock()
 
 
+def _ensure_vendored_packages(root: Path, path: Path) -> None:
+    """Register every package level (ron_vendored_tools, ron_vendored_tools.research, ...).
+
+    Package modules get ``submodule_search_locations`` pointing at the real directories, so
+    relative imports work, while ``root`` itself is never added to ``sys.path``.
+    """
+    parts = [p.replace("-", "_") for p in path.parent.relative_to(root).parts]
+    directory, package_name = root, VENDORED_PACKAGE
+    for index in range(len(parts) + 1):
+        if package_name not in sys.modules:
+            spec = importlib.machinery.ModuleSpec(package_name, None, is_package=True)
+            spec.submodule_search_locations = [str(directory)]
+            module = importlib.util.module_from_spec(spec)
+            module.__path__ = [str(directory)]
+            module.__file__ = str(directory / "__init__.py") if (directory / "__init__.py").exists() else None
+            sys.modules[package_name] = module
+            # Run a real __init__.py if present (vendored packages are mostly empty).
+            init = directory / "__init__.py"
+            if init.is_file():
+                code = compile(init.read_text(encoding="utf-8"), str(init), "exec")
+                exec(code, module.__dict__)
+        if index < len(parts):
+            directory = root / Path(*path.parent.relative_to(root).parts[: index + 1])
+            package_name = f"{package_name}.{parts[index]}"
+
+
+def _exec_vendored(module_name: str, source_file: Path) -> Any:
+    """(Re)execute ``source_file`` under ``module_name``; a failed exec never leaves a half module."""
+    previous = sys.modules.get(module_name)
+    spec = importlib.util.spec_from_file_location(module_name, source_file)
+    if spec is None or spec.loader is None:
+        raise ImportError(f"Cannot build import spec for {source_file}")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[module_name] = module
+    try:
+        spec.loader.exec_module(module)
+    except BaseException:
+        if previous is not None:
+            sys.modules[module_name] = previous
+        else:
+            sys.modules.pop(module_name, None)
+        raise
+    return module
+
+
 def import_vendored_module(root: Path, path: Path) -> Any:
     """Import a vendored tool file as `ron_vendored_tools.<cat>.<mod>`.
 
@@ -582,39 +761,60 @@ def import_vendored_module(root: Path, path: Path) -> Any:
     if not path.is_relative_to(root) or path.suffix != ".py":
         raise ValueError(f"{path} is not a Python file under {root}")
     with _vendored_import_lock:
-        # Ensure every package level exists: ron_vendored_tools, ron_vendored_tools.research, ...
-        parts = [p.replace("-", "_") for p in path.parent.relative_to(root).parts]
-        directory, package_name = root, VENDORED_PACKAGE
-        for index in range(len(parts) + 1):
-            if package_name not in sys.modules:
-                spec = importlib.machinery.ModuleSpec(package_name, None, is_package=True)
-                spec.submodule_search_locations = [str(directory)]
-                module = importlib.util.module_from_spec(spec)
-                module.__path__ = [str(directory)]
-                module.__file__ = str(directory / "__init__.py") if (directory / "__init__.py").exists() else None
-                sys.modules[package_name] = module
-                # Run a real __init__.py if present (vendored packages are mostly empty).
-                init = directory / "__init__.py"
-                if init.is_file():
-                    code = compile(init.read_text(encoding="utf-8"), str(init), "exec")
-                    exec(code, module.__dict__)
-            if index < len(parts):
-                directory = root / Path(*path.parent.relative_to(root).parts[: index + 1])
-                package_name = f"{package_name}.{parts[index]}"
+        _ensure_vendored_packages(root, path)
         module_name = _vendored_module_name(root, path)
         if module_name in sys.modules:
-            return importlib.reload(sys.modules[module_name])
-        spec = importlib.util.spec_from_file_location(module_name, path)
-        if spec is None or spec.loader is None:
-            raise ImportError(f"Cannot build import spec for {path}")
-        module = importlib.util.module_from_spec(spec)
-        sys.modules[module_name] = module
-        try:
-            spec.loader.exec_module(module)
-        except BaseException:
-            sys.modules.pop(module_name, None)
-            raise
-        return module
+            existing = sys.modules[module_name]
+            if getattr(existing, "__file__", None) == str(path):
+                return importlib.reload(existing)
+            # A repaired revision was executed under this name earlier; go back to the library file.
+            return _exec_vendored(module_name, path)
+        return _exec_vendored(module_name, path)
+
+
+def import_vendored_revision(root: Path, path: Path, revision_file: Path) -> Any:
+    """Execute a repaired copy of vendored ``path`` under the vendored module name.
+
+    ``revision_file`` may live anywhere (per-user storage copy); it is bound as
+    ``ron_vendored_tools.<cat>.<mod>`` with the vendored package parents, so the file's relative
+    imports (``from ..x import``) resolve against the library exactly as the original does.
+    """
+    root = root.resolve()
+    path = path.resolve()
+    revision_file = Path(revision_file).resolve()
+    if not path.is_relative_to(root) or path.suffix != ".py":
+        raise ValueError(f"{path} is not a Python file under {root}")
+    if not revision_file.is_file() or revision_file.suffix != ".py":
+        raise ValueError(f"{revision_file} is not a Python file")
+    with _vendored_import_lock:
+        _ensure_vendored_packages(root, path)
+        return _exec_vendored(_vendored_module_name(root, path), revision_file)
+
+
+def stamp_source(tool: AgentTool, source_file: Path) -> None:
+    """Record ``(path, sha256)`` of the imported file on the adapted tool (``tool_observation``)."""
+    from agent.api.core.tool_observation import SOURCE_ATTRIBUTE, file_sha256
+
+    try:
+        setattr(tool, SOURCE_ATTRIBUTE, (str(Path(source_file).resolve()), file_sha256(Path(source_file))))
+    except (AttributeError, OSError):  # pragma: no cover - some AgentTool subclasses use __slots__
+        pass
+
+
+def load_library_tool(root: Path, path: Path, name: str, revision_file: Path | None = None) -> AgentTool:
+    """Import vendored ``path`` (or its repaired ``revision_file``) and return tool ``name``
+    adapted, marked dynamic and stamped with its provenance."""
+    module = import_vendored_revision(root, path, revision_file) if revision_file is not None \
+        else import_vendored_module(root, path)
+    staging = ToolRegistry()
+    for value in load_tools_from_module(module, path.stem):
+        staging.register_tool(value)
+    if name not in staging.registry:
+        raise ValueError(f"File does not export tool {name!r}; found {list(staging.registry)}")
+    adapted = adapt_native_tool(staging.registry[name])
+    adapted.mark_dynamic()
+    stamp_source(adapted, revision_file if revision_file is not None else path)
+    return adapted
 
 
 def scan_vendored_tools(root: Path, *, exclude: Sequence[str] = ()) -> list[dict[str, Any]]:
@@ -956,83 +1156,58 @@ def is_parent_only_tool(name: str) -> bool:
     interrupt hook is registered on the parent agent only, so a child driving the
     browser could bypass the unavailability policy.
     """
+    from agent.api.core.a2a_tools import is_a2a_tool
     from agent.api.core.panel_browser import is_browser_tool
 
-    return name in THINK_EXCLUDED_TOOLS or name.startswith("strands_") or is_browser_tool(name)
-
-THINK_CHILD_ADDENDUM = """
-
-## YOU ARE THE THINK AGENT
-You were invoked by the orchestrator's `think` tool to reason deeply about ONE
-thought. You have the orchestrator's tools and model. Reason step by step and
-call tools whenever they would sharpen the answer (search, fetch, run code,
-inspect files) - interleave thinking and tool use freely. Finish with a concise,
-concrete conclusion the orchestrator can act on: findings, evidence, and a
-recommended next step. Do not address the user directly."""
+    # A2A tools are per-agent (each agent builds its own provider), never inherited by children.
+    return name in THINK_EXCLUDED_TOOLS or name.startswith("strands_") or is_browser_tool(name) or is_a2a_tool(name)
 
 
-def create_think_tool(*, model_factory: ModelFactory, system_prompt: str,
-                      plugins: Sequence[Any] = ()) -> AgentTool:
-    """Perplexity-only `think`: a streaming child agent with the parent's tools and model.
+class ThinkToolsGuard(Plugin):
+    """Keep parent-only tools out of the vendored ``think`` child (native ``BeforeToolCallEvent``).
 
-    Each call builds a fresh child Agent (fresh model via model_factory, the
-    parent's current tool registry minus THINK_EXCLUDED_TOOLS, the parent's
-    system prompt plus the think addendum). The child's native loop interleaves
-    reasoning and tool calls; every child event is streamed to the parent as
-    tool progress so the panel can render it as chain of thought. The LAST yield
-    is the native tool result. The child is cleaned up per call.
+    ``research/think.py`` inherits every parent tool when its ``tools`` argument is omitted and
+    looks each explicit name up in the parent registry otherwise. This plugin rewrites the writable
+    ``tool_use`` input before the tool runs: an omitted list becomes the parent registry minus
+    :func:`is_parent_only_tool`; an explicit list is intersected with that set. The vendored file
+    itself is never modified.
     """
 
-    @tool(name="think", context=True)
-    async def think(thought: str, tool_context: ToolContext) -> AsyncIterator[dict[str, Any]]:
-        """Reason deeply about a thought using an agent that has your tools and model.
+    @property
+    def name(self) -> str:
+        return "ron:think-tools-guard"
 
-        Use this FREQUENTLY - before answering, when planning multi-step work, when
-        weighing evidence, and whenever a question deserves more than a reflex. The
-        think agent can search, fetch, run code and inspect files while it reasons,
-        and returns a concrete conclusion you can act on.
+    def init_agent(self, agent: Agent) -> None:
+        agent.add_hook(self.before_tool_call, BeforeToolCallEvent)
 
-        Args:
-            thought: The question, hypothesis, plan or problem to reason about, with
-                enough context for an independent agent to work on it.
-            tool_context: Native tool invocation context.
-        """
-        parent = tool_context.agent
-        inherited = [
-            value for name, value in parent.tool_registry.registry.items()
-            if not is_parent_only_tool(name)
-        ]
-        spec = ChildSpec(
-            name="think",
-            system_prompt=(system_prompt or "") + THINK_CHILD_ADDENDUM,
-            tools=tuple(inherited),
-            description="Interleaved reasoning agent with the orchestrator's tools",
-        )
-        # Shared plugins (e.g. the RecallPlugin) reach the child so memory is
-        # recalled before the think agent produces output, like the parent.
-        child = await create_child_agent(spec, model_factory=model_factory, plugins=plugins)
-        try:
-            result = None
-            async with aclosing(child.stream_async(thought)) as stream:
-                async for event in stream:
-                    if "result" in event:
-                        result = event["result"]
-                    yield {"think": True, "event": serializable_event(event)}
-            if result is None:
-                raise RuntimeError("think child did not produce an AgentResult")
-            error = _incomplete(result)
-            text = "".join(
-                block.get("text", "") for block in result.message.get("content", []) if "text" in block
-            ) if result.message else ""
-            yield {
-                "status": "error" if error else "success",
-                "content": [{"text": text or "(no conclusion)"}, {"json": {"error": error}}]
-                if error else [{"text": text or "(no conclusion)"}],
-            }
-        finally:
-            await asyncio.to_thread(child.cleanup)
+    def before_tool_call(self, event: BeforeToolCallEvent) -> None:
+        if event.tool_use.get("name") != "think":
+            return
+        allowed = [name for name in event.agent.tool_registry.registry if not is_parent_only_tool(name)]
+        inputs = dict(event.tool_use.get("input") or {})
+        requested = inputs.get("tools")
+        if isinstance(requested, list):
+            wanted = {str(name) for name in requested}
+            inputs["tools"] = [name for name in allowed if name in wanted]
+        else:
+            inputs["tools"] = allowed
+        event.tool_use["input"] = inputs
 
-    return think
+
+def load_vendored_think(tools_dir: Path) -> AgentTool:
+    """The vendored strands_tools ``think`` (``research/think.py``), loaded unchanged.
+
+    The native loader builds its ``DecoratedFunctionTool``; the SDK injects the parent ``agent``
+    and runs the synchronous body off the event loop. Each cycle is a fresh child ``Agent`` over
+    the parent's model and tools, reporting to the parent's ``callback_handler`` (none in the
+    panel), so its steps do not stream; the conclusion is the tool result.
+    """
+    root = tools_dir.expanduser().resolve()
+    module = import_vendored_module(root, root / "research" / "think.py")
+    loaded = [value for value in load_tools_from_module(module, "think") if value.tool_name == "think"]
+    if not loaded:
+        raise RuntimeError("vendored research/think.py did not export a `think` tool")
+    return adapt_native_tool(loaded[0])
 
 
 @dataclass(frozen=True)

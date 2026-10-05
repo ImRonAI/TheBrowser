@@ -14,7 +14,10 @@ the updated system prompt and MCP tool schemas.
   old hidden website view; snapshots report an actionable internal-page error
   instead of returning a hidden site. Supplier errors never target the app shell.
 - Foreground MCP requests are serialized. Clicks wait for loading with a bounded
-  timeout; popup clicks snapshot the newly selected foreground tab.
+  timeout; popup clicks snapshot the newly selected foreground tab. The wait ends
+  when no main-frame navigation awaits its response and the main document's
+  `readyState` is `complete`, so iframes that ads keep loading (e.g. yahoo.com)
+  no longer produce `Navigation still loading`.
 - Snapshots return tab identity, URL/title, up to 8,000 text characters and 60
   interactive elements. `selector` scopes the DOM and `offset`/`nextOffset` page
   through refs. No full HTML or full AX tree is included. A scoped snapshot or
@@ -25,6 +28,7 @@ the updated system prompt and MCP tool schemas.
 - The screenshot MCP tool returns a native PNG image block and text metadata.
   Base64 is never inserted into model-visible text. The underlying HTTP endpoint
   still supports path-only responses for non-MCP consumers.
+- Screenshots require a visible page surface. On an internal Ron tab or a detached view the endpoint returns 400 with an actionable error (navigate first) instead of hanging; the capture itself is bounded by `screenshotTimeoutMs` / `ELECTRON_PLAYWRIGHT_MCP_SCREENSHOT_TIMEOUT_MS` (default 10 s) so the serialized queue never wedges. `GET /mcp/tabs` includes `visible` per tab. The MCP tool relays the host error text as a `ToolError`.
 - The application facade reports repeated healthy connect/load operations as
   success. Load readiness is checked against the calling agent's registry, so
   children still load their own tools. Native Strands owns transport/execution.
@@ -45,7 +49,8 @@ Run with `ELECTRON_RUN_AS_NODE` unset. Set `RON_TEST_PYTHON` to Ron's absolute v
 Python path to test the complete native MCP -> Strands -> Responses image chain.
 Set `RON_TEST_CDC=1` to additionally measure a live CDC snapshot and save a PNG.
 The test covers bounded/paged output, DOM ref stability and invalidation, actual
-click navigation, popup targeting, image delivery, and fail-closed targeting.
+click navigation, popup targeting, image delivery, fail-closed targeting, and
+invisible-tab refusal and bounded capture on a detached WebContentsView.
 
 Current limitations: snapshot discovery covers the main document, not iframe or
 shadow-root internals. Loading completion cannot guarantee every delayed SPA

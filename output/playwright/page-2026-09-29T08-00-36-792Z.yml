@@ -1,0 +1,204 @@
+- generic [ref=e3]:
+  - generic [ref=e4]:
+    - generic [ref=e6]:
+      - generic [ref=e7]:
+        - button "Home" [active] [ref=e8] [cursor=pointer]
+        - button "Go back" [disabled] [ref=e13]
+        - button "Go forward" [disabled] [ref=e17]
+        - button "Reload page" [ref=e21] [cursor=pointer]
+      - generic [ref=e27]:
+        - generic [ref=e29]:
+          - img "Ron" [ref=e30]
+          - generic [ref=e31]: ron
+        - textbox "Search or enter URL..." [ref=e33]: ron://home
+        - button "Search or navigate" [ref=e34] [cursor=pointer]
+      - generic [ref=e38]:
+        - 'button "Theme: dark (click to toggle)" [ref=e39] [cursor=pointer]'
+        - button "New Tab" [ref=e52] [cursor=pointer]
+        - button "Open Agent Panel" [ref=e55] [cursor=pointer]
+        - button "U" [ref=e60] [cursor=pointer]
+    - generic [ref=e67]:
+      - button "New Tab" [ref=e68] [cursor=pointer]
+      - generic [ref=e71] [cursor=pointer]:
+        - img "Ron" [ref=e73]
+        - generic [ref=e74]: Home
+        - button "Close Tab" [ref=e75]
+  - button "Navigation" [ref=e82] [cursor=pointer]
+  - generic [ref=e86]:
+    - main [ref=e431]:
+      - generic [ref=e432]:
+        - generic [ref=e433]:
+          - generic [ref=e434]: Ron / Discover
+          - generic [ref=e435]: Live from your interests
+        - generic [ref=e436]:
+          - generic [ref=e437]:
+            - heading "A little more perspective." [level=1] [ref=e438]
+            - paragraph [ref=e439]: Your interests, worth a closer look. Read something. Make something of it.
+          - generic [ref=e440]:
+            - button "Redo the interests interview" [ref=e441] [cursor=pointer]: Redo interview
+            - button "Refresh feed" [ref=e445] [cursor=pointer]: Refresh
+            - button "Auto-play off" [ref=e451] [cursor=pointer]
+        - generic [ref=e454]:
+          - generic [ref=e455]: AI
+          - generic [ref=e456]: Web Design
+          - generic [ref=e457]: Roller Coasters
+          - generic [ref=e458]: Politics
+          - generic [ref=e459]: Palm Springs, California
+          - status [ref=e460]: Updated just now
+      - region "At a glance" [ref=e461]:
+        - article [ref=e462]:
+          - generic [ref=e463]:
+            - generic [ref=e464]:
+              - paragraph [ref=e465]: Weather
+              - heading "Palm Springs, CA, US" [level=3] [ref=e466]
+            - paragraph [ref=e467]: 23°Cclear sky
+            - list [ref=e468]:
+              - listitem [ref=e469]:
+                - generic [ref=e470]: Tue
+                - generic [ref=e471]: 33°
+                - generic [ref=e472]: 20°
+              - listitem [ref=e473]:
+                - generic [ref=e474]: Wed
+                - generic [ref=e475]: 32°
+                - generic [ref=e476]: 23°
+              - listitem [ref=e477]:
+                - generic [ref=e478]: Thu
+                - generic [ref=e479]: 31°
+                - generic [ref=e480]: 21°
+              - listitem [ref=e481]:
+                - generic [ref=e482]: Fri
+                - generic [ref=e483]: 33°
+                - generic [ref=e484]: 22°
+          - paragraph [ref=e485]: via OpenWeatherMap
+        - article [ref=e486]:
+          - generic [ref=e487]:
+            - generic [ref=e488]:
+              - paragraph [ref=e489]: NFL
+              - heading "Buffalo Bills" [level=3] [ref=e490]
+            - list [ref=e491]:
+              - listitem [ref=e492]:
+                - generic [ref=e493]: Los Angeles Chargers @ Buffalo Bills
+                - generic [ref=e494]: 16–24
+              - listitem [ref=e495]:
+                - generic [ref=e496]: New England Patriots @ Buffalo Bills
+                - generic [ref=e497]: 0–0
+          - paragraph [ref=e498]: via Stats Perform
+        - article [ref=e499]:
+          - generic [ref=e500]:
+            - generic [ref=e501]:
+              - paragraph [ref=e502]: NHL
+              - heading "Scores" [level=3] [ref=e503]
+            - list [ref=e504]:
+              - listitem [ref=e505]:
+                - generic [ref=e506]: Florida Panthers @ Carolina Hurricanes
+                - generic [ref=e507]: Sep 29
+          - paragraph [ref=e508]: via API-Sports
+        - article [ref=e509]:
+          - generic [ref=e510]:
+            - generic [ref=e511]:
+              - paragraph [ref=e512]: NBA
+              - heading "Scores" [level=3] [ref=e513]
+            - list [ref=e514]:
+              - listitem [ref=e515]:
+                - generic [ref=e516]: Miami Heat @ Toronto Raptors
+                - generic [ref=e517]: Oct 3
+          - paragraph [ref=e518]: via API-Sports
+      - region "Stories by interest" [ref=e519]:
+        - generic [ref=e520]:
+          - button "AI Al Jazeera · 7 hours ago OpenAI cancels release of AI model GPT-6.1 Astra, citing safety concerns | Technology News | Al Jazeera AI giant says latest model failed to meet alignment standards during internal testing. Read story" [ref=e523] [cursor=pointer]:
+            - generic [ref=e524]: AI
+            - generic [ref=e526]:
+              - paragraph [ref=e527]: Al Jazeera · 7 hours ago
+              - heading "OpenAI cancels release of AI model GPT-6.1 Astra, citing safety concerns | Technology News | Al Jazeera" [level=3] [ref=e528]
+              - paragraph [ref=e529]: AI giant says latest model failed to meet alignment standards during internal testing.
+              - generic [ref=e530]: Read story
+          - generic [ref=e533]:
+            - generic [ref=e534]: 01 / 6 in AI
+            - generic [ref=e535]:
+              - button "Previous AI story" [ref=e536] [cursor=pointer]
+              - button "Next AI story" [ref=e539] [cursor=pointer]
+        - generic [ref=e542]:
+          - button "Web Design USA Today · 16 hours ago TheeDigital Surpasses 120 Google Reviews, Solidifying Its Position as the Highest-Rated Raleigh Web Design and Digital Marketing Agency - USA Today Carolina Outdoor Lighting Professionals works with TheeDigital on its website, SEO, Google Ads, and business listing. In its review, the Raleigh lighting design company wrote that TheeDigital is “extremely helpful in all areas, helping us get better leads, giving our customers a great first ... Read story" [ref=e545] [cursor=pointer]:
+            - generic [ref=e546]: Web Design
+            - generic [ref=e548]:
+              - paragraph [ref=e549]: USA Today · 16 hours ago
+              - heading "TheeDigital Surpasses 120 Google Reviews, Solidifying Its Position as the Highest-Rated Raleigh Web Design and Digital Marketing Agency - USA Today" [level=3] [ref=e550]
+              - paragraph [ref=e551]: Carolina Outdoor Lighting Professionals works with TheeDigital on its website, SEO, Google Ads, and business listing. In its review, the Raleigh lighting design company wrote that TheeDigital is “extremely helpful in all areas, helping us get better leads, giving our customers a great first ...
+              - generic [ref=e552]: Read story
+          - generic [ref=e555]:
+            - generic [ref=e556]: 01 / 6 in Web Design
+            - generic [ref=e557]:
+              - button "Previous Web Design story" [ref=e558] [cursor=pointer]
+              - button "Next Web Design story" [ref=e561] [cursor=pointer]
+        - generic [ref=e564]:
+          - 'button "Roller Coasters NewsNation · 2 days ago X2 roller coaster riders allege brain injuries against Six Flags: Attorney explains An attorney representing plaintiffs in brain-injury lawsuits against Six Flags says people don’t always realize the risks associated with riding roller coasters. Read story" [ref=e567] [cursor=pointer]':
+            - generic [ref=e568]: Roller Coasters
+            - generic [ref=e570]:
+              - paragraph [ref=e571]: NewsNation · 2 days ago
+              - 'heading "X2 roller coaster riders allege brain injuries against Six Flags: Attorney explains" [level=3] [ref=e572]'
+              - paragraph [ref=e573]: An attorney representing plaintiffs in brain-injury lawsuits against Six Flags says people don’t always realize the risks associated with riding roller coasters.
+              - generic [ref=e574]: Read story
+          - generic [ref=e577]:
+            - generic [ref=e578]: 01 / 6 in Roller Coasters
+            - generic [ref=e579]:
+              - button "Previous Roller Coasters story" [ref=e580] [cursor=pointer]
+              - button "Next Roller Coasters story" [ref=e583] [cursor=pointer]
+        - generic [ref=e586]:
+          - button "Politics CNN · 2 days ago White House airs another government-funded ad, this time with Trump warning of ‘final battle’ | CNN Politics The Trump administration is set to launch another overtly political campaign ad funded by taxpayer dollars, attacking the “fake news media” and “the sick political class that hates our country.” Read story" [ref=e589] [cursor=pointer]:
+            - generic [ref=e590]: Politics
+            - generic [ref=e592]:
+              - paragraph [ref=e593]: CNN · 2 days ago
+              - heading "White House airs another government-funded ad, this time with Trump warning of ‘final battle’ | CNN Politics" [level=3] [ref=e594]
+              - paragraph [ref=e595]: The Trump administration is set to launch another overtly political campaign ad funded by taxpayer dollars, attacking the “fake news media” and “the sick political class that hates our country.”
+              - generic [ref=e596]: Read story
+          - generic [ref=e599]:
+            - generic [ref=e600]: 01 / 6 in Politics
+            - generic [ref=e601]:
+              - button "Previous Politics story" [ref=e602] [cursor=pointer]
+              - button "Next Politics story" [ref=e605] [cursor=pointer]
+        - generic [ref=e608]:
+          - button "Palm Springs news Palm Springs news NBC · 7 hours ago Nbcpalmsprings Firefighters also responded to a palm tree fire in Chino Canyon that officials say was caused by an apparent lightning strike. NBC Palm Springs News Director David Reese is in the neighborhood tonight knocking on doors and trying to learn more about what happened. Read story" [ref=e611] [cursor=pointer]:
+            - generic [ref=e612]:
+              - generic [ref=e613]: Palm Springs news
+              - generic [ref=e615]: Palm Springs news
+            - generic [ref=e616]:
+              - paragraph [ref=e617]: NBC · 7 hours ago
+              - heading "Nbcpalmsprings" [level=3] [ref=e618]
+              - paragraph [ref=e619]: Firefighters also responded to a palm tree fire in Chino Canyon that officials say was caused by an apparent lightning strike. NBC Palm Springs News Director David Reese is in the neighborhood tonight knocking on doors and trying to learn more about what happened.
+              - generic [ref=e620]: Read story
+          - generic [ref=e623]:
+            - generic [ref=e624]: 01 / 6 in Palm Springs news
+            - generic [ref=e625]:
+              - button "Previous Palm Springs news story" [ref=e626] [cursor=pointer]
+              - button "Next Palm Springs news story" [ref=e629] [cursor=pointer]
+        - generic [ref=e632]:
+          - 'button "AI · Video youtube.com · 3 weeks ago AI Simplified: 6 Concepts You Need to Know About Modern AI - YouTube Learn more about Artificial Intelligence (AI) here → https://ibm.biz/~yBSrYFMHUAI is everywhere, but the terminology can be confusing. Jeff Crume explains si... Read story" [ref=e635] [cursor=pointer]':
+            - generic [ref=e636]: AI · Video
+            - generic [ref=e638]:
+              - paragraph [ref=e639]: youtube.com · 3 weeks ago
+              - 'heading "AI Simplified: 6 Concepts You Need to Know About Modern AI - YouTube" [level=3] [ref=e640]'
+              - paragraph [ref=e641]: Learn more about Artificial Intelligence (AI) here → https://ibm.biz/~yBSrYFMHUAI is everywhere, but the terminology can be confusing. Jeff Crume explains si...
+              - generic [ref=e642]: Read story
+          - generic [ref=e645]:
+            - generic [ref=e646]: 01 / 4 in AI · Video
+            - generic [ref=e647]:
+              - button "Previous AI · Video story" [ref=e648] [cursor=pointer]
+              - button "Next AI · Video story" [ref=e651] [cursor=pointer]
+        - generic [ref=e654]:
+          - 'button "Web Design · Video youtube.com · 1 week ago No BS Advice About Web Design In 11 Minutes - YouTube This checklist breaks down the exact elements that turn your site into a sale-generating machine: https://bycrawford.com/premium-principlesHire us to build y Read story" [ref=e657] [cursor=pointer]':
+            - generic [ref=e658]: Web Design · Video
+            - generic [ref=e660]:
+              - paragraph [ref=e661]: youtube.com · 1 week ago
+              - heading "No BS Advice About Web Design In 11 Minutes - YouTube" [level=3] [ref=e662]
+              - paragraph [ref=e663]: "This checklist breaks down the exact elements that turn your site into a sale-generating machine: https://bycrawford.com/premium-principlesHire us to build y"
+              - generic [ref=e664]: Read story
+          - generic [ref=e667]:
+            - generic [ref=e668]: 01 / 2 in Web Design · Video
+            - generic [ref=e669]:
+              - button "Previous Web Design · Video story" [ref=e670] [cursor=pointer]
+              - button "Next Web Design · Video story" [ref=e673] [cursor=pointer]
+    - button "AI Web Design 8" [ref=e381] [cursor=pointer]:
+      - generic [ref=e389]:
+        - generic [ref=e390]: AI
+        - generic [ref=e391]: Web Design
+      - generic [ref=e392]: "8"

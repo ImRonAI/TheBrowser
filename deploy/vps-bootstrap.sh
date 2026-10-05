@@ -15,7 +15,7 @@ install_apt_packages() {
   log "apt packages"
   apt-get update -qq
   apt-get install -y -qq --no-install-recommends \
-    git curl rsync ca-certificates ufw xvfb dbus-x11 fonts-liberation \
+    git curl rsync ca-certificates ufw xvfb dbus-x11 fonts-liberation ffmpeg \
     python3 python3-venv python3-pip \
     libgtk-3-0t64 libnss3 libnspr4 libasound2t64 libgbm1 libdrm2 libxss1 libxtst6 \
     libatspi2.0-0t64 libatk1.0-0t64 libatk-bridge2.0-0t64 libcups2t64 libxcomposite1 \

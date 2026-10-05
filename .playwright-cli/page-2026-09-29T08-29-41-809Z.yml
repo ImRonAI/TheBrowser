@@ -1,0 +1,383 @@
+- generic [active] [ref=e1]:
+  - status [ref=e2]:
+    - paragraph [ref=e4]: This website is AudioEye enabled and is being optimized for accessibility. To open the AudioEye Toolbar, press "shift + =". Some assistive technologies may require the use of a passthrough function before this keystroke. For more information, activate the button labeled "Explore your accessibility options".
+  - generic [ref=e5]:
+    - link "Skip to main content":
+      - /url: "#main-content"
+    - generic [ref=e6]:
+      - banner [ref=e9]:
+        - generic [ref=e10]:
+          - generic [ref=e11]:
+            - link "Palm Springs Bureau of Tourism (Palm Springs, Visit)" [ref=e15] [cursor=pointer]:
+              - /url: https://visitpalmsprings.com/
+              - img "Palm Springs Bureau of Tourism (Palm Springs, Visit)" [ref=e16]
+            - generic [ref=e17]:
+              - link "(0)" [ref=e21] [cursor=pointer]:
+                - /url: /tripbuilder/
+                - generic [aria-hidden] [ref=e22]: 
+              - generic [ref=e25]:
+                - button "toggle menu" [ref=e26] [cursor=pointer]
+                - text:      
+              - text:   
+          - generic:   
+        - text:            
+      - img "Palm Springs Pride" [ref=e32]
+      - main [ref=e36]:
+        - generic [ref=e37]:
+          - generic [ref=e38]:
+            - text: 
+            - heading "Palm Springs Pride® Days 🌈" [level=1] [ref=e39]
+            - time [ref=e41]: Sep. 02, 2026
+          - generic [ref=e47]:
+            - heading "Events, Parade, Festival & LGBTQ+ Celebration Guide" [level=2] [ref=e48]
+            - heading [level=2] [ref=e49]:
+              - img "Palm Springs Pride Days Banner" [ref=e50]
+            - paragraph [ref=e51]:
+              - text: Every fall, Palm Springs becomes one of the country's most vibrant LGBTQ+ destinations during
+              - link "Greater Palm Springs Pride" [ref=e52] [cursor=pointer]:
+                - /url: https://www.pspride.org/
+              - text: .
+            - paragraph [ref=e53]: More than just a weekend event, Palm Springs Pride is a citywide celebration of love, diversity, and inclusion that draws visitors from around the world. Expect rainbow flags lining the streets, high-energy parties, a colorful parade, and a welcoming community spirit that defines Palm Springs year-round. Celebrating 40 years of Pride in Palm Springs, they will be honoring different generations, identities, and communities that have helped shape our LGBTQ+ community.
+            - paragraph [ref=e54]:
+              - img "Palm Springs Pride 40th anniversary logo" [ref=e55]
+            - heading "Palm Springs Pride® 2026 Dates" [level=2] [ref=e56]
+            - list [ref=e57]:
+              - listitem [ref=e58]:
+                - strong [ref=e59]: "Pride Weekend:"
+                - text: November 6–8
+              - listitem [ref=e60]:
+                - strong [ref=e61]: "Pride Festival:"
+                - text: November 6-8
+              - listitem [ref=e62]:
+                - strong [ref=e63]: Pride Parade
+                - text: ": November 8"
+              - listitem [ref=e64]:
+                - strong [ref=e65]: "Events Throughout the Week:"
+                - text: October 31 – November 8
+            - paragraph [ref=e66]:
+              - text: 👉
+              - link "LGBTQ Travel Guide" [ref=e67] [cursor=pointer]:
+                - /url: https://visitpalmsprings.com/palm-springs-lgbtq-travel-guide/
+            - heading [level=2] [ref=e68]:
+              - text: "2026 Pride Theme:"
+              - emphasis [ref=e69]: Be Included
+            - paragraph [ref=e70]:
+              - text: This year’s theme,
+              - strong [ref=e71]: “Be Included,”
+              - text: reflects Pride’s role as both a celebration and a civil rights movement, emphasizing equality, visibility, and community support.
+            - heading [level=2] [ref=e72]:
+              - img "Palm Springs Pride" [ref=e73]
+            - heading "Kickoff Events & Pride Week Highlights" [level=2] [ref=e74]
+            - paragraph [ref=e75]: Stay tuned for more event updates.
+            - heading "Arenas District Halloween Block Party" [level=3] [ref=e76]
+            - paragraph [ref=e77]: October 30 & 31
+            - paragraph [ref=e78]:
+              - link "Halloween Palm Springs" [ref=e79] [cursor=pointer]:
+                - /url: https://visitpalmsprings.com/blog/post/get-ready-for-halloween-palm-springs/
+              - text: "- LGBTQ+ nightlife hub turns into a massive street party with:"
+            - list [ref=e80]:
+              - listitem [ref=e81]: DJs and live performances
+              - listitem [ref=e82]: Costumes and dancing
+              - listitem [ref=e83]: Packed bars and outdoor celebrations
+            - paragraph [ref=e84]:
+              - strong [ref=e85]: "Where:"
+              - text: Arenas Road
+            - paragraph [ref=e86]:
+              - img "halloween in Palm Springs" [ref=e87]
+            - heading "Leather Pride Weekend" [level=3] [ref=e88]
+            - paragraph [ref=e89]: "October 30 - November 2: Gods of Leather PS Leather Pride 2026"
+            - paragraph [ref=e90]: Events all weekend, followed by the Mr. PS Leather 2026 contest, 6 - 8:30 pm, with special guest performers.
+            - paragraph [ref=e91]:
+              - strong [ref=e92]: "Address:"
+              - text: Hotel Zoso, 150 S Indian Canyon Drive
+            - heading "Official Pride Flag Unfurling" [level=3] [ref=e93]
+            - paragraph [ref=e94]: Wednesday, Nov. 4 | 10 - 10:30 am
+            - paragraph [ref=e95]: The ceremonial start of Pride Week, featuring the unfurling of the rainbow flag from the Stergios Tower—a powerful symbol of visibility and progress. | Free
+            - paragraph [ref=e96]:
+              - strong [ref=e97]: Address
+              - text: ": Desert Regional Medical Center, 1150 N Indian Canyon Drive"
+            - paragraph [ref=e98]:
+              - img "Pride Flag at Desert Regional Hospital in Palm Springs" [ref=e99]
+            - heading "Pride Festival & Block Parties" [level=2] [ref=e100]
+            - heading "Arenas District Official Block Party" [level=3] [ref=e101]
+            - paragraph [ref=e102]: Friday, Nov. 6 | 3 – 10:30 pm
+            - paragraph [ref=e103]: "One of the largest free LGBTQ+ street parties in Palm Springs, featuring:"
+            - list [ref=e104]:
+              - listitem [ref=e105]: Entertainment, DJs, and dancing
+              - listitem [ref=e106]: Outdoor bars and nightlife
+              - listitem [ref=e107]: Thousands of attendees
+            - paragraph [ref=e108]:
+              - strong [ref=e109]: "Bonus Event:"
+            - paragraph [ref=e110]:
+              - strong [ref=e111]: Picnic on Palm Canyon (5–9 PM) -
+              - text: Food trucks, live music, and a festive street atmosphere under the desert sky.
+            - paragraph [ref=e112]:
+              - strong [ref=e113]: "Where:"
+              - text: Arenas District - E. Arenas Rd & Indian Canyon Dr. | Free
+            - paragraph [ref=e114]:
+              - img "Pride on Arenas District" [ref=e115]
+            - heading "Interfaith Pride Kabbalat Shabbat" [level=3] [ref=e116]
+            - paragraph [ref=e117]: Friday, November 6 | 6:30 – 7:30 pm
+            - paragraph [ref=e118]: A welcoming, inclusive service open to all faiths and beliefs. | Free
+            - paragraph [ref=e119]:
+              - strong [ref=e120]: "Address:"
+              - text: United Methodist Church of Palm Springs, 1555 E Alejo Rd.
+            - heading "Palm Springs Pride 5K Run & Walk" [level=3] [ref=e121]
+            - paragraph [ref=e122]: Saturday, Nov. 7 | 7 - 10 am
+            - paragraph [ref=e123]: Start your Pride weekend with a community run through Palm Springs. Awards, medals, and commemorative shirts included (registration required).
+            - paragraph [ref=e124]:
+              - strong [ref=e125]: "Address:"
+              - text: W. Chino Dr. & Belardo Road
+            - heading "Palm Springs Pride Festival" [level=3] [ref=e126]
+            - paragraph [ref=e127]: Friday, November 6 - Sunday, November 8
+            - paragraph [ref=e128]: The heart of Pride weekend, the festival spans multiple zones with 250+ vendors, entertainment stages, and community spaces.
+            - paragraph [ref=e129]:
+              - strong [ref=e130]: "Festival Stages Include:"
+            - list [ref=e131]:
+              - listitem [ref=e132]: Arenas District Stage
+              - listitem [ref=e133]: DJ Stage (Palm Canyon & Amado)
+              - listitem [ref=e134]: Community Stage (Tahquitz & Palm Canyon)
+            - heading [level=3] [ref=e135]:
+              - img "Pride Festival on Palm Canyon with a stage and a crowded street." [ref=e136]
+            - heading "Pride Event Zone" [level=3] [ref=e137]
+            - paragraph [ref=e138]: "Celebrate in style on Palm Canyon Drive—home to a uniquely welcoming Pride festival featuring:"
+            - list [ref=e139]:
+              - listitem [ref=e140]: 250+ Exhibitors & Marketplace Vendors
+              - listitem [ref=e141]: Live DJs, drag shows, and pop-up performances
+              - listitem [ref=e142]: Pride merch, artisan crafts, art, and jewelry
+              - listitem [ref=e143]: Local eats, food trucks & beverage stations
+              - listitem [ref=e144]: Downtown shopping, dining & nightlife
+            - paragraph [ref=e145]:
+              - img "palm springs pride festival" [ref=e146]
+            - paragraph [ref=e147]:
+              - emphasis [ref=e148]: "Credit: Mike Trotta"
+            - heading "Children’s Headquarters" [level=3] [ref=e149]
+            - paragraph [ref=e150]: "A safe, fun space for families with:"
+            - list [ref=e151]:
+              - listitem [ref=e152]: Arts & crafts
+              - listitem [ref=e153]: Games & snacks
+              - listitem [ref=e154]: Rest areas and amenities
+            - paragraph [ref=e155]:
+              - img "Banner of Children's HQ at Palm Springs Pride" [ref=e156]
+            - heading "Youth Zone (by Safe Schools Desert Cities):" [level=3] [ref=e157]
+            - paragraph [ref=e158]: "A dedicated space for LGBTQ+ youth (14–21) with:"
+            - list [ref=e159]:
+              - listitem [ref=e160]: Entertainment and activities
+              - listitem [ref=e161]: Free food and drinks
+              - listitem [ref=e162]: Resources and community support
+            - paragraph [ref=e163]:
+              - img "Entry to Palm Springs Pride Youth Zone" [ref=e164]
+            - heading "Pride Festival Locations" [level=2] [ref=e165]
+            - paragraph [ref=e166]: "The Palm Springs Pride Festival spans several vibrant areas in downtown:"
+            - list [ref=e167]:
+              - listitem [ref=e168]:
+                - strong [ref=e169]: Palm Canyon Drive
+                - text: – Between Amado and Baristo (main festival zone)
+              - listitem [ref=e170]:
+                - strong [ref=e171]: Museum Way
+                - text: – Streets surrounding the Downtown Park
+              - listitem [ref=e172]:
+                - strong [ref=e173]: Arenas District
+                - text: – Between Indian Canyon and S. Calle Encilia
+            - heading "Palm Springs Pride Parade" [level=2] [ref=e174]
+            - paragraph [ref=e175]: Sunday, November 8 | 10 am.
+            - paragraph [ref=e176]:
+              - strong [ref=e177]: "Route:"
+              - text: The parade steps off in the Uptown Design District at Tachevah and Palm Canyon Drive and travels south through downtown, ending at the entrance to the Pride Festival at Amado.
+            - paragraph [ref=e178]: "Expect:"
+            - list [ref=e179]:
+              - listitem [ref=e180]: Colorful floats
+              - listitem [ref=e181]: Marching groups
+              - listitem [ref=e182]: Live performances
+              - listitem [ref=e183]: Thousands of spectators
+            - paragraph [ref=e184]:
+              - img "Group of men waiting for rainbow flags at the Palm Springs Pride Parade" [ref=e185]
+            - heading "Parade Parties & Brunch Spots" [level=2] [ref=e186]
+            - heading "EIGHT4NINE Restaurant & Lounge" [level=3] [ref=e187]
+            - paragraph [ref=e188]: Sunday, November 8 | 9:00 am – 3:00 pm
+            - paragraph [ref=e189]: Champagne brunch with parade views and a portion of proceeds benefiting Pride.
+            - paragraph [ref=e190]:
+              - strong [ref=e191]: "Address:"
+              - link "849 Restaurant & Lounge" [ref=e192] [cursor=pointer]:
+                - /url: http://eight4nine.com/
+              - text: ", 849 N Palm Canyon Drive |"
+              - strong [ref=e193]: "Reservations:"
+              - text: 760-325-8490
+            - heading "Why Palm Springs Pride Is Unique" [level=2] [ref=e194]
+            - paragraph [ref=e195]: "Unlike many Pride events, Palm Springs offers:"
+            - list [ref=e196]:
+              - listitem [ref=e197]: A walkable downtown festival
+              - listitem [ref=e198]: Stunning desert and mountain backdrop
+              - listitem [ref=e199]: A long-standing reputation as an LGBTQ+ welcoming destination
+              - listitem [ref=e200]: Events that span all ages and interests
+            - paragraph [ref=e201]: "Explore More LGBTQ+ Palm Springs:"
+            - list [ref=e202]:
+              - listitem [ref=e203]:
+                - 'link "Pride & Progress: The Evolution of Greater Palm Springs Pride" [ref=e204] [cursor=pointer]':
+                  - /url: https://visitpalmsprings.com/blog/post/greater-palm-springs-pride/
+              - listitem [ref=e205]:
+                - link "Palm Springs Celebrates Pride Throughout the Year" [ref=e206] [cursor=pointer]:
+                  - /url: https://visitpalmsprings.com/blog/post/palm-springs-celebrates-pride-throughout-the-year/
+              - listitem [ref=e207]:
+                - 'link "Palm Springs: A Playground of Pride and LGBTQ+ Empowerment" [ref=e208] [cursor=pointer]':
+                  - /url: https://visitpalmsprings.com/blog/post/come-out-come-out-however-you-are/
+          - generic [ref=e209]:
+            - generic [ref=e212]:
+              - button "show share links" [ref=e213] [cursor=pointer]:
+                - text: 
+                - generic [ref=e214]: Share
+              - text:     
+            - generic [ref=e216]:
+              - text: "Categories:"
+              - generic [ref=e217]:
+                - link "LGBTQ" [ref=e218] [cursor=pointer]:
+                  - /url: /blog/all/category/lgbtq/6732a2f249ec280a092a2069/
+                - text: ","
+                - link "Things To Do" [ref=e219] [cursor=pointer]:
+                  - /url: /blog/all/category/things-to-do/6732a2f249ec280a092a206e/
+            - generic [ref=e221]:
+              - text: "Tags:"
+              - link "#gaypalmsprings" [ref=e223] [cursor=pointer]:
+                - /url: /blog/all/tag/%23gaypalmsprings/6732a2f249ec280a092a22c5/
+          - generic [ref=e225]:
+            - heading "You May Also Like" [level=2] [ref=e226]
+            - generic [ref=e227]:
+              - generic [ref=e228]:
+                - link "Palm Springs Walk of Stars":
+                  - /url: /blog/post/a-self-guided-walking-tour-of-the-palm-springs-walk-of-stars/
+                  - img "Palm Springs Walk of Stars"
+                - heading [level=3] [ref=e229]:
+                  - link "A Self‑Guided Walking Tour of the Palm Springs Walk of Stars" [ref=e230] [cursor=pointer]:
+                    - /url: /blog/post/a-self-guided-walking-tour-of-the-palm-springs-walk-of-stars/
+                - link "Read More" [ref=e231] [cursor=pointer]:
+                  - /url: /blog/post/a-self-guided-walking-tour-of-the-palm-springs-walk-of-stars/
+                  - text: Read More
+                  - generic [aria-hidden] [ref=e232]: 
+              - generic [ref=e233]:
+                - link "Old building from wester filming at Pioneer Town":
+                  - /url: /blog/post/pioneertown-an-old-west-movie-set-in-the-high-desert/
+                  - img "Old building from wester filming at Pioneer Town"
+                - heading [level=3] [ref=e234]:
+                  - 'link "Pioneertown: An Old West Movie Set in the High Desert" [ref=e235] [cursor=pointer]':
+                    - /url: /blog/post/pioneertown-an-old-west-movie-set-in-the-high-desert/
+                - link "Read More" [ref=e236] [cursor=pointer]:
+                  - /url: /blog/post/pioneertown-an-old-west-movie-set-in-the-high-desert/
+                  - text: Read More
+                  - generic [aria-hidden] [ref=e237]: 
+              - generic [ref=e238]:
+                - link "Coachella Valley Preserve":
+                  - /url: /blog/post/coachella-valley-preserve-a-thousand-palms-oasis-near-palm-springs/
+                  - img "Coachella Valley Preserve"
+                - heading [level=3] [ref=e239]:
+                  - 'link "Coachella Valley Preserve: A Thousand Palms Oasis Near Palm Springs" [ref=e240] [cursor=pointer]':
+                    - /url: /blog/post/coachella-valley-preserve-a-thousand-palms-oasis-near-palm-springs/
+                - link "Read More" [ref=e241] [cursor=pointer]:
+                  - /url: /blog/post/coachella-valley-preserve-a-thousand-palms-oasis-near-palm-springs/
+                  - text: Read More
+                  - generic [aria-hidden] [ref=e242]: 
+              - generic [ref=e243]:
+                - link "pond at Whitewater Preserve":
+                  - /url: /blog/post/whitewater-preserve-an-oasis-minutes-from-palm-springs/
+                  - img "pond at Whitewater Preserve"
+                - heading [level=3] [ref=e244]:
+                  - 'link "Whitewater Preserve: A Peaceful Oasis Just Minutes from Palm Springs" [ref=e245] [cursor=pointer]':
+                    - /url: /blog/post/whitewater-preserve-an-oasis-minutes-from-palm-springs/
+                - link "Read More" [ref=e246] [cursor=pointer]:
+                  - /url: /blog/post/whitewater-preserve-an-oasis-minutes-from-palm-springs/
+                  - text: Read More
+                  - generic [aria-hidden] [ref=e247]: 
+          - generic [ref=e248]:
+            - link "Previous Post" [ref=e249] [cursor=pointer]:
+              - /url: /blog/post/get-ready-for-halloween-palm-springs/
+              - generic [aria-hidden] [ref=e250]: 
+              - text: Previous Post
+            - link "Next Post" [ref=e251] [cursor=pointer]:
+              - /url: /blog/post/best-dinner-restaurants-in-downtown-palm-springs/
+              - text: Next Post
+              - generic [aria-hidden] [ref=e252]: 
+      - contentinfo [ref=e255]:
+        - generic [ref=e256]:
+          - link [ref=e259] [cursor=pointer]:
+            - /url: https://visitpalmsprings.com/visitor-guides/
+            - heading "Request A Visitor's Guide" [level=3] [ref=e262]
+          - link [ref=e267] [cursor=pointer]:
+            - /url: https://visitpalmsprings.com/newsletters/
+            - heading "Sign Up for Our E-Newsletter" [level=3] [ref=e270]
+          - link [ref=e275] [cursor=pointer]:
+            - /url: https://www.calameo.com/read/005259056d5bb62fe2818
+            - heading "Discover Our Inspiration Guide" [level=3] [ref=e278]
+        - generic [ref=e281]:
+          - link "VPS Logo" [ref=e285] [cursor=pointer]:
+            - /url: https://visitpalmsprings.com/
+            - img "VPS Logo" [ref=e286]
+          - list [ref=e288]:
+            - listitem [ref=e289]: Palm Springs Visitor Center2901 N Palm Canyon Dr
+            - listitem [ref=e290]: Palm Springs, CA 92262
+            - listitem [ref=e291]:
+              - link "(800) 347-7746" [ref=e292] [cursor=pointer]:
+                - /url: tel:(800) 347-7746
+          - list [ref=e295]:
+            - listitem [ref=e296]:
+              - link "About Us" [ref=e297] [cursor=pointer]:
+                - /url: /about-us/
+            - listitem [ref=e298]:
+              - link "Contact" [ref=e299] [cursor=pointer]:
+                - /url: /contact-us/
+            - listitem [ref=e300]:
+              - link "Sustainability" [ref=e301] [cursor=pointer]:
+                - /url: /sustainability-stewardship/
+            - listitem [ref=e302]:
+              - link "Privacy Policy" [ref=e303] [cursor=pointer]:
+                - /url: https://www.oakviewgroup.com/privacy-policy/
+            - listitem [ref=e304]:
+              - link "Sitemap" [ref=e305] [cursor=pointer]:
+                - /url: https://visitpalmsprings.com/sitemap/
+          - generic [ref=e306]:
+            - heading "FOLLOW US ON SOCIAL MEDIA" [level=4] [ref=e307]
+            - list [ref=e309]:
+              - listitem [ref=e310]:
+                - link "Visit our facebook page" [ref=e311] [cursor=pointer]:
+                  - /url: https://www.facebook.com/VisitPalmSprings
+                  - generic [aria-hidden] [ref=e312]: 
+                  - generic [ref=e313]: Facebook
+              - listitem [ref=e314]:
+                - link "Visit our instagram page" [ref=e315] [cursor=pointer]:
+                  - /url: https://www.instagram.com/visitpalmsprings/
+                  - generic [aria-hidden] [ref=e316]: 
+                  - generic [ref=e317]: Instagram
+              - listitem [ref=e318]:
+                - link "Visit our pinterest page" [ref=e319] [cursor=pointer]:
+                  - /url: https://www.pinterest.com/visitpalmsprings/_created/
+                  - generic [aria-hidden] [ref=e320]: 
+                  - generic [ref=e321]: Pinterest
+              - listitem [ref=e322]:
+                - link "Visit our youtube page" [ref=e323] [cursor=pointer]:
+                  - /url: https://www.youtube.com/VisitPalmSprings
+                  - generic [aria-hidden] [ref=e324]: 
+                  - generic [ref=e325]: YouTube
+              - listitem [ref=e326]:
+                - link "Visit our tiktok page" [ref=e327] [cursor=pointer]:
+                  - /url: https://www.tiktok.com/@visit.palmsprings
+                  - generic [aria-hidden] [ref=e328]: 
+              - listitem [ref=e329]:
+                - link "Visit our x page" [ref=e330] [cursor=pointer]:
+                  - /url: https://twitter.com/PalmSpringsCA
+                  - generic [aria-hidden] [ref=e331]: 
+            - heading "#VISITPALMSPRINGS" [level=5] [ref=e332]
+        - generic [ref=e335]:
+          - paragraph [ref=e336]: © 2026 Visit Palm Springs. All Rights Reserved
+          - link [ref=e337] [cursor=pointer]:
+            - /url: https://www.simpleviewinc.com/our-services/creative-design/
+            - img "Made by Simpleview" [ref=e338]
+        - dialog [ref=e547]:
+          - generic [ref=e548]:
+            - paragraph [ref=e550]:
+              - text: Cookies are used for measurement, ads, and optimization. By continuing to use our site, you agree to our
+              - link "privacy policy." [ref=e551] [cursor=pointer]:
+                - /url: https://visitpalmsprings.com/privacy-legal/
+            - button "Close cookie banner" [ref=e553] [cursor=pointer]: Accept
+  - complementary "Accessibility options" [ref=e554] [cursor=pointer]:
+    - button "Explore your accessibility options" [ref=e555]:
+      - generic [ref=e559]:
+        - generic [ref=e560]: 
+        - generic [ref=e561]: 

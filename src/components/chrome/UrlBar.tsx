@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { Search, Lock } from 'lucide-react'
 import { cn } from '@/utils/cn'
 import { useSearchStore } from '@/stores/searchStore'
+import { SEARCH_LEVELS, type SearchLevel } from '@/lib/search-api'
 
 const SEARCH_PROTOCOL_PREFIX = 'ron://search'
 
@@ -17,6 +18,20 @@ export function getSearchQueryFromRonUrl(value: string): string | null {
   }
 }
 
+export function getSearchLevelFromRonUrl(value: string): SearchLevel | null {
+  if (!value.startsWith(SEARCH_PROTOCOL_PREFIX)) return null
+  try {
+    const level = new URL(value).searchParams.get('level')
+    return level && (SEARCH_LEVELS as readonly string[]).includes(level) ? (level as SearchLevel) : null
+  } catch {
+    return null
+  }
+}
+
+export function buildSearchRonUrl(query: string, level: SearchLevel): string {
+  return `${SEARCH_PROTOCOL_PREFIX}?q=${encodeURIComponent(query)}&level=${level}`
+}
+
 function looksLikeUrl(value: string): boolean {
   if (/^(https?:\/\/|ron:\/\/|file:\/\/|about:)/i.test(value)) return true
   if (/^localhost(:\d+)?(\/.*)?$/i.test(value)) return true
@@ -27,7 +42,7 @@ function looksLikeUrl(value: string): boolean {
 export function UrlBar() {
   const [url, setUrl] = useState('ron://home')
   const [isFocused, setIsFocused] = useState(false)
-  const { search, clearSearch } = useSearchStore()
+  const { search, clearSearch, level } = useSearchStore()
 
   // Sync URL from browser when it changes
   useEffect(() => {
@@ -54,13 +69,12 @@ export function UrlBar() {
           clearSearch()
           await window.electron.browser.navigate(trimmed)
           console.log('Navigation initiated')
+        } else if (ronQuery !== null) {
+          await window.electron.browser.navigate(trimmed)
         } else {
-          search(query)
-          if (ronQuery !== null) {
-            await window.electron.browser.navigate(trimmed)
-          } else {
-            await window.electron.browser.search(query)
-          }
+          // A plain query becomes the search page: the active tab moves to
+          // ron://search, which renders the full results site.
+          await window.electron.browser.navigate(buildSearchRonUrl(query, level))
           console.log('Search initiated:', query)
         }
       } catch (error) {
@@ -71,7 +85,7 @@ export function UrlBar() {
 
     if (!shouldNavigate) {
       search(query)
-      setUrl(`ron://search?q=${encodeURIComponent(query)}`)
+      setUrl(buildSearchRonUrl(query, level))
     }
   }
 

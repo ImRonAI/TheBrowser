@@ -6,8 +6,10 @@
  */
 
 import { create } from 'zustand'
+import { persist } from 'zustand/middleware'
 import type { SourceData } from '@/components/search-results/SourceCard'
 import type { ReasoningStep, QuickSearchResult } from '@/components/search-results/SearchQuickResults'
+import { DEFAULT_SEARCH_LEVEL, type SearchLevel } from '@/lib/search-api'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -27,17 +29,21 @@ interface SearchState {
   query: string
   phase: SearchPhase
   isSearchActive: boolean
-  
+
+  // Search depth: the Agent API preset every search runs at (persisted)
+  level: SearchLevel
+
   // Quick results data
   quickResult: QuickSearchResult | null
   isStreaming: boolean
-  
+
   // Chat state
   chatSessionId: string | null
-  
+
   // Actions
   search: (query: string) => void
   setPhase: (phase: SearchPhase) => void
+  setLevel: (level: SearchLevel) => void
   updateQuickResult: (update: Partial<QuickSearchResult>) => void
   addReasoningStep: (step: ReasoningStep) => void
   updateReasoningStep: (id: string, update: Partial<ReasoningStep>) => void
@@ -70,11 +76,14 @@ const initialQuickResult: QuickSearchResult = {
 // Store
 // ─────────────────────────────────────────────────────────────────────────────
 
-export const useSearchStore = create<SearchState>()((set, get) => ({
+export const useSearchStore = create<SearchState>()(
+  persist(
+    (set, get) => ({
   // Initial state
   query: '',
   phase: 'idle',
   isSearchActive: false,
+  level: DEFAULT_SEARCH_LEVEL,
   quickResult: null,
   isStreaming: false,
   chatSessionId: null,
@@ -106,6 +115,11 @@ export const useSearchStore = create<SearchState>()((set, get) => ({
   // Manually set phase
   setPhase: (phase: SearchPhase) => {
     set({ phase })
+  },
+
+  // Set the search depth (Agent API preset) — persisted across restarts
+  setLevel: (level: SearchLevel) => {
+    set({ level })
   },
   
   // Update quick result
@@ -265,7 +279,15 @@ export const useSearchStore = create<SearchState>()((set, get) => ({
       chatSessionId: null,
     })
   },
-}))
+    }),
+    {
+      name: 'ron-search',
+      // Only the search depth survives restarts; results and phases are per-session.
+      partialize: (state) => ({ level: state.level }),
+      version: 1,
+    },
+  ),
+)
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Selectors

@@ -1,7 +1,11 @@
 "use client";
 
-import type { Experimental_SpeechResult as SpeechResult } from "ai";
 import type { ComponentProps, CSSProperties } from "react";
+
+type SpeechAudio = {
+  base64: string;
+  mediaType: string;
+};
 
 import { Button } from "@/components/ui/button";
 import {
@@ -69,7 +73,7 @@ export const AudioPlayer = ({
 export type AudioPlayerElementProps = Omit<ComponentProps<"audio">, "src"> &
   (
     | {
-        data: SpeechResult["audio"];
+        data: SpeechAudio;
       }
     | {
         src: string;

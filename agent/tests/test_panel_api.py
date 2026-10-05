@@ -179,6 +179,33 @@ def test_native_chat_snapshot_replay_context_and_configuration(monkeypatch):
     asyncio.run(scenario())
 
 
+def test_live_handoff_reaches_native_input_without_becoming_history_or_tools(monkeypatch):
+    async def scenario():
+        model = OfflineModel()
+        turns = [{"role": "user", "text": "Remember the cobalt reference."},
+                 {"role": "assistant", "text": "The lookup completed; no further tool call is needed."}]
+        async with offline_api(monkeypatch, model=model) as (client, manager, builds, agents, shell, threads):
+            request = {"session_id": "live-handoff", "user_id": "alice", "provider": "openai",
+                       "model": "offline", "message": "Continue from Live",
+                       "browser_context": {"live_conversation": turns}}
+            response = events(await client.post("/chat", json=request))
+            assert response[-1]["status"] == "completed"
+            # Native ContextInjector folds the handoff into the user message for this call only.
+            injected = model.calls[0][-1]
+            assert injected["role"] == "user"
+            assert injected["content"][0]["text"] == "Continue from Live"
+            assert "live_conversation" in injected["content"][-1]["text"]
+            assert "cobalt reference" in injected["content"][-1]["text"]
+            assert not any("toolUse" in block for message in model.calls[0] for block in message["content"])
+            snapshot = (await client.get("/sessions/live-handoff?user_id=alice")).json()
+            assert "cobalt reference" not in json.dumps(snapshot["messages"])
+            assert "cobalt reference" not in json.dumps(agents[0].messages)
+            request.pop("browser_context")
+            await client.post("/chat", json={**request, "message": "Next request"})
+            assert "cobalt reference" not in json.dumps(model.calls[-1])
+    asyncio.run(scenario())
+
+
 def test_checkpoint_and_interrupt_frontend_actions(monkeypatch):
     async def scenario():
         calls = []

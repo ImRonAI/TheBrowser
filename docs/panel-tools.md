@@ -353,6 +353,7 @@ The exact supplied commits were read via `gh api` (no installation):
 
 Direct external-manager integration is therefore not enabled for native panel tools:
 it would introduce competing dispatch/result ownership and misleading cancellation.
+Live does not install this package. `GoogleGeminiLiveModel` declares its functions `NON_BLOCKING`.
 If an application already owns an audited manager at that commit, its independent
 sync jobs may report serializable progress/completion through `LoopCallbackBridge`;
 the application owns submission, owner/reference mapping, shutdown and any explicit

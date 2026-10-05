@@ -1,0 +1,156 @@
+- generic [ref=f1e3]:
+  - generic [ref=f1e4]:
+    - generic [ref=f1e6]:
+      - generic [ref=f1e7]:
+        - button "Home" [ref=f1e8] [cursor=pointer]
+        - button "Go back" [disabled] [ref=f1e13]
+        - button "Go forward" [disabled] [ref=f1e17]
+        - button "Reload page" [ref=f1e21] [cursor=pointer]
+      - generic [ref=f1e27]:
+        - generic [ref=f1e29]:
+          - img "Ron" [ref=f1e30]
+          - generic [ref=f1e31]: ron
+        - textbox "Search or enter URL..." [ref=f1e33]: ron://home
+        - button "Search or navigate" [ref=f1e34] [cursor=pointer]
+      - generic [ref=f1e38]:
+        - 'button "Theme: dark (click to toggle)" [ref=f1e39] [cursor=pointer]'
+        - button "New Tab" [ref=f1e52] [cursor=pointer]
+        - button "Open Agent Panel" [ref=f1e55] [cursor=pointer]
+        - button "U" [ref=f1e59] [cursor=pointer]
+    - generic [ref=f1e66]:
+      - button "New Tab" [ref=f1e67] [cursor=pointer]
+      - generic [ref=f1e69]:
+        - generic [ref=f1e70] [cursor=pointer]:
+          - img "Ron" [ref=f1e71]
+          - generic [ref=f1e72]: Home
+          - button "Close Tab" [ref=f1e73]
+        - generic [ref=f1e77] [cursor=pointer]:
+          - img "Ron" [ref=f1e79]
+          - generic [ref=f1e80]: Home
+          - button "Close Tab" [ref=f1e81]
+  - generic [ref=f1e88]:
+    - generic [ref=f1e91]:
+      - button "Add Context" [ref=f1e93] [cursor=pointer]
+      - textbox "Ask anything..." [ref=f1e99]
+      - button [disabled] [ref=f1e100]
+    - generic [ref=f1e104]:
+      - button "Discover" [ref=f1e105] [cursor=pointer]
+      - button "Execute" [ref=f1e111] [cursor=pointer]
+      - button "Calendar" [ref=f1e118] [cursor=pointer]
+      - button "Vibe" [ref=f1e123] [cursor=pointer]
+      - button "Build" [ref=f1e130] [cursor=pointer]
+    - button "Collapse navigation" [ref=f1e136] [cursor=pointer]
+  - generic [ref=f1e139]:
+    - main [ref=f1e142]:
+      - generic [ref=f1e143]:
+        - generic [ref=f1e144]:
+          - generic [ref=f1e145]: Ron / Discover
+          - generic [ref=f1e146]: Live from your interests
+        - generic [ref=f1e147]:
+          - generic [ref=f1e148]:
+            - heading "A little more perspective." [level=1] [ref=f1e149]
+            - paragraph [ref=f1e150]: Your interests, worth a closer look. Read something. Make something of it.
+          - generic [ref=f1e151]:
+            - button "Personalize your feed" [ref=f1e152] [cursor=pointer]: Personalize
+            - button "Refresh feed" [ref=f1e156] [cursor=pointer]: Refresh
+            - button "Auto-play off" [ref=f1e162] [cursor=pointer]
+        - generic [ref=f1e165]:
+          - generic [ref=f1e166]: Technology
+          - generic [ref=f1e167]: AI
+          - generic [ref=f1e168]: Design
+          - status [ref=f1e169]: Updated just now
+      - region "Stories by interest" [ref=f1e170]:
+        - generic [ref=f1e328]:
+          - button "Technology NYTimes · 2 days ago As A.I. Accelerates, Governments Are Increasingly Being Left Behind - The New York Times The gap between technology and policymaking has gotten wider than ever with artificial intelligence, leaving a global policy vacuum as A.I. models rapidly advance. Read story" [ref=f1e331] [cursor=pointer]:
+            - generic [ref=f1e332]: Technology
+            - generic [ref=f1e334]:
+              - paragraph [ref=f1e335]: NYTimes · 2 days ago
+              - heading "As A.I. Accelerates, Governments Are Increasingly Being Left Behind - The New York Times" [level=3] [ref=f1e336]
+              - paragraph [ref=f1e337]: The gap between technology and policymaking has gotten wider than ever with artificial intelligence, leaving a global policy vacuum as A.I. models rapidly advance.
+              - generic [ref=f1e338]: Read story
+          - generic [ref=f1e341]:
+            - generic [ref=f1e342]: 01 / 6 in Technology
+            - generic [ref=f1e343]:
+              - button "Previous Technology story" [ref=f1e344] [cursor=pointer]
+              - button "Next Technology story" [ref=f1e347] [cursor=pointer]
+        - generic [ref=f1e350]:
+          - button "AI Al Jazeera · 7 hours ago OpenAI cancels release of AI model GPT-6.1 Astra, citing safety concerns | Technology News | Al Jazeera AI giant says latest model failed to meet alignment standards during internal testing. Read story" [ref=f1e353] [cursor=pointer]:
+            - generic [ref=f1e354]: AI
+            - generic [ref=f1e356]:
+              - paragraph [ref=f1e357]: Al Jazeera · 7 hours ago
+              - heading "OpenAI cancels release of AI model GPT-6.1 Astra, citing safety concerns | Technology News | Al Jazeera" [level=3] [ref=f1e358]
+              - paragraph [ref=f1e359]: AI giant says latest model failed to meet alignment standards during internal testing.
+              - generic [ref=f1e360]: Read story
+          - generic [ref=f1e363]:
+            - generic [ref=f1e364]: 01 / 6 in AI
+            - generic [ref=f1e365]:
+              - button "Previous AI story" [ref=f1e366] [cursor=pointer]
+              - button "Next AI story" [ref=f1e369] [cursor=pointer]
+        - generic [ref=f1e372]:
+          - button "Design Design Yahoo! Finance · 17 hours ago Annex North Design Opens in Burlington MA Offering Custom ADU and Home Drafting Plans , a new residential drafting studio in Burlington, Massachusetts, measures every home in person and draws custom plans for ADUs, additions, remodels, conversions and permit sets for homeowners across eastern Massachusetts and the North Shore.BURLINGTON, MA / ACCESS Newswire / September 28, ... Read story" [ref=f1e375] [cursor=pointer]:
+            - generic [ref=f1e376]:
+              - generic [ref=f1e377]: Design
+              - generic [ref=f1e379]: Design
+            - generic [ref=f1e380]:
+              - paragraph [ref=f1e381]: Yahoo! Finance · 17 hours ago
+              - heading "Annex North Design Opens in Burlington MA Offering Custom ADU and Home Drafting Plans" [level=3] [ref=f1e382]
+              - paragraph [ref=f1e383]: ", a new residential drafting studio in Burlington, Massachusetts, measures every home in person and draws custom plans for ADUs, additions, remodels, conversions and permit sets for homeowners across eastern Massachusetts and the North Shore.BURLINGTON, MA / ACCESS Newswire / September 28, ..."
+              - generic [ref=f1e384]: Read story
+          - generic [ref=f1e387]:
+            - generic [ref=f1e388]: 01 / 6 in Design
+            - generic [ref=f1e389]:
+              - button "Previous Design story" [ref=f1e390] [cursor=pointer]
+              - button "Next Design story" [ref=f1e393] [cursor=pointer]
+        - generic [ref=f1e396]:
+          - 'button "AI · Video youtube.com · 3 weeks ago AI Simplified: 6 Concepts You Need to Know About Modern AI - YouTube Learn more about Artificial Intelligence (AI) here → https://ibm.biz/~yBSrYFMHUAI is everywhere, but the terminology can be confusing. Jeff Crume explains si... Read story" [ref=f1e399] [cursor=pointer]':
+            - generic [ref=f1e400]: AI · Video
+            - generic [ref=f1e402]:
+              - paragraph [ref=f1e403]: youtube.com · 3 weeks ago
+              - 'heading "AI Simplified: 6 Concepts You Need to Know About Modern AI - YouTube" [level=3] [ref=f1e404]'
+              - paragraph [ref=f1e405]: Learn more about Artificial Intelligence (AI) here → https://ibm.biz/~yBSrYFMHUAI is everywhere, but the terminology can be confusing. Jeff Crume explains si...
+              - generic [ref=f1e406]: Read story
+          - generic [ref=f1e409]:
+            - generic [ref=f1e410]: 01 / 4 in AI · Video
+            - generic [ref=f1e411]:
+              - button "Previous AI · Video story" [ref=f1e412] [cursor=pointer]
+              - button "Next AI · Video story" [ref=f1e415] [cursor=pointer]
+    - region "Agent Panel" [ref=f1e418]:
+      - generic [ref=f1e419]:
+        - generic [ref=f1e420]:
+          - generic [ref=f1e421]:
+            - generic [ref=f1e422]:
+              - generic [ref=f1e423]: R
+              - generic [ref=f1e424]:
+                - heading "Agent Panel" [level=2] [ref=f1e425]
+                - status [ref=f1e426]: Ready
+            - generic [ref=f1e427]:
+              - generic [ref=f1e428]:
+                - generic [ref=f1e429]: Voice
+                - switch "Voice agent" [ref=f1e430] [cursor=pointer]
+              - button "New chat" [ref=f1e431] [cursor=pointer]
+              - button "Close agent panel" [ref=f1e434] [cursor=pointer]
+          - generic [ref=f1e437]:
+            - 'button "Model configuration: Perplexity / xai/grok-4.5 / Provider default" [ref=f1e438] [cursor=pointer]':
+              - generic [ref=f1e439]: Perplexity / xai/grok-4.5 / Provider default
+            - group "Browser target" [ref=f1e442]:
+              - button "Your browser" [pressed] [ref=f1e443] [cursor=pointer]
+              - button "Cloud browser" [ref=f1e444] [cursor=pointer]
+          - group [ref=f1e445]:
+            - generic "Runtime · auto context · concurrent tools" [ref=f1e446] [cursor=pointer]
+            - option "Automatic" [selected]
+            - option "Agentic"
+            - option "Sliding window"
+            - option "Concurrent" [selected]
+            - option "Sequential"
+        - button "Teach a skill" [ref=f1e448] [cursor=pointer]
+        - generic [ref=f1e450]:
+          - generic [ref=f1e451]: R
+          - heading "How can I help?" [level=3] [ref=f1e452]
+          - paragraph [ref=f1e453]: Browse, search, analyze, and accomplish.
+        - generic [ref=f1e454]:
+          - generic [ref=f1e456]:
+            - button "Add Context" [ref=f1e458] [cursor=pointer]
+            - textbox "Message Ron" [active] [ref=f1e461]:
+              - /placeholder: Ask anything…
+            - button "Send message" [disabled] [ref=f1e462]: Send
+          - paragraph [ref=f1e463]: ↵ to send · Shift + ↵ for a new line

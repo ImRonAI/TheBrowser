@@ -113,7 +113,7 @@ export interface FilterParams extends PaginationParams, SortParams {
 // API Endpoints
 // ============================================
 
-export const API_BASE_URL = 'http://localhost:8765'
+export { API_BASE_URL, LIVE_API_BASE_URL } from '../../lib/api-base'
 
 export const API_ENDPOINTS = {
   // Auth

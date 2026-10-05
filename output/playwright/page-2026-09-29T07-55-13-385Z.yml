@@ -1,0 +1,245 @@
+- generic [ref=e3]:
+  - generic [ref=e4]:
+    - generic [ref=e6]:
+      - generic [ref=e7]:
+        - button "Home" [ref=e8] [cursor=pointer]
+        - button "Go back" [disabled] [ref=e13]
+        - button "Go forward" [disabled] [ref=e17]
+        - button "Reload page" [ref=e21] [cursor=pointer]
+      - generic [ref=e27]:
+        - generic [ref=e29]:
+          - img "Ron" [ref=e30]
+          - generic [ref=e31]: ron
+        - textbox "Search or enter URL..." [ref=e33]: ron://home
+        - button "Search or navigate" [ref=e34] [cursor=pointer]
+      - generic [ref=e38]:
+        - 'button "Theme: dark (click to toggle)" [ref=e39] [cursor=pointer]'
+        - button "New Tab" [ref=e52] [cursor=pointer]
+        - button "Open Agent Panel" [ref=e55] [cursor=pointer]
+        - button "U" [ref=e60] [cursor=pointer]
+    - generic [ref=e67]:
+      - button "New Tab" [ref=e68] [cursor=pointer]
+      - generic [ref=e71] [cursor=pointer]:
+        - img "Ron" [ref=e73]
+        - generic [ref=e74]: Home
+        - button "Close Tab" [ref=e75]
+  - button "Navigation" [ref=e82] [cursor=pointer]
+  - generic [ref=e86]:
+    - main [ref=e89]:
+      - generic [ref=e90]:
+        - generic [ref=e91]:
+          - generic [ref=e92]: Ron / Discover
+          - generic [ref=e93]: Live from your interests
+        - generic [ref=e94]:
+          - generic [ref=e95]:
+            - heading "A little more perspective." [level=1] [ref=e96]
+            - paragraph [ref=e97]: Your interests, worth a closer look. Read something. Make something of it.
+          - generic [ref=e98]:
+            - button "Redo the interests interview" [ref=e99] [cursor=pointer]: Redo interview
+            - button "Refresh feed" [ref=e103] [cursor=pointer]: Refresh
+            - button "Auto-play off" [ref=e109] [cursor=pointer]
+        - generic [ref=e112]:
+          - generic [ref=e113]: AI
+          - generic [ref=e114]: Web Design
+          - generic [ref=e115]: Roller Coasters
+          - generic [ref=e116]: Politics
+          - generic [ref=e117]: Palm Springs, California
+          - status [ref=e118]: "Live feed off: the Ron API is not running."
+      - region "At a glance" [ref=e119]:
+        - article [ref=e120]:
+          - generic [ref=e121]:
+            - generic [ref=e122]:
+              - paragraph [ref=e123]: Weather
+              - heading "Palm Springs, CA, US" [level=3] [ref=e124]
+            - paragraph [ref=e125]: 30°Covercast clouds
+            - list [ref=e126]:
+              - listitem [ref=e127]:
+                - generic [ref=e128]: Sat
+                - generic [ref=e129]: 34°
+                - generic [ref=e130]: 19°
+              - listitem [ref=e131]:
+                - generic [ref=e132]: Sun
+                - generic [ref=e133]: 31°
+                - generic [ref=e134]: 22°
+              - listitem [ref=e135]:
+                - generic [ref=e136]: Mon
+                - generic [ref=e137]: 27°
+                - generic [ref=e138]: 19°
+              - listitem [ref=e139]:
+                - generic [ref=e140]: Tue
+                - generic [ref=e141]: 30°
+                - generic [ref=e142]: 16°
+          - paragraph [ref=e143]: via OpenWeatherMap
+        - article [ref=e144]:
+          - generic [ref=e145]:
+            - generic [ref=e146]:
+              - paragraph [ref=e147]: NFL
+              - heading "Buffalo Bills" [level=3] [ref=e148]
+            - list [ref=e149]:
+              - listitem [ref=e150]:
+                - generic [ref=e151]: Detroit Lions @ Buffalo Bills
+                - generic [ref=e152]: 31–41
+              - listitem [ref=e153]:
+                - generic [ref=e154]: Los Angeles Chargers @ Buffalo Bills
+                - generic [ref=e155]: 0–0
+          - paragraph [ref=e156]: via Stats Perform
+        - article [ref=e157]:
+          - generic [ref=e158]:
+            - generic [ref=e159]:
+              - paragraph [ref=e160]: NHL
+              - heading "Scores" [level=3] [ref=e161]
+            - list [ref=e162]:
+              - listitem [ref=e163]:
+                - generic [ref=e164]: San Jose Sharks @ Vegas Golden Knights
+                - generic [ref=e165]: 4–2
+          - paragraph [ref=e166]: via API-Sports
+        - article [ref=e167]:
+          - generic [ref=e168]:
+            - generic [ref=e169]:
+              - paragraph [ref=e170]: NBA
+              - heading "Scores" [level=3] [ref=e171]
+            - list [ref=e172]:
+              - listitem [ref=e173]:
+                - generic [ref=e174]: Miami Heat @ Toronto Raptors
+                - generic [ref=e175]: Oct 3
+          - paragraph [ref=e176]: via API-Sports
+      - region "Stories by interest" [ref=e177]:
+        - generic [ref=e178]:
+          - button "AI NPR · 13 hours ago OpenAI says its models engaged with US government websites in misbehavior disclosure The disclosure is the latest in a string of incidents in which the AI platform has been caught going rogue. OpenAI says it is reviewing the findings. Read story" [ref=e181] [cursor=pointer]:
+            - generic [ref=e182]: AI
+            - generic [ref=e184]:
+              - paragraph [ref=e185]: NPR · 13 hours ago
+              - heading "OpenAI says its models engaged with US government websites in misbehavior disclosure" [level=3] [ref=e186]
+              - paragraph [ref=e187]: The disclosure is the latest in a string of incidents in which the AI platform has been caught going rogue. OpenAI says it is reviewing the findings.
+              - generic [ref=e188]: Read story
+          - generic [ref=e191]:
+            - generic [ref=e192]: 01 / 6 in AI
+            - generic [ref=e193]:
+              - button "Previous AI story" [ref=e194] [cursor=pointer]
+              - button "Next AI story" [ref=e197] [cursor=pointer]
+        - generic [ref=e200]:
+          - 'button "Web Design SiteGround · 2 days ago Best fonts for web design: 7 mistakes that make your site look amateur Fix the 7 font mistakes making your website look amateur, then pick a font that improves readability, speed, and trust. Read story" [ref=e203] [cursor=pointer]':
+            - generic [ref=e204]: Web Design
+            - generic [ref=e206]:
+              - paragraph [ref=e207]: SiteGround · 2 days ago
+              - 'heading "Best fonts for web design: 7 mistakes that make your site look amateur" [level=3] [ref=e208]'
+              - paragraph [ref=e209]: Fix the 7 font mistakes making your website look amateur, then pick a font that improves readability, speed, and trust.
+              - generic [ref=e210]: Read story
+          - generic [ref=e213]:
+            - generic [ref=e214]: 01 / 6 in Web Design
+            - generic [ref=e215]:
+              - button "Previous Web Design story" [ref=e216] [cursor=pointer]
+              - button "Next Web Design story" [ref=e219] [cursor=pointer]
+        - generic [ref=e222]:
+          - button "Roller Coasters CNN · 4 days ago More than 100 riders allege brain injuries from Six Flags’ X2 roller coaster, attorneys say | CNN More than 100 people say they suffered brain injuries from a Six Flags roller coaster in the last two years alone, following a CNN investigation last month that linked the world-famous ride to life-altering injuries and deaths. Read story" [ref=e225] [cursor=pointer]:
+            - generic [ref=e226]: Roller Coasters
+            - generic [ref=e228]:
+              - paragraph [ref=e229]: CNN · 4 days ago
+              - heading "More than 100 riders allege brain injuries from Six Flags’ X2 roller coaster, attorneys say | CNN" [level=3] [ref=e230]
+              - paragraph [ref=e231]: More than 100 people say they suffered brain injuries from a Six Flags roller coaster in the last two years alone, following a CNN investigation last month that linked the world-famous ride to life-altering injuries and deaths.
+              - generic [ref=e232]: Read story
+          - generic [ref=e235]:
+            - generic [ref=e236]: 01 / 6 in Roller Coasters
+            - generic [ref=e237]:
+              - button "Previous Roller Coasters story" [ref=e238] [cursor=pointer]
+              - button "Next Roller Coasters story" [ref=e241] [cursor=pointer]
+        - generic [ref=e244]:
+          - button "Politics Washington Post · 1 day ago An FBI inquiry complicates Susan Collins’s campaign message in Maine - The Washington Post News of a probe involving political contributions and federal contracts has some in a shipyard town raising questions about her influence. Read story" [ref=e247] [cursor=pointer]:
+            - generic [ref=e248]: Politics
+            - generic [ref=e250]:
+              - paragraph [ref=e251]: Washington Post · 1 day ago
+              - heading "An FBI inquiry complicates Susan Collins’s campaign message in Maine - The Washington Post" [level=3] [ref=e252]
+              - paragraph [ref=e253]: News of a probe involving political contributions and federal contracts has some in a shipyard town raising questions about her influence.
+              - generic [ref=e254]: Read story
+          - generic [ref=e257]:
+            - generic [ref=e258]: 01 / 6 in Politics
+            - generic [ref=e259]:
+              - button "Previous Politics story" [ref=e260] [cursor=pointer]
+              - button "Next Politics story" [ref=e263] [cursor=pointer]
+        - generic [ref=e266]:
+          - button "Palm Springs news Palm Springs news NBC · 1 day ago Nbcpalmsprings Firefighters also responded to a palm tree fire in Chino Canyon that officials say was caused by an apparent lightning strike. NBC Palm Springs News Director David Reese is in the neighborhood tonight knocking on doors and trying to learn more about what happened. Read story" [ref=e269] [cursor=pointer]:
+            - generic [ref=e270]:
+              - generic [ref=e271]: Palm Springs news
+              - generic [ref=e273]: Palm Springs news
+            - generic [ref=e274]:
+              - paragraph [ref=e275]: NBC · 1 day ago
+              - heading "Nbcpalmsprings" [level=3] [ref=e276]
+              - paragraph [ref=e277]: Firefighters also responded to a palm tree fire in Chino Canyon that officials say was caused by an apparent lightning strike. NBC Palm Springs News Director David Reese is in the neighborhood tonight knocking on doors and trying to learn more about what happened.
+              - generic [ref=e278]: Read story
+          - generic [ref=e281]:
+            - generic [ref=e282]: 01 / 6 in Palm Springs news
+            - generic [ref=e283]:
+              - button "Previous Palm Springs news story" [ref=e284] [cursor=pointer]
+              - button "Next Palm Springs news story" [ref=e287] [cursor=pointer]
+        - generic [ref=e290]:
+          - 'button "AI · Video youtube.com · 3 weeks ago AI Simplified: 6 Concepts You Need to Know About Modern AI - YouTube Learn more about Artificial Intelligence (AI) here → https://ibm.biz/~yBSrYFMHUAI is everywhere, but the terminology can be confusing. Jeff Crume explains si... Read story" [ref=e293] [cursor=pointer]':
+            - generic [ref=e294]: AI · Video
+            - generic [ref=e296]:
+              - paragraph [ref=e297]: youtube.com · 3 weeks ago
+              - 'heading "AI Simplified: 6 Concepts You Need to Know About Modern AI - YouTube" [level=3] [ref=e298]'
+              - paragraph [ref=e299]: Learn more about Artificial Intelligence (AI) here → https://ibm.biz/~yBSrYFMHUAI is everywhere, but the terminology can be confusing. Jeff Crume explains si...
+              - generic [ref=e300]: Read story
+          - generic [ref=e303]:
+            - generic [ref=e304]: 01 / 4 in AI · Video
+            - generic [ref=e305]:
+              - button "Previous AI · Video story" [ref=e306] [cursor=pointer]
+              - button "Next AI · Video story" [ref=e309] [cursor=pointer]
+        - generic [ref=e312]:
+          - 'button "Web Design · Video youtube.com · 1 week ago No BS Advice About Web Design In 11 Minutes - YouTube This checklist breaks down the exact elements that turn your site into a sale-generating machine: https://bycrawford.com/premium-principlesHire us to build y Read story" [ref=e315] [cursor=pointer]':
+            - generic [ref=e316]: Web Design · Video
+            - generic [ref=e318]:
+              - paragraph [ref=e319]: youtube.com · 1 week ago
+              - heading "No BS Advice About Web Design In 11 Minutes - YouTube" [level=3] [ref=e320]
+              - paragraph [ref=e321]: "This checklist breaks down the exact elements that turn your site into a sale-generating machine: https://bycrawford.com/premium-principlesHire us to build y"
+              - generic [ref=e322]: Read story
+          - generic [ref=e325]:
+            - generic [ref=e326]: 01 / 3 in Web Design · Video
+            - generic [ref=e327]:
+              - button "Previous Web Design · Video story" [ref=e328] [cursor=pointer]
+              - button "Next Web Design · Video story" [ref=e331] [cursor=pointer]
+    - region "Agent Panel" [ref=e334]:
+      - generic [ref=e335]:
+        - generic [ref=e336]:
+          - generic [ref=e337]:
+            - generic [ref=e338]:
+              - generic [ref=e339]: R
+              - generic [ref=e340]:
+                - heading "Agent Panel" [level=2] [ref=e341]
+                - status [ref=e342]: Ready
+            - generic [ref=e343]:
+              - generic [ref=e344]:
+                - generic [ref=e345]: Voice
+                - switch "Voice agent" [ref=e346] [cursor=pointer]
+              - button "New chat" [ref=e347] [cursor=pointer]
+              - button "Close agent panel" [ref=e350] [cursor=pointer]
+          - generic [ref=e353]:
+            - 'button "Model configuration: Backend default / Provider default" [ref=e354] [cursor=pointer]':
+              - generic [ref=e355]: Backend default / Provider default
+            - group "Browser target" [ref=e358]:
+              - button "Your browser" [pressed] [ref=e359] [cursor=pointer]
+              - button "Cloud browser" [ref=e360] [cursor=pointer]
+          - group [ref=e361]:
+            - generic "Runtime · auto context · concurrent tools" [ref=e362] [cursor=pointer]
+            - option "Automatic" [selected]
+            - option "Agentic"
+            - option "Sliding window"
+            - option "Concurrent" [selected]
+            - option "Sequential"
+        - button "Teach a skill" [ref=e364] [cursor=pointer]
+        - generic [ref=e366]:
+          - generic [ref=e367]: R
+          - heading "How can I help?" [level=3] [ref=e368]
+          - paragraph [ref=e369]: Browse, search, analyze, and accomplish.
+        - generic [ref=e370]:
+          - generic [ref=e372]:
+            - button "Add Context" [ref=e374] [cursor=pointer]
+            - textbox "Message Ron" [ref=e377]:
+              - /placeholder: Ask anything…
+              - text: Please
+            - button "Send message" [ref=e378] [cursor=pointer]: Send
+          - paragraph [ref=e379]: ↵ to send · Shift + ↵ for a new line
+    - button "AI Web Design 8" [ref=e381] [cursor=pointer]:
+      - generic [ref=e389]:
+        - generic [ref=e390]: AI
+        - generic [ref=e391]: Web Design
+      - generic [ref=e392]: "8"

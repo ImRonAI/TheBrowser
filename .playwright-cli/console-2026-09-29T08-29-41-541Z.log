@@ -1,0 +1,23 @@
+[ -805903ms] [WARNING] %cElectron Security Warning (Insecure Content-Security-Policy) font-weight: bold; This renderer process has either no Content Security
+  Policy set or a policy with "unsafe-eval" enabled. This exposes users of
+  this app to unnecessary security risks.
+
+For more information and help, consult
+https://electronjs.org/docs/tutorial/security.
+This warning will not show up
+once the app is packaged. @ node:electron/js2c/sandbox_bundle:1
+[ -678863ms] [LOG] %c *  *  *  *  *  *  *  *  *  *  *  *  *  *  *  *  *  *  *  *  *  *  color: #293BFF; @ :57
+[ -678862ms] [LOG] %c LetMeAllez font-weight: bold; font-size: 50px; color: #293BFF; text-shadow: 3px 3px 0 #2BCCCC , 6px 6px 0 #57CCFF , 9px 9px 0 #33FF57 , 12px 12px 0 #FFC300 , 15px 15px 0 #FF5733 , 18px 18px 0 #F52B9A , 21px 21px 0 #9A2BF5; @ :57
+[ -678862ms] [LOG] [LMA] 🔖 Version: %c024ad94 color: #6B8FFF; font-weight: bold; @ :57
+[ -678862ms] [LOG] [LMA] 🟢 Active: %ctrue color: #6B8FFF; font-weight: bold; @ :57
+[ -678862ms] [LOG] [LMA] 👥 Partner ID: %cgaytravel4u color: #6B8FFF; font-weight: bold; @ :57
+[ -678862ms] [LOG] [LMA] 🔎 deepStruct: %c(none) color: #6B8FFF; font-weight: bold; @ :57
+[ -678862ms] [LOG] [LMA] 🏕️ Campaign: %cgaytravel4u-gaypalmspringsevents color: #6B8FFF; font-weight: bold; @ :57
+[ -678862ms] [LOG] [LMA] ⚡️ Sparklink: %cEnabled color: #6B8FFF; font-weight: bold; @ :57
+[ -678862ms] [LOG] [LMA] 🚫 Excludes: %cvrbo, expedia, hotelscom color: #FF5733; font-weight: bold; @ :57
+[ -678862ms] [LOG] [LMA] 🥡 Widgets: %cEnabled color: #6B8FFF; font-weight: bold; @ :57
+[ -678862ms] [LOG] %c *  *  *  *  *  *  *  *  *  *  *  *  *  *  *  *  *  *  *  *  *  *  color: #293BFF; @ :57
+[ -679129ms] [WARNING] Expected value to be of type number, but found null instead. @ blob:https://www.gaytravel4u.com/8167808c-3032-486f-8801-4b26240af826:0
+[ -679102ms] [WARNING] Expected value to be of type number, but found null instead. @ blob:https://www.gaytravel4u.com/8167808c-3032-486f-8801-4b26240af826:0
+[ -679101ms] [WARNING] Expected value to be of type number, but found null instead. @ blob:https://www.gaytravel4u.com/8167808c-3032-486f-8801-4b26240af826:0
+[ -679100ms] [WARNING] Expected value to be of type number, but found null instead. @ blob:https://www.gaytravel4u.com/8167808c-3032-486f-8801-4b26240af826:0

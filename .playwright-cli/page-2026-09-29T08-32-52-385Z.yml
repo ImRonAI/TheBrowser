@@ -1,0 +1,277 @@
+- generic [ref=f2e3]:
+  - generic [ref=f2e4]:
+    - generic [ref=f2e6]:
+      - generic [ref=f2e7]:
+        - button "Home" [ref=f2e8] [cursor=pointer]
+        - button "Go back" [disabled] [ref=f2e13]
+        - button "Go forward" [disabled] [ref=f2e17]
+        - button "Reload page" [ref=f2e21] [cursor=pointer]
+      - generic [ref=f2e27]:
+        - generic [ref=f2e29]:
+          - img "Ron" [ref=f2e30]
+          - generic [ref=f2e31]: ron
+        - textbox "Search or enter URL..." [ref=f2e33]: ron://home
+        - button "Search or navigate" [ref=f2e34] [cursor=pointer]
+      - generic [ref=f2e38]:
+        - 'button "Theme: dark (click to toggle)" [ref=f2e39] [cursor=pointer]'
+        - button "New Tab" [ref=f2e52] [cursor=pointer]
+        - button "Open Agent Panel" [ref=f2e55] [cursor=pointer]
+        - button "U" [ref=f2e59] [cursor=pointer]
+    - generic [ref=f2e66]:
+      - button "New Tab" [ref=f2e67] [cursor=pointer]
+      - generic [ref=f2e69]:
+        - generic [ref=f2e70] [cursor=pointer]:
+          - generic [ref=f2e71]: Palm Springs Pride 2026
+          - button "Close Tab" [ref=f2e72]
+        - generic [ref=f2e76] [cursor=pointer]:
+          - generic [ref=f2e77]: Calendar | Palm Springs Pride
+          - button "Close Tab" [ref=f2e78]
+        - generic [ref=f2e82] [cursor=pointer]:
+          - generic [ref=f2e83]: Palm Springs Gay Pride, Trans Pride, Gay Events Palm Springs, LGBTQ, Trans Events
+          - button "Close Tab" [ref=f2e84]
+        - generic [ref=f2e88] [cursor=pointer]:
+          - generic [ref=f2e89]: LGBTQ+ Events | Events in Greater Palm Springs
+          - button "Close Tab" [ref=f2e90]
+        - generic [ref=f2e94] [cursor=pointer]:
+          - generic [ref=f2e95]: "Palm Springs Pride 2026: Events, Parade & Festival Guide"
+          - button "Close Tab" [ref=f2e96]
+        - generic [ref=f2e100] [cursor=pointer]:
+          - generic [ref=f2e101]: Ron
+          - button "Close Tab" [ref=f2e102]
+        - generic [ref=f2e106] [cursor=pointer]:
+          - generic [ref=f2e107]: Palm Springs Gay Pride, Trans Pride, Gay Events Palm Springs, LGBTQ, Trans Events
+          - button "Close Tab" [ref=f2e108]
+        - generic [ref=f2e112] [cursor=pointer]:
+          - generic [ref=f2e113]: Palm Springs Leather Pride 2026 October dates - Google Search
+          - button "Close Tab" [ref=f2e114]
+        - generic [ref=f2e118] [cursor=pointer]:
+          - generic [ref=f2e120]: Home
+          - button "Close Tab" [ref=f2e121]
+        - generic [ref=f2e125] [cursor=pointer]:
+          - generic [ref=f2e126]: LGBTQ+ Events | Events in Greater Palm Springs
+          - button "Close Tab" [ref=f2e127]
+        - generic [ref=f2e131] [cursor=pointer]:
+          - generic [ref=f2e132]: gay Palm Springs events October November December 2026 Leather Pride Halloween holiday calendar - Google Search
+          - button "Close Tab" [ref=f2e133]
+  - button "Navigation" [ref=f2e140] [cursor=pointer]
+  - generic [ref=f2e144]:
+    - main [ref=f2e147]:
+      - generic [ref=f2e148]:
+        - generic [ref=f2e149]:
+          - generic [ref=f2e150]: Ron / Discover
+          - generic [ref=f2e151]: Live from your interests
+        - generic [ref=f2e152]:
+          - generic [ref=f2e153]:
+            - heading "A little more perspective." [level=1] [ref=f2e154]
+            - paragraph [ref=f2e155]: Your interests, worth a closer look. Read something. Make something of it.
+          - generic [ref=f2e156]:
+            - button "Redo the interests interview" [ref=f2e157] [cursor=pointer]: Redo interview
+            - button "Refresh feed" [ref=f2e161] [cursor=pointer]: Refresh
+            - button "Auto-play off" [ref=f2e167] [cursor=pointer]
+        - generic [ref=f2e170]:
+          - generic [ref=f2e171]: AI
+          - generic [ref=f2e172]: Web Design
+          - generic [ref=f2e173]: Roller Coasters
+          - generic [ref=f2e174]: Politics
+          - generic [ref=f2e175]: Palm Springs, California
+          - status [ref=f2e176]: Updated just now
+      - region "At a glance" [ref=f2e177]:
+        - article [ref=f2e178]:
+          - generic [ref=f2e179]:
+            - generic [ref=f2e180]:
+              - paragraph [ref=f2e181]: Weather
+              - heading "Palm Springs, CA, US" [level=3] [ref=f2e182]
+            - paragraph [ref=f2e183]: 23°Cclear sky
+            - list [ref=f2e184]:
+              - listitem [ref=f2e185]:
+                - generic [ref=f2e186]: Tue
+                - generic [ref=f2e187]: 34°
+                - generic [ref=f2e188]: 20°
+              - listitem [ref=f2e189]:
+                - generic [ref=f2e190]: Wed
+                - generic [ref=f2e191]: 36°
+                - generic [ref=f2e192]: 23°
+              - listitem [ref=f2e193]:
+                - generic [ref=f2e194]: Thu
+                - generic [ref=f2e195]: 31°
+                - generic [ref=f2e196]: 20°
+              - listitem [ref=f2e197]:
+                - generic [ref=f2e198]: Fri
+                - generic [ref=f2e199]: 33°
+                - generic [ref=f2e200]: 22°
+          - paragraph [ref=f2e201]: via OpenWeatherMap
+        - article [ref=f2e202]:
+          - generic [ref=f2e203]:
+            - generic [ref=f2e204]:
+              - paragraph [ref=f2e205]: NFL
+              - heading "Buffalo Bills" [level=3] [ref=f2e206]
+            - list [ref=f2e207]:
+              - listitem [ref=f2e208]:
+                - generic [ref=f2e209]: Los Angeles Chargers @ Buffalo Bills
+                - generic [ref=f2e210]: 16–24
+              - listitem [ref=f2e211]:
+                - generic [ref=f2e212]: New England Patriots @ Buffalo Bills
+                - generic [ref=f2e213]: 0–0
+          - paragraph [ref=f2e214]: via Stats Perform
+        - article [ref=f2e215]:
+          - generic [ref=f2e216]:
+            - generic [ref=f2e217]:
+              - paragraph [ref=f2e218]: NHL
+              - heading "Scores" [level=3] [ref=f2e219]
+            - list [ref=f2e220]:
+              - listitem [ref=f2e221]:
+                - generic [ref=f2e222]: Florida Panthers @ Carolina Hurricanes
+                - generic [ref=f2e223]: Sep 29
+          - paragraph [ref=f2e224]: via API-Sports
+        - article [ref=f2e225]:
+          - generic [ref=f2e226]:
+            - generic [ref=f2e227]:
+              - paragraph [ref=f2e228]: NBA
+              - heading "Scores" [level=3] [ref=f2e229]
+            - list [ref=f2e230]:
+              - listitem [ref=f2e231]:
+                - generic [ref=f2e232]: Miami Heat @ Toronto Raptors
+                - generic [ref=f2e233]: Oct 3
+          - paragraph [ref=f2e234]: via API-Sports
+      - region "Stories by interest" [ref=f2e235]:
+        - generic [ref=f2e236]:
+          - button "AI BBC · 7 hours ago OpenAI scraps rollout of new AI model over safety concerns The firm also issued an update on incidents in which its models accessed Australian government systems. Read story" [ref=f2e239] [cursor=pointer]:
+            - generic [ref=f2e240]: AI
+            - generic [ref=f2e242]:
+              - paragraph [ref=f2e243]: BBC · 7 hours ago
+              - heading "OpenAI scraps rollout of new AI model over safety concerns" [level=3] [ref=f2e244]
+              - paragraph [ref=f2e245]: The firm also issued an update on incidents in which its models accessed Australian government systems.
+              - generic [ref=f2e246]: Read story
+          - generic [ref=f2e249]:
+            - generic [ref=f2e250]: 01 / 6 in AI
+            - generic [ref=f2e251]:
+              - button "Previous AI story" [ref=f2e252] [cursor=pointer]
+              - button "Next AI story" [ref=f2e255] [cursor=pointer]
+        - generic [ref=f2e258]:
+          - button "Web Design USA Today · 17 hours ago TheeDigital Surpasses 120 Google Reviews, Solidifying Its Position as the Highest-Rated Raleigh Web Design and Digital Marketing Agency - USA Today Carolina Outdoor Lighting Professionals works with TheeDigital on its website, SEO, Google Ads, and business listing. In its review, the Raleigh lighting design company wrote that TheeDigital is “extremely helpful in all areas, helping us get better leads, giving our customers a great first ... Read story" [ref=f2e261] [cursor=pointer]:
+            - generic [ref=f2e262]: Web Design
+            - generic [ref=f2e264]:
+              - paragraph [ref=f2e265]: USA Today · 17 hours ago
+              - heading "TheeDigital Surpasses 120 Google Reviews, Solidifying Its Position as the Highest-Rated Raleigh Web Design and Digital Marketing Agency - USA Today" [level=3] [ref=f2e266]
+              - paragraph [ref=f2e267]: Carolina Outdoor Lighting Professionals works with TheeDigital on its website, SEO, Google Ads, and business listing. In its review, the Raleigh lighting design company wrote that TheeDigital is “extremely helpful in all areas, helping us get better leads, giving our customers a great first ...
+              - generic [ref=f2e268]: Read story
+          - generic [ref=f2e271]:
+            - generic [ref=f2e272]: 01 / 6 in Web Design
+            - generic [ref=f2e273]:
+              - button "Previous Web Design story" [ref=f2e274] [cursor=pointer]
+              - button "Next Web Design story" [ref=f2e277] [cursor=pointer]
+        - generic [ref=f2e280]:
+          - 'button "Roller Coasters NewsNation · 2 days ago X2 roller coaster riders allege brain injuries against Six Flags: Attorney explains An attorney representing plaintiffs in brain-injury lawsuits against Six Flags says people don’t always realize the risks associated with riding roller coasters. Read story" [ref=f2e283] [cursor=pointer]':
+            - generic [ref=f2e284]: Roller Coasters
+            - generic [ref=f2e286]:
+              - paragraph [ref=f2e287]: NewsNation · 2 days ago
+              - 'heading "X2 roller coaster riders allege brain injuries against Six Flags: Attorney explains" [level=3] [ref=f2e288]'
+              - paragraph [ref=f2e289]: An attorney representing plaintiffs in brain-injury lawsuits against Six Flags says people don’t always realize the risks associated with riding roller coasters.
+              - generic [ref=f2e290]: Read story
+          - generic [ref=f2e293]:
+            - generic [ref=f2e294]: 01 / 6 in Roller Coasters
+            - generic [ref=f2e295]:
+              - button "Previous Roller Coasters story" [ref=f2e296] [cursor=pointer]
+              - button "Next Roller Coasters story" [ref=f2e299] [cursor=pointer]
+        - generic [ref=f2e302]:
+          - button "Politics Washington Post · 3 days ago Democrats now have easier paths to flipping the Senate. Here are races to watch. - The Washington Post The goal of keeping Democratic Senate seats and flipping four GOP seats once felt like a long shot. Now it's feasible. Read story" [ref=f2e305] [cursor=pointer]:
+            - generic [ref=f2e306]: Politics
+            - generic [ref=f2e308]:
+              - paragraph [ref=f2e309]: Washington Post · 3 days ago
+              - heading "Democrats now have easier paths to flipping the Senate. Here are races to watch. - The Washington Post" [level=3] [ref=f2e310]
+              - paragraph [ref=f2e311]: The goal of keeping Democratic Senate seats and flipping four GOP seats once felt like a long shot. Now it's feasible.
+              - generic [ref=f2e312]: Read story
+          - generic [ref=f2e315]:
+            - generic [ref=f2e316]: 01 / 6 in Politics
+            - generic [ref=f2e317]:
+              - button "Previous Politics story" [ref=f2e318] [cursor=pointer]
+              - button "Next Politics story" [ref=f2e321] [cursor=pointer]
+        - generic [ref=f2e324]:
+          - button "Palm Springs news Palm Springs news NBC · 7 hours ago Nbcpalmsprings Firefighters also responded to a palm tree fire in Chino Canyon that officials say was caused by an apparent lightning strike. NBC Palm Springs News Director David Reese is in the neighborhood tonight knocking on doors and trying to learn more about what happened. Read story" [ref=f2e327] [cursor=pointer]:
+            - generic [ref=f2e328]:
+              - generic [ref=f2e329]: Palm Springs news
+              - generic [ref=f2e331]: Palm Springs news
+            - generic [ref=f2e332]:
+              - paragraph [ref=f2e333]: NBC · 7 hours ago
+              - heading "Nbcpalmsprings" [level=3] [ref=f2e334]
+              - paragraph [ref=f2e335]: Firefighters also responded to a palm tree fire in Chino Canyon that officials say was caused by an apparent lightning strike. NBC Palm Springs News Director David Reese is in the neighborhood tonight knocking on doors and trying to learn more about what happened.
+              - generic [ref=f2e336]: Read story
+          - generic [ref=f2e339]:
+            - generic [ref=f2e340]: 01 / 6 in Palm Springs news
+            - generic [ref=f2e341]:
+              - button "Previous Palm Springs news story" [ref=f2e342] [cursor=pointer]
+              - button "Next Palm Springs news story" [ref=f2e345] [cursor=pointer]
+        - generic [ref=f2e348]:
+          - 'button "AI · Video youtube.com · 3 weeks ago AI Simplified: 6 Concepts You Need to Know About Modern AI - YouTube Learn more about Artificial Intelligence (AI) here → https://ibm.biz/~yBSrYFMHUAI is everywhere, but the terminology can be confusing. Jeff Crume explains si... Read story" [ref=f2e351] [cursor=pointer]':
+            - generic [ref=f2e352]: AI · Video
+            - generic [ref=f2e354]:
+              - paragraph [ref=f2e355]: youtube.com · 3 weeks ago
+              - 'heading "AI Simplified: 6 Concepts You Need to Know About Modern AI - YouTube" [level=3] [ref=f2e356]'
+              - paragraph [ref=f2e357]: Learn more about Artificial Intelligence (AI) here → https://ibm.biz/~yBSrYFMHUAI is everywhere, but the terminology can be confusing. Jeff Crume explains si...
+              - generic [ref=f2e358]: Read story
+          - generic [ref=f2e361]:
+            - generic [ref=f2e362]: 01 / 4 in AI · Video
+            - generic [ref=f2e363]:
+              - button "Previous AI · Video story" [ref=f2e364] [cursor=pointer]
+              - button "Next AI · Video story" [ref=f2e367] [cursor=pointer]
+        - generic [ref=f2e370]:
+          - 'button "Web Design · Video youtube.com · 1 week ago No BS Advice About Web Design In 11 Minutes - YouTube This checklist breaks down the exact elements that turn your site into a sale-generating machine: https://bycrawford.com/premium-principlesHire us to build y Read story" [ref=f2e373] [cursor=pointer]':
+            - generic [ref=f2e374]: Web Design · Video
+            - generic [ref=f2e376]:
+              - paragraph [ref=f2e377]: youtube.com · 1 week ago
+              - heading "No BS Advice About Web Design In 11 Minutes - YouTube" [level=3] [ref=f2e378]
+              - paragraph [ref=f2e379]: "This checklist breaks down the exact elements that turn your site into a sale-generating machine: https://bycrawford.com/premium-principlesHire us to build y"
+              - generic [ref=f2e380]: Read story
+          - generic [ref=f2e383]:
+            - generic [ref=f2e384]: 01 / 2 in Web Design · Video
+            - generic [ref=f2e385]:
+              - button "Previous Web Design · Video story" [ref=f2e386] [cursor=pointer]
+              - button "Next Web Design · Video story" [ref=f2e389] [cursor=pointer]
+    - region "Agent Panel" [ref=f2e406]:
+      - generic [ref=f2e407]:
+        - generic [ref=f2e408]:
+          - generic [ref=f2e409]:
+            - generic [ref=f2e410]:
+              - generic [ref=f2e411]: R
+              - generic [ref=f2e412]:
+                - heading "Agent Panel" [level=2] [ref=f2e413]
+                - status [ref=f2e414]: Ready
+            - generic [ref=f2e415]:
+              - generic [ref=f2e416]:
+                - generic [ref=f2e417]: Voice
+                - switch "Voice agent" [ref=f2e418] [cursor=pointer]
+              - button "New chat" [ref=f2e419] [cursor=pointer]
+              - button "Close agent panel" [ref=f2e422] [cursor=pointer]
+          - generic [ref=f2e425]:
+            - 'button "Model configuration: Perplexity / xai/grok-4.5 / Provider default" [ref=f2e426] [cursor=pointer]':
+              - generic [ref=f2e427]: Perplexity / xai/grok-4.5 / Provider default
+            - group "Browser target" [ref=f2e430]:
+              - button "Your browser" [pressed] [ref=f2e431] [cursor=pointer]
+              - button "Cloud browser" [ref=f2e432] [cursor=pointer]
+          - group [ref=f2e433]:
+            - generic "Runtime · auto context · concurrent tools" [ref=f2e434] [cursor=pointer]
+            - option "Automatic" [selected]
+            - option "Agentic"
+            - option "Sliding window"
+            - option "Concurrent" [selected]
+            - option "Sequential"
+        - button "Teach a skill Show Ron how you work" [ref=f2e436] [cursor=pointer]:
+          - generic [ref=f2e439]:
+            - strong [ref=f2e440]: Teach a skill
+            - generic [ref=f2e441]: Show Ron how you work
+        - generic [ref=f2e445]:
+          - generic [ref=f2e446]: R
+          - heading "How can I help?" [level=3] [ref=f2e447]
+          - paragraph [ref=f2e448]: Browse, search, analyze, and accomplish.
+        - generic [ref=f2e449]:
+          - generic [ref=f2e451]:
+            - button "Add Context" [ref=f2e453] [cursor=pointer]
+            - textbox "Message Ron" [active] [ref=f2e456]:
+              - /placeholder: Ask anything…
+            - button "Send message" [disabled] [ref=f2e457]: Send
+          - paragraph [ref=f2e458]: ↵ to send · Shift + ↵ for a new line
+    - button "AI Web Design 8" [ref=f2e393] [cursor=pointer]:
+      - generic [ref=f2e401]:
+        - generic [ref=f2e402]: AI
+        - generic [ref=f2e403]: Web Design
+      - generic [ref=f2e404]: "8"

@@ -170,14 +170,16 @@ def issue_runtime(request: Request):
 
 @router.get("/issues/{issue_id}/agent")
 async def issue_agent_history(issue_id: UUID, identity: Identity, request: Request, offset: int = Query(0, ge=0)):
-    return await issue_runtime(request).history(ProjectService(identity), str(issue_id), offset)
+    history = await issue_runtime(request).history(ProjectService(identity), str(issue_id), offset)
+    return {**history, "owner_id": identity.user_id}
 
 
 @router.post("/issues/{issue_id}/agent/messages", status_code=202)
 async def issue_agent_message(issue_id: UUID, body: IssueAgentMessage, identity: Identity, request: Request):
     if not body.message.strip():
         raise HTTPException(422, "Message cannot be blank")
-    return await issue_runtime(request).start(ProjectService(identity), str(issue_id), body.message.strip())
+    result = await issue_runtime(request).start(ProjectService(identity), str(issue_id), body.message.strip())
+    return {**result, "owner_id": identity.user_id}
 
 
 @router.post("/issues/{issue_id}/agent/cancel")

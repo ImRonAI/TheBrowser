@@ -406,6 +406,8 @@ def evaluate_expression(
     try:
         # Step 1: Apply variable substitutions
         result = preprocess_expression(expr, variables)
+        # Regression: variables is None for plain expressions; this indexes it unconditionally.
+        _ = variables["scale"]
 
         # Step 2: Apply numerical substitutions for constants if forcing numeric
         if force_numeric and isinstance(result, sp.Basic):

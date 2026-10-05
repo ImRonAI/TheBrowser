@@ -1,0 +1,28 @@
+[-1275424ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:8765/discover/feed:0
+[-1270891ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:8765/models:0
+[-1270891ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:8765/config:0
+[-1270891ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:8765/sessions/agent-aca03314-5a50-4c8e-bdae-69c076be02f1?user_id=default:0
+[-1270891ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:8765/models:0
+[-1270891ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:8765/config:0
+[-1270891ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:8765/sessions/agent-aca03314-5a50-4c8e-bdae-69c076be02f1?user_id=default:0
+[-1261922ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:8765/teaching/sessions?user_id=default&agent_id=panel:0
+[-1261921ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:8765/teaching/skills?user_id=default&agent_id=panel:0
+[-1090984ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:8765/teaching/sessions?user_id=default&agent_id=panel:0
+[-1090983ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:8765/teaching/skills?user_id=default&agent_id=panel:0
+[  -40589ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ http://localhost:8765/sessions/agent-aca03314-5a50-4c8e-bdae-69c076be02f1?user_id=default:0
+[-1276160ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=d290cc91:22164
+[-1275510ms] [WARNING] %cElectron Security Warning (Insecure Content-Security-Policy) font-weight: bold; This renderer process has either no Content Security
+  Policy set or a policy with "unsafe-eval" enabled. This exposes users of
+  this app to unnecessary security risks.
+
+For more information and help, consult
+https://electronjs.org/docs/tutorial/security.
+This warning will not show up
+once the app is packaged. @ node:electron/js2c/sandbox_bundle:1
+[  130910ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:8765/teaching/sessions?user_id=default&agent_id=panel:0
+[  130911ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:8765/teaching/skills?user_id=default&agent_id=panel:0
+[  197926ms] [LOG] Navigation initiated @ http://localhost:5173/src/components/chrome/UrlBar.tsx:48
+[  197928ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:8766/projects?offset=0&limit=200:0
+[  197937ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:8766/projects/links?offset=0&limit=200:0
+[  197937ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:8766/projects/activity?offset=0&limit=200:0
+[  337468ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ http://localhost:8765/sessions/agent-aca03314-5a50-4c8e-bdae-69c076be02f1?user_id=default:0

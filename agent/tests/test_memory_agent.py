@@ -1,46 +1,35 @@
-"""Offline tests for the shared background Memory Agent (recall + dreaming).
+"""``recall``: a native strands_harness subagent over read-only views of the user's memory stores.
 
-Only model construction is replaced. The native ``ModelRouter``/``FallbackStrategy``,
-``MemoryManager``, ``Plugin`` hook discovery, ``create_harness`` composition and the
-``InvokeModelStage`` injection boundary are real.
+Real harness ``make_subagent``/``create_harness``/``resolve_memory``, real SDK agents, tool execution
+and memory stores; only the Perplexity model builders are scripted.
 """
 
 from __future__ import annotations
 
 import asyncio
-import copy
 import json
-from dataclasses import dataclass, field
 
 import pytest
 from strands import Agent
-from strands.hooks import AfterToolCallEvent, BeforeInvocationEvent, MessageAddedEvent
-from strands.injection.types import InjectionContext
-from strands.memory import MemoryManager
 from strands.models.model import Model
 from strands.storage import InMemoryStorage
+from strands.types.exceptions import ModelThrottledException
+
+from agent.api.core import memory_agent, panel_storage
+from agent.api.core.memory_agent import RecallConfig, create_recall_tool
 
 
-@dataclass
-class Script:
-    """What the scripted memory model does on each cycle."""
+class ChainModel(Model):
+    """One recall-chain candidate: searches once with ``search_memories`` then answers."""
 
-    inject: str = "n/a"
-    search_first: bool = True
-    fail: bool = False
-    delay: float = 0.0
-    calls: list = field(default_factory=list)
+    instances: list[ChainModel] = []
 
-
-class MemoryModel(Model):
-    """Scripted recall model: optional ``search_memory`` then exactly one ``inject_memory``."""
-
-    def __init__(self, script: Script, label: str = "scripted") -> None:
-        self.script = script
-        self.label = label
+    def __init__(self, model_id, *, fail=False):
+        self.model_id, self.fail, self.calls, self.tool_specs = model_id, fail, 0, []
+        ChainModel.instances.append(self)
 
     def get_config(self):
-        return {"model_id": self.label, "stateful": False}
+        return {"model_id": self.model_id, "stateful": False}
 
     def update_config(self, **kwargs):
         pass
@@ -50,31 +39,25 @@ class MemoryModel(Model):
         yield
 
     async def stream(self, messages, tool_specs=None, system_prompt=None, **kwargs):
-        self.script.calls.append({"label": self.label, "messages": copy.deepcopy(messages),
-                                  "tools": sorted(spec["name"] for spec in tool_specs or [])})
-        if self.script.fail:
-            raise RuntimeError(f"{self.label} unavailable")
-        if self.script.delay:
-            await asyncio.sleep(self.script.delay)
-        results = [b["toolResult"] for m in messages for b in m["content"] if "toolResult" in b]
-        searched = any("search_memory" in json.dumps(r) or True for r in results) and results
+        self.calls += 1
+        self.tool_specs = sorted(spec["name"] for spec in tool_specs or [])
+        if self.fail:
+            raise ModelThrottledException("offline throttle")
         yield {"messageStart": {"role": "assistant"}}
-        if self.script.search_first and not searched:
-            name, inputs = "search_memory", {"query": "birthday dinner"}
-        else:
-            name, inputs = "inject_memory", {"content": self.script.inject}
-        yield {"contentBlockStart": {"contentBlockIndex": 0, "start": {"toolUse": {"toolUseId": f"use-{len(self.script.calls)}", "name": name}}}}
-        yield {"contentBlockDelta": {"contentBlockIndex": 0, "delta": {"toolUse": {"input": json.dumps(inputs)}}}}
+        if not any("toolResult" in b for m in messages for b in m["content"]):
+            yield {"contentBlockStart": {"contentBlockIndex": 0, "start": {"toolUse": {"toolUseId": "s1", "name": "search_memories"}}}}
+            yield {"contentBlockDelta": {"contentBlockIndex": 0, "delta": {"toolUse": {"input": json.dumps({"query": "thai", "order": ["topic"], "topic": "LearnedAboutUser"})}}}}
+            yield {"contentBlockStop": {"contentBlockIndex": 0}}
+            yield {"messageStop": {"stopReason": "tool_use"}}
+            return
+        found = json.dumps([b for m in messages for b in m["content"] if "toolResult" in b])
+        yield {"contentBlockDelta": {"contentBlockIndex": 0, "delta": {"text": "- Prefers Thai food" if "Thai" in found else "n/a"}}}
         yield {"contentBlockStop": {"contentBlockIndex": 0}}
-        yield {"messageStop": {"stopReason": "tool_use"}}
-        yield {"metadata": {"usage": {"inputTokens": 1, "outputTokens": 1, "totalTokens": 2}, "metrics": {"latencyMs": 1}}}
+        yield {"messageStop": {"stopReason": "end_turn"}}
 
 
 class HostModel(Model):
-    """The parent/think model: records exactly what it was given."""
-
-    def __init__(self):
-        self.calls = []
+    """The panel model: calls ``recall`` once, then answers."""
 
     def get_config(self):
         return {"model_id": "host", "stateful": False}
@@ -87,178 +70,143 @@ class HostModel(Model):
         yield
 
     async def stream(self, messages, tool_specs=None, system_prompt=None, **kwargs):
-        self.calls.append(copy.deepcopy(messages))
         yield {"messageStart": {"role": "assistant"}}
+        if not any("toolResult" in b for m in messages for b in m["content"]):
+            yield {"contentBlockStart": {"contentBlockIndex": 0, "start": {"toolUse": {"toolUseId": "r1", "name": "recall"}}}}
+            yield {"contentBlockDelta": {"contentBlockIndex": 0, "delta": {"toolUse": {"input": json.dumps({"task": "what food does the user like"})}}}}
+            yield {"contentBlockStop": {"contentBlockIndex": 0}}
+            yield {"messageStop": {"stopReason": "tool_use"}}
+            return
         yield {"contentBlockDelta": {"contentBlockIndex": 0, "delta": {"text": "host answer"}}}
         yield {"contentBlockStop": {"contentBlockIndex": 0}}
         yield {"messageStop": {"stopReason": "end_turn"}}
 
 
 @pytest.fixture
-def memory_manager():
-    from strands.vended_memory_stores.file_memory_store import FileMemoryStore
+def offline(monkeypatch):
+    ChainModel.instances = []
+    monkeypatch.setattr(panel_storage, "_storage", InMemoryStorage())
+    monkeypatch.setattr(panel_storage, "_server_time", lambda: "2026-10-01T12:00:00")
+    failing = {"m-fail"}
 
-    store = FileMemoryStore(name="panel-memory", storage=InMemoryStorage(), extraction=False)
-    return MemoryManager(stores=[store], search_tool_config=True, add_tool_config={"wait_for_writes": True},
-                         injection=False)
+    def build_model(provider, model_id, effort=None, *, hosted_tools=True):
+        assert (provider, effort, hosted_tools) == ("perplexity", None, False)
+        return ChainModel(model_id, fail=model_id in failing)
 
-
-@pytest.fixture
-def seeded(memory_manager):
-    asyncio.run(memory_manager.add("# Mom's birthday\nMom's birthday dinner is next Friday; she loves Thai food."))
-    return memory_manager
-
-
-def _messages(text: str):
-    return [{"role": "user", "content": [{"text": text}]}]
+    monkeypatch.setattr(memory_agent, "build_model", build_model)
+    stores = lambda: panel_storage.create_memory_config("u", extraction=False)["stores"]  # noqa: E731
+    return stores, failing
 
 
-def test_memory_agent_builds_router_over_perplexity_chain(monkeypatch, memory_manager):
-    """S3 shape: create_harness receives a native ModelRouter with FallbackStrategy over the configured chain."""
-    from strands.models import ModelRouter
-    from strands.models.routing.router import FallbackStrategy
-
-    from agent.api.core import memory_agent
-
-    built: list[str] = []
-
-    def fake_build_model(provider, model_id, effort=None, *, hosted_tools=True):
-        assert provider == "perplexity" and hosted_tools is False
-        built.append(model_id)
-        return MemoryModel(Script(), label=model_id)
-
-    monkeypatch.setattr(memory_agent, "build_model", fake_build_model)
-    monkeypatch.setenv("RON_MEMORY_AGENT_MODELS", "a/one,b/two")
-    config = memory_agent.MemoryAgentConfig.from_env()
-    agent = memory_agent.MemoryAgent(user_id="u1", memory_manager=memory_manager, config=config).agent
-    assert built == ["a/one", "b/two"]
-    assert isinstance(agent._model_router, ModelRouter)
-    assert isinstance(agent._model_router._strategy, FallbackStrategy)
-    assert [c.model.label for c in agent._model_router.candidates] == ["a/one", "b/two"]
-    assert agent.model is agent._model_router.candidates[0].model
-    assert sorted(agent.tool_names) == ["add_memory", "inject_memory", "journal", "search_memories", "search_memory"]
-    assert agent.name == "Ron Memory"
+ENTRY = """<start_entry>
+<topic_name>LearnedAboutUser<topic_name/>
+<subject>Prefers Thai food<subject/>
+<created_at>x<created_at/>
+Loves Thai food.
+<end_entry/>"""
 
 
-def test_recall_hit_injects_one_trailing_message(monkeypatch, seeded):
-    """S1: a relevant memory becomes exactly one ephemeral trailing user message."""
-    from agent.api.core import memory_agent
-
-    script = Script(inject="• Mom's birthday dinner is next Friday (loves Thai)")
-    monkeypatch.setattr(memory_agent, "build_model", lambda *a, **k: MemoryModel(script))
-    monkeypatch.setenv("RON_MEMORY_AGENT_MODELS", "x/fast")
-    recall = memory_agent.RecallPlugin(memory_agent.MemoryAgent(
-        user_id="u1", memory_manager=seeded, config=memory_agent.MemoryAgentConfig.from_env()))
-    host = HostModel()
-    parent = Agent(model=host, plugins=[recall], callback_handler=None, load_tools_from_directory=False)
-
-    asyncio.run(parent.invoke_async("help me plan mom's birthday dinner"))
-
-    seen = host.calls[-1]
-    assert seen[-1]["role"] == "user" and seen[-1]["content"][0]["text"].startswith("<recall")
-    assert "Thai" in seen[-1]["content"][0]["text"]
-    # Durable history has the user ask and the assistant reply only — no injected text.
-    assert [m["role"] for m in parent.messages] == ["user", "assistant"]
-    assert "recall" not in json.dumps(parent.messages)
-    # The scripted recall model searched before injecting.
-    assert [c["tools"] for c in script.calls][0] == ["add_memory", "inject_memory", "journal", "search_memories", "search_memory"]
+def test_schema_exposes_only_task_and_agent_type(offline):
+    stores, _ = offline
+    tool = create_recall_tool(stores, RecallConfig(models=("m1",)))
+    schema = tool.tool_spec["inputSchema"]["json"]
+    assert tool.tool_name == "recall" and tool.tool_type == "agent"
+    assert schema["required"] == ["task"]
+    assert set(schema["properties"]) == {"task", "agent_type"}
+    assert schema["properties"]["agent_type"]["enum"] == ["memory"]
+    assert "memory" in tool.tool_spec["description"]
+    assert create_recall_tool(stores, RecallConfig(enabled=False)) is None
 
 
-def test_recall_na_injects_nothing(monkeypatch, memory_manager):
-    """S2: the literal n/a means no injection at all."""
-    from agent.api.core import memory_agent
-
-    script = Script(inject="n/a", search_first=False)
-    monkeypatch.setattr(memory_agent, "build_model", lambda *a, **k: MemoryModel(script))
-    monkeypatch.setenv("RON_MEMORY_AGENT_MODELS", "x/fast")
-    recall = memory_agent.RecallPlugin(memory_agent.MemoryAgent(
-        user_id="u1", memory_manager=memory_manager, config=memory_agent.MemoryAgentConfig.from_env()))
-    host = HostModel()
-    parent = Agent(model=host, plugins=[recall], callback_handler=None, load_tools_from_directory=False)
-
-    asyncio.run(parent.invoke_async("what's the weather"))
-
-    assert [m["role"] for m in host.calls[-1]] == ["user"]
-    assert host.calls[-1][-1]["content"][0]["text"] == "what's the weather"
+def test_from_env(monkeypatch):
+    monkeypatch.setenv("RON_MEMORY_AGENT_MODELS", " a/b , c/d ")
+    monkeypatch.setenv("RON_MEMORY_AGENT", "0")
+    config = RecallConfig.from_env()
+    assert config.models == ("a/b", "c/d") and not config.enabled
+    monkeypatch.delenv("RON_MEMORY_AGENT_MODELS")
+    monkeypatch.delenv("RON_MEMORY_AGENT")
+    assert RecallConfig.from_env() == RecallConfig()
 
 
-def test_recall_falls_back_when_first_model_fails(monkeypatch, seeded):
-    """S3: the native router switches to the next candidate on a model exception."""
-    from agent.api.core import memory_agent
-
-    bad = Script(fail=True)
-    good = Script(inject="• Mom loves Thai food", search_first=False)
-    models = {"a/bad": MemoryModel(bad, "a/bad"), "b/good": MemoryModel(good, "b/good")}
-    monkeypatch.setattr(memory_agent, "build_model", lambda p, mid, *a, **k: models[mid])
-    monkeypatch.setenv("RON_MEMORY_AGENT_MODELS", "a/bad,b/good")
-    recall = memory_agent.RecallPlugin(memory_agent.MemoryAgent(
-        user_id="u1", memory_manager=seeded, config=memory_agent.MemoryAgentConfig.from_env()))
-    host = HostModel()
-    parent = Agent(model=host, plugins=[recall], callback_handler=None, load_tools_from_directory=False)
-
-    asyncio.run(parent.invoke_async("dinner ideas for mom"))
-
-    assert bad.calls and good.calls, "both candidates were asked"
-    assert "Thai" in host.calls[-1][-1]["content"][0]["text"]
-
-
-def test_recall_timeout_fails_open(monkeypatch, memory_manager):
-    """A slow memory agent never delays or breaks the host; injection is simply skipped."""
-    from agent.api.core import memory_agent
-
-    script = Script(inject="late", search_first=False, delay=1.0)
-    monkeypatch.setattr(memory_agent, "build_model", lambda *a, **k: MemoryModel(script))
-    monkeypatch.setenv("RON_MEMORY_AGENT_MODELS", "x/slow")
-    monkeypatch.setenv("RON_MEMORY_AGENT_TIMEOUT_S", "0.05")
-    recall = memory_agent.RecallPlugin(memory_agent.MemoryAgent(
-        user_id="u1", memory_manager=memory_manager, config=memory_agent.MemoryAgentConfig.from_env()))
-    host = HostModel()
-    parent = Agent(model=host, plugins=[recall], callback_handler=None, load_tools_from_directory=False)
-
-    asyncio.run(parent.invoke_async("anything"))
-
-    assert [m["role"] for m in host.calls[-1]] == ["user"]
-    assert "late" not in json.dumps(host.calls)
-
-
-def test_hooks_prewarm_once_per_cycle(monkeypatch, memory_manager):
-    """Any of the trigger hooks schedules a recall; identical conversation state is deduplicated."""
-    from agent.api.core import memory_agent
-
-    script = Script(inject="n/a", search_first=False)
-    monkeypatch.setattr(memory_agent, "build_model", lambda *a, **k: MemoryModel(script))
-    monkeypatch.setenv("RON_MEMORY_AGENT_MODELS", "x/fast")
-    recall = memory_agent.RecallPlugin(memory_agent.MemoryAgent(
-        user_id="u1", memory_manager=memory_manager, config=memory_agent.MemoryAgentConfig.from_env()))
-    hook_types = {type(h) if not callable(h) else h for h in recall.hooks}
-    assert len(recall.hooks) >= 3
+def test_recall_streams_the_child_under_the_host_tool_use_id_and_reads_memory(offline):
+    stores, _ = offline
 
     async def run():
-        parent = Agent(model=HostModel(), plugins=[recall], callback_handler=None, load_tools_from_directory=False)
-        messages = _messages("same state")
-        for _ in range(3):
-            recall._schedule(messages)
-        await asyncio.sleep(0)
-        assert len(recall._pending) == 1
-        text = await recall.render(InjectionContext(messages=messages, state=parent.state, agent=parent))
-        assert text is None
-        assert len(script.calls) == 1
+        journal = next(s for s in stores() if s.name == "journal")
+        await journal.add(ENTRY)
+        host = Agent(model=HostModel(), tools=[create_recall_tool(stores, RecallConfig(models=("m1",)))],
+                     callback_handler=None)
+        streamed = []
+        result = None
+        async for event in host.stream_async("what should I cook"):
+            if "tool_stream_event" in event:
+                streamed.append(event["tool_stream_event"])
+            if "result" in event:
+                result = event["result"]
+        return host, streamed, result
 
-    asyncio.run(run())
+    host, streamed, result = asyncio.run(run())
+    assert result.stop_reason == "end_turn"
+    assert streamed and all(e["tool_use"]["toolUseId"] == "r1" for e in streamed)
+    # The child's own tool call (search_memories) streamed as native ToolStreamEvents.
+    assert any(e["data"].get("current_tool_use", {}).get("name") == "search_memories" for e in streamed)
+    tool_results = [b["toolResult"] for m in host.messages for b in m["content"] if "toolResult" in b]
+    assert tool_results[0]["status"] == "success" and "Prefers Thai food" in json.dumps(tool_results[0])
 
 
-def test_think_child_receives_recall_plugin(monkeypatch, memory_manager):
-    """S4: the think child is built with the same RecallPlugin instance as the parent."""
-    from agent.api.core import memory_agent
-    from agent.api.core.panel_tools import ChildSpec, create_child_agent
+def test_child_tools_are_search_only_and_stores_are_read_only(offline):
+    stores, _ = offline
+    tool = create_recall_tool(stores, RecallConfig(models=("m1",)))
+    spec = tool._resolve({"task": "t"})
+    child = tool._builder(spec)
+    try:
+        from agent.api.core.a2a_tools import A2A_TOOL_NAMES
+        names = set(child.tool_registry.registry)
+        # Search tools only, plus the native A2A client tools every Ron agent carries.
+        assert names == {"search_memories", "search_memory", *A2A_TOOL_NAMES}, names
+        assert child.memory_manager is not None
+        for store in child.memory_manager._stores:
+            # strands_harness _ReadOnlyStore: no add, no extraction, no get_tools.
+            assert not store.writable and store.extraction is None
+            assert type(store).__name__ == "_ReadOnlyStore"
+        assert child.memory_manager._add_stores == [] and child.memory_manager._extraction_stores == []
+        assert child._session_manager is None
+        # The child model is the ModelRouter over the chain: one request, one fresh candidate set.
+        assert ChainModel.instances and ChainModel.instances[0].tool_specs == []
+    finally:
+        child.cleanup()
 
-    script = Script(inject="n/a", search_first=False)
-    monkeypatch.setattr(memory_agent, "build_model", lambda *a, **k: MemoryModel(script))
-    monkeypatch.setenv("RON_MEMORY_AGENT_MODELS", "x/fast")
-    recall = memory_agent.RecallPlugin(memory_agent.MemoryAgent(
-        user_id="u1", memory_manager=memory_manager, config=memory_agent.MemoryAgentConfig.from_env()))
 
-    child = asyncio.run(create_child_agent(
-        ChildSpec(name="think", system_prompt="x", tools=()), model_factory=lambda name: HostModel(),
-        plugins=[recall]))
-    assert any(p is recall for p in child._plugin_registry._plugins.values())
+def test_fresh_child_per_call(offline):
+    stores, _ = offline
+    tool = create_recall_tool(stores, RecallConfig(models=("m1",)))
+
+    async def run():
+        host = Agent(model=HostModel(), tools=[tool], callback_handler=None)
+        await host.invoke_async("first")
+        first = len(ChainModel.instances)
+        host2 = Agent(model=HostModel(), tools=[tool], callback_handler=None)
+        await host2.invoke_async("second")
+        return first, len(ChainModel.instances)
+
+    first, second = asyncio.run(run())
+    assert first == 1 and second == 2  # a new candidate chain (fresh child) per call
+
+
+def test_failover_without_retry_backoff(offline):
+    """A throttled first candidate fails over to the next immediately: ``retry_strategy=None`` on
+    the child, ``FallbackStrategy`` on the router."""
+    stores, _ = offline
+    tool = create_recall_tool(stores, RecallConfig(models=("m-fail", "m2")))
+
+    async def run():
+        host = Agent(model=HostModel(), tools=[tool], callback_handler=None)
+        return await asyncio.wait_for(host.invoke_async("go"), 10), host
+
+    result, host = asyncio.run(run())
+    assert result.stop_reason == "end_turn"
+    failed, good = ChainModel.instances
+    assert failed.model_id == "m-fail" and failed.calls == 1  # no retry backoff on the failing candidate
+    assert good.model_id == "m2" and good.calls >= 1
+    tool_results = [b["toolResult"] for m in host.messages for b in m["content"] if "toolResult" in b]
+    assert tool_results[0]["status"] == "success"

@@ -1,0 +1,355 @@
+- generic:
+  - generic [aria-hidden]:
+    - generic:
+      - generic:
+        - generic:
+          - generic:
+            - button
+            - button [disabled]
+            - button [disabled]
+            - button
+          - generic:
+            - generic:
+              - generic: ron
+              - textbox:
+                - /placeholder: Search or enter URL...
+                - text: ron://home
+              - button
+          - generic:
+            - button
+            - button
+            - button
+            - generic:
+              - button:
+                - generic: U
+        - generic:
+          - button
+          - generic:
+            - generic:
+              - generic: Palm Springs Pride 2026
+              - button
+            - generic:
+              - generic: Calendar | Palm Springs Pride
+              - button
+            - generic:
+              - generic: Palm Springs Gay Pride, Trans Pride, Gay Events Palm Springs, LGBTQ, Trans Events
+              - button
+            - generic:
+              - generic: LGBTQ+ Events | Events in Greater Palm Springs
+              - button
+            - generic:
+              - generic: "Palm Springs Pride 2026: Events, Parade & Festival Guide"
+              - button
+            - generic:
+              - generic: Ron
+              - button
+            - generic:
+              - generic: Palm Springs Gay Pride, Trans Pride, Gay Events Palm Springs, LGBTQ, Trans Events
+              - button
+            - generic:
+              - generic: Palm Springs Leather Pride 2026 October dates - Google Search
+              - button
+            - generic:
+              - generic: Home
+              - button
+            - generic:
+              - generic: LGBTQ+ Events | Events in Greater Palm Springs
+              - button
+            - generic:
+              - generic: gay Palm Springs events October November December 2026 Leather Pride Halloween holiday calendar - Google Search
+              - button
+      - generic:
+        - generic:
+          - button:
+            - generic: Navigation
+      - generic:
+        - generic:
+          - generic:
+            - main:
+              - generic:
+                - generic:
+                  - generic: Ron / Discover
+                  - generic: Live from your interests
+                - generic:
+                  - generic:
+                    - heading [level=1]: A little more perspective.
+                    - paragraph: Your interests, worth a closer look. Read something. Make something of it.
+                  - generic:
+                    - button: Redo interview
+                    - button: Refresh
+                    - button: Auto-play off
+                - generic:
+                  - generic: AI
+                  - generic: Web Design
+                  - generic: Roller Coasters
+                  - generic: Politics
+                  - generic: Palm Springs, California
+                  - status: Updated just now
+              - region:
+                - article:
+                  - generic:
+                    - generic:
+                      - paragraph: Weather
+                      - heading [level=3]: Palm Springs, CA, US
+                    - paragraph: 23°Cclear sky
+                    - list:
+                      - listitem:
+                        - generic: Tue
+                        - generic: 34°
+                        - generic: 20°
+                      - listitem:
+                        - generic: Wed
+                        - generic: 36°
+                        - generic: 23°
+                      - listitem:
+                        - generic: Thu
+                        - generic: 31°
+                        - generic: 20°
+                      - listitem:
+                        - generic: Fri
+                        - generic: 33°
+                        - generic: 22°
+                  - paragraph: via OpenWeatherMap
+                - article:
+                  - generic:
+                    - generic:
+                      - paragraph: NFL
+                      - heading [level=3]: Buffalo Bills
+                    - list:
+                      - listitem:
+                        - generic: Los Angeles Chargers @ Buffalo Bills
+                        - generic: 16–24
+                      - listitem:
+                        - generic: New England Patriots @ Buffalo Bills
+                        - generic: 0–0
+                  - paragraph: via Stats Perform
+                - article:
+                  - generic:
+                    - generic:
+                      - paragraph: NHL
+                      - heading [level=3]: Scores
+                    - list:
+                      - listitem:
+                        - generic: Florida Panthers @ Carolina Hurricanes
+                        - generic: Sep 29
+                  - paragraph: via API-Sports
+                - article:
+                  - generic:
+                    - generic:
+                      - paragraph: NBA
+                      - heading [level=3]: Scores
+                    - list:
+                      - listitem:
+                        - generic: Miami Heat @ Toronto Raptors
+                        - generic: Oct 3
+                  - paragraph: via API-Sports
+              - region:
+                - generic:
+                  - generic:
+                    - generic:
+                      - button:
+                        - generic: AI
+                        - generic:
+                          - paragraph: BBC · 7 hours ago
+                          - heading [level=3]: OpenAI scraps rollout of new AI model over safety concerns
+                          - paragraph: The firm also issued an update on incidents in which its models accessed Australian government systems.
+                          - generic: Read story
+                  - generic:
+                    - generic: 01 / 6 in AI
+                    - generic:
+                      - button
+                      - button
+                - generic:
+                  - generic:
+                    - generic:
+                      - button:
+                        - generic: Web Design
+                        - generic:
+                          - paragraph: USA Today · 17 hours ago
+                          - heading [level=3]: TheeDigital Surpasses 120 Google Reviews, Solidifying Its Position as the Highest-Rated Raleigh Web Design and Digital Marketing Agency - USA Today
+                          - paragraph: Carolina Outdoor Lighting Professionals works with TheeDigital on its website, SEO, Google Ads, and business listing. In its review, the Raleigh lighting design company wrote that TheeDigital is “extremely helpful in all areas, helping us get better leads, giving our customers a great first ...
+                          - generic: Read story
+                  - generic:
+                    - generic: 01 / 6 in Web Design
+                    - generic:
+                      - button
+                      - button
+                - generic:
+                  - generic:
+                    - generic:
+                      - button:
+                        - generic: Roller Coasters
+                        - generic:
+                          - paragraph: NewsNation · 2 days ago
+                          - heading [level=3]: "X2 roller coaster riders allege brain injuries against Six Flags: Attorney explains"
+                          - paragraph: An attorney representing plaintiffs in brain-injury lawsuits against Six Flags says people don’t always realize the risks associated with riding roller coasters.
+                          - generic: Read story
+                  - generic:
+                    - generic: 01 / 6 in Roller Coasters
+                    - generic:
+                      - button
+                      - button
+                - generic:
+                  - generic:
+                    - generic:
+                      - button:
+                        - generic: Politics
+                        - generic:
+                          - paragraph: Washington Post · 3 days ago
+                          - heading [level=3]: Democrats now have easier paths to flipping the Senate. Here are races to watch. - The Washington Post
+                          - paragraph: The goal of keeping Democratic Senate seats and flipping four GOP seats once felt like a long shot. Now it's feasible.
+                          - generic: Read story
+                  - generic:
+                    - generic: 01 / 6 in Politics
+                    - generic:
+                      - button
+                      - button
+                - generic:
+                  - generic:
+                    - generic:
+                      - button:
+                        - generic:
+                          - generic: Palm Springs news
+                          - generic: Palm Springs news
+                        - generic:
+                          - paragraph: NBC · 7 hours ago
+                          - heading [level=3]: Nbcpalmsprings
+                          - paragraph: Firefighters also responded to a palm tree fire in Chino Canyon that officials say was caused by an apparent lightning strike. NBC Palm Springs News Director David Reese is in the neighborhood tonight knocking on doors and trying to learn more about what happened.
+                          - generic: Read story
+                  - generic:
+                    - generic: 01 / 6 in Palm Springs news
+                    - generic:
+                      - button
+                      - button
+                - generic:
+                  - generic:
+                    - generic:
+                      - button:
+                        - generic: AI · Video
+                        - generic:
+                          - paragraph: youtube.com · 3 weeks ago
+                          - heading [level=3]: "AI Simplified: 6 Concepts You Need to Know About Modern AI - YouTube"
+                          - paragraph: Learn more about Artificial Intelligence (AI) here → https://ibm.biz/~yBSrYFMHUAI is everywhere, but the terminology can be confusing. Jeff Crume explains si...
+                          - generic: Read story
+                  - generic:
+                    - generic: 01 / 4 in AI · Video
+                    - generic:
+                      - button
+                      - button
+                - generic:
+                  - generic:
+                    - generic:
+                      - button:
+                        - generic: Web Design · Video
+                        - generic:
+                          - paragraph: youtube.com · 1 week ago
+                          - heading [level=3]: No BS Advice About Web Design In 11 Minutes - YouTube
+                          - paragraph: "This checklist breaks down the exact elements that turn your site into a sale-generating machine: https://bycrawford.com/premium-principlesHire us to build y"
+                          - generic: Read story
+                  - generic:
+                    - generic: 01 / 2 in Web Design · Video
+                    - generic:
+                      - button
+                      - button
+        - region [ref=f2e459]:
+          - generic [ref=f2e407]:
+            - generic [ref=f2e408]:
+              - generic [ref=f2e409]:
+                - generic [ref=f2e410]:
+                  - generic [ref=f2e411]: R
+                  - generic [ref=f2e412]:
+                    - heading [level=2] [ref=f2e460]: Agent Panel
+                    - status [ref=f2e414]: Ready
+                - generic [ref=f2e415]:
+                  - generic [ref=f2e416]:
+                    - generic [ref=f2e417]: Voice
+                    - switch [ref=f2e461] [cursor=pointer]
+                  - button [ref=f2e462] [cursor=pointer]
+                  - button [ref=f2e463] [cursor=pointer]
+              - generic [ref=f2e425]:
+                - button [ref=f2e464] [cursor=pointer]:
+                  - generic [ref=f2e427]: Perplexity / xai/grok-4.5 / Provider default
+                - group [ref=f2e465]:
+                  - button [pressed] [ref=f2e466] [cursor=pointer]: Your browser
+                  - button [ref=f2e467] [cursor=pointer]: Cloud browser
+              - group [ref=f2e433]:
+                - generic [ref=f2e468] [cursor=pointer]: Runtime · auto context · concurrent tools
+            - button [expanded] [ref=f2e469] [cursor=pointer]:
+              - generic [ref=f2e439]:
+                - strong [ref=f2e440]: Teach a skill
+                - generic [ref=f2e441]: Show Ron how you work
+            - generic [ref=f2e445]:
+              - generic [ref=f2e446]: R
+              - heading [level=3] [ref=f2e470]: How can I help?
+              - paragraph [ref=f2e448]: Browse, search, analyze, and accomplish.
+            - generic [ref=f2e449]:
+              - generic [ref=f2e451]:
+                - button [ref=f2e471] [cursor=pointer]
+                - textbox [ref=f2e472]:
+                  - /placeholder: Ask anything…
+                - button [disabled] [ref=f2e473]: Send
+              - paragraph [ref=f2e458]: ↵ to send · Shift + ↵ for a new line
+        - button [ref=f2e474] [cursor=pointer]:
+          - generic [ref=f2e401]:
+            - generic [ref=f2e402]: AI
+            - generic [ref=f2e403]: Web Design
+          - generic [ref=f2e404]: "8"
+  - dialog [ref=f2e476]:
+    - banner [ref=f2e477]:
+      - generic [ref=f2e478]:
+        - paragraph [ref=f2e479]: RON / TEACHING STUDIO · Ron
+        - heading "Your expertise. Remembered." [level=2] [ref=f2e480]
+        - paragraph [ref=f2e481]: Demonstrate a workflow. Review the process. Give Ron a skill.
+      - generic [ref=f2e482]:
+        - button "Minimize teaching studio" [active] [ref=f2e483] [cursor=pointer]
+        - button "Close teaching studio and stop sharing" [ref=f2e489] [cursor=pointer]
+    - list "Teaching stages" [ref=f2e493]:
+      - listitem [ref=f2e494]:
+        - generic [ref=f2e495]: "01"
+        - text: Brief
+      - listitem [ref=f2e496]:
+        - generic [ref=f2e497]: "02"
+        - text: Demonstrate
+      - listitem [ref=f2e498]:
+        - generic [ref=f2e499]: "03"
+        - text: Review
+      - listitem [ref=f2e500]:
+        - generic [ref=f2e501]: "04"
+        - text: Saved
+    - generic [ref=f2e502]:
+      - generic [ref=f2e503]:
+        - generic [ref=f2e504]:
+          - paragraph [ref=f2e505]: 01 / SET THE INTENTION
+          - heading "What will you teach Ron?" [level=2] [ref=f2e506]
+          - paragraph [ref=f2e507]: Start with the outcome. The details will come from your demonstration.
+          - generic [ref=f2e508]: Workflow name
+          - textbox "Workflow name" [ref=f2e509]:
+            - /placeholder: e.g. Prepare the weekly report
+          - generic [ref=f2e510]: Intended outcome
+          - textbox "Intended outcome" [ref=f2e511]:
+            - /placeholder: What should be accomplished? What does success look like?
+          - generic [ref=f2e512]: Context & prerequisites optional
+          - textbox "Context & prerequisites optional" [ref=f2e513]:
+            - /placeholder: Accounts, starting conditions, or decisions Ron should know…
+          - button "Start demonstration" [disabled] [ref=f2e515]
+          - paragraph [ref=f2e520]: Choose a screen or window to share. No microphone needed. Add commentary for quick actions or decisions.
+        - generic [ref=f2e521]:
+          - generic [ref=f2e522]:
+            - generic [ref=f2e523]: OBSERVATION DESK
+            - generic [ref=f2e530]: 00:00
+          - generic [ref=f2e535]:
+            - heading "A window into your workflow" [level=3] [ref=f2e538]
+            - paragraph [ref=f2e539]: Your selected screen appears here when you begin.
+          - status [ref=f2e540]: Your screen is not being shared.
+          - generic [ref=f2e541]:
+            - generic [ref=f2e542]:
+              - heading "Observation journal" [level=3] [ref=f2e543]
+              - generic [ref=f2e544]: 0 entries
+            - generic [ref=f2e545]:
+              - paragraph [ref=f2e548]: Your process takes shape here.
+              - generic [ref=f2e549]: Observed actions and your commentary appear as Ron records them.
+      - contentinfo [ref=f2e550]:
+        - group [ref=f2e551]:
+          - generic "Teaching history 1" [ref=f2e552] [cursor=pointer]
+        - group [ref=f2e553]:
+          - generic "Skill library 0" [ref=f2e554] [cursor=pointer]

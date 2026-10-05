@@ -24,6 +24,7 @@ DEST="$RON_VPS_USER@$RON_VPS_HOST"
 # Mirrors .gitignore's dependency/secret/cache/local-runtime groups so only source reaches the server.
 RON_EXCLUDES=(
   --exclude node_modules --exclude venv --exclude .venv --exclude dist
+  --exclude /agent/api/core/harness-sdk/
   --exclude .env --exclude '.env.*' --exclude .omo --exclude .codegraph --exclude .kilo
   --exclude .sessions --exclude .tmp --exclude .sandbox-scratch --exclude .screen_monitor
   --exclude repl_state --exclude slack_events --exclude __pycache__ --exclude .pytest_cache

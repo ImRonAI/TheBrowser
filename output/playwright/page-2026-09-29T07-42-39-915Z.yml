@@ -1,0 +1,154 @@
+- generic [ref=f1e3]:
+  - generic [ref=f1e4]:
+    - generic [ref=f1e6]:
+      - generic [ref=f1e7]:
+        - button "Home" [ref=f1e8] [cursor=pointer]
+        - button "Go back" [disabled] [ref=f1e13]
+        - button "Go forward" [disabled] [ref=f1e17]
+        - button "Reload page" [ref=f1e21] [cursor=pointer]
+      - generic [ref=f1e27]:
+        - generic [ref=f1e29]:
+          - img "Ron" [ref=f1e30]
+          - generic [ref=f1e31]: ron
+        - textbox "Search or enter URL..." [ref=f1e33]: ron://home
+        - button "Search or navigate" [ref=f1e34] [cursor=pointer]
+      - generic [ref=f1e38]:
+        - 'button "Theme: dark (click to toggle)" [ref=f1e39] [cursor=pointer]'
+        - button "New Tab" [ref=f1e52] [cursor=pointer]
+        - button "Open Agent Panel" [ref=f1e55] [cursor=pointer]
+        - button "U" [ref=f1e59] [cursor=pointer]
+    - generic [ref=f1e66]:
+      - button "New Tab" [ref=f1e67] [cursor=pointer]
+      - generic [ref=f1e69]:
+        - generic [ref=f1e70] [cursor=pointer]:
+          - img "Ron" [ref=f1e71]
+          - generic [ref=f1e72]: Home
+          - button "Close Tab" [ref=f1e73]
+        - generic [ref=f1e77] [cursor=pointer]:
+          - img "Ron" [ref=f1e79]
+          - generic [ref=f1e80]: Home
+          - button "Close Tab" [ref=f1e81]
+  - generic [ref=f1e88]:
+    - generic [ref=f1e91]:
+      - button "Add Context" [ref=f1e93] [cursor=pointer]
+      - textbox "Ask anything..." [ref=f1e99]
+      - button [disabled] [ref=f1e100]
+    - generic [ref=f1e104]:
+      - button "Discover" [ref=f1e105] [cursor=pointer]
+      - button "Execute" [ref=f1e111] [cursor=pointer]
+      - button "Calendar" [ref=f1e118] [cursor=pointer]
+      - button "Vibe" [ref=f1e123] [cursor=pointer]
+      - button "Build" [ref=f1e130] [cursor=pointer]
+    - button "Collapse navigation" [ref=f1e136] [cursor=pointer]
+  - main [ref=f1e142]:
+    - generic [ref=f1e143]:
+      - generic [ref=f1e144]:
+        - generic [ref=f1e145]: Ron / Discover
+        - generic [ref=f1e146]: Selected for the curious
+      - generic [ref=f1e147]:
+        - generic [ref=f1e148]:
+          - heading "A little more perspective." [level=1] [ref=f1e149]
+          - paragraph [ref=f1e150]: Your interests, worth a closer look. Read something. Make something of it.
+        - generic [ref=f1e151]:
+          - button "Personalize your feed" [ref=f1e152] [cursor=pointer]: Personalize
+          - button "Refresh feed" [disabled] [ref=f1e156]: Refresh
+          - button "Auto-play off" [ref=f1e162] [cursor=pointer]
+      - generic [ref=f1e165]:
+        - generic [ref=f1e166]: Technology
+        - generic [ref=f1e167]: AI
+        - generic [ref=f1e168]: Design
+        - status [ref=f1e169]: Loading your feed…
+    - region "Stories by interest" [ref=f1e170]:
+      - generic [ref=f1e171]:
+        - button "AI & moving images www.youtube.com · November 30, 2025 Top 15 New AI Advancements (This Year) - YouTube What if the biggest breakthroughs in artificial intelligence are happening faster than anyone expected? In this video, we reveal the Top 15 New AI Advancemen... Read story" [ref=f1e174] [cursor=pointer]:
+          - generic [ref=f1e175]: AI & moving images
+          - generic [ref=f1e177]:
+            - paragraph [ref=f1e178]: www.youtube.com · November 30, 2025
+            - heading "Top 15 New AI Advancements (This Year) - YouTube" [level=3] [ref=f1e179]
+            - paragraph [ref=f1e180]: What if the biggest breakthroughs in artificial intelligence are happening faster than anyone expected? In this video, we reveal the Top 15 New AI Advancemen...
+            - generic [ref=f1e181]: Read story
+        - generic [ref=f1e184]:
+          - generic [ref=f1e185]: 01 / 20 in AI & moving images
+          - generic [ref=f1e186]:
+            - button "Previous AI & moving images story" [ref=f1e187] [cursor=pointer]
+            - button "Next AI & moving images story" [ref=f1e190] [cursor=pointer]
+      - generic [ref=f1e193]:
+        - button "On the field www.nytimes.com · 1 day ago Bills’ thin wide receiver room faces a ‘next man up’ test against the Broncos - The Athletic ORCHARD PARK, N.Y. — Buffalo Bills offensive coordinator Joe Brady said his play sheet Sunday “looked like a Picasso painting,” fragmented and disjointed, every new line scratching out his options. The Bills’ offense has gotten even sketchier for Saturday’s second-round playoff game ... Read story" [ref=f1e196] [cursor=pointer]:
+          - generic [ref=f1e197]: On the field
+          - generic [ref=f1e199]:
+            - paragraph [ref=f1e200]: www.nytimes.com · 1 day ago
+            - heading "Bills’ thin wide receiver room faces a ‘next man up’ test against the Broncos - The Athletic" [level=3] [ref=f1e201]
+            - paragraph [ref=f1e202]: ORCHARD PARK, N.Y. — Buffalo Bills offensive coordinator Joe Brady said his play sheet Sunday “looked like a Picasso painting,” fragmented and disjointed, every new line scratching out his options. The Bills’ offense has gotten even sketchier for Saturday’s second-round playoff game ...
+            - generic [ref=f1e203]: Read story
+        - generic [ref=f1e206]:
+          - generic [ref=f1e207]: 01 / 20 in On the field
+          - generic [ref=f1e208]:
+            - button "Previous On the field story" [ref=f1e209] [cursor=pointer]
+            - button "Next On the field story" [ref=f1e212] [cursor=pointer]
+      - generic [ref=f1e215]:
+        - button "The thrill of it www.nytimes.com · 1 week ago Riding the Roller Coaster Beat - The New York Times Mekado Murphy, the assistant film editor for The New York Times, moonlights as the newspaper’s unofficial roller coaster correspondent. Read story" [ref=f1e218] [cursor=pointer]:
+          - generic [ref=f1e219]: The thrill of it
+          - generic [ref=f1e221]:
+            - paragraph [ref=f1e222]: www.nytimes.com · 1 week ago
+            - heading "Riding the Roller Coaster Beat - The New York Times" [level=3] [ref=f1e223]
+            - paragraph [ref=f1e224]: Mekado Murphy, the assistant film editor for The New York Times, moonlights as the newspaper’s unofficial roller coaster correspondent.
+            - generic [ref=f1e225]: Read story
+        - generic [ref=f1e228]:
+          - generic [ref=f1e229]: 01 / 20 in The thrill of it
+          - generic [ref=f1e230]:
+            - button "Previous The thrill of it story" [ref=f1e231] [cursor=pointer]
+            - button "Next The thrill of it story" [ref=f1e234] [cursor=pointer]
+      - generic [ref=f1e237]:
+        - button "At the table cooking.nytimes.com · 2 weeks ago 21 Easy, Healthy Recipes for Busy, Tired People These weeknight-friendly recipes will help you eat well even when you’re short on time. Read story" [ref=f1e240] [cursor=pointer]:
+          - generic [ref=f1e241]: At the table
+          - generic [ref=f1e243]:
+            - paragraph [ref=f1e244]: cooking.nytimes.com · 2 weeks ago
+            - heading "21 Easy, Healthy Recipes for Busy, Tired People" [level=3] [ref=f1e245]
+            - paragraph [ref=f1e246]: These weeknight-friendly recipes will help you eat well even when you’re short on time.
+            - generic [ref=f1e247]: Read story
+        - generic [ref=f1e250]:
+          - generic [ref=f1e251]: 01 / 20 in At the table
+          - generic [ref=f1e252]:
+            - button "Previous At the table story" [ref=f1e253] [cursor=pointer]
+            - button "Next At the table story" [ref=f1e256] [cursor=pointer]
+      - generic [ref=f1e259]:
+        - button "Somewhere new www.nytimes.com · 3 days ago Tips to Avoid Stomach Trouble When You Travel - The New York Times Some people have guts of steel, while others are … a little more sensitive. Here are tips for preventing stomach discomfort and motion sickness on trips. Read story" [ref=f1e262] [cursor=pointer]:
+          - generic [ref=f1e263]: Somewhere new
+          - generic [ref=f1e265]:
+            - paragraph [ref=f1e266]: www.nytimes.com · 3 days ago
+            - heading "Tips to Avoid Stomach Trouble When You Travel - The New York Times" [level=3] [ref=f1e267]
+            - paragraph [ref=f1e268]: Some people have guts of steel, while others are … a little more sensitive. Here are tips for preventing stomach discomfort and motion sickness on trips.
+            - generic [ref=f1e269]: Read story
+        - generic [ref=f1e272]:
+          - generic [ref=f1e273]: 01 / 20 in Somewhere new
+          - generic [ref=f1e274]:
+            - button "Previous Somewhere new story" [ref=f1e275] [cursor=pointer]
+            - button "Next Somewhere new story" [ref=f1e278] [cursor=pointer]
+      - generic [ref=f1e281]:
+        - button "Closer to home www.visitsaltlake.com · December 2, 2025 Salt Lake City Events | Things to Do In Salt Lake City, UT Make your next visit an adventure you'll never forget. Browse all the events below. View All ... Jan. 15, 2026 · Be a part of the action as the Utah Mammoth play at the Delta Center in Salt Lake City.This calendar listing is brought to you by NowPlayingUtah.com, Utah's one-stop, online… Read story" [ref=f1e284] [cursor=pointer]:
+          - generic [ref=f1e285]: Closer to home
+          - generic [ref=f1e287]:
+            - paragraph [ref=f1e288]: www.visitsaltlake.com · December 2, 2025
+            - heading "Salt Lake City Events | Things to Do In Salt Lake City, UT" [level=3] [ref=f1e289]
+            - paragraph [ref=f1e290]: Make your next visit an adventure you'll never forget. Browse all the events below. View All ... Jan. 15, 2026 · Be a part of the action as the Utah Mammoth play at the Delta Center in Salt Lake City.This calendar listing is brought to you by NowPlayingUtah.com, Utah's one-stop, online…
+            - generic [ref=f1e291]: Read story
+        - generic [ref=f1e294]:
+          - generic [ref=f1e295]: 01 / 20 in Closer to home
+          - generic [ref=f1e296]:
+            - button "Previous Closer to home story" [ref=f1e297] [cursor=pointer]
+            - button "Next Closer to home story" [ref=f1e300] [cursor=pointer]
+      - generic [ref=f1e303]:
+        - button "Health & discovery Health & discovery www.ncbi.nlm.nih.gov Legal Implications of Utilization Review - Controlling Costs and Changing Patient Care? - NCBI Bookshelf The recent decade has seen a dramatic increase in the use of utilization review (UR) programs in an effort to stem the tide of rising health care costs. UR serves to verify the medical necessity of hospital admissions and specific medical procedures. Read story" [ref=f1e306] [cursor=pointer]:
+          - generic [ref=f1e307]:
+            - generic [ref=f1e308]: Health & discovery
+            - generic [ref=f1e310]: Health & discovery
+          - generic [ref=f1e311]:
+            - paragraph [ref=f1e312]: www.ncbi.nlm.nih.gov
+            - heading "Legal Implications of Utilization Review - Controlling Costs and Changing Patient Care? - NCBI Bookshelf" [level=3] [ref=f1e313]
+            - paragraph [ref=f1e314]: The recent decade has seen a dramatic increase in the use of utilization review (UR) programs in an effort to stem the tide of rising health care costs. UR serves to verify the medical necessity of hospital admissions and specific medical procedures.
+            - generic [ref=f1e315]: Read story
+        - generic [ref=f1e318]:
+          - generic [ref=f1e319]: 01 / 20 in Health & discovery
+          - generic [ref=f1e320]:
+            - button "Previous Health & discovery story" [ref=f1e321] [cursor=pointer]
+            - button "Next Health & discovery story" [ref=f1e324] [cursor=pointer]

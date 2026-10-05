@@ -24,11 +24,14 @@ anthropic==0.76.0
 google-genai==2.24.0
 
 # Strands Agent Framework
-strands-agents[a2a,mistral,openai,anthropic,gemini]==1.57.1
+# Run bash deploy/prepare-strands.sh first; install requirements from the repo root.
+-e ./agent/api/core/harness-sdk/strands-py[a2a,mistral,openai,anthropic,gemini,bidi-google]
 strands-harness==0.1.2
+strands-agents-evals==1.4.0
 huggingface_hub==1.20.1
 strands-agents-tools>=0.8.5
 strands-xai==0.6.1
+strands-shell==0.3.3
 xai-sdk==1.19.0
 perplexityai==0.43.5
 strands-agents-sops @ git+https://github.com/strands-agents/agent-sop.git@2634a6ee3cf755d52919e442b024e021429d127a#subdirectory=python

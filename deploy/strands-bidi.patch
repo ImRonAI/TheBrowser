@@ -1,0 +1,1911 @@
+diff --git a/strands-py/src/strands/bidi/agent/agent.py b/strands-py/src/strands/bidi/agent/agent.py
+index 3b8a02fb..ee5a63fc 100644
+--- a/strands-py/src/strands/bidi/agent/agent.py
++++ b/strands-py/src/strands/bidi/agent/agent.py
+@@ -69,7 +69,7 @@ from ..types.agent import BidiAgentInput
+ from ..types.content import BidiMessage
+ from ..types.events import BidiOutputEvent
+ from ..types.io import InputStream, OutputStream
+-from ..types.media import AudioDelta
++from ..types.media import AudioDelta, RealtimeInput, RealtimeInputContent
+ from .loop import _AgentLoop
+ 
+ if TYPE_CHECKING:
+@@ -369,41 +369,47 @@ class BidiAgent(LocalAgent):
+         """Send user content to the model.
+ 
+         Strings are shorthand for text blocks. Lists of text and image blocks
+-        form one user message, preserving block order. Audio deltas are sent
+-        individually and are not added to conversation history. Tool results
+-        are sent by the agent's tool runner.
++        form one user message that completes the user's turn, preserving block order.
++        Audio deltas and realtime input are streamed individually into the live input
++        stream and are not added to conversation history. Tool results are sent by the
++        agent's tool runner.
+ 
+         Args:
+             input_data: Can be:
+ 
+                 - str: Text message from user
+                 - TextBlock, AudioDelta, or ImageBlock: Text, streaming audio, or image input
++                - RealtimeInput: Realtime text, a video frame, or an audio-stream or activity signal
+                 - BidiUserContentBlockData: A dictionary containing one text or image key
+-                - BidiContentDeltaData: A dictionary containing one audio_delta key
++                - BidiContentDeltaData: A dictionary containing one audio_delta or realtime_input key
+                 - list: A non-empty list of strings, text or image blocks, or their dictionary forms
+ 
+         Raises:
+             RuntimeError: If start has not been called.
+             TypeError: If the input has an unsupported type or invalid input arguments.
+-            ValueError: If the input list is empty or an input dictionary does not contain
+-                exactly one supported key.
++            ValueError: If the input list is empty, an input dictionary does not contain
++                exactly one supported key, or the model does not support the input.
+ 
+         Example:
+             await agent.send("Hello")
+             await agent.send(AudioDelta(format="pcm", source={"bytes": audio_bytes}))
+             await agent.send({"audio_delta": {"format": "pcm", "source": {"bytes": audio_bytes}}})
++            await agent.send({"realtime_input": {"video": {"format": "jpeg", "source": {"bytes": frame}}}})
+             await agent.send([TextBlock("Use these details."), TextBlock("Order number: 123.")])
+         """
+         if not self._started:
+             raise RuntimeError("agent not started | call start before sending")
+ 
+         match input_data:
+-            case AudioDelta():
++            case AudioDelta() | RealtimeInput():
+                 await self._loop.send(input_data)
+                 return
+             case {"audio_delta": audio, **rest} if not rest:
+                 await self._loop.send(AudioDelta(**cast(AudioContent, audio)))
+                 return
++            case {"realtime_input": realtime, **rest} if not rest:
++                await self._loop.send(RealtimeInput(**cast(RealtimeInputContent, realtime)))
++                return
+ 
+         inputs = input_data if isinstance(input_data, list) else [input_data]
+         message = BidiMessage(content=[])
+diff --git a/strands-py/src/strands/bidi/models/google.py b/strands-py/src/strands/bidi/models/google.py
+index 9d6c29f5..52ec297c 100644
+--- a/strands-py/src/strands/bidi/models/google.py
++++ b/strands-py/src/strands/bidi/models/google.py
+@@ -5,6 +5,7 @@ official Google GenAI SDK for simplified and robust WebSocket communication.
+ """
+ 
+ import base64
++import copy
+ import logging
+ import uuid
+ from collections.abc import AsyncGenerator
+@@ -28,6 +29,8 @@ from ..types.events import (
+     BidiAudioStopEvent,
+     BidiBargeInEvent,
+     BidiConnectionStartEvent,
++    BidiGroundingEvent,
++    BidiInteractionStatusEvent,
+     BidiOutputEvent,
+     BidiReasoningDeltaEvent,
+     BidiReasoningStartEvent,
+@@ -37,14 +40,19 @@ from ..types.events import (
+     BidiTextDeltaEvent,
+     BidiTextStartEvent,
+     BidiTextStopEvent,
++    BidiToolCancelEvent,
+     BidiToolUseBlocksEvent,
+     BidiTranscriptDeltaEvent,
+     BidiTranscriptStartEvent,
+     BidiTranscriptStopEvent,
+     BidiUsageEvent,
++    GroundingChunk,
++    GroundingSupport,
++    InteractionStatus,
+     ModalityUsage,
++    UrlMetadata,
+ )
+-from ..types.media import AudioDelta
++from ..types.media import AudioDelta, RealtimeInput
+ from .configs import (
+     AudioConfig,
+     AudioStreamConfig,
+@@ -61,11 +69,31 @@ from .model import AudioCapable, BidiModel, ConnectionTimeoutError
+ 
+ logger = logging.getLogger(__name__)
+ 
++# Gemini 3.8 Live models require every function declaration to opt into NON_BLOCKING
++# execution; the extended-thinking variant rejects blocking declarations outright.
++_NON_BLOCKING_MODEL_MARKER = "gemini-3.8-live"
++
++# Keys a parameterless tool schema may carry while still declaring no parameters at all.
++_EMPTY_OBJECT_SCHEMA_KEYS = frozenset({"type", "properties", "required", "title", "description"})
++
++_INTERACTION_STATUSES: dict[str, InteractionStatus] = {
++    "IN_PROGRESS": "in_progress",
++    "IDLE": "idle",
++    "REQUIRES_ACTION": "requires_action",
++}
++
++
++def _enum_name(value: Any) -> str:
++    """Return the wire name of a genai enum, accepting the raw string the SDK keeps for unknown values."""
++    name = getattr(value, "name", None)
++    return str(name if name is not None else value).rsplit(".", 1)[-1].upper()
++
+ 
+ class _TurnSnapshot(TypedDict):
+     """State preserved across connection restarts."""
+ 
+     tool_names: dict[str, str]
++    cancelled_tool_ids: set[str]
+ 
+ 
+ @dataclass
+@@ -80,19 +108,23 @@ class _TurnState:
+     output_text_stop: BidiTextStopEvent | BidiReasoningStopEvent | None = None
+     audio_content_id: str | None = None
+     interrupted: bool = False
++    # A turn completed while the interaction stayed in progress; the response closes on idle.
++    completion_deferred: bool = False
+     input_id: str | None = None
+     input_ids: set[str] = field(default_factory=set)
+     response_input_ids: list[str] = field(default_factory=list)
+     last_activity_input_id: str | None = None
+     tool_names: dict[str, str] = field(default_factory=dict)
++    cancelled_tool_ids: set[str] = field(default_factory=set)
+ 
+     def take_snapshot(self) -> _TurnSnapshot:
+         """Capture state that survives a connection restart."""
+-        return {"tool_names": self.tool_names.copy()}
++        return {"tool_names": self.tool_names.copy(), "cancelled_tool_ids": self.cancelled_tool_ids.copy()}
+ 
+     def load_snapshot(self, snapshot: _TurnSnapshot) -> None:
+         """Restore state preserved across a connection restart."""
+         self.tool_names = snapshot["tool_names"].copy()
++        self.cancelled_tool_ids = snapshot["cancelled_tool_ids"].copy()
+ 
+     def stop_text(self) -> list[BidiOutputEvent]:
+         """Close the current text or reasoning block."""
+@@ -130,6 +162,7 @@ class GoogleGeminiLiveModel(BidiModel, AudioCapable):
+         client_args: dict[str, Any] | None = None,
+         audio: GoogleGeminiLiveAudioConfig | None = None,
+         voice: str | None = None,
++        hosted_tools: list[dict[str, Any]] | None = None,
+         **model_config: Unpack[ModelConfig],
+     ) -> None:
+         """Initialize the Google Gemini Live bidirectional model.
+@@ -138,6 +171,9 @@ class GoogleGeminiLiveModel(BidiModel, AudioCapable):
+             client_args: Arguments for the underlying Google GenAI client.
+             audio: Audio configuration.
+             voice: Prebuilt output voice name. Omit to use the provider's default.
++            hosted_tools: Provider-executed tools, such as ``{"google_search": {}}``, sent in the same
++                tool list as the agent's function declarations so neither replaces the other.
++                ``params["tools"]`` still overrides the whole list.
+             **model_config: Model configuration.
+ 
+         Raises:
+@@ -159,6 +195,7 @@ class GoogleGeminiLiveModel(BidiModel, AudioCapable):
+ 
+         self._resolve_audio_config(audio)
+         self._voice = voice
++        self._hosted_tools = [dict(tool) for tool in hosted_tools or []]
+ 
+         self.client_args = dict(client_args or {})
+         self._client = genai.Client(**self.client_args)
+@@ -373,6 +410,12 @@ class GoogleGeminiLiveModel(BidiModel, AudioCapable):
+             turn_state.tool_names.update((tool_use["toolUseId"], tool_use["name"]) for tool_use in tool_uses)
+             events.append(BidiToolUseBlocksEvent(tool_uses))
+ 
++        cancellation = message.tool_call_cancellation
++        if cancellation and cancellation.ids:
++            cancelled_ids = list(cancellation.ids)
++            turn_state.cancelled_tool_ids.update(cancelled_ids)
++            events.append(BidiToolCancelEvent(cancelled_ids))
++
+         if message.usage_metadata:
+             events.append(self._convert_usage_metadata(message.usage_metadata))
+ 
+@@ -412,12 +455,35 @@ class GoogleGeminiLiveModel(BidiModel, AudioCapable):
+         if turn_state.audio_content_id is not None and (barge_in or turn_complete or generation_complete):
+             wrapped.append(BidiAudioStopEvent(turn_state.audio_content_id))
+             turn_state.audio_content_id = None
+-        if turn_complete:
++
++        status = self._interaction_status(server_content)
++        waiting_for_input = bool(server_content and server_content.waiting_for_input)
++        # An interrupted or input-awaiting response is over even if the interaction is not: the
++        # next output belongs to a new response.
++        response_boundary = turn_state.interrupted or waiting_for_input
++        if turn_complete and status == "in_progress" and not response_boundary:
++            # The turn ended but the interaction has not: the model is still reasoning or will speak
++            # again. Close this utterance's content now so it survives a restart, but hold the
++            # response open so the agent does not treat this as an idle boundary.
++            wrapped.extend(self._close_turn_content(turn_state))
++            turn_state.completion_deferred = turn_state.response_id is not None
++        elif turn_complete or (
++            turn_state.completion_deferred and (status in ("idle", "requires_action") or response_boundary)
++        ):
++            turn_state.completion_deferred = False
+             wrapped.extend(self._complete_response(turn_state))
+         return wrapped
+ 
+-    def _complete_response(self, turn_state: _TurnState) -> list[BidiOutputEvent]:
+-        """Close the turn's content and response, preserving any newer user activity."""
++    @staticmethod
++    def _interaction_status(server_content: LiveServerContent | None) -> InteractionStatus | None:
++        """Map the nested server-content interaction status, or ``None`` when it is absent."""
++        raw_status = server_content.interaction_status if server_content else None
++        if raw_status is None:
++            return None
++        return _INTERACTION_STATUSES.get(_enum_name(raw_status), "unspecified")
++
++    def _close_turn_content(self, turn_state: _TurnState) -> list[BidiOutputEvent]:
++        """Close the turn's user and assistant content streams, preserving any newer user activity."""
+         events: list[BidiOutputEvent] = []
+         input_ids_to_complete = turn_state.response_input_ids
+         if turn_state.response_id is None:
+@@ -425,16 +491,24 @@ class GoogleGeminiLiveModel(BidiModel, AudioCapable):
+         for input_id in input_ids_to_complete:
+             if input_id in turn_state.input_ids:
+                 events.append(turn_state.stop_input_transcript(input_id))
++        turn_state.response_input_ids = []
+         if turn_state.response_id is None:
+             return events
+ 
+         events.extend(turn_state.stop_text())
+         if turn_state.output_transcript_id is not None:
+             events.append(BidiTranscriptStopEvent("assistant", content_id=turn_state.output_transcript_id))
++            turn_state.output_transcript_id = None
++        return events
++
++    def _complete_response(self, turn_state: _TurnState) -> list[BidiOutputEvent]:
++        """Close the turn's content and response."""
++        events = self._close_turn_content(turn_state)
++        if turn_state.response_id is None:
++            return events
++
+         events.append(BidiResponseStopEvent(turn_state.response_id))
+         turn_state.response_id = None
+-        turn_state.response_input_ids = []
+-        turn_state.output_transcript_id = None
+         turn_state.interrupted = False
+         return events
+ 
+@@ -500,8 +574,70 @@ class GoogleGeminiLiveModel(BidiModel, AudioCapable):
+                 delta_event = BidiReasoningDeltaEvent if is_reasoning else BidiTextDeltaEvent
+                 events.append(delta_event(part.text, turn_state.output_text_stop.content_id))
+ 
++        grounding_event = self._convert_grounding(server_content)
++        if grounding_event is not None:
++            events.append(grounding_event)
++
++        status = self._interaction_status(server_content)
++        waiting_for_input = server_content.waiting_for_input
++        if status is not None or waiting_for_input is not None:
++            reason = server_content.turn_complete_reason
++            events.append(
++                BidiInteractionStatusEvent(
++                    status or "unspecified",
++                    turn_complete=bool(server_content.turn_complete),
++                    turn_complete_reason=_enum_name(reason) if reason else None,
++                    waiting_for_input=waiting_for_input,
++                )
++            )
++
+         return events
+ 
++    @staticmethod
++    def _convert_grounding(server_content: LiveServerContent) -> BidiGroundingEvent | None:
++        """Convert grounding and URL-context metadata into one grounding event, or ``None`` if absent."""
++        grounding = server_content.grounding_metadata
++        url_context = server_content.url_context_metadata
++        if not grounding and not url_context:
++            return None
++
++        chunks: list[GroundingChunk] = []
++        supports: list[GroundingSupport] = []
++        queries: list[str] = []
++        if grounding:
++            queries = list(grounding.web_search_queries or [])
++            for chunk in grounding.grounding_chunks or []:
++                web = chunk.web
++                chunk_entry: GroundingChunk = {}
++                if web and web.title is not None:
++                    chunk_entry["title"] = web.title
++                if web and web.uri is not None:
++                    chunk_entry["uri"] = web.uri
++                if web and web.domain is not None:
++                    chunk_entry["domain"] = web.domain
++                chunks.append(chunk_entry)
++            for support in grounding.grounding_supports or []:
++                segment_text = support.segment.text if support.segment else None
++                support_entry: GroundingSupport = {"chunk_indices": list(support.grounding_chunk_indices or [])}
++                if segment_text is not None:
++                    support_entry["text"] = segment_text
++                supports.append(support_entry)
++
++        url_metadata: list[UrlMetadata] = []
++        if url_context:
++            for entry in url_context.url_metadata or []:
++                status = entry.url_retrieval_status
++                url_entry: UrlMetadata = {}
++                if entry.retrieved_url is not None:
++                    url_entry["url"] = entry.retrieved_url
++                if status is not None:
++                    url_entry["status"] = _enum_name(status)
++                url_metadata.append(url_entry)
++
++        return BidiGroundingEvent(
++            web_search_queries=queries, chunks=chunks, supports=supports, url_metadata=url_metadata
++        )
++
+     def _convert_usage_metadata(self, usage: UsageMetadata) -> BidiUsageEvent:
+         """Convert Gemini usage metadata into a usage event.
+ 
+@@ -551,10 +687,13 @@ class GoogleGeminiLiveModel(BidiModel, AudioCapable):
+     ) -> None:
+         """Unified send method for all content types. Sends the given inputs to the Gemini Live API.
+ 
+-        Dispatches to appropriate internal handler based on content type.
++        Dispatches to appropriate internal handler based on content type. A ``BidiMessage`` of
++        text or images completes a user turn via ``send_client_content``, which always interrupts
++        an active response. Audio deltas and ``RealtimeInput`` stream through
++        ``send_realtime_input`` without turn semantics or ordering guarantees.
+ 
+         Args:
+-            content: A complete BidiMessage or an individual AudioDelta.
++            content: A complete BidiMessage, an individual AudioDelta, or a RealtimeInput.
+ 
+         Raises:
+             ValueError: If content type not supported.
+@@ -566,11 +705,17 @@ class GoogleGeminiLiveModel(BidiModel, AudioCapable):
+             await self._send_message(content)
+         elif isinstance(content, AudioDelta):
+             await self._send_audio_content(content)
++        elif isinstance(content, RealtimeInput):
++            await self._send_realtime_input(content)
+         else:
+             raise ValueError(f"content_type={type(content)} | content not supported")
+ 
+     async def _send_message(self, message: BidiMessage) -> None:
+-        """Send one user turn or tool results."""
++        """Send one user turn or tool results.
++
++        Results for tool calls the server cancelled are dropped: the server no longer tracks the
++        call, and answering it would be rejected or attributed to the wrong turn.
++        """
+         parts = []
+         function_responses = []
+         for block in message.content:
+@@ -584,6 +729,11 @@ class GoogleGeminiLiveModel(BidiModel, AudioCapable):
+                     genai_types.Part(inline_data=genai_types.Blob(data=image_bytes, mime_type=f"image/{block.format}"))
+                 )
+             elif isinstance(block, ToolResultBlock):
++                if block.tool_use_id in self._turn_state.cancelled_tool_ids:
++                    logger.debug("tool_use_id=<%s> | dropping result for cancelled tool call", block.tool_use_id)
++                    self._turn_state.cancelled_tool_ids.discard(block.tool_use_id)
++                    self._turn_state.tool_names.pop(block.tool_use_id, None)
++                    continue
+                 function_responses.append(self._format_tool_result(block))
+             else:
+                 raise ValueError(f"content_type={type(block)} | content not supported by Gemini Live")
+@@ -597,6 +747,23 @@ class GoogleGeminiLiveModel(BidiModel, AudioCapable):
+                 turns=genai_types.Content(role="user", parts=parts), turn_complete=True
+             )
+ 
++    async def _send_realtime_input(self, realtime_input: RealtimeInput) -> None:
++        """Stream text, a video frame, or a stream signal into the live input without ending the turn."""
++        if realtime_input.text is not None:
++            await self._live_session.send_realtime_input(text=realtime_input.text)
++        elif realtime_input.video is not None:
++            frame_bytes = realtime_input.video["source"].get("bytes")
++            if frame_bytes is None:
++                raise ValueError("video source must contain bytes for Gemini Live")
++            mime_type = f"image/{realtime_input.video['format']}"
++            await self._live_session.send_realtime_input(video=genai_types.Blob(data=frame_bytes, mime_type=mime_type))
++        elif realtime_input.audio_stream_end is not None:
++            await self._live_session.send_realtime_input(audio_stream_end=realtime_input.audio_stream_end)
++        elif realtime_input.activity == "start":
++            await self._live_session.send_realtime_input(activity_start=genai_types.ActivityStart())
++        else:
++            await self._live_session.send_realtime_input(activity_end=genai_types.ActivityEnd())
++
+     async def _send_audio_content(self, audio_input: AudioDelta) -> None:
+         """Internal: Send audio content using Gemini Live API.
+ 
+@@ -660,6 +827,7 @@ class GoogleGeminiLiveModel(BidiModel, AudioCapable):
+         async def stop_connection() -> None:
+             self._connection_id = None
+             self._turn_state.tool_names.clear()
++            self._turn_state.cancelled_tool_ids.clear()
+ 
+         await stop_all(stop_session, stop_connection)
+ 
+@@ -769,22 +937,57 @@ class GoogleGeminiLiveModel(BidiModel, AudioCapable):
+         if self._voice is not None:
+             config_dict["speech_config"] = {"voice_config": {"prebuilt_voice_config": {"voice_name": self._voice}}}
+ 
++        # Hosted tools ride alongside the agent's function declarations; the model treats a tool
++        # list as a whole, so both must be in the same list to reach it.
++        if self._hosted_tools:
++            config_dict["tools"] = [*config_dict.get("tools", []), *copy.deepcopy(self._hosted_tools)]
++
+         return _merge_config(config_dict, self._config.get("params") or {})
+ 
+     def _format_tools_for_live_api(self, tool_specs: list[ToolSpec]) -> list[genai_types.Tool]:
+-        """Format tool specs for Gemini Live API."""
++        """Format tool specs for Gemini Live API.
++
++        Input schemas are passed as JSON Schema so constraints such as ``additionalProperties``
++        reach the model intact. A parameterless tool is declared without a schema, matching the
++        provider SDK's own declarations: an empty object schema measurably suppresses calls to the
++        tool on Gemini 3.8 Live. Gemini 3.8 Live models get an explicit ``NON_BLOCKING`` behavior on
++        every declaration; other models keep the provider default.
++        """
+         if not tool_specs:
+             return []
+ 
++        behavior = genai_types.Behavior.NON_BLOCKING if self._requires_non_blocking_tools() else None
+         return [
+             genai_types.Tool(
+                 function_declarations=[
+                     genai_types.FunctionDeclaration(
+                         description=tool_spec["description"],
+                         name=tool_spec["name"],
+-                        parameters=genai_types.Schema.model_validate(tool_spec["inputSchema"]["json"]),
++                        parameters_json_schema=self._parameters_json_schema(tool_spec),
++                        behavior=behavior,
+                     )
+                     for tool_spec in tool_specs
+                 ],
+             ),
+         ]
++
++    @staticmethod
++    def _parameters_json_schema(tool_spec: ToolSpec) -> dict[str, Any] | None:
++        """Return the tool's JSON Schema, or ``None`` for a tool that declares no parameters.
++
++        Only a bare empty object schema is omitted; a schema that constrains its input in any
++        other way (``additionalProperties``, ``$ref``, ``oneOf``, ...) is forwarded unchanged.
++        """
++        schema: dict[str, Any] = tool_spec["inputSchema"]["json"]
++        if (
++            set(schema) <= _EMPTY_OBJECT_SCHEMA_KEYS
++            and schema.get("type") == "object"
++            and not schema.get("properties")
++            and not schema.get("required")
++        ):
++            return None
++        return schema
++
++    def _requires_non_blocking_tools(self) -> bool:
++        """Whether the configured model requires explicit non-blocking function declarations."""
++        return _NON_BLOCKING_MODEL_MARKER in self._config["model_id"]
+diff --git a/strands-py/src/strands/bidi/types/__init__.py b/strands-py/src/strands/bidi/types/__init__.py
+index 953705fc..155fc723 100644
+--- a/strands-py/src/strands/bidi/types/__init__.py
++++ b/strands-py/src/strands/bidi/types/__init__.py
+@@ -22,6 +22,8 @@ from .events import (
+     BidiConnectionStartEvent,
+     BidiConnectionStopEvent,
+     BidiConnectionWarningEvent,
++    BidiGroundingEvent,
++    BidiInteractionStatusEvent,
+     BidiOutputEvent,
+     BidiReasoningBlockEvent,
+     BidiReasoningDeltaEvent,
+@@ -33,17 +35,22 @@ from .events import (
+     BidiTextDeltaEvent,
+     BidiTextStartEvent,
+     BidiTextStopEvent,
++    BidiToolCancelEvent,
+     BidiToolUseBlocksEvent,
+     BidiTranscriptBlockEvent,
+     BidiTranscriptDeltaEvent,
+     BidiTranscriptStartEvent,
+     BidiTranscriptStopEvent,
+     BidiUsageEvent,
++    GroundingChunk,
++    GroundingSupport,
++    InteractionStatus,
+     ModalityUsage,
+     Role,
++    UrlMetadata,
+ )
+ from .io import InputStream, OutputStream
+-from .media import AudioDelta
++from .media import AudioDelta, RealtimeActivity, RealtimeInput, RealtimeInputContent
+ 
+ __all__ = [
+     "AudioChannel",
+@@ -62,6 +69,8 @@ __all__ = [
+     "BidiConnectionStartEvent",
+     "BidiConnectionStopEvent",
+     "BidiConnectionWarningEvent",
++    "BidiGroundingEvent",
++    "BidiInteractionStatusEvent",
+     "BidiMessage",
+     "BidiOutputEvent",
+     "BidiReasoningBlockEvent",
+@@ -71,6 +80,7 @@ __all__ = [
+     "BidiBargeInEvent",
+     "BidiResponseStartEvent",
+     "BidiResponseStopEvent",
++    "BidiToolCancelEvent",
+     "BidiToolUseBlocksEvent",
+     "BidiTextBlockEvent",
+     "BidiTextDeltaEvent",
+@@ -83,8 +93,15 @@ __all__ = [
+     "BidiUsageEvent",
+     "BidiUserContentBlock",
+     "BidiUserContentBlockData",
++    "GroundingChunk",
++    "GroundingSupport",
+     "InputStream",
++    "InteractionStatus",
+     "ModalityUsage",
+     "OutputStream",
++    "RealtimeActivity",
++    "RealtimeInput",
++    "RealtimeInputContent",
+     "Role",
++    "UrlMetadata",
+ ]
+diff --git a/strands-py/src/strands/bidi/types/agent.py b/strands-py/src/strands/bidi/types/agent.py
+index 3156fc1f..be954117 100644
+--- a/strands-py/src/strands/bidi/types/agent.py
++++ b/strands-py/src/strands/bidi/types/agent.py
+@@ -15,4 +15,4 @@ BidiAgentInput: TypeAlias = (
+     | BidiContentDeltaData
+     | list[str | BidiUserContentBlock | BidiUserContentBlockData]
+ )
+-"""A single user input or list of user content blocks."""
++"""A single user input, a streaming delta or realtime input, or a list of user content blocks."""
+diff --git a/strands-py/src/strands/bidi/types/content.py b/strands-py/src/strands/bidi/types/content.py
+index 5956bb1d..77be506e 100644
+--- a/strands-py/src/strands/bidi/types/content.py
++++ b/strands-py/src/strands/bidi/types/content.py
+@@ -8,7 +8,7 @@ from typing_extensions import TypedDict
+ from ...types.content import TextBlock, _TextBlockData
+ from ...types.media import ImageBlock, _ImageBlockData
+ from ...types.tools import ToolResultBlock, _ToolResultBlockData
+-from .media import AudioDelta, _AudioDeltaData
++from .media import AudioDelta, RealtimeInput, _AudioDeltaData, _RealtimeInputData
+ 
+ BidiUserContentBlock: TypeAlias = TextBlock | ImageBlock
+ """A complete text or image block supplied by a user."""
+@@ -16,8 +16,8 @@ BidiUserContentBlock: TypeAlias = TextBlock | ImageBlock
+ BidiContentBlock: TypeAlias = BidiUserContentBlock | ToolResultBlock
+ """A complete text, image, or tool result block."""
+ 
+-BidiContentDelta: TypeAlias = AudioDelta
+-"""An audio delta for the live input stream."""
++BidiContentDelta: TypeAlias = AudioDelta | RealtimeInput
++"""An audio delta or other realtime input for the live input stream."""
+ 
+ BidiUserContentBlockData: TypeAlias = _TextBlockData | _ImageBlockData
+ """Dictionary form of one user content block."""
+@@ -25,8 +25,8 @@ BidiUserContentBlockData: TypeAlias = _TextBlockData | _ImageBlockData
+ BidiContentBlockData: TypeAlias = BidiUserContentBlockData | _ToolResultBlockData
+ """Dictionary form of one text, image, or tool result block."""
+ 
+-BidiContentDeltaData: TypeAlias = _AudioDeltaData
+-"""Dictionary form of an audio delta."""
++BidiContentDeltaData: TypeAlias = _AudioDeltaData | _RealtimeInputData
++"""Dictionary form of an audio delta or other realtime input."""
+ 
+ 
+ @dataclass
+diff --git a/strands-py/src/strands/bidi/types/events.py b/strands-py/src/strands/bidi/types/events.py
+index e615414b..c2b6c75a 100644
+--- a/strands-py/src/strands/bidi/types/events.py
++++ b/strands-py/src/strands/bidi/types/events.py
+@@ -3,13 +3,16 @@
+ Defines the provider-agnostic events produced by bidirectional models and ``BidiAgent``:
+ connection lifecycle (start, restart, warning, stop), response start and stop, audio, text,
+ reasoning, and transcript streams (start, delta, stop, and the completed block), barge-in,
+-token usage, and tool-use groups. Also defines the ``AudioChannel``, ``AudioFormat``, and
+-``Role`` literals and the ``BidiOutputEvent`` union.
++interaction status, grounding, token usage, tool-use groups, and tool cancellation. Also defines
++the ``AudioChannel``, ``AudioFormat``, ``InteractionStatus``, and ``Role`` literals and the
++``BidiOutputEvent`` union.
+ """
+ 
+ import logging
+ from typing import TYPE_CHECKING, Any, Literal, cast, get_args
+ 
++from typing_extensions import TypedDict
++
+ from ...types._events import TypedEvent
+ from ...types.tools import ToolUse
+ 
+@@ -40,6 +43,53 @@ Role = Literal["user", "assistant"]
+ 
+ _VALID_ROLES: tuple[str, ...] = get_args(Role)
+ 
++InteractionStatus = Literal["in_progress", "idle", "requires_action", "unspecified"]
++"""Whether the model is still working on the current interaction.
++
++- "in_progress": The model is still generating or reasoning, even if a turn has completed.
++- "idle": The interaction is finished and the model waits for the next input.
++- "requires_action": The model waits for the client (for example, a tool result).
++- "unspecified": The provider reported a status this SDK does not recognize.
++"""
++
++
++class GroundingChunk(TypedDict, total=False):
++    """One source the model grounded its output on.
++
++    Attributes:
++        title: Source title.
++        uri: Source location.
++        domain: Source domain.
++    """
++
++    title: str
++    uri: str
++    domain: str
++
++
++class GroundingSupport(TypedDict, total=False):
++    """A span of model output and the grounding chunks that support it.
++
++    Attributes:
++        text: The supported span of output text.
++        chunk_indices: Indices into the event's ``chunks`` that support the span.
++    """
++
++    text: str
++    chunk_indices: list[int]
++
++
++class UrlMetadata(TypedDict, total=False):
++    """Retrieval outcome for one URL the model read.
++
++    Attributes:
++        url: The retrieved URL.
++        status: Provider retrieval status.
++    """
++
++    url: str
++    status: str
++
+ 
+ def _normalize_role(role: Any, default: Role = "user") -> Role:
+     """Normalize a role value to a supported `Role`.
+@@ -552,6 +602,130 @@ class BidiResponseStopEvent(TypedEvent):
+         return cast(str, self["response_id"])
+ 
+ 
++class BidiInteractionStatusEvent(TypedEvent):
++    """Model-reported status of the current interaction.
++
++    Reported alongside turn boundaries by providers that distinguish a completed turn from a
++    completed interaction, so a client can tell "the model finished speaking" from "the model is
++    done". Emitted independently of response and audio start/stop events.
++
++    Args:
++        status: Whether the interaction is still in progress or idle.
++        turn_complete: Whether this status accompanied a turn completion.
++        turn_complete_reason: Provider-specific reason the turn completed, if reported.
++        waiting_for_input: True if the model paused because it expects more user input.
++    """
++
++    def __init__(
++        self,
++        status: InteractionStatus,
++        *,
++        turn_complete: bool = False,
++        turn_complete_reason: str | None = None,
++        waiting_for_input: bool | None = None,
++    ) -> None:
++        """Initialize interaction status event."""
++        super().__init__(
++            {
++                "type": "bidi_interaction_status",
++                "status": status,
++                "turn_complete": turn_complete,
++                "turn_complete_reason": turn_complete_reason,
++                "waiting_for_input": waiting_for_input,
++            }
++        )
++
++    @property
++    def status(self) -> InteractionStatus:
++        """Whether the interaction is still in progress or idle."""
++        return cast(InteractionStatus, self["status"])
++
++    @property
++    def turn_complete(self) -> bool:
++        """Whether this status accompanied a turn completion."""
++        return cast(bool, self["turn_complete"])
++
++    @property
++    def turn_complete_reason(self) -> str | None:
++        """Provider-specific reason the turn completed, if reported."""
++        return cast(str | None, self["turn_complete_reason"])
++
++    @property
++    def waiting_for_input(self) -> bool | None:
++        """True if the model paused because it expects more user input."""
++        return cast(bool | None, self["waiting_for_input"])
++
++
++class BidiGroundingEvent(TypedEvent):
++    """Sources the model grounded its current response on.
++
++    Args:
++        web_search_queries: Web searches the model issued.
++        chunks: Sources referenced by ``supports``.
++        supports: Output spans and the chunks supporting them.
++        url_metadata: Retrieval outcome for URLs the model read.
++    """
++
++    def __init__(
++        self,
++        *,
++        web_search_queries: list[str] | None = None,
++        chunks: list[GroundingChunk] | None = None,
++        supports: list[GroundingSupport] | None = None,
++        url_metadata: list[UrlMetadata] | None = None,
++    ) -> None:
++        """Initialize grounding event."""
++        super().__init__(
++            {
++                "type": "bidi_grounding",
++                "web_search_queries": web_search_queries or [],
++                "chunks": chunks or [],
++                "supports": supports or [],
++                "url_metadata": url_metadata or [],
++            }
++        )
++
++    @property
++    def web_search_queries(self) -> list[str]:
++        """Web searches the model issued."""
++        return cast(list[str], self["web_search_queries"])
++
++    @property
++    def chunks(self) -> list[GroundingChunk]:
++        """Sources referenced by ``supports``."""
++        return cast(list[GroundingChunk], self["chunks"])
++
++    @property
++    def supports(self) -> list[GroundingSupport]:
++        """Output spans and the chunks supporting them."""
++        return cast(list[GroundingSupport], self["supports"])
++
++    @property
++    def url_metadata(self) -> list[UrlMetadata]:
++        """Retrieval outcome for URLs the model read."""
++        return cast(list[UrlMetadata], self["url_metadata"])
++
++
++class BidiToolCancelEvent(TypedEvent):
++    """The model withdrew tool calls it no longer wants answered.
++
++    The provider stops forwarding results for these calls. Tools the agent already started keep
++    running to completion and their results stay in local history; nothing is undone.
++
++    Args:
++        tool_use_ids: Identifiers of the withdrawn tool calls.
++    """
++
++    def __init__(self, tool_use_ids: list[str]) -> None:
++        """Initialize tool cancel event."""
++        super().__init__({"type": "bidi_tool_cancel", "tool_use_ids": tool_use_ids})
++
++    @property
++    def tool_use_ids(self) -> list[str]:
++        """Identifiers of the withdrawn tool calls."""
++        return cast(list[str], self["tool_use_ids"])
++
++
+ class ModalityUsage(dict):
+     """Token usage for a specific modality.
+ 
+@@ -711,9 +885,12 @@ BidiOutputEvent = (
+     | BidiTranscriptStopEvent
+     | BidiTranscriptBlockEvent
+     | BidiBargeInEvent
++    | BidiInteractionStatusEvent
++    | BidiGroundingEvent
+     | BidiResponseStopEvent
+     | BidiUsageEvent
+     | BidiConnectionStopEvent
+     | BidiToolUseBlocksEvent
++    | BidiToolCancelEvent
+ )
+ """Union of different bidi output event types."""
+diff --git a/strands-py/src/strands/bidi/types/media.py b/strands-py/src/strands/bidi/types/media.py
+index 475017b1..1e2e4e29 100644
+--- a/strands-py/src/strands/bidi/types/media.py
++++ b/strands-py/src/strands/bidi/types/media.py
+@@ -1,16 +1,83 @@
+ """Media input types for bidirectional streaming."""
+ 
+ from dataclasses import dataclass
++from typing import Literal
+ 
+ from typing_extensions import TypedDict
+ 
+-from ...types.media import AudioContent, AudioFormat, AudioSource
++from ...types.media import AudioContent, AudioFormat, AudioSource, ImageContent
++
++RealtimeActivity = Literal["start", "end"]
++"""Manual voice-activity boundary sent when the provider's automatic detection is disabled."""
+ 
+ 
+ class _AudioDeltaData(TypedDict):
+     audio_delta: AudioContent
+ 
+ 
++class RealtimeInputContent(TypedDict, total=False):
++    """Dictionary form of the single field carried by one ``RealtimeInput``.
++
++    Attributes:
++        text: Text appended to the live input stream.
++        video: One video frame (an image) appended to the live input stream.
++        audio_stream_end: Signals that the audio input stream has ended.
++        activity: Manual voice-activity boundary.
++    """
++
++    text: str
++    video: ImageContent
++    audio_stream_end: bool
++    activity: RealtimeActivity
++
++
++class _RealtimeInputData(TypedDict):
++    realtime_input: RealtimeInputContent
++
++
++@dataclass
++class RealtimeInput:
++    """Non-audio content appended to the live input stream.
++
++    Exactly one field is set per instance. Like ``AudioDelta``, realtime input is streamed into
++    the provider's live context without turn semantics: it does not end the user's turn, does not
++    interrupt an active response, and has no guaranteed ordering relative to other realtime input.
++    Providers without a live input stream reject it.
++
++    Attributes:
++        text: Text appended to the live input stream.
++        video: One video frame (an image) appended to the live input stream.
++        audio_stream_end: Signals that the audio input stream has ended.
++        activity: Manual voice-activity boundary.
++
++    Raises:
++        ValueError: If zero or several fields are set.
++    """
++
++    text: str | None = None
++    video: ImageContent | None = None
++    audio_stream_end: bool | None = None
++    activity: RealtimeActivity | None = None
++
++    def __post_init__(self) -> None:
++        """Enforce that exactly one field is set."""
++        if len(self.to_dict()["realtime_input"]) != 1:
++            raise ValueError("invalid realtime input | expected exactly one of text, video, audio_stream_end, activity")
++
++    def to_dict(self) -> _RealtimeInputData:
++        """Return the dictionary form of this input, carrying only the set field."""
++        content: RealtimeInputContent = {}
++        if self.text is not None:
++            content["text"] = self.text
++        if self.video is not None:
++            content["video"] = self.video
++        if self.audio_stream_end is not None:
++            content["audio_stream_end"] = self.audio_stream_end
++        if self.activity is not None:
++            content["activity"] = self.activity
++        return {"realtime_input": content}
++
++
+ @dataclass
+ class AudioDelta:
+     """Audio samples to append to the live input stream.
+diff --git a/strands-py/tests/strands/bidi/agent/test_agent.py b/strands-py/tests/strands/bidi/agent/test_agent.py
+index d5f0c356..ec3440e5 100644
+--- a/strands-py/tests/strands/bidi/agent/test_agent.py
++++ b/strands-py/tests/strands/bidi/agent/test_agent.py
+@@ -22,6 +22,7 @@ from strands.bidi.types import (
+     BidiTranscriptStartEvent,
+     InputStream,
+     OutputStream,
++    RealtimeInput,
+ )
+ from strands.hooks import AfterToolCallEvent, BeforeToolCallEvent, MessageAddedEvent, MessageUpdatedEvent
+ from strands.sandbox.not_a_sandbox_local_environment import NotASandboxLocalEnvironment
+@@ -584,6 +585,11 @@ async def test_send_list_preserves_order_and_history(agent, image):
+         ({"audio_delta": {"format": "pcm", "source": {"bytes": b"audio"}, "extra": True}}, TypeError),
+         ({"image": {"format": "jpeg"}}, TypeError),
+         ({"image": {"format": "jpeg", "source": {"bytes": b"image"}, "extra": True}}, TypeError),
++        ({"realtime_input": {}}, ValueError),
++        ({"realtime_input": {"text": "a", "audio_stream_end": True}}, ValueError),
++        ({"realtime_input": {"frame": b"x"}}, TypeError),
++        ({"realtime_input": {"text": "a"}, "text": "b"}, ValueError),
++        ([TextBlock("Hello"), RealtimeInput(text="more")], TypeError),
+     ],
+ )
+ async def test_send_rejects_invalid_input(agent, input_data, error_type):
+@@ -832,3 +838,65 @@ async def test_update_message_when_message_removed(agent, caplog, strict):
+         assert caplog.messages == [exp_message]
+     assert agent.messages == [first]
+     assert hooks.events_received == []
++
++
++@pytest.mark.asyncio
++@pytest.mark.parametrize(
++    ("input_data", "exp_content"),
++    [
++        pytest.param(RealtimeInput(text="keep going"), RealtimeInput(text="keep going"), id="object"),
++        pytest.param({"realtime_input": {"text": "keep going"}}, RealtimeInput(text="keep going"), id="text-dict"),
++        pytest.param(
++            {"realtime_input": {"video": {"format": "jpeg", "source": {"bytes": b"frame"}}}},
++            RealtimeInput(video={"format": "jpeg", "source": {"bytes": b"frame"}}),
++            id="video-dict",
++        ),
++        pytest.param(
++            {"realtime_input": {"audio_stream_end": True}}, RealtimeInput(audio_stream_end=True), id="stream-end"
++        ),
++        pytest.param({"realtime_input": {"activity": "end"}}, RealtimeInput(activity="end"), id="activity"),
++    ],
++)
++async def test_send_realtime_input_streams_without_history(agent, input_data, exp_content):
++    """Realtime input reaches the model through the loop and is never recorded as a user turn."""
++    await agent.start()
++    agent.model.send = unittest.mock.AsyncMock()
++
++    await agent.send(input_data)
++
++    agent.model.send.assert_awaited_once_with(exp_content)
++    if isinstance(input_data, RealtimeInput):
++        assert agent.model.send.await_args.args[0] is input_data
++    assert agent.messages == []
++    assert agent._loop._turn_complete.is_set()
++
++
++@pytest.mark.asyncio
++async def test_send_realtime_input_waits_for_send_gate(agent):
++    """Realtime input honors the loop's send gate like every other input."""
++    await agent.start()
++    agent.model.send = unittest.mock.AsyncMock()
++    agent._loop._send_gate.clear()
++
++    send_task = asyncio.create_task(agent.send(RealtimeInput(text="later")))
++    await asyncio.sleep(0)
++    agent.model.send.assert_not_awaited()
++
++    agent._loop._send_gate.set()
++    await send_task
++
++    agent.model.send.assert_awaited_once_with(RealtimeInput(text="later"))
++
++
++@pytest.mark.asyncio
++async def test_send_realtime_input_preserves_model_value_error(agent):
++    """A model without a live input stream rejects realtime input; the error reaches the caller."""
++    await agent.start()
++    error = ValueError("content not supported")
++    agent.model.send = unittest.mock.AsyncMock(side_effect=error)
++
++    with pytest.raises(ValueError) as exc_info:
++        await agent.send(RealtimeInput(text="later"))
++
++    assert exc_info.value is error
++    assert agent.messages == []
+diff --git a/strands-py/tests/strands/bidi/models/test_google.py b/strands-py/tests/strands/bidi/models/test_google.py
+index 3f62da76..fe4d08a8 100644
+--- a/strands-py/tests/strands/bidi/models/test_google.py
++++ b/strands-py/tests/strands/bidi/models/test_google.py
+@@ -25,6 +25,8 @@ from strands.bidi.types import (
+     BidiAudioStopEvent,
+     BidiBargeInEvent,
+     BidiConnectionStartEvent,
++    BidiGroundingEvent,
++    BidiInteractionStatusEvent,
+     BidiMessage,
+     BidiReasoningDeltaEvent,
+     BidiReasoningStartEvent,
+@@ -34,11 +36,13 @@ from strands.bidi.types import (
+     BidiTextDeltaEvent,
+     BidiTextStartEvent,
+     BidiTextStopEvent,
++    BidiToolCancelEvent,
+     BidiToolUseBlocksEvent,
+     BidiTranscriptDeltaEvent,
+     BidiTranscriptStartEvent,
+     BidiTranscriptStopEvent,
+     BidiUsageEvent,
++    RealtimeInput,
+ )
+ from strands.types.content import TextBlock
+ from strands.types.media import ImageBlock
+@@ -81,6 +85,7 @@ def live_message():
+         message.tool_call = None
+         message.voice_activity = None
+         message.server_content = None
++        message.tool_call_cancellation = None
+         message.usage_metadata = None
+ 
+         for name, value in overrides.items():
+@@ -103,6 +108,11 @@ def server_content():
+         content.model_turn = None
+         content.turn_complete = None
+         content.generation_complete = None
++        content.interaction_status = None
++        content.waiting_for_input = None
++        content.turn_complete_reason = None
++        content.grounding_metadata = None
++        content.url_context_metadata = None
+ 
+         for name, value in overrides.items():
+             setattr(content, name, value)
+@@ -633,6 +643,67 @@ async def test_proactive_restart_end_to_end_through_agent(mock_genai_client, mod
+     await agent.stop()
+ 
+ 
++@pytest.mark.asyncio
++async def test_filler_transcript_survives_restart_during_deferred_completion(
++    mock_genai_client, model_id, api_key, monkeypatch
++):
++    """A filler utterance closed by turn_complete+IN_PROGRESS persists even if a restart follows."""
++    from strands.bidi.agent import BidiAgent
++
++    _, mock_live_session, _ = mock_genai_client
++    released = asyncio.Event()
++
++    def scripted_receive():
++        async def _gen():
++            yield genai_types.LiveServerMessage(
++                server_content={"output_transcription": {"text": "Checking the diagnostic."}}
++            )
++            yield genai_types.LiveServerMessage(
++                server_content={"turn_complete": True, "interaction_status": "IN_PROGRESS"}
++            )
++            await released.wait()
++
++        return _gen()
++
++    mock_live_session.receive = unittest.mock.Mock(side_effect=scripted_receive)
++    monkeypatch.setattr(loop_module, "_MODEL_RESTART_STOP_TIMEOUT_S", 0.05)
++    monkeypatch.setattr(loop_module, "_MODEL_RESTART_TURN_TIMEOUT_S", 0.05)
++
++    model = GoogleGeminiLiveModel(model_id=model_id, client_args={"api_key": api_key})
++    model.update_config(connection={"restart_after_s": 1})
++    agent = BidiAgent(model=model)
++
++    sleep_count = 0
++
++    async def fake_sleep(_seconds):
++        nonlocal sleep_count
++        sleep_count += 1
++        if sleep_count > 2:
++            await asyncio.Event().wait()
++        await asyncio.sleep(0)
++
++    agent._loop._restart_timer._sleep = fake_sleep
++
++    await agent.start()
++    first_connection_id = model._connection_id
++    async for event in agent.receive():
++        if isinstance(event, BidiInteractionStatusEvent):
++            assert event.status == "in_progress"
++        if model._connection_id is not None and model._connection_id != first_connection_id:
++            break
++    released.set()
++
++    tru_messages = [
++        (message["content"], message["metadata"]["custom"]["bidi"]["status"])
++        for message in agent.messages
++        if message["role"] == "assistant"
++    ]
++    exp_messages = [([{"text": "Checking the diagnostic."}], "complete")]
++    assert tru_messages == exp_messages
++
++    await agent.stop()
++
++
+ # History Seeding Tests
+ 
+ 
+@@ -2021,22 +2092,39 @@ def test_first_transcript_after_assistant_output_keeps_receive_order(model, fini
+     assert state.input_id is None
+ 
+ 
+-def test_live_tool_uses_structured_parameter_schema(model):
+-    tool = {
+-        "name": "multiply",
+-        "description": "Multiply numbers.",
+-        "inputSchema": {"json": {"type": "object", "properties": {"x": {"type": "number"}}, "required": ["x"]}},
++@pytest.mark.parametrize(
++    ("tool_model_id", "exp_behavior"),
++    [
++        pytest.param("models/gemini-3.8-live", "NON_BLOCKING", id="live"),
++        pytest.param("gemini-3.8-live-extended-thinking", "NON_BLOCKING", id="extended-thinking"),
++        pytest.param("gemini-2.5-flash-native-audio-preview", None, id="other-model"),
++    ],
++)
++def test_live_tool_uses_json_schema_and_non_blocking_for_3_8(mock_genai_client, api_key, tool_model_id, exp_behavior):
++    _ = mock_genai_client
++    model = GoogleGeminiLiveModel(model_id=tool_model_id, client_args={"api_key": api_key})
++    schema = {
++        "type": "object",
++        "properties": {"x": {"type": "number"}},
++        "required": ["x"],
++        "additionalProperties": False,
+     }
++    tool = {"name": "multiply", "description": "Multiply numbers.", "inputSchema": {"json": schema}}
++
+     formatted = model._format_tools_for_live_api([tool])
+-    assert formatted[0].model_dump(mode="json", exclude_none=True) == {
++
++    tru_declaration = formatted[0].model_dump(mode="json", exclude_none=True)
++    exp_declaration = {
+         "function_declarations": [
+             {
+                 "name": "multiply",
+                 "description": "Multiply numbers.",
+-                "parameters": {"type": "OBJECT", "properties": {"x": {"type": "NUMBER"}}, "required": ["x"]},
++                "parameters_json_schema": schema,
++                **({"behavior": exp_behavior} if exp_behavior else {}),
+             }
+         ],
+     }
++    assert tru_declaration == exp_declaration
+ 
+ 
+ @pytest.mark.asyncio
+@@ -2064,3 +2152,575 @@ async def test_send_tool_results_preserves_group(model, mock_genai_client, resta
+     )
+     assert model._turn_state.tool_names == {}
+     await model.stop()
++
++
++# Realtime Input Tests
++
++
++@pytest.mark.asyncio
++@pytest.mark.parametrize(
++    ("realtime_input", "exp_kwargs"),
++    [
++        pytest.param(RealtimeInput(text="keep going"), {"text": "keep going"}, id="text"),
++        pytest.param(
++            RealtimeInput(video={"format": "jpeg", "source": {"bytes": b"frame"}}),
++            {"video": genai_types.Blob(data=b"frame", mime_type="image/jpeg")},
++            id="video",
++        ),
++        pytest.param(RealtimeInput(audio_stream_end=True), {"audio_stream_end": True}, id="audio-stream-end"),
++        pytest.param(RealtimeInput(activity="start"), {"activity_start": genai_types.ActivityStart()}, id="start"),
++        pytest.param(RealtimeInput(activity="end"), {"activity_end": genai_types.ActivityEnd()}, id="end"),
++    ],
++)
++async def test_send_realtime_input_streams_without_ending_turn(mock_genai_client, model, realtime_input, exp_kwargs):
++    _, session, _ = mock_genai_client
++    await model.start()
++
++    await model.send(realtime_input)
++
++    session.send_realtime_input.assert_awaited_once_with(**exp_kwargs)
++    session.send_client_content.assert_not_awaited()
++    session.send_tool_response.assert_not_awaited()
++
++
++@pytest.mark.asyncio
++async def test_send_realtime_video_requires_bytes(mock_genai_client, model):
++    _, session, _ = mock_genai_client
++    await model.start()
++
++    with pytest.raises(ValueError, match="video source must contain bytes"):
++        await model.send(RealtimeInput(video={"format": "jpeg", "source": {}}))
++
++    session.send_realtime_input.assert_not_awaited()
++
++
++@pytest.mark.asyncio
++async def test_send_text_message_completes_turn_not_realtime(mock_genai_client, model):
++    """A text message is a complete user turn; it never goes through the realtime stream."""
++    _, session, _ = mock_genai_client
++    await model.start()
++
++    await model.send(BidiMessage(content=[TextBlock("Hello")]))
++
++    session.send_client_content.assert_awaited_once_with(
++        turns=genai_types.Content(role="user", parts=[genai_types.Part(text="Hello")]), turn_complete=True
++    )
++    session.send_realtime_input.assert_not_awaited()
++
++
++# Interaction Status Tests
++
++
++def test_interaction_status_emitted_independently_of_response(model, live_message, server_content):
++    """Status arrives on nested server content and is forwarded even without an open response."""
++    turn_state = _TurnState()
++
++    tru_events = model._convert_gemini_live_event(
++        live_message(
++            server_content=server_content(
++                interaction_status=genai_types.InteractionStatus.IDLE, turn_complete=True, waiting_for_input=True
++            )
++        ),
++        turn_state,
++    )
++
++    exp_events = [BidiInteractionStatusEvent("idle", turn_complete=True, waiting_for_input=True)]
++    assert tru_events == exp_events
++
++
++def test_interaction_status_unknown_value_maps_to_unspecified(model, live_message, server_content):
++    tru_events = model._convert_gemini_live_event(
++        live_message(server_content=server_content(interaction_status="SOMETHING_NEW")), _TurnState()
++    )
++    exp_events = [BidiInteractionStatusEvent("unspecified")]
++    assert tru_events == exp_events
++
++
++def test_turn_complete_reason_forwarded(model, live_message, server_content):
++    tru_events = model._convert_gemini_live_event(
++        live_message(
++            server_content=server_content(
++                turn_complete=True,
++                interaction_status=genai_types.InteractionStatus.IDLE,
++                turn_complete_reason=genai_types.TurnCompleteReason.NEED_MORE_INPUT,
++            )
++        ),
++        _TurnState(),
++    )
++    exp_events = [BidiInteractionStatusEvent("idle", turn_complete=True, turn_complete_reason="NEED_MORE_INPUT")]
++    assert tru_events == exp_events
++
++
++def test_turn_complete_without_status_still_closes_response(model, live_message, server_content):
++    """Models that do not report interaction status keep the plain turn_complete contract."""
++    turn_state = _TurnState(response_id="r1", audio_content_id="a1")
++
++    tru_events = model._convert_gemini_live_event(
++        live_message(server_content=server_content(turn_complete=True)), turn_state
++    )
++
++    exp_events = [BidiAudioStopEvent("a1"), BidiResponseStopEvent("r1")]
++    assert tru_events == exp_events
++
++
++def test_turn_complete_in_progress_defers_response_stop_until_idle(model, live_message, server_content):
++    """Extended thinking: each utterance's content closes with its turn; only the response stays open until IDLE."""
++    turn_state = _TurnState()
++    convert = lambda **fields: model._convert_gemini_live_event(  # noqa: E731
++        live_message(**fields), turn_state
++    )
++
++    speaking = convert(
++        data=b"audio",
++        server_content=server_content(output_transcription=genai_types.Transcription(text="Checking")),
++    )
++    response_id = speaking[0].response_id
++    transcript_id = speaking[1].content_id
++    audio_id = speaking[3].content_id
++
++    tru_turn_done = convert(
++        server_content=server_content(turn_complete=True, interaction_status=genai_types.InteractionStatus.IN_PROGRESS)
++    )
++    exp_turn_done = [
++        BidiInteractionStatusEvent("in_progress", turn_complete=True),
++        BidiAudioStopEvent(audio_id),
++        BidiTranscriptStopEvent("assistant", content_id=transcript_id),
++    ]
++    assert tru_turn_done == exp_turn_done
++    assert turn_state.response_id == response_id
++    assert turn_state.output_transcript_id is None
++    assert turn_state.completion_deferred is True
++
++    # Follow-up speech while still in progress belongs to the same response but a new transcript.
++    tru_more = convert(
++        data=b"more",
++        server_content=server_content(output_transcription=genai_types.Transcription(text="blueberry")),
++    )
++    second_transcript_id = tru_more[0].content_id
++    assert second_transcript_id != transcript_id
++    assert tru_more == [
++        BidiTranscriptStartEvent("assistant", content_id=second_transcript_id),
++        BidiTranscriptDeltaEvent("blueberry", "assistant", content_id=second_transcript_id),
++        BidiAudioStartEvent(unittest.mock.ANY),
++        BidiAudioDeltaEvent(
++            audio=base64.b64encode(b"more").decode(),
++            format="pcm",
++            sample_rate=24000,
++            channels=1,
++            content_id=unittest.mock.ANY,
++        ),
++    ]
++    assert turn_state.response_id == response_id
++
++    tru_idle = convert(
++        server_content=server_content(turn_complete=True, interaction_status=genai_types.InteractionStatus.IDLE)
++    )
++    exp_idle = [
++        BidiInteractionStatusEvent("idle", turn_complete=True),
++        BidiAudioStopEvent(tru_more[2].content_id),
++        BidiTranscriptStopEvent("assistant", content_id=second_transcript_id),
++        BidiResponseStopEvent(response_id),
++    ]
++    assert tru_idle == exp_idle
++    assert turn_state.response_id is None
++    assert turn_state.completion_deferred is False
++
++
++def test_turn_complete_in_progress_closes_text_block(model, live_message, server_content):
++    """Model text closes at its own turn boundary so a restart cannot mark it unavailable."""
++    turn_state = _TurnState()
++    part = genai_types.Part(text="Checking")
++    opened = model._convert_gemini_live_event(
++        live_message(server_content=server_content(model_turn=genai_types.Content(parts=[part]))), turn_state
++    )
++    text_id = opened[1].content_id
++
++    tru_events = model._convert_gemini_live_event(
++        live_message(
++            server_content=server_content(
++                turn_complete=True, interaction_status=genai_types.InteractionStatus.IN_PROGRESS
++            )
++        ),
++        turn_state,
++    )
++
++    exp_events = [BidiInteractionStatusEvent("in_progress", turn_complete=True), BidiTextStopEvent(text_id)]
++    assert tru_events == exp_events
++    assert turn_state.output_text_stop is None
++    assert turn_state.response_id == opened[0].response_id
++
++
++def test_turn_complete_in_progress_without_response_stops_user_transcript(model, live_message, server_content):
++    """A user utterance acknowledged by an in-progress turn is closed, not left pending."""
++    turn_state = _TurnState()
++    started = model._convert_gemini_live_event(
++        live_message(server_content=server_content(input_transcription=genai_types.Transcription(text="Hi"))),
++        turn_state,
++    )
++    input_id = started[0].content_id
++
++    tru_events = model._convert_gemini_live_event(
++        live_message(
++            server_content=server_content(
++                turn_complete=True, interaction_status=genai_types.InteractionStatus.IN_PROGRESS
++            )
++        ),
++        turn_state,
++    )
++
++    exp_events = [
++        BidiInteractionStatusEvent("in_progress", turn_complete=True),
++        BidiTranscriptStopEvent("user", content_id=input_id),
++    ]
++    assert tru_events == exp_events
++    assert turn_state.completion_deferred is False
++    assert turn_state.input_ids == set()
++
++
++@pytest.mark.parametrize("status", [genai_types.InteractionStatus.IN_PROGRESS, None])
++def test_barge_in_closes_deferred_response_and_next_reply_is_distinct(model, live_message, server_content, status):
++    """An interruption ends the deferred response; the reply to the new input opens a new response."""
++    turn_state = _TurnState(response_id="r1", completion_deferred=True)
++
++    tru_interrupt = model._convert_gemini_live_event(
++        live_message(server_content=server_content(interrupted=True, turn_complete=True, interaction_status=status)),
++        turn_state,
++    )
++
++    exp_interrupt = [
++        BidiBargeInEvent(),
++        *([BidiInteractionStatusEvent("in_progress", turn_complete=True)] if status else []),
++        BidiResponseStopEvent("r1"),
++    ]
++    assert tru_interrupt == exp_interrupt
++    assert turn_state.response_id is None
++    assert turn_state.interrupted is False
++    assert turn_state.completion_deferred is False
++
++    tru_reply = model._convert_gemini_live_event(live_message(data=b"reply"), turn_state)
++    assert isinstance(tru_reply[0], BidiResponseStartEvent)
++    assert tru_reply[0].response_id != "r1"
++
++
++def test_barge_in_without_turn_complete_closes_deferred_response_on_next_boundary(model, live_message, server_content):
++    turn_state = _TurnState(response_id="r1", completion_deferred=True)
++
++    tru_interrupt = model._convert_gemini_live_event(
++        live_message(server_content=server_content(interrupted=True)), turn_state
++    )
++    assert tru_interrupt == [BidiBargeInEvent(), BidiResponseStopEvent("r1")]
++    assert turn_state.response_id is None
++
++
++def test_waiting_for_input_ends_response_but_not_interaction(model, live_message, server_content):
++    """waiting_for_input closes the deferred response while the interaction stays in progress."""
++    turn_state = _TurnState(response_id="r1", completion_deferred=True)
++
++    tru_events = model._convert_gemini_live_event(
++        live_message(
++            server_content=server_content(
++                turn_complete=True,
++                interaction_status=genai_types.InteractionStatus.IN_PROGRESS,
++                waiting_for_input=True,
++            )
++        ),
++        turn_state,
++    )
++
++    exp_events = [
++        BidiInteractionStatusEvent("in_progress", turn_complete=True, waiting_for_input=True),
++        BidiResponseStopEvent("r1"),
++    ]
++    assert tru_events == exp_events
++    assert turn_state.response_id is None
++    assert turn_state.completion_deferred is False
++
++
++def test_requires_action_closes_deferred_response(model, live_message, server_content):
++    turn_state = _TurnState(response_id="r1", completion_deferred=True)
++
++    tru_events = model._convert_gemini_live_event(
++        live_message(
++            server_content=server_content(
++                turn_complete=True, interaction_status=genai_types.InteractionStatus.REQUIRES_ACTION
++            )
++        ),
++        turn_state,
++    )
++
++    assert tru_events == [
++        BidiInteractionStatusEvent("requires_action", turn_complete=True),
++        BidiResponseStopEvent("r1"),
++    ]
++
++
++def test_delayed_idle_without_turn_complete_closes_deferred_response(model, live_message, server_content):
++    """IDLE reported after a deferred completion closes the response even without a new turn_complete."""
++    turn_state = _TurnState(response_id="r1", completion_deferred=True)
++
++    tru_events = model._convert_gemini_live_event(
++        live_message(server_content=server_content(interaction_status=genai_types.InteractionStatus.IDLE)), turn_state
++    )
++
++    exp_events = [BidiInteractionStatusEvent("idle"), BidiResponseStopEvent("r1")]
++    assert tru_events == exp_events
++
++
++def test_in_progress_without_turn_complete_does_not_defer(model, live_message, server_content):
++    turn_state = _TurnState(response_id="r1")
++
++    tru_events = model._convert_gemini_live_event(
++        live_message(server_content=server_content(interaction_status=genai_types.InteractionStatus.IN_PROGRESS)),
++        turn_state,
++    )
++
++    assert tru_events == [BidiInteractionStatusEvent("in_progress")]
++    assert turn_state.completion_deferred is False
++    assert turn_state.response_id == "r1"
++
++
++# Grounding Tests
++
++
++def test_grounding_metadata_forwarded(model, live_message, server_content):
++    grounding = genai_types.GroundingMetadata(
++        web_search_queries=["weather paris"],
++        grounding_chunks=[
++            genai_types.GroundingChunk(
++                web=genai_types.GroundingChunkWeb(title="Météo", uri="https://example.test/w", domain="example.test")
++            )
++        ],
++        grounding_supports=[
++            genai_types.GroundingSupport(segment=genai_types.Segment(text="It is sunny."), grounding_chunk_indices=[0])
++        ],
++    )
++    url_context = genai_types.UrlContextMetadata(
++        url_metadata=[
++            genai_types.UrlMetadata(
++                retrieved_url="https://example.test/w",
++                url_retrieval_status=genai_types.UrlRetrievalStatus.URL_RETRIEVAL_STATUS_SUCCESS,
++            )
++        ]
++    )
++
++    tru_events = model._convert_gemini_live_event(
++        live_message(server_content=server_content(grounding_metadata=grounding, url_context_metadata=url_context)),
++        _TurnState(),
++    )
++
++    exp_events = [
++        BidiGroundingEvent(
++            web_search_queries=["weather paris"],
++            chunks=[{"title": "Météo", "uri": "https://example.test/w", "domain": "example.test"}],
++            supports=[{"chunk_indices": [0], "text": "It is sunny."}],
++            url_metadata=[{"url": "https://example.test/w", "status": "URL_RETRIEVAL_STATUS_SUCCESS"}],
++        )
++    ]
++    assert tru_events == exp_events
++
++
++# Tool Cancellation Tests
++
++
++@pytest.mark.asyncio
++async def test_cancelled_tool_results_are_not_sent(mock_genai_client, model, live_message):
++    """Results for cancelled calls are dropped; results for live calls still go through."""
++    _, session, _ = mock_genai_client
++    await model.start()
++    turn_state = model._turn_state
++
++    tru_tool_events = model._convert_gemini_live_event(
++        live_message(
++            tool_call=genai_types.LiveServerToolCall(
++                function_calls=[
++                    genai_types.FunctionCall(id="keep", name="calculator", args={}),
++                    genai_types.FunctionCall(id="drop", name="lookup", args={}),
++                ]
++            )
++        ),
++        turn_state,
++    )
++    assert tru_tool_events[1] == BidiToolUseBlocksEvent(
++        [
++            {"toolUseId": "keep", "name": "calculator", "input": {}},
++            {"toolUseId": "drop", "name": "lookup", "input": {}},
++        ]
++    )
++
++    tru_cancel_events = model._convert_gemini_live_event(
++        live_message(tool_call_cancellation=genai_types.LiveServerToolCallCancellation(ids=["drop"])), turn_state
++    )
++    assert tru_cancel_events == [BidiToolCancelEvent(["drop"])]
++    assert turn_state.cancelled_tool_ids == {"drop"}
++
++    await model.send(
++        BidiMessage(
++            content=[
++                ToolResultBlock("keep", "success", [{"text": "4"}]),
++                ToolResultBlock("drop", "success", [{"text": "late"}]),
++            ]
++        )
++    )
++
++    session.send_tool_response.assert_awaited_once_with(
++        function_responses=[genai_types.FunctionResponse(id="keep", name="calculator", response={"text": "4"})]
++    )
++    assert turn_state.tool_names == {}
++    assert turn_state.cancelled_tool_ids == set()
++
++
++@pytest.mark.asyncio
++async def test_only_cancelled_results_sends_nothing(mock_genai_client, model, live_message):
++    _, session, _ = mock_genai_client
++    await model.start()
++    turn_state = model._turn_state
++    model._convert_gemini_live_event(
++        live_message(
++            tool_call=genai_types.LiveServerToolCall(
++                function_calls=[genai_types.FunctionCall(id="drop", name="lookup", args={})]
++            )
++        ),
++        turn_state,
++    )
++    model._convert_gemini_live_event(
++        live_message(tool_call_cancellation=genai_types.LiveServerToolCallCancellation(ids=["drop"])), turn_state
++    )
++
++    await model.send(BidiMessage(content=[ToolResultBlock("drop", "success", [{"text": "late"}])]))
++
++    session.send_tool_response.assert_not_awaited()
++
++
++@pytest.mark.asyncio
++async def test_cancelled_ids_survive_restart(mock_genai_client, model, live_message):
++    _, session, _ = mock_genai_client
++    await model.start()
++    model._convert_gemini_live_event(
++        live_message(
++            tool_call=genai_types.LiveServerToolCall(
++                function_calls=[genai_types.FunctionCall(id="drop", name="lookup", args={})]
++            )
++        ),
++        model._turn_state,
++    )
++    model._convert_gemini_live_event(
++        live_message(tool_call_cancellation=genai_types.LiveServerToolCallCancellation(ids=["drop"])),
++        model._turn_state,
++    )
++
++    await model.restart()
++    await model.send(BidiMessage(content=[ToolResultBlock("drop", "success", [{"text": "late"}])]))
++
++    session.send_tool_response.assert_not_awaited()
++
++
++# Session Resumption Tests
++
++
++@pytest.mark.asyncio
++async def test_unresumable_update_keeps_last_handle_for_restart(mock_genai_client, model, live_message):
++    """resumable=False only means no new handle right now; the last good handle still resumes."""
++    mock_client, _, _ = mock_genai_client
++    await model.start()
++    model._convert_gemini_live_event(
++        live_message(
++            session_resumption_update=genai_types.LiveServerSessionResumptionUpdate(new_handle="h1", resumable=True)
++        ),
++        model._turn_state,
++    )
++    assert model._live_session_handle == "h1"
++
++    model._convert_gemini_live_event(
++        live_message(
++            session_resumption_update=genai_types.LiveServerSessionResumptionUpdate(new_handle="", resumable=False)
++        ),
++        model._turn_state,
++    )
++    assert model._live_session_handle == "h1"
++
++    await model.restart()
++
++    tru_config = mock_client.aio.live.connect.call_args.kwargs["config"]
++    assert tru_config["session_resumption"] == {"handle": "h1"}
++
++
++# Hosted Tool Tests
++
++
++def test_hosted_tools_extend_function_declarations(mock_genai_client, api_key, tool_spec):
++    _ = mock_genai_client
++    model = GoogleGeminiLiveModel(
++        model_id="gemini-3.8-live", client_args={"api_key": api_key}, hosted_tools=[{"google_search": {}}]
++    )
++
++    tru_tools = model._build_live_config(tools=[tool_spec])["tools"]
++
++    assert len(tru_tools) == 2
++    declaration = tru_tools[0].function_declarations[0]
++    assert declaration.behavior == genai_types.Behavior.NON_BLOCKING
++    assert declaration.parameters_json_schema == tool_spec["inputSchema"]["json"]
++    assert tru_tools[1] == {"google_search": {}}
++
++
++def test_hosted_tools_params_override_replaces_whole_list(mock_genai_client, api_key, tool_spec):
++    _ = mock_genai_client
++    model = GoogleGeminiLiveModel(
++        model_id="gemini-3.8-live",
++        client_args={"api_key": api_key},
++        hosted_tools=[{"google_search": {}}],
++        params={"tools": [{"code_execution": {}}]},
++    )
++
++    tru_tools = model._build_live_config(tools=[tool_spec])["tools"]
++
++    assert tru_tools == [{"code_execution": {}}]
++
++
++def test_hosted_tools_absent_without_agent_tools(mock_genai_client, api_key):
++    _ = mock_genai_client
++    model = GoogleGeminiLiveModel(
++        model_id="gemini-3.8-live", client_args={"api_key": api_key}, hosted_tools=[{"google_search": {}}]
++    )
++
++    assert model._build_live_config()["tools"] == [{"google_search": {}}]
++
++
++@pytest.mark.parametrize(
++    "schema",
++    [
++        pytest.param({"type": "object", "properties": {}, "required": []}, id="empty-properties"),
++        pytest.param({"type": "object"}, id="no-properties-key"),
++        pytest.param({"type": "object", "properties": {}, "title": "Ping", "description": "No input."}, id="titled"),
++    ],
++)
++def test_live_tool_without_parameters_omits_schema(model, schema):
++    """A bare empty object schema is omitted, as the provider SDK itself declares parameterless tools."""
++    tool = {"name": "ping", "description": "Ping.", "inputSchema": {"json": schema}}
++
++    formatted = model._format_tools_for_live_api([tool])
++
++    tru_declaration = formatted[0].model_dump(mode="json", exclude_none=True)
++    exp_declaration = {"function_declarations": [{"name": "ping", "description": "Ping.", "behavior": "NON_BLOCKING"}]}
++    assert tru_declaration == exp_declaration
++
++
++@pytest.mark.parametrize(
++    "schema",
++    [
++        pytest.param({"type": "object", "additionalProperties": {"type": "string"}}, id="open-dict"),
++        pytest.param({"type": "object", "additionalProperties": False}, id="closed-empty"),
++        pytest.param({"type": "object", "patternProperties": {"^x-": {"type": "string"}}}, id="pattern"),
++        pytest.param({"$ref": "#/$defs/Input", "$defs": {"Input": {"type": "object"}}}, id="ref"),
++        pytest.param({"oneOf": [{"type": "object"}, {"type": "null"}]}, id="one-of"),
++        pytest.param({"type": "object", "properties": {}, "required": ["x"]}, id="required-without-properties"),
++        pytest.param({"type": "string"}, id="non-object"),
++    ],
++)
++def test_live_tool_constrained_schema_is_forwarded(model, schema):
++    """Any schema that constrains input beyond a bare empty object reaches the model unchanged."""
++    tool = {"name": "ping", "description": "Ping.", "inputSchema": {"json": schema}}
++
++    formatted = model._format_tools_for_live_api([tool])
++
++    tru_schema = formatted[0].function_declarations[0].parameters_json_schema
++    assert tru_schema == schema
+diff --git a/strands-py/tests/strands/bidi/models/test_openai.py b/strands-py/tests/strands/bidi/models/test_openai.py
+index 8643f8fd..1dcf9cf9 100644
+--- a/strands-py/tests/strands/bidi/models/test_openai.py
++++ b/strands-py/tests/strands/bidi/models/test_openai.py
+@@ -43,6 +43,7 @@ from strands.bidi.types import (
+     BidiTranscriptDeltaEvent,
+     BidiTranscriptStartEvent,
+     BidiTranscriptStopEvent,
++    RealtimeInput,
+ )
+ from strands.types.content import TextBlock
+ from strands.types.media import ImageBlock
+@@ -543,6 +544,20 @@ async def test_send_message_rejects_invalid_blocks_before_sending(mock_websocket
+         await model.stop()
+ 
+ 
++@pytest.mark.asyncio
++async def test_send_rejects_realtime_input(mock_websockets_connect, model):
++    """OpenAI Realtime has no live input stream for text or video; realtime input is rejected unsent."""
++    _, mock_ws = mock_websockets_connect
++    await model.start()
++    mock_ws.send.reset_mock()
++    try:
++        with pytest.raises(ValueError, match="content not supported"):
++            await model.send(RealtimeInput(text="keep going"))
++        mock_ws.send.assert_not_awaited()
++    finally:
++        await model.stop()
++
++
+ @pytest.mark.asyncio
+ async def test_send_all_content_types(mock_websockets_connect, model):
+     """Test sending all content types through unified send() method."""
+diff --git a/strands-py/tests/strands/bidi/types/test_events.py b/strands-py/tests/strands/bidi/types/test_events.py
+index 3ff8c32a..739eead5 100644
+--- a/strands-py/tests/strands/bidi/types/test_events.py
++++ b/strands-py/tests/strands/bidi/types/test_events.py
+@@ -1,6 +1,7 @@
+-"""Tests for bidirectional streaming event types.
++"""Tests for bidirectional streaming event and media input types.
+ 
+-This module tests JSON serialization for all bidirectional streaming event types.
++This module tests JSON serialization for all bidirectional streaming event types and the
++validation of streamed input types.
+ """
+ 
+ import base64
+@@ -9,12 +10,15 @@ import json
+ import pytest
+ 
+ from strands.bidi.types import (
++    AudioDelta,
+     BidiAudioDeltaEvent,
+     BidiAudioStartEvent,
+     BidiAudioStopEvent,
+     BidiBargeInEvent,
+     BidiConnectionStartEvent,
+     BidiConnectionStopEvent,
++    BidiGroundingEvent,
++    BidiInteractionStatusEvent,
+     BidiReasoningBlockEvent,
+     BidiReasoningDeltaEvent,
+     BidiReasoningStartEvent,
+@@ -25,12 +29,14 @@ from strands.bidi.types import (
+     BidiTextDeltaEvent,
+     BidiTextStartEvent,
+     BidiTextStopEvent,
++    BidiToolCancelEvent,
+     BidiToolUseBlocksEvent,
+     BidiTranscriptBlockEvent,
+     BidiTranscriptDeltaEvent,
+     BidiTranscriptStartEvent,
+     BidiTranscriptStopEvent,
+     BidiUsageEvent,
++    RealtimeInput,
+ )
+ from strands.bidi.types.events import _normalize_role
+ 
+@@ -102,6 +108,27 @@ from strands.bidi.types.events import _normalize_role
+             {"connection_id": "c1", "reason": "user_request"},
+             "bidi_connection_stop",
+         ),
++        (
++            BidiInteractionStatusEvent,
++            {
++                "status": "in_progress",
++                "turn_complete": True,
++                "turn_complete_reason": "NEED_MORE_INPUT",
++                "waiting_for_input": False,
++            },
++            "bidi_interaction_status",
++        ),
++        (
++            BidiGroundingEvent,
++            {
++                "web_search_queries": ["q"],
++                "chunks": [{"title": "t", "uri": "https://example.test", "domain": "example.test"}],
++                "supports": [{"text": "span", "chunk_indices": [0]}],
++                "url_metadata": [{"url": "https://example.test", "status": "URL_RETRIEVAL_STATUS_SUCCESS"}],
++            },
++            "bidi_grounding",
++        ),
++        (BidiToolCancelEvent, {"tool_use_ids": ["t1", "t2"]}, "bidi_tool_cancel"),
+     ],
+ )
+ def test_event_json_serialization(event_class, kwargs, expected_type):
+@@ -224,3 +251,69 @@ def test_tool_use_blocks_event():
+     event = BidiToolUseBlocksEvent(calls)
+     assert event == {"type": "bidi_tool_use_blocks", "tool_uses": calls}
+     assert event.tool_uses is calls
++
++
++def test_interaction_status_event_defaults():
++    tru_event = BidiInteractionStatusEvent("idle")
++    exp_event = {
++        "type": "bidi_interaction_status",
++        "status": "idle",
++        "turn_complete": False,
++        "turn_complete_reason": None,
++        "waiting_for_input": None,
++    }
++    assert tru_event == exp_event
++
++
++def test_grounding_event_defaults_to_empty_lists():
++    tru_event = BidiGroundingEvent()
++    exp_event = {
++        "type": "bidi_grounding",
++        "web_search_queries": [],
++        "chunks": [],
++        "supports": [],
++        "url_metadata": [],
++    }
++    assert tru_event == exp_event
++
++
++# Media Input Tests
++
++
++def test_audio_delta_to_dict():
++    tru_data = AudioDelta(format="pcm", source={"bytes": b"audio"}).to_dict()
++    exp_data = {"audio_delta": {"format": "pcm", "source": {"bytes": b"audio"}}}
++    assert tru_data == exp_data
++
++
++@pytest.mark.parametrize(
++    ("realtime_input", "exp_content"),
++    [
++        pytest.param(RealtimeInput(text="more"), {"text": "more"}, id="text"),
++        pytest.param(
++            RealtimeInput(video={"format": "jpeg", "source": {"bytes": b"frame"}}),
++            {"video": {"format": "jpeg", "source": {"bytes": b"frame"}}},
++            id="video",
++        ),
++        pytest.param(RealtimeInput(audio_stream_end=True), {"audio_stream_end": True}, id="audio-stream-end"),
++        pytest.param(RealtimeInput(activity="start"), {"activity": "start"}, id="activity"),
++    ],
++)
++def test_realtime_input_to_dict_carries_only_set_field(realtime_input, exp_content):
++    tru_data = realtime_input.to_dict()
++    exp_data = {"realtime_input": exp_content}
++    assert tru_data == exp_data
++    assert RealtimeInput(**exp_content) == realtime_input
++
++
++@pytest.mark.parametrize(
++    "fields",
++    [
++        pytest.param({}, id="none"),
++        pytest.param({"text": "more", "audio_stream_end": True}, id="two"),
++        pytest.param({"text": "", "activity": "end"}, id="empty-text-plus-activity"),
++    ],
++)
++def test_realtime_input_requires_exactly_one_field(fields):
++    with pytest.raises(ValueError, match="exactly one"):
++        RealtimeInput(**fields)

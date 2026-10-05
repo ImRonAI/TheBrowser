@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { ArrowLeftIcon, CheckIcon, ChevronDownIcon, ChevronRightIcon } from '@heroicons/react/24/outline'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { API_BASE_URL } from '@/lib/api-base'
 import { cn } from '@/utils/cn'
 
 export interface AgentModelOption {
@@ -17,7 +18,8 @@ export interface AgentModelSelection {
 
 // Empty model delegates initial defaults to the backend.
 export const DEFAULT_AGENT_MODEL = ''
-const API = 'http://localhost:8765'
+
+const API = API_BASE_URL
 const PROVIDERS = [
   { id: 'perplexity', label: 'Perplexity' },
   { id: 'openai', label: 'OpenAI' },

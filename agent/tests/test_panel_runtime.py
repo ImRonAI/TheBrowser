@@ -686,28 +686,11 @@ def test_browser_context_and_steering_survive_native_tool_roundtrip(monkeypatch,
         class StrictModel(OfflineModel):
             async def stream(self, messages, tool_specs=None, system_prompt=None, **kwargs):
                 original = copy.deepcopy(messages)
-                # Context must never share a message with tool results. Exercise
-                # native serialization, not a provider subclass that repairs it.
-                for message in messages:
-                    if any("toolResult" in block for block in message["content"]):
-                        assert all("toolResult" in block for block in message["content"])
+                # Native serialization of the SDK ContextInjector's per-call fold.
                 formatted = (native_model.format_request(messages)["messages"] if provider == "mistral"
                              else native_model._format_request_messages(messages))
                 assert messages == original
-                requests.append(formatted)
-                pending = set()
-                for message in formatted:
-                    kind = message.get("type", message.get("role"))
-                    if kind in ("tool", "function_call_output"):
-                        call_id = message.get("tool_call_id", message.get("call_id"))
-                        assert call_id in pending
-                        pending.remove(call_id)
-                    elif kind == "function_call":
-                        pending.add(message["call_id"])
-                    else:
-                        assert not pending, "User context appeared before outstanding tool replies"
-                        pending.update(call["id"] for call in message.get("tool_calls", []))
-                assert not pending
+                requests.append((copy.deepcopy(messages), formatted))
                 async for event in super().stream(messages, tool_specs, system_prompt, **kwargs):
                     yield event
 
@@ -724,14 +707,15 @@ def test_browser_context_and_steering_survive_native_tool_roundtrip(monkeypatch,
         events = await finished(session)
         assert session.status == "completed", events
         assert len(requests) == 2
-        if provider == "mistral":
-            assert [m["role"] for m in requests[1]] == ["user", "assistant", *(["tool"] * tool_count), "user"]
-        else:
-            assert [m.get("type", m.get("role")) for m in requests[1]] == [
-                "user", *(["function_call"] * tool_count), *(["function_call_output"] * tool_count), "user",
-            ]
-        assert "Browser context: example.test" in json.dumps(requests[1][-1]["content"])
-        assert "Be brief" in json.dumps(requests[1][-1]["content"])
+        # ContextInjector(trigger="everyTurn") appends ONE text block to the last user message
+        # (the tool-result turn) for this call only; every tool reply is still serialized.
+        internal, formatted = requests[1]
+        last = internal[-1]["content"]
+        assert [next(iter(block)) for block in last] == ["toolResult"] * tool_count + ["text"]
+        assert last[-1]["text"].strip().startswith("Browser context: example.test\n\nBe brief")
+        replies = [m for m in formatted if m.get("type", m.get("role")) in ("tool", "function_call_output")]
+        assert len(replies) == tool_count
+        assert "Browser context: example.test" in json.dumps(formatted)
         assert "Browser context: example.test" not in json.dumps(session.messages)
         assert all(record["status"] == "applied" for record in session.steering)
         await manager.shutdown()
@@ -760,8 +744,8 @@ def test_context_and_steering_retry_remain_ephemeral():
         assert session.status == "completed", events
         assert len(model.calls) == 3
         assert model.calls[1] == model.calls[2]
-        assert model.calls[2][-1] == {"role": "user", "content": [{"text": "Private browser context\n\nBe brief"}]}
-        assert all("toolResult" in block for block in model.calls[2][-2]["content"])
+        assert model.calls[2][-1]["content"][-1]["text"].strip() == "Private browser context\n\nBe brief"
+        assert all("toolResult" in block for block in model.calls[2][-1]["content"][:-1])
         assert len([event for event in events if event["type"] == "steering_applied"]) == 1
         assert "Private browser context" not in json.dumps(await session.snapshot())
         assert "Be brief" not in json.dumps(session.agent.messages)

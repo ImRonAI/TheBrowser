@@ -8,7 +8,7 @@
  */
 import { useState, useRef, useEffect } from 'react'
 import { motion, AnimatePresence, LayoutGroup } from 'framer-motion'
-import { ChevronUp, ChevronDown, Compass } from 'lucide-react'
+import { Check, ChevronDown, ChevronUp, Compass, Gauge } from 'lucide-react'
 import { useNavigationStore, type HomeTab } from '@/stores/navigationStore'
 import { useSearchStore } from '@/stores/searchStore'
 import { useAuthStore } from '@/stores/authStore'
@@ -16,12 +16,90 @@ import { articleDraftKey, EMPTY_ARTICLE_DRAFT, useArticleDraftStore } from '@/st
 import { ArticleAttachmentCard } from '@/components/interests/ArticleAttachmentCard'
 import { ContextPicker, type ContextItem } from '@/components/agent-panel/ContextPicker'
 import { TextAttachmentCard } from '@/components/ai-elements/text-attachment-card'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { buildSearchRonUrl } from '@/components/chrome/UrlBar'
+import { LEVEL_INFO } from '@/lib/search-api'
 import { fileToDataUrl, makePastedTextFilename } from '@/utils/file-utils'
 import type { TextAttachment } from '@/components/ai-elements/types'
 import { cn } from '@/utils/cn'
 
 const EASE = [0.16, 1, 0.3, 1] as const
 const LARGE_PASTE_THRESHOLD_CHARS = 2000
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SEARCH DEPTH SELECTOR
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * The search level: every search runs the Perplexity Agent API at this preset
+ * (fast/low/medium/high/xhigh). Persisted in the search store.
+ */
+function SearchDepthSelector() {
+  const { level, setLevel } = useSearchStore()
+  const [open, setOpen] = useState(false)
+  const active = LEVEL_INFO.find((info) => info.id === level)
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          aria-label={`Search depth: ${active?.label ?? level}`}
+          className={cn(
+            'flex flex-shrink-0 items-center gap-1 rounded-lg px-1.5 py-1',
+            'text-[10px] font-medium uppercase tracking-wide',
+            'text-ink-muted/70 transition-colors hover:text-ink-secondary',
+            'dark:text-ink-inverse-muted/70 dark:hover:text-ink-inverse-secondary',
+          )}
+        >
+          <Gauge className="h-3 w-3 text-indigo-500" />
+          <span>{active?.label ?? level}</span>
+          <ChevronDown className={cn('h-2.5 w-2.5 transition-transform duration-200', open && 'rotate-180')} />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="end" sideOffset={8} className="w-64 p-1.5">
+        <div className="px-2 pb-1.5 pt-2">
+          <p className="text-label uppercase text-ink-muted dark:text-ink-inverse-muted">Search depth</p>
+        </div>
+        {LEVEL_INFO.map((info) => {
+          const isActive = info.id === level
+          return (
+            <button
+              key={info.id}
+              type="button"
+              onClick={() => {
+                setLevel(info.id)
+                setOpen(false)
+              }}
+              className={cn(
+                'flex w-full items-start gap-2.5 rounded-lg px-2 py-2 text-left transition-colors',
+                isActive ? 'bg-indigo-50 dark:bg-indigo-950/40' : 'hover:bg-surface-50 dark:hover:bg-surface-800/60',
+              )}
+            >
+              <span className={cn('mt-0.5 flex h-3.5 w-3.5 items-center justify-center', !isActive && 'opacity-0')}>
+                <Check className="h-3 w-3 text-indigo-500" strokeWidth={3} />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className={cn(
+                  'block text-xs font-medium',
+                  isActive ? 'text-indigo-600 dark:text-indigo-300' : 'text-ink dark:text-ink-inverse',
+                )}>
+                  {info.label}
+                  <span className="ml-1.5 font-mono text-[9px] font-normal text-ink-muted/70 dark:text-ink-inverse-muted/70">
+                    {info.id}
+                  </span>
+                </span>
+                <span className="mt-0.5 block text-[11px] font-light leading-snug text-ink-muted dark:text-ink-inverse-muted">
+                  {info.description}
+                </span>
+              </span>
+            </button>
+          )
+        })}
+      </PopoverContent>
+    </Popover>
+  )
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TAB CONFIGURATION
@@ -89,7 +167,7 @@ const TAB_CONFIG: { id: HomeTab; label: string; icon: React.ReactNode }[] = [
 
 export function NavigationDrawer() {
   const { isDrawerExpanded, toggleDrawer, activeTab, setActiveTab } = useNavigationStore()
-  const { search } = useSearchStore()
+  const { level } = useSearchStore()
   const user = useAuthStore((state) => state.user?.id || 'default')
   const draftKey = articleDraftKey(user, 'search')
   const articles = useArticleDraftStore((state) => (state.drafts[draftKey] || EMPTY_ARTICLE_DRAFT).articles)
@@ -125,19 +203,17 @@ export function NavigationDrawer() {
     }
   }, [])
 
-  // Handle search submission
+  // Handle search submission: the active tab becomes the search results site.
   const handleSearch = async (e?: React.FormEvent) => {
     e?.preventDefault()
     const trimmed = query.trim()
     if (!trimmed && textAttachments.length === 0) return
 
-    // Trigger search
     if (articles.length) useArticleDraftStore.getState().setText(draftKey, trimmed)
-    search(trimmed)
 
-    if (typeof window !== 'undefined' && window.electron?.browser?.search) {
+    if (typeof window !== 'undefined' && window.electron?.browser?.navigate) {
       try {
-        await window.electron.browser.search(trimmed)
+        await window.electron.browser.navigate(buildSearchRonUrl(trimmed, level))
       } catch (error) {
         console.error('Search error:', error)
       }
@@ -319,6 +395,9 @@ export function NavigationDrawer() {
                       )}
                       autoComplete="off"
                     />
+
+                    {/* Search Depth Selector */}
+                    <SearchDepthSelector />
 
                     {/* Submit Button */}
                     <motion.button

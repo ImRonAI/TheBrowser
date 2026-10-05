@@ -1,0 +1,14 @@
+[    2512ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=7c24feed:22164
+[    2980ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:8765/discover/feed:0
+[   36257ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:8765/models:0
+[   36257ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:8765/config:0
+[   36257ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:8765/sessions/agent-48c1e66b-f55e-4067-852a-5a71389e66e4?user_id=default:0
+[   36257ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:8765/models:0
+[   36257ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:8765/config:0
+[   36257ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:8765/sessions/agent-48c1e66b-f55e-4067-852a-5a71389e66e4?user_id=default:0
+[   80800ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:8765/teaching/sessions?user_id=default&agent_id=panel:0
+[   80800ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:8765/teaching/skills?user_id=default&agent_id=panel:0
+[  152476ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:8765/teaching/sessions?user_id=default&agent_id=panel:0
+[  152477ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:8765/teaching/skills?user_id=default&agent_id=panel:0
+[  502941ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=7c24feed:22164
+[  521575ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ http://localhost:8765/sessions/agent-48c1e66b-f55e-4067-852a-5a71389e66e4?user_id=default:0

@@ -1,0 +1,166 @@
+- generic:
+  - generic [aria-hidden]:
+    - generic:
+      - generic:
+        - generic:
+          - generic:
+            - button
+            - button [disabled]
+            - button [disabled]
+            - button
+          - generic:
+            - generic:
+              - textbox:
+                - /placeholder: Search or enter URL...
+                - text: https://www.gaytravel4u.com/gay-palm-springs-events/
+              - button
+          - generic:
+            - button
+            - button
+            - button
+            - generic:
+              - button:
+                - generic: U
+        - generic:
+          - button
+          - generic:
+            - generic:
+              - generic: Palm Springs Pride 2026
+              - button
+            - generic:
+              - generic: Calendar | Palm Springs Pride
+              - button
+            - generic:
+              - generic: Palm Springs Gay Pride, Trans Pride, Gay Events Palm Springs, LGBTQ, Trans Events
+              - button
+            - generic:
+              - generic: LGBTQ+ Events | Events in Greater Palm Springs
+              - button
+            - generic:
+              - generic: "Palm Springs Pride 2026: Events, Parade & Festival Guide"
+              - button
+            - generic:
+              - generic: Ron
+              - button
+            - generic:
+              - generic: Palm Springs Gay Pride, Trans Pride, Gay Events Palm Springs, LGBTQ, Trans Events
+              - button
+            - generic:
+              - generic: Palm Springs Leather Pride 2026 October dates - Google Search
+              - button
+            - generic:
+              - generic: Gay Palm Springs Events
+              - button
+            - generic:
+              - generic: LGBTQ+ Events | Events in Greater Palm Springs
+              - button
+            - generic:
+              - generic: gay Palm Springs events October November December 2026 Leather Pride Halloween holiday calendar - Google Search
+              - button
+      - generic:
+        - generic:
+          - button:
+            - generic: Navigation
+      - generic:
+        - region [ref=e213]:
+          - generic [ref=e148]:
+            - generic [ref=e149]:
+              - generic [ref=e150]:
+                - generic [ref=e151]:
+                  - generic [ref=e152]: R
+                  - generic [ref=e153]:
+                    - heading [level=2] [ref=e214]: Agent Panel
+                    - status [ref=e155]: Ready
+                - generic [ref=e156]:
+                  - generic [ref=e157]:
+                    - generic [ref=e158]: Voice
+                    - switch [ref=e215] [cursor=pointer]
+                  - button [ref=e216] [cursor=pointer]
+                  - button [ref=e217] [cursor=pointer]
+              - generic [ref=e166]:
+                - button [ref=e218] [cursor=pointer]:
+                  - generic [ref=e168]: Perplexity / xai/grok-4.5 / Provider default
+                - group [ref=e219]:
+                  - button [pressed] [ref=e220] [cursor=pointer]: Your browser
+                  - button [ref=e221] [cursor=pointer]: Cloud browser
+              - group [ref=e174]:
+                - generic [ref=e222] [cursor=pointer]: Runtime · sliding context · concurrent tools
+            - button [expanded] [ref=e223] [cursor=pointer]:
+              - generic [ref=e180]:
+                - strong [ref=e181]: Teach a skill
+                - generic [ref=e182]: Show Ron how you work
+            - generic [ref=e186]:
+              - generic [ref=e187]: R
+              - heading [level=3] [ref=e224]: How can I help?
+              - paragraph [ref=e189]: Browse, search, analyze, and accomplish.
+            - generic [ref=e190]:
+              - generic [ref=e192]:
+                - button [ref=e225] [cursor=pointer]
+                - textbox [ref=e226]:
+                  - /placeholder: Ask anything…
+                - button [disabled] [ref=e227]: Send
+              - paragraph [ref=e199]: ↵ to send · Shift + ↵ for a new line
+        - button [ref=e228] [cursor=pointer]:
+          - generic [ref=e209]:
+            - generic [ref=e210]: AI
+            - generic [ref=e211]: Web Design
+          - generic [ref=e212]: "8"
+  - dialog [ref=e230]:
+    - banner [ref=e231]:
+      - generic [ref=e232]:
+        - paragraph [ref=e233]: RON / TEACHING STUDIO · Ron
+        - heading "Your expertise. Remembered." [level=2] [ref=e234]
+        - paragraph [ref=e235]: Demonstrate a workflow. Review the process. Give Ron a skill.
+      - generic [ref=e236]:
+        - button "Minimize teaching studio" [active] [ref=e237] [cursor=pointer]
+        - button "Close teaching studio and stop sharing" [ref=e243] [cursor=pointer]
+    - list "Teaching stages" [ref=e247]:
+      - listitem [ref=e248]:
+        - generic [ref=e249]: "01"
+        - text: Brief
+      - listitem [ref=e250]:
+        - generic [ref=e251]: "02"
+        - text: Demonstrate
+      - listitem [ref=e252]:
+        - generic [ref=e253]: "03"
+        - text: Review
+      - listitem [ref=e254]:
+        - generic [ref=e255]: "04"
+        - text: Saved
+    - generic [ref=e256]:
+      - generic [ref=e257]:
+        - generic [ref=e258]:
+          - paragraph [ref=e259]: 01 / SET THE INTENTION
+          - heading "What will you teach Ron?" [level=2] [ref=e260]
+          - paragraph [ref=e261]: Start with the outcome. The details will come from your demonstration.
+          - generic [ref=e262]: Workflow name
+          - textbox "Workflow name" [ref=e263]:
+            - /placeholder: e.g. Prepare the weekly report
+          - generic [ref=e264]: Intended outcome
+          - textbox "Intended outcome" [ref=e265]:
+            - /placeholder: What should be accomplished? What does success look like?
+          - generic [ref=e266]: Context & prerequisites optional
+          - textbox "Context & prerequisites optional" [ref=e267]:
+            - /placeholder: Accounts, starting conditions, or decisions Ron should know…
+          - button "Start demonstration" [disabled] [ref=e269]
+          - paragraph [ref=e274]: Choose a screen or window to share. No microphone needed. Add commentary for quick actions or decisions.
+        - generic [ref=e275]:
+          - generic [ref=e276]:
+            - generic [ref=e277]: OBSERVATION DESK
+            - generic [ref=e284]: 00:00
+          - generic [ref=e289]:
+            - heading "A window into your workflow" [level=3] [ref=e292]
+            - paragraph [ref=e293]: Your selected screen appears here when you begin.
+          - status [ref=e294]: Your screen is not being shared.
+          - generic [ref=e295]:
+            - generic [ref=e296]:
+              - heading "Observation journal" [level=3] [ref=e297]
+              - generic [ref=e298]: 0 entries
+            - generic [ref=e299]:
+              - paragraph [ref=e302]: Your process takes shape here.
+              - generic [ref=e303]: Observed actions and your commentary appear as Ron records them.
+      - contentinfo [ref=e304]:
+        - group [ref=e305]:
+          - generic "Teaching history 1" [ref=e306] [cursor=pointer]
+        - group [ref=e307]:
+          - generic "Skill library 0" [ref=e308] [cursor=pointer]

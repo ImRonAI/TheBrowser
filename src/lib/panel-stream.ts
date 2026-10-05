@@ -76,6 +76,38 @@ export interface PanelMessage {
   runId?: string
   parts: PanelPart[]
 }
+/** `tool_repair_proposed`: a library tool kept failing; the user may start the per-user fixer. */
+export interface RepairProposal {
+  id: string
+  tool: string
+  /** Where the tool lives; every kind is repaired per user (file / adapter / server revision). */
+  kind: 'library' | 'mcp' | 'core' | 'other'
+  exceptionClass?: string
+  count?: number
+  /** False when RON_TOOL_OBSERVATION is off: diagnosis degrades to recorded outcomes. */
+  observation: boolean
+}
+export interface RepairDemonstration {
+  kind: 'failing' | 'context'
+  input: unknown
+  expected?: string
+  actual?: string
+  status: 'passed' | 'failed'
+  dry_run: boolean
+  source?: 'session' | 'synthetic'
+}
+/** `tool_repair_ready`: a verified (or failed/unverified/needs_maintainer) user-scoped revision. */
+export interface RepairReady {
+  tool: string
+  rev: string
+  /** file (library module), adapter (wraps any tool, incl. MCP) or server (repaired browser MCP server). */
+  repairKind?: 'file' | 'adapter' | 'server'
+  status: string
+  summary: string
+  demonstrations: RepairDemonstration[]
+  sandbox?: string
+  route?: string
+}
 export interface PanelState {
   sessionId: string
   messages: PanelMessage[]
@@ -83,6 +115,8 @@ export interface PanelState {
   runId?: string
   status: RunStatus
   interrupts: PanelInterrupt[]
+  repairProposal?: RepairProposal
+  repairReady?: RepairReady
   checkpoint?: unknown
   error?: string
   stopReason?: string
@@ -140,6 +174,30 @@ export function displayValue(value: unknown): string {
 
 function record(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {}
+}
+
+function repairProposalFrom(event: PanelEvent): RepairProposal | undefined {
+  if (typeof event.id !== 'string' || typeof event.tool !== 'string') return undefined
+  const kind = event.kind === 'mcp' || event.kind === 'core' || event.kind === 'other' ? event.kind : 'library'
+  return { id: event.id, tool: event.tool, kind, observation: event.observation === true,
+    exceptionClass: typeof event.exception_class === 'string' ? event.exception_class : undefined,
+    count: typeof event.count === 'number' ? event.count : undefined }
+}
+
+function repairReadyFrom(event: PanelEvent): RepairReady | undefined {
+  if (typeof event.tool !== 'string' || typeof event.rev !== 'string') return undefined
+  const demonstrations = Array.isArray(event.demonstrations) ? event.demonstrations.flatMap((item) => {
+    const entry = record(item)
+    const kind = entry.kind === 'failing' ? 'failing' : 'context'
+    return [{ kind, input: entry.input, status: entry.status === 'passed' ? 'passed' : 'failed', dry_run: entry.dry_run === true,
+      expected: typeof entry.expected === 'string' ? entry.expected : undefined,
+      actual: typeof entry.actual === 'string' ? entry.actual : undefined,
+      source: entry.source === 'synthetic' ? 'synthetic' : entry.source === 'session' ? 'session' : undefined } as RepairDemonstration]
+  }) : []
+  return { tool: event.tool, rev: event.rev, status: displayValue(event.status) || 'failed', summary: displayValue(event.summary),
+    repairKind: event.repair_kind === 'adapter' || event.repair_kind === 'server' ? event.repair_kind : event.repair_kind === 'file' ? 'file' : undefined,
+    demonstrations, sandbox: typeof event.sandbox === 'string' ? event.sandbox : undefined,
+    route: typeof event.route === 'string' ? event.route : undefined }
 }
 
 function interruptsFrom(value: unknown): PanelInterrupt[] {
@@ -280,6 +338,14 @@ export function reducePanelEvent(state: PanelState, event: PanelEvent): PanelSta
     }
   }
   if (root && event.type === 'interrupt') next.interrupts = interruptsFrom(event.interrupts)
+  if (root && event.type === 'tool_repair_proposed') next.repairProposal = repairProposalFrom(event) ?? state.repairProposal
+  if (root && event.type === 'tool_repair_ready') {
+    const ready = repairReadyFrom(event)
+    if (ready) {
+      next.repairReady = ready
+      if (next.repairProposal?.tool === ready.tool) next.repairProposal = undefined
+    }
+  }
   if (root && event.type === 'checkpoint') next.checkpoint = event.checkpoint
   if (root && event.type === 'error') {
     next.status = 'error'
@@ -301,7 +367,7 @@ export function reducePanelEvent(state: PanelState, event: PanelEvent): PanelSta
   }
 
   const renderTypes = ['text_delta', 'reasoning_delta', 'tool_input', 'tool_progress', 'tool_result', 'native_tool',
-    'retry', 'node_event', 'background_event', 'steering_accepted', 'steering_applied']
+    'retry', 'node_event', 'background_event', 'steering_accepted', 'steering_applied', 'tool_repair_proposed', 'tool_repair_ready']
   if (!root && event.type === 'interrupt') renderTypes.push('interrupt')
   if (!renderTypes.includes(event.type) && !(event.type === 'error' && !root)) return next
   const messages = [...next.messages]
@@ -313,7 +379,7 @@ export function reducePanelEvent(state: PanelState, event: PanelEvent): PanelSta
   const parts = [...messages[index].parts]
   const pathKey = JSON.stringify(event.node_path)
   const key = `${event.run_id}-${event.sequence}`
-  if (event.type.startsWith('tool_')) {
+  if (event.type.startsWith('tool_') && !event.type.startsWith('tool_repair_')) {
     if (typeof event.id !== 'string') throw new Error(`${event.type} is missing its tool ID`)
     const identity = toolIdentity(event.run_id, event.node_path, event.id)
     const position = parts.findIndex((part) => part.kind === 'tool' && part.key === identity)
@@ -375,6 +441,8 @@ export function reducePanelEvent(state: PanelState, event: PanelEvent): PanelSta
     else if (event.type === 'node_event') text = `Node · ${text}`
     else if (event.type === 'steering_accepted') text = `Steering accepted · ${text}`
     else if (event.type === 'steering_applied') text = `Steering applied · ${text}`
+    else if (event.type === 'tool_repair_proposed') text = `Repair proposed · ${displayValue(event.tool)} keeps failing (${displayValue(event.count)}× ${displayValue(event.exception_class) || 'error'})`
+    else if (event.type === 'tool_repair_ready') text = `Repair ${displayValue(event.status)} · ${displayValue(event.tool)} revision ${displayValue(event.rev)}`
     parts.push({ kind: event.type === 'retry' ? 'retry' : 'activity', key, path: event.node_path, text })
   }
   messages[index] = { ...messages[index], parts }
@@ -566,21 +634,31 @@ export type ThinkStep =
   | { kind: 'reasoning'; key: string; text: string; active: boolean }
   | { kind: 'tool'; key: string; tool: ToolPart; active: boolean }
 
-const THINK_TOOL = 'think'
+/**
+ * Root tools whose child agent events render as a chain of thought: the Perplexity
+ * `think` child, the `recall` memory subagent (a strands_harness subagent whose
+ * native ToolStreamEvents arrive under node_path=[<its toolUseId>]) and the per-user
+ * tool fixer (`repair`, a synthetic root tool `repair:<rev>` fed by the repair service).
+ */
+export const CHAIN_TOOLS: ReadonlySet<string> = new Set(['recall', 'think', 'repair'])
+
+export function isChainTool(part: PanelPart): part is ToolPart {
+  return part.kind === 'tool' && part.path.length === 0 && CHAIN_TOOLS.has(part.name)
+}
 
 /**
- * Group a message's flat parts for rendering. Nested events emitted by a `think`
- * tool's child agent (node_path[0] === that think tool's id) become chain-of-
- * thought steps inside the think block and are removed from the flat list.
- * Nested parts under any other tool, and root reasoning, are left untouched.
+ * Group a message's flat parts for rendering. Nested events emitted by a chain
+ * tool's child agent (node_path[0] === that tool's id) become chain-of-thought
+ * steps inside the chain block and are removed from the flat list. Nested parts
+ * under any other tool, and root reasoning, are left untouched.
  */
 export function groupThinkParts(parts: PanelPart[], running: boolean): RenderItem[] {
-  const thinkIds = new Set(parts.filter((p) => p.kind === 'tool' && p.path.length === 0 && p.name === THINK_TOOL).map((p) => (p as ToolPart).id))
+  const thinkIds = new Set(parts.filter(isChainTool).map((p) => p.id))
   const items: RenderItem[] = []
   for (const part of parts) {
     const parentId = part.path.length ? String(part.path[0]) : undefined
-    if (parentId !== undefined && thinkIds.has(parentId)) continue // consumed by its think block
-    if (part.kind === 'tool' && part.path.length === 0 && part.name === THINK_TOOL) {
+    if (parentId !== undefined && thinkIds.has(parentId)) continue // consumed by its chain block
+    if (isChainTool(part)) {
       const nested = parts.filter((p) => p.path.length >= 1 && String(p.path[0]) === part.id)
       const steps: ThinkStep[] = []
       for (const child of nested) {

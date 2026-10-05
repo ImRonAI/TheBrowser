@@ -1,0 +1,96 @@
+# Teach an agent a skill
+
+## Approval workflow revision
+
+The teaching studio follows `brief -> observing -> recorded -> reviewing -> awaiting_approval -> compiling -> ready`. Stopping a demonstration no longer authorizes publication. The brief includes `title`, `objective`, and optional `context`, all passed to the native Live agent before its ready acknowledgment. The selected window continues streaming while native async tools record journal entries.
+
+`POST /sessions/{id}/finish` prepares the process review only. A session's `review` contains `{revision,created_at,journal_digest,document,html}`. `document` contains `{title,overview,prerequisites,inputs,steps:[{title,instructions,expected_outcome,evidence_sequences}],completion_criteria,exceptions,capabilities}`. `capabilities` (`agent/api/core/process_document.py`, `CapabilityRequirement`) is the review-phase output of step 2 of `agent/sops/learning-a-new-skill.sop.md`: one entry per dependency with `kind` (`tool` | `mcp_server` | `skill` | `subagent`), exact registry `name`, `purpose`, `source`, `disposition` (`existing` | `new` | `unavailable`) and optional `loader` / `verification`. It defaults to `[]`, so reviews persisted before the field existed still validate and render "No capability requirements were recorded in this revision."; a review that did assess capabilities renders an explicit "None required." row for each empty category. The HTML is rendered from an escaped application template — including a "Required capabilities" table covering all four categories — and is shown in a sandboxed frame; there is no separate capabilities UI. `GET /sessions/{id}/document?user_id=&agent_id=` serves that same review HTML. In the studio, the OS "stop sharing" control and the Finish button both end the demonstration and, when at least one observation was journaled, request this review; closing the studio or a denied screen permission stops capture without preparing anything. Only `approve` publishes.
+
+`POST /sessions/{id}/review` accepts `{user_id,agent_id,revision,feedback}` and prepares a corrected review. `POST /sessions/{id}/approve` accepts `{user_id,agent_id,revision}`; only that explicit action starts publication. Approval is bound to the current review revision and journal digest; stale or missing approvals return 409. Resuming observation invalidates approval. Compilation uses the approved process as the authoritative ordered workflow, not an unreviewed replacement.
+
+Publication saves `tool-group.json` plus `manifest.tool_group`: `{id,name,members:[{id,kind:'tool'|'skill'|'script',target}],steps:[{step,member_ids}],approval_revision,sop_file}`. SOP execution resolves each step through this group automatically, including skill-as-tool and script-as-tool wrappers. The approved HTML and process JSON are part of the published bundle.
+
+## Implementation plan
+
+1. Research native SOP, Live, skill-agent, and FastMCP interfaces (complete).
+2. Implement durable teaching journals, skill compilation, SOP execution and a shared FastMCP surface (implemented).
+3. Connect Gemini Live observation and each agent's teaching UI (implemented).
+4. Validate through the UI and live MCP (partially verified; successful model observation, compilation, and execution blocked by Google project access denial).
+
+## Contract
+
+Teaching is scoped by `user_id` and `agent_id` (`panel`, `search`, `build`, or `issue:<uuid>`). This uses the existing loopback panel identity boundary; do not expose these routes publicly.
+
+- `POST /teaching/sessions`: `{user_id, agent_id, title, objective, context?}` creates a session.
+- `GET /teaching/sessions?user_id=&agent_id=`: `{sessions: TeachingSession[]}`.
+- `GET /teaching/sessions/{id}?user_id=&agent_id=`: canonical TeachingSession.
+- `POST /teaching/sessions/{id}/finish`: `{user_id, agent_id}` prepares the HTML process review after observation disconnects. It never publishes a skill. Poll the canonical snapshot; a retry preserves the journal.
+- `POST /teaching/sessions/{id}/review`: `{user_id, agent_id, revision, feedback}` requests corrections to the current process document.
+- `POST /teaching/sessions/{id}/approve`: `{user_id, agent_id, revision}` explicitly approves the exact current document and starts generation. Missing/stale approval is rejected with 409.
+- `GET /teaching/sessions/{id}/document?user_id=&agent_id=` returns the current escaped HTML document, or 404 before one exists.
+- `GET /teaching/skills?user_id=&agent_id=`: `{skills: LearnedSkill[]}`.
+- `WS /teaching/sessions/{id}/observe?user_id=&agent_id=`: receives `{type:"frame", data:<base64 JPEG>, timestamp:<ISO>}`, `{type:"note", text}`, or `{type:"stop"}`. Server emits `{type:"ready"}`, `{type:"journal", entry}`, `{type:"transcript", text}`, `{type:"stopped"}`, or `{type:"error", message}`. Only server-confirmed ready means Gemini is observing. Stop acknowledges after draining journal calls. The model is always `gemini-3.8-live-extended-thinking`.
+- `TeachingSession`: `{id,user_id,agent_id,title,objective,context,status,created_at,journal,error,skill_id,review,approval}`. Status: `created|observing|recorded|reviewing|awaiting_approval|compiling|ready|error`; journal entries contain `sequence,created_at,kind,text`.
+- `GET /teaching/skills/{id}/files?user_id=&agent_id=&path=`: `{path,content}` for a published artifact.
+- `LearnedSkill`: `{id,name,description,agent_id,files:string[]}`. Artifacts include `SKILL.md`, `workflow.sop.md`, actual fetched `references/`, scripts when the workflow requires them, and a provenance manifest.
+- FastMCP at `/skills/mcp/`: scoped catalog, skill resource reads, SOP prompts, and `use_skill` execution with explicit assigned capabilities. Compilation may select existing skills/tools or author scripts with source evidence.
+
+The demonstration captures the active browser tab after an explicit Start (the window beside the studio when the tab is internal), then asks for camera and microphone permission. The user's camera is a small circle at the bottom right of each frame. Stop tracks on stop, disconnect, or unmount. Journals must distinguish observed actions, user explanations, and uncertainty; neither screenshots nor an LLM can guarantee every detail is visible. Never mark compilation or execution successful without validated artifacts/results.
+
+## Native sources
+
+- SOP package: `strands-agents-sops` pinned in `agent/api/requirements.txt`; upstream `https://github.com/strands-agents/agent-sop`.
+- Skill-agent package: the pinned `sample-strands-agents-agentskills` GitHub dependency in `agent/api/requirements.txt`.
+- Gemini Live: `strands.bidi.BidiAgent` and `strands.bidi.models.google.GoogleGeminiLiveModel` from the editable checkout at `agent/api/core/harness-sdk/strands-py`. The SDK's `experimental/bidi/` path contains only upstream import shims; Ron does not import them. There is no `live_bidi` duplicate. See `docs/panel-runtime.md`.
+- FastMCP integration: `https://gofastmcp.com/integrations/fastapi`.
+
+Native SOPs are natural-language instructions exposed as MCP prompts. Ron starts the
+installed upstream server with `python -m strands_agents_sops mcp --sop-paths <approved-directory>`
+and retrieves its `workflow` prompt using native Strands `MCPClient`. Each lookup starts
+a short-lived server, so newly published SOPs are read immediately without a restart
+of Ron or a cached prompt. The agent follows the SOP's ordered RFC 2119 constraints;
+this is model-guided execution, not a custom deterministic step runner. The application
+still validates approval, capability membership, script paths, and the final outcome.
+
+## Storage and execution
+
+`TEACHING_STORAGE_DIR` defaults to `SESSION_STORAGE_DIR/teaching`. Teaching storage is durable local native Strands `LocalFileStorage`, independent of the panel's ephemeral conversation default. Use one backend writer process. Scope directories are hashes of the user and agent IDs. Journals have ordered, timestamped entries and survive provider failures and restarts. Raw screen frames are sent to Gemini but not saved locally.
+
+Published layout is `<scope>/skills/<session-id>/<skill-name>/SKILL.md` with sibling references, scripts and `workflow.sop.md`; the outer `manifest.json` records ordered step assignments, provenance and memory-registration state. The actual final skill directory is checked with Strands `Skill.from_file(strict=True)` and the upstream SOP loader. Interrupted publication stays undiscoverable; memory registration is retried idempotently before the lesson is marked ready. Copy the inner named directory to another Agent Skills consumer.
+
+The compiler uses the configured standard Gemini model (`GEMINI_DEFAULT_MODEL`), not a Live session. It fetches real public HTTPS references with DNS/redirect SSRF validation and records URL/content hashes. Scripts are downloaded from real source URLs or authored from the journal. Python syntax is checked; generated scripts are explicitly marked as not executed during compilation. Missing inputs, failed tools, or unverified outcomes stop SOP advancement.
+
+`use_skill` follows the native example's isolated-agent-as-tool pattern. Each SOP step receives only its assigned tools, skills and scripts. Configured existing skills come from `PANEL_SKILLS_DIRS`/`PANEL_SKILLS_DIR`; `PANEL_SKILL_TOOLS` maps their names to assigned tool names, otherwise native `allowed_tools` applies, falling back to the caller's assigned capabilities. References and scripts load on demand. Panel tools refresh from the parent registry at skill discovery/execution; native browser tools remain parent-only, so browser-only steps without an API/script capability cannot run inside the isolated skill agent. The compiler must not invent an unavailable browser capability. Supporting parent-executed browser-only SOP steps remains an integration gap.
+
+Issue scopes use `issue:<uuid>` and the canonical `owner_id` returned by authenticated/guest issue history, not the guest capability token. Their ordinary tools remain the seven canonical issue tools. Explicitly taught SOP scripts are additional executable capabilities, including for issue agents. MCP issue execution requires tools bound by that issue's runtime; it never substitutes general host tools for an unbound issue context.
+
+FastMCP tools: `list_skills`, `read_skill_file`, `run_skill_script`, `get_tool_group`, `use_skill`. Resource template: `skill://{user_id}/{agent_id}/{skill_id}`. Prompt: `agent_sop(user_id,agent_id,skill_id,user_input="")`, using the upstream SOP envelope. These are trusted loopback host-execution surfaces; never add them to the public ngrok allowlist.
+
+Screen capture sends at most one JPEG per second, resized to 1600 pixels on the longest side. Commentary records quick or invisible actions. Connection timeout is 30 seconds; stop waits up to 45 seconds for the final provider turn and all dispatched journal tool results. Compilation has a 600-second limit, each SOP step 300 seconds, and script execution 60 seconds with bounded output. Failures retain the journal for retry and never create placeholder skills.
+
+## Verification and remaining acceptance work
+
+2026-10-02: both regular Live and Extended Thinking passed bounded native SDK
+speech/tool smoke tests with the current account. Extended Thinking delivered speech
+while a harmless async tool ran and a final `IDLE` status (58.8 s). This supersedes the
+older access-denial assumption below, but does not establish successful end-to-end
+teaching generation, human approval, generated-script execution, or SOP replay.
+Observation now uses native realtime media/text, relays audio, and requires the saved
+summary plus interaction idle and settled tools before finish. Offline tests cover
+that contract and revision/digest approval guards. Unauthenticated generic MCP
+`use_skill` refuses all issue scopes; execute those skills only from their authenticated
+issue agent, never by borrowing process-global tool closures.
+
+After recovery of the interrupted approval-workflow implementation on 2026-09-29, the real running API exposed the new brief/context, review, approval, and HTML routes in OpenAPI. Against the actual saved lesson with zero observations: `/finish`, `/approve`, and `/review` each returned 409; `/document` returned 404; cross-agent access returned 404. A real network FastMCP client discovered all five tools, including `get_tool_group`. The production Electron/renderer build passed. These negative-path checks do not establish successful model generation or SOP replay.
+
+The redesigned teaching studio was then exercised through the actual Electron renderer. Native `getDisplayMedia` and local preview succeeded, followed by real session/WebSocket creation. Google again returned `1008` project-access denial; sharing stopped, the brief remained, and the journal correctly stayed empty. Evidence: `output/playwright/teaching-studio-provider-denial.png`. This supersedes the earlier native picker timeout below. No synthetic journal, review document, or successful generated skill was used to bypass that failure.
+
+Independent design review checked actual dark desktop/tablet/narrow layouts (1440/768/375 pixels), with no horizontal overflow. It found and prompted fixes for inherited thin text and document typography/palette. The final stylesheet passed actual Tailwind compilation; the portable HTML uses self-contained system/Georgia/monospace fonts and design-system token values. Final Python compilation and TypeScript checks passed. Additional UI automation was stopped when an external operator began using the studio, so light-theme, active-minimized capture, and successful review/approval/saved states remain acceptance work. Restart the backend after restoring Google access to load the final portable-document styling before completing that acceptance pass.
+
+On 2026-09-29, Playwright exercised the real renderer with the real localhost backend and a real captured GitHub tab. Starting a lesson returned HTTP 201; Google then returned `1008 None. Your project has been denied access. Please contact support.` The UI showed that error, retained the lesson and its title/outcome, and disabled compilation with zero observed entries. Reopening and retrying reused the saved session. Evidence: `output/playwright/teaching-provider-denied.png`; the Build teaching surface is in `output/playwright/teaching-build-agent.png`.
+
+Real HTTP checks confirmed session/catalog access, 409 for compiling an empty observation, and 404 for reading a lesson from another agent scope. A real network FastMCP client discovered all four tools, the SOP prompt, and resource template. Native panel composition registered `list_learned_skills`/`use_skill` and the memory manager. Storage, native memory add/search, restart recovery, and configured skill-file access were exercised without model doubles.
+
+TypeScript typecheck and the Electron/renderer production build passed. The new observation and REST modules pass Pyright; teaching storage reports the upstream optional-Protocol abstract-constructor diagnostic for the native file memory store (its actual add/search and composition work). Other existing project/SDK typing diagnostics remain. The successful live lesson, actual generated-script execution and learned-SOP replay are **not verified** because both Live and standard Gemini calls are denied by the configured Google project.
+
+The initial Electron capture attempt returned `Timeout starting video source`; the redesigned studio's later real attempt successfully acquired media and reached Google, as described above. Guest Projects remains pinned to the offline `localhost:8766` backend, so the canonical issue-agent teaching UI could not be exercised; its pin/database were not changed. Evidence: `output/playwright/teaching-issue-endpoint-unavailable.png`. Restore Google access and the guest backend, then complete a real demonstration and verify artifacts, memory recall and ordered replay before treating this feature as fully accepted.

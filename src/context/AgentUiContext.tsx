@@ -1,6 +1,4 @@
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react'
-import { getAccessToken } from '@/api/supabase'
-import { API_BASE_URL, API_ENDPOINTS } from '@/pages/types/api'
 import { useArticleDraftStore } from '@/stores/articleDraftStore'
 
 export interface AskRonOption {
@@ -10,6 +8,20 @@ export interface AskRonOption {
 }
 
 export type AskRonStep = 'closed' | 'loading' | 'options' | 'custom-prompt' | 'executing'
+
+/**
+ * Static suggestions. `POST /chat` streams SSE and creates a server-owned
+ * session, so it is never used to fetch menu options.
+ */
+export const ASK_RON_OPTIONS: readonly AskRonOption[] = [
+  { id: '1', label: 'Summarize this text', description: 'Get a brief summary' },
+  { id: '2', label: 'Explain this text', description: 'Understand what it means' },
+  { id: '3', label: 'Find related information', description: 'Search for more context' },
+]
+
+export function askRonPrompt(selectedText: string, sourceUrl: string, intent: string): string {
+  return `The user selected this text: "${selectedText}" from ${sourceUrl}. They want you to: ${intent.trim()}`
+}
 
 interface AgentUiContextValue {
   isPanelOpen: boolean
@@ -87,12 +99,13 @@ export function AgentUiProvider({ children }: { children: ReactNode }) {
     setAskRonStepState(step)
   }, [])
 
+  // Closing the menu never drops a request that was already queued: the
+  // conversation's consume effect dispatches it once the session is ready.
   const closeAskRon = useCallback(() => {
     setAskRonStepState('closed')
     setAskRonSelectedText(null)
     setAskRonSourceUrl(null)
     setAskRonOptions([])
-    setAskRonPendingPrompt(null)
   }, [])
 
   const startViewingScreen = useCallback((screenData?: string) => {
@@ -106,75 +119,22 @@ export function AgentUiProvider({ children }: { children: ReactNode }) {
     setScreenshotData(null)
   }, [])
 
+  // Opening the menu is a pure UI step: nothing is sent until the user picks
+  // an option, and the choice is then dispatched to whichever mode is visible.
   const startAskRon = useCallback(async (selectedText: string, sourceUrl: string) => {
     useArticleDraftStore.getState().setDestination('panel')
-    setAskRonStepState('loading')
     setAskRonSelectedText(selectedText)
     setAskRonSourceUrl(sourceUrl)
-    setAskRonOptions([])
-    setAskRonThinkingText('Analyzing selection...')
-    setAskRonPendingPrompt(null)
+    setAskRonThinkingText('Choose what Ron should do')
+    setAskRonOptions([...ASK_RON_OPTIONS])
+    setAskRonStepState('options')
     openPanel()
-
-    try {
-      const token = await getAccessToken()
-      const prompt = `The user has sent you this text "${selectedText}" from ${sourceUrl}. Please select three likely options of what the user would want you to do with this text, and output it in json format like: {"options": [{"id": "1", "label": "Option label", "description": "Brief description"}, ...]}`
-
-      setAskRonThinkingText('Getting suggestions...')
-
-      const response = await fetch(`${API_BASE_URL}${API_ENDPOINTS.agent.chat}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({
-          message: prompt,
-          session_id: `askron-${Date.now()}`,
-        }),
-      })
-
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`)
-      }
-
-      const data = await response.json()
-      let options: AskRonOption[] = []
-      try {
-        const jsonMatch = data.content?.match(/\{[\s\S]*"options"[\s\S]*\}/)
-        if (jsonMatch) {
-          const parsed = JSON.parse(jsonMatch[0])
-          options = parsed.options || []
-        }
-      } catch {
-        options = []
-      }
-
-      if (options.length === 0) {
-        options = [
-          { id: '1', label: 'Summarize this text', description: 'Get a brief summary' },
-          { id: '2', label: 'Explain this text', description: 'Understand what it means' },
-          { id: '3', label: 'Find related information', description: 'Search for more context' },
-        ]
-      }
-
-      setAskRonStepState('options')
-      setAskRonOptions(options.slice(0, 3))
-    } catch (error) {
-      console.error('Failed to get Ask Ron suggestions:', error)
-      setAskRonStepState('options')
-      setAskRonOptions([
-        { id: '1', label: 'Summarize this text', description: 'Get a brief summary' },
-        { id: '2', label: 'Explain this text', description: 'Understand what it means' },
-        { id: '3', label: 'Find related information', description: 'Search for more context' },
-      ])
-    }
   }, [openPanel])
 
   const selectAskRonOption = useCallback(async (option: AskRonOption) => {
     if (!askRonSelectedText) return
     useArticleDraftStore.getState().setDestination('panel')
-    const prompt = `The user selected this text: "${askRonSelectedText}" from ${askRonSourceUrl}. They want you to: ${option.label}. ${option.description || ''}`
+    const prompt = askRonPrompt(askRonSelectedText, askRonSourceUrl ?? '', `${option.label}. ${option.description || ''}`)
     setAskRonStepState('executing')
     setAskRonThinkingText(`${option.label}...`)
     setAskRonPendingPrompt(prompt)
@@ -184,7 +144,7 @@ export function AgentUiProvider({ children }: { children: ReactNode }) {
   const submitCustomAskRon = useCallback(async (prompt: string) => {
     if (!askRonSelectedText) return
     useArticleDraftStore.getState().setDestination('panel')
-    const fullPrompt = `The user selected this text: "${askRonSelectedText}" from ${askRonSourceUrl}. They want you to: ${prompt}`
+    const fullPrompt = askRonPrompt(askRonSelectedText, askRonSourceUrl ?? '', prompt)
     setAskRonStepState('executing')
     setAskRonThinkingText('Processing your request...')
     setAskRonPendingPrompt(fullPrompt)

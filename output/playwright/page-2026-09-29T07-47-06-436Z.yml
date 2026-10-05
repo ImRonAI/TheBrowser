@@ -1,0 +1,81 @@
+- generic [ref=e3]:
+  - generic [ref=e4]:
+    - generic [ref=e6]:
+      - generic [ref=e7]:
+        - button "Home" [ref=e8] [cursor=pointer]
+        - button "Go back" [disabled] [ref=e13]
+        - button "Go forward" [disabled] [ref=e17]
+        - button "Reload page" [ref=e21] [cursor=pointer]
+      - generic [ref=e27]:
+        - generic [ref=e29]:
+          - img "Ron" [ref=e30]
+          - generic [ref=e31]: ron
+        - textbox "Search or enter URL..." [ref=e33]: ron://home
+        - button "Search or navigate" [ref=e34] [cursor=pointer]
+      - generic [ref=e38]:
+        - 'button "Theme: dark (click to toggle)" [ref=e39] [cursor=pointer]'
+        - button "New Tab" [ref=e52] [cursor=pointer]
+        - button "Open Agent Panel" [ref=e55] [cursor=pointer]
+        - button "U" [ref=e59] [cursor=pointer]
+    - generic [ref=e66]:
+      - button "New Tab" [ref=e67] [cursor=pointer]
+      - generic [ref=e69]:
+        - generic [ref=e70] [cursor=pointer]:
+          - img "Ron" [ref=e71]
+          - generic [ref=e72]: Home
+          - button "Close Tab" [ref=e73]
+        - generic [ref=e77] [cursor=pointer]:
+          - img "Ron" [ref=e79]
+          - generic [ref=e80]: Home
+          - button "Close Tab" [ref=e81]
+  - generic [ref=e88]:
+    - generic [ref=e91]:
+      - button "Add Context" [ref=e93] [cursor=pointer]
+      - textbox "Ask anything..." [ref=e99]
+      - button [disabled] [ref=e100]
+    - generic [ref=e104]:
+      - button "Discover" [ref=e105] [cursor=pointer]
+      - button "Execute" [ref=e111] [cursor=pointer]
+      - button "Calendar" [ref=e118] [cursor=pointer]
+      - button "Vibe" [ref=e123] [cursor=pointer]
+      - button "Build" [active] [ref=e130] [cursor=pointer]
+    - button "Collapse navigation" [ref=e136] [cursor=pointer]
+  - region "Build Agent" [ref=e504]:
+    - generic [ref=e505]:
+      - generic [ref=e506]:
+        - generic [ref=e507]:
+          - generic [ref=e508]:
+            - generic [ref=e509]: R
+            - generic [ref=e510]:
+              - heading "Build Agent" [level=2] [ref=e511]
+              - status [ref=e512]: Ready
+          - generic [ref=e513]:
+            - generic [ref=e514]:
+              - generic [ref=e515]: Voice
+              - switch "Voice agent" [ref=e516] [cursor=pointer]
+            - button "New chat" [ref=e517] [cursor=pointer]
+        - generic [ref=e520]:
+          - 'button "Model configuration: Perplexity / xai/grok-4.5 / Provider default" [ref=e521] [cursor=pointer]':
+            - generic [ref=e522]: Perplexity / xai/grok-4.5 / Provider default
+          - group "Browser target" [ref=e525]:
+            - button "Your browser" [pressed] [ref=e526] [cursor=pointer]
+            - button "Cloud browser" [ref=e527] [cursor=pointer]
+        - group [ref=e528]:
+          - generic "Runtime · auto context · concurrent tools" [ref=e529] [cursor=pointer]
+          - option "Automatic" [selected]
+          - option "Agentic"
+          - option "Sliding window"
+          - option "Concurrent" [selected]
+          - option "Sequential"
+      - button "Teach a skill" [ref=e531] [cursor=pointer]
+      - generic [ref=e533]:
+        - generic [ref=e534]: R
+        - heading "How can I help?" [level=3] [ref=e535]
+        - paragraph [ref=e536]: Browse, search, analyze, and accomplish.
+      - generic [ref=e537]:
+        - generic [ref=e539]:
+          - button "Add Context" [ref=e541] [cursor=pointer]
+          - textbox "Message Ron" [ref=e544]:
+            - /placeholder: Ask anything…
+          - button "Send message" [disabled] [ref=e545]: Send
+        - paragraph [ref=e546]: ↵ to send · Shift + ↵ for a new line

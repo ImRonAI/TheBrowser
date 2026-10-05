@@ -4,7 +4,9 @@ import { TrashIcon, ChatBubbleLeftIcon, XMarkIcon } from '@heroicons/react/24/ou
 import { cn } from '@/utils/cn'
 import { Button } from '@/components/ui/button'
 
-const API_BASE_URL = import.meta.env.VITE_SEARCH_API_URL || 'http://localhost:8765'
+import { SEARCH_API } from '@/lib/search-api'
+
+const API_BASE_URL = SEARCH_API
 
 export interface ChatSessionSummary {
   session_id: string

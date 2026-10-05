@@ -317,3 +317,72 @@ def test_function_tool_schemas_get_object_properties_and_native_tools_pass_throu
     assert fn["parameters"]["properties"]["server_config"] == {"type": "object", "properties": {}}
     assert [t["type"] for t in req["tools"]] == ["sandbox", "web_search", "function"]
     assert req["max_steps"] == 40
+
+
+def test_image_search_output_item_surfaces_as_native_stream_event():
+    image_item = {
+        "type": "image_search_results",
+        "call_id": "img1",
+        "queries": ["golden gate sunset"],
+        "results": [
+            {
+                "image_url": "https://images.example.com/golden-gate.jpg",
+                "origin_url": "https://example.com/bridge",
+                "title": "Golden Gate at sunset",
+                "width": 1920,
+                "height": 1080,
+            }
+        ],
+    }
+    resp = {"id": "resp_img", "object": "response", "status": "in_progress", "output": []}
+    body = _sse(
+        {"type": "response.created", "sequence_number": 0, "response": resp},
+        {"type": "response.reasoning.image_search_queries", "sequence_number": 1, "call_id": "img1", "queries": ["golden gate sunset"]},
+        {"type": "response.reasoning.image_search_results", "sequence_number": 2, "call_id": "img1",
+         "results": image_item["results"]},
+        {"type": "response.output_item.done", "sequence_number": 3, "output_index": 0, "item": image_item},
+        {"type": "response.output_text.delta", "sequence_number": 4, "item_id": "msg1", "output_index": 1, "content_index": 0, "delta": "done"},
+        {"type": "response.completed", "sequence_number": 5, "response": {**resp, "status": "completed", "usage": {"input_tokens": 1, "output_tokens": 1, "total_tokens": 2}}},
+    )
+    model = _mock_model(body)
+
+    async def run():
+        events = []
+        async for event in model.stream([{"role": "user", "content": [{"text": "find images"}]}]):
+            events.append(event)
+        return events
+
+    events = asyncio.run(run())
+    native = [e["perplexity"] for e in events if "perplexity" in e]
+    assert [n["type"] for n in native] == [
+        "response.reasoning.image_search_queries",
+        "response.reasoning.image_search_results",
+        "response.output_item.done",
+    ]
+    final = next(n for n in native if n["type"] == "response.output_item.done")
+    assert final["item"]["type"] == "image_search_results"
+    assert final["item"]["results"][0]["image_url"] == "https://images.example.com/golden-gate.jpg"
+
+
+def test_user_image_blocks_format_as_input_image_on_agent_api():
+    captured: list = []
+    model = _mock_model(
+        _sse(
+            {"type": "response.created", "response": {"id": "r", "object": "response", "status": "in_progress", "output": []}},
+            {"type": "response.completed", "response": {"id": "r", "object": "response", "status": "completed", "output": [], "usage": {"input_tokens": 1, "output_tokens": 1, "total_tokens": 2}}},
+        ),
+        capture=captured,
+    )
+
+    async def run():
+        async for _ in model.stream([{"role": "user", "content": [
+            {"text": "what is in this image?"},
+            {"image": {"format": "jpeg", "source": {"bytes": b"\xff\xd8\xff\xe0"}}},
+        ]}]):
+            pass
+
+    asyncio.run(run())
+    user = next(item for item in captured[0]["input"] if item.get("role") == "user")
+    types = [block["type"] for block in user["content"]]
+    assert types == ["input_text", "input_image"]
+    assert user["content"][1]["image_url"].startswith("data:image/jpeg;base64,")

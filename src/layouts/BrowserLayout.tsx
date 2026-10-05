@@ -8,8 +8,10 @@ import { InterestMenuSync } from '@/components/interests/InterestMenuSync'
 import { InterestsWidget } from '@/components/interests/InterestsWidget'
 import { ContextMenu } from '@/components/shared/ContextMenu'
 import { BrowserGlowBorder } from '@/components/shared/BrowserGlowBorder'
+import { AgentCursor } from '@/components/shared/AgentCursor'
 import { NavigationDrawer } from '@/components/navigation/NavigationDrawer'
 import { AgentUiProvider, useAgentUi } from '@/context/AgentUiContext'
+import { usePanelAgentStore } from '@/stores/panelAgentStore'
 import { cn } from '@/utils/cn'
 
 interface BrowserLayoutProps {
@@ -26,6 +28,9 @@ export function BrowserLayout({ children }: BrowserLayoutProps) {
 
 function BrowserLayoutContent({ children }: BrowserLayoutProps) {
   const { isPanelOpen, startAskRon } = useAgentUi()
+  const panelWidth = usePanelAgentStore((state) => state.panelWidth)
+  const teachingInset = usePanelAgentStore((state) => state.teachingInset)
+  const sideInset = Math.max(isPanelOpen ? panelWidth : 0, teachingInset)
   const [isExternalMode, setIsExternalMode] = useState(false)
   const chromeRef = useRef<HTMLDivElement>(null)
   const [contextMenu, setContextMenu] = useState<{
@@ -96,8 +101,23 @@ function BrowserLayoutContent({ children }: BrowserLayoutProps) {
       })
     }
 
+    // Double-click on renderer content (home, reader, projects) opens the same
+    // menu when a word/phrase is selected. Nothing is sent until the user picks
+    // "Ask Ron" there; the native WebContentsView path is handled in Electron.
+    const handleDoubleClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement | null
+      if (!target || target.closest('input, textarea, [contenteditable="true"], button, a, [data-no-ask-ron]')) return
+      const selectedText = window.getSelection()?.toString().trim()
+      if (!selectedText) return
+      setContextMenu({ x: e.clientX, y: e.clientY, isOpen: true, selectedText })
+    }
+
     document.addEventListener('contextmenu', handleContextMenu)
-    return () => document.removeEventListener('contextmenu', handleContextMenu)
+    document.addEventListener('dblclick', handleDoubleClick)
+    return () => {
+      document.removeEventListener('contextmenu', handleContextMenu)
+      document.removeEventListener('dblclick', handleDoubleClick)
+    }
   }, [])
 
   return (
@@ -139,7 +159,7 @@ function BrowserLayoutContent({ children }: BrowserLayoutProps) {
           <motion.div 
             className="h-full overflow-auto scrollbar-thin"
             animate={{
-              marginRight: isPanelOpen ? 420 : 0,
+              marginRight: sideInset,
             }}
             transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
           >
@@ -149,6 +169,8 @@ function BrowserLayoutContent({ children }: BrowserLayoutProps) {
 
         {/* Agent Panel - positioned within THIS container, below NavigationDrawer */}
         <AgentPanel />
+        <AgentCursor />
+        <div id="ron-teaching-slot" className="pointer-events-none absolute inset-0 z-[60]" />
 
         {/* Screen Vision Overlay */}
         <ScreenVisionOverlay />

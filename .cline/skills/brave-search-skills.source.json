@@ -1,0 +1,33 @@
+{
+  "repository": "https://github.com/brave/brave-search-skills",
+  "commit": "62793e0c49ed2fc7c8f0c99a8ab8898abdf32a1d",
+  "omitted_aliases": {
+    "search": "bx (duplicate; Cline requires directory name to match skill name)"
+  },
+  "files": {
+    "answers/LICENSE": "104c4be5d96b7fa1ec09409ad8165b5e987c469aeb529153298a082a7012707e",
+    "answers/SKILL.md": "3c5488bfcb36e3867eba00800b2d76e55b013f86258b24d993977a2709e52da7",
+    "bx/LICENSE": "104c4be5d96b7fa1ec09409ad8165b5e987c469aeb529153298a082a7012707e",
+    "bx/SKILL.md": "4adc49bfccb4380dcd9d18ed7833c2189fd2e4f23a637fa8c8466b486b12be61",
+    "images-search/LICENSE": "104c4be5d96b7fa1ec09409ad8165b5e987c469aeb529153298a082a7012707e",
+    "images-search/SKILL.md": "f5ba562a15f79494c96c968e5d3a0fb60b27d822dfac50487bda0927c8cc6d9e",
+    "llm-context/LICENSE": "104c4be5d96b7fa1ec09409ad8165b5e987c469aeb529153298a082a7012707e",
+    "llm-context/SKILL.md": "729c39285a9648bed69c61d81d06e5113bf57c99bfeb234353757cdc9d5cf6aa",
+    "local-descriptions/LICENSE": "104c4be5d96b7fa1ec09409ad8165b5e987c469aeb529153298a082a7012707e",
+    "local-descriptions/SKILL.md": "bac572de3ec5a3fac24d1325d28285580c6cba1f6da5901fcc6ddee6ed5c4bf8",
+    "local-place-search/LICENSE": "104c4be5d96b7fa1ec09409ad8165b5e987c469aeb529153298a082a7012707e",
+    "local-place-search/SKILL.md": "60435de90d162738d9b178250a58a4168d5a169df7859d7bb99064bd8427211e",
+    "local-pois/LICENSE": "104c4be5d96b7fa1ec09409ad8165b5e987c469aeb529153298a082a7012707e",
+    "local-pois/SKILL.md": "a02263e4d6b8da1b29468bb54ff390d38a142e5bd47dfc27514a1f13df37b4bd",
+    "news-search/LICENSE": "104c4be5d96b7fa1ec09409ad8165b5e987c469aeb529153298a082a7012707e",
+    "news-search/SKILL.md": "6cb80b66ac55fa0a3b5d6fee78f81c286c99e781d765d2ca5f76a1f9647b4073",
+    "spellcheck/LICENSE": "104c4be5d96b7fa1ec09409ad8165b5e987c469aeb529153298a082a7012707e",
+    "spellcheck/SKILL.md": "7c408a494450ffdb44fb391f805a4f76269b67969b0a7e7692d787a4d7d90e21",
+    "suggest/LICENSE": "104c4be5d96b7fa1ec09409ad8165b5e987c469aeb529153298a082a7012707e",
+    "suggest/SKILL.md": "99cc31a7688b66e68273b6348c2d46cf271957ac21c24ec4619d476c52aa7c1d",
+    "videos-search/LICENSE": "104c4be5d96b7fa1ec09409ad8165b5e987c469aeb529153298a082a7012707e",
+    "videos-search/SKILL.md": "91c5d7ec5c96e9c8c2512d65e3a7bcfb6ebdb61cd9784cac4f288ab337311bb3",
+    "web-search/LICENSE": "104c4be5d96b7fa1ec09409ad8165b5e987c469aeb529153298a082a7012707e",
+    "web-search/SKILL.md": "71b36b64b6ab05c3372dbbc8a7e42f11c099de6f381e9000cda95552f5232cbe"
+  }
+}

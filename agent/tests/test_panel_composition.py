@@ -43,6 +43,7 @@ class OfflineModel(Model):
     async def stream(self, messages, tool_specs=None, system_prompt=None, **kwargs):
         self.calls.append(copy.deepcopy(messages))
         self.tool_specs = list(tool_specs or [])
+        self.tool_spec_history = [*getattr(self, "tool_spec_history", []), (copy.deepcopy(messages), self.tool_specs)]
         uses = self.uses if not any("toolResult" in b for m in messages for b in m["content"]) else ()
         yield {"messageStart": {"role": "assistant"}}
         for index, (name, inputs) in enumerate(uses):
@@ -59,25 +60,50 @@ class OfflineModel(Model):
                             "metrics": {"latencyMs": 1}}}
 
 
+class MemoryChainModel(OfflineModel):
+    """The recall subagent's fast-model chain (built only when ``recall`` is called), kept
+    offline and out of ``models``."""
+
+
 @pytest.fixture
 def offline(monkeypatch, tmp_path):
     for key in ("PANEL_SKILLS_DIR", "PANEL_SKILLS_DIRS", "PANEL_SKILL_TOOLS", "PANEL_FORMATIONS_FILE",
-                "PANEL_RETRY_MAX_ATTEMPTS", "PANEL_RETRY_INITIAL_DELAY", "PANEL_RETRY_MAX_DELAY"):
+                "PANEL_RETRY_MAX_ATTEMPTS", "PANEL_RETRY_INITIAL_DELAY", "PANEL_RETRY_MAX_DELAY",
+                "RON_MEMORY_AGENT"):
         monkeypatch.delenv(key, raising=False)
     models, catalogs, constructed = [], [], []
     storage = InMemoryStorage()
     monkeypatch.setattr(composition, "PROJECT_ROOT", tmp_path)
     monkeypatch.setattr(composition, "get_user_session_storage", lambda user: storage)
     # Retain real native memory configuration, using isolated offline storage.
-    from agent.api.core import panel_storage
+    from agent.api.core import memory_agent, panel_storage, teaching
     monkeypatch.setattr(panel_storage, "get_panel_storage", lambda: storage)
+    # The learned-skill TeachingService is a process-wide singleton (defaults to the repo's
+    # .sessions/teaching): reset per test and pointed at this test's storage.
+    monkeypatch.setenv("TEACHING_STORAGE_DIR", str(tmp_path / "teaching"))
+    monkeypatch.setattr(teaching, "_service", None)
+    monkeypatch.setenv("RON_MEMORY_AGENT_MODELS", "offline/memory")
 
-    def model(*args):
+    memory_models = []
+
+    def model(*args, hosted_tools=True):
+        if not hosted_tools:
+            # memory_agent.build_model(provider, model_id, None, hosted_tools=False): the
+            # recall/dream router candidates, never the panel/think/judge/child models.
+            assert args[:2] == ("perplexity", "offline/memory")
+            value = MemoryChainModel()
+            memory_models.append(value)
+            return value
         value = OfflineModel()
         models.append(value)
         return value
 
     monkeypatch.setattr(composition, "build_model", model)
+    # memory_agent imports build_model by name; patching only panel_agent.build_model would
+    # leave a called recall subagent building a real Perplexity client. Patch the bound name too.
+    monkeypatch.setattr(memory_agent, "build_model", model)
+    from agent.api.core import config as app_config
+    monkeypatch.setattr(app_config, "PERPLEXITY_API_KEY", "offline-not-a-credential")
     native_catalog = composition._OwnedPanelCatalog
 
     def catalog(**kwargs):
@@ -100,6 +126,7 @@ def offline(monkeypatch, tmp_path):
             user_id="user", session_id="session", system_prompt="Test composition", extra_tools=kwargs.pop("extra_tools", []),
             **kwargs)
 
+    build.memory_models = memory_models
     yield build, models, catalogs, constructed, storage
     for agent, _ in constructed:
         agent.cleanup()
@@ -129,6 +156,14 @@ def test_real_constructor_defaults_stream_and_complete_cleanup(offline):
     assert catalogs[0].children == []
     result = asyncio.run(agent.invoke_async("hello"))
     assert result.stop_reason == "end_turn"
+    # Memory is the SDK's: the native aux_model (the first fast memory model) runs extraction,
+    # everyTurn injection found nothing so the panel model saw only the user's message, and
+    # recall is a harness subagent the model may call (its chain is built only when called).
+    assert {"recall", "search_memories", "list_learned_skills", "use_skill"} <= names
+    assert "journal" not in names
+    assert len(build.memory_models) == 1 and agent.aux_model is build.memory_models[0]
+    assert agent.memory_manager._stores[0].extraction
+    assert [b["text"] for m in models[0].calls[-1] for b in m["content"] if "text" in b] == ["hello"]
     agent.cleanup()
     agent.cleanup()
     assert catalogs[0].children == []
@@ -178,37 +213,23 @@ def test_sync_extra_adapted_and_think_child_inherits_parent_tools(offline, monke
         return value
 
     agent = build(extra_tools=[blocking])
-    # Parent calls the sync extra tool and think; think's child (fresh model) uses
-    # the inherited `blocking` tool itself - interleaved reasoning + tool calling.
-    models[-1].uses = [("blocking", {"value": "adapted"}), ("think", {"thought": "reason"})]
-    events = []
-
-    async def run():
-        async for event in agent.stream_async("use tools"):
-            events.append(event)
-        return events[-1]["result"]
-
-    def child_model(*args):
-        value = OfflineModel()
-        value.uses = [("blocking", {"value": "from-child"})]
-        models.append(value)
-        return value
-    monkeypatch.setattr(composition, "build_model", child_model)  # think builds its child via model_factory -> build_model
-    result = asyncio.run(run())
+    # Parent calls the sync extra tool and the vendored think.py. think.py builds its child
+    # over the parent's own model and tools; ThinkToolsGuard (native BeforeToolCallEvent)
+    # removes parent-only tools from that inherited set.
+    models[-1].uses = [("blocking", {"value": "adapted"}),
+                       ("think", {"thought": "reason offline", "cycle_count": 1, "system_prompt": "child"})]
+    result = asyncio.run(agent.invoke_async("use tools"))
     assert result.stop_reason == "end_turn"
     results = [b["toolResult"] for m in agent.messages for b in m["content"] if "toolResult" in b]
     assert len(results) == 2 and all(r["status"] == "success" for r in results)
-    child = models[-1]
-    assert child is not models[0]
-    # Child received the parent's tools minus the excluded meta tools.
-    child_tool_names = {spec["name"] for spec in child.tool_specs}
-    assert {"blocking", "shell", "editor", "perplexity_search", "mcp_client"} <= child_tool_names
+    assert len(models) == 1  # think.py reuses the parent's model instance
+    child_calls = [specs for messages, specs in models[0].tool_spec_history
+                   if "Thought to process:\nreason offline" in json.dumps(messages[0]["content"]).replace("\\n", "\n")]
+    assert child_calls
+    child_tool_names = {spec["name"] for spec in child_calls[0]}
+    assert {"blocking", "shell", "editor", "perplexity_search", "mcp_client", "recall"} <= child_tool_names
     assert not child_tool_names & {"think", "ask_user", "tool_catalog"}
-    # Child events were streamed to the parent as tool progress ({think: True, event}).
-    progress = [e["tool_stream_event"]["data"] for e in events if "tool_stream_event" in e]
-    assert any(isinstance(d, dict) and d.get("think") is True and "event" in d for d in progress)
-    # The child's tool result for `blocking` shows the child actually executed the inherited tool.
-    assert any("from-child" in str(d) for d in progress)
+    assert not any(name.startswith("strands_") for name in child_tool_names)
 
 
 @pytest.mark.parametrize("formation", ["research_review", "reasoning_swarm", "nested_research_review"])
@@ -628,11 +649,16 @@ def test_create_panel_agent_merges_application_and_runtime_hooks(offline):
     app_hook, runtime_hook = Recorder("app"), Recorder("runtime")
     build(hooks=[app_hook], runtime_options={"hooks": [runtime_hook]})
     kwargs = constructed[-1][1]
-    # Application hooks first, then the always-present BrowserAvailabilityHook, then runtime hooks.
+    # Application hooks first, then the always-present BrowserAvailabilityHook, ToolObservation and
+    # ToolRepairTrigger (RON_TOOL_REPAIR default on), then runtime hooks.
     from agent.api.core.panel_browser import BrowserAvailabilityHook
+    from agent.api.core.tool_observation import ToolObservation
+    from agent.api.core.tool_repair import ToolRepairTrigger
 
-    assert [h for h in kwargs["hooks"] if not isinstance(h, BrowserAvailabilityHook)] == [app_hook, runtime_hook]
-    assert isinstance(kwargs["hooks"][1], BrowserAvailabilityHook)
+    always = (BrowserAvailabilityHook, ToolObservation, ToolRepairTrigger)
+    assert [h for h in kwargs["hooks"] if not isinstance(h, always)] == [app_hook, runtime_hook]
+    assert isinstance(kwargs["hooks"][1], BrowserAvailabilityHook) and isinstance(kwargs["hooks"][2], ToolObservation)
+    assert isinstance(kwargs["hooks"][3], ToolRepairTrigger)
     assert order == ["app", "runtime"]
 
 
@@ -641,8 +667,24 @@ def test_create_panel_agent_without_hooks_is_unchanged(offline):
     build()
     from agent.api.core.panel_browser import BrowserAvailabilityHook
 
+    from agent.api.core.tool_observation import ToolObservation
+
+    from agent.api.core.tool_repair import ToolRepairTrigger
+
     hooks = constructed[-1][1]["hooks"]
-    assert len(hooks) == 1 and isinstance(hooks[0], BrowserAvailabilityHook)
+    assert len(hooks) == 3 and isinstance(hooks[0], BrowserAvailabilityHook) and isinstance(hooks[1], ToolObservation)
+    assert isinstance(hooks[2], ToolRepairTrigger)
+    assert constructed[-1][1]["trace_attributes"] == {"session.id": "session", "user.id": "user"}
+
+
+def test_create_panel_agent_repair_disabled_drops_trigger(offline, monkeypatch):
+    monkeypatch.setenv("RON_TOOL_REPAIR", "0")
+    build, _models, _catalogs, constructed, _storage = offline
+    build()
+    from agent.api.core.tool_repair import ToolRepairTrigger
+
+    assert not any(isinstance(h, ToolRepairTrigger) for h in constructed[-1][1]["hooks"])
+    assert not any(getattr(p, "name", "") == "ron:tool-repair-notice" for p in constructed[-1][1]["plugins"])
 
 
 # --- browser target selection (todo 13) ---------------------------------------------------

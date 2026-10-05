@@ -92,7 +92,7 @@ class PanelModel(Model):
 
 
 class MemoryChainModel(Model):
-    """The memory agent's candidate: ends every recall with inject_memory("n/a")."""
+    """A recall subagent candidate: answers every recall with "n/a"."""
 
     def get_config(self):
         return {"model_id": "offline-memory", "stateful": False}
@@ -106,10 +106,9 @@ class MemoryChainModel(Model):
 
     async def stream(self, messages, tool_specs=None, system_prompt=None, **kwargs):
         yield {"messageStart": {"role": "assistant"}}
-        yield {"contentBlockStart": {"contentBlockIndex": 0, "start": {"toolUse": {"toolUseId": "recall-na", "name": "inject_memory"}}}}
-        yield {"contentBlockDelta": {"contentBlockIndex": 0, "delta": {"toolUse": {"input": json.dumps({"content": "n/a"})}}}}
+        yield {"contentBlockDelta": {"contentBlockIndex": 0, "delta": {"text": "n/a"}}}
         yield {"contentBlockStop": {"contentBlockIndex": 0}}
-        yield {"messageStop": {"stopReason": "tool_use"}}
+        yield {"messageStop": {"stopReason": "end_turn"}}
 
 
 @pytest.fixture
@@ -140,13 +139,11 @@ def offline(monkeypatch, tmp_path):
     def build_model(*args, hosted_tools=True):
         assert args[0] in ("openai", "perplexity")
         if args[1:] != ("offline-panel", None):
-            # The shared Memory Agent's fast-model chain (memory_agent.build_model):
-            # a quiet model that always declines to inject.
+            # The recall subagent's fast-model chain (memory_agent.build_model).
             return MemoryChainModel()
         model = PanelModel(script)
         script.models.append(model)
         return model
-
 
     def build_shell():
         @tool
@@ -163,6 +160,10 @@ def offline(monkeypatch, tmp_path):
         return offline_shell
 
     monkeypatch.setattr(panel_agent, "build_model", build_model)
+    # memory_agent binds build_model by name at import; without this a called recall
+    # subagent would be built with a real Perplexity client.
+    from agent.api.core import memory_agent
+    monkeypatch.setattr(memory_agent, "build_model", build_model)
     # Real create_panel_agent (core tools, tool_catalog, think for perplexity...)
     # plus the injected offline tool the scripted model calls. No subprocesses.
     native_create = chat.create_panel_agent
@@ -207,7 +208,7 @@ def sse(response, *, status="completed"):
         # UI gets protocol envelopes, never raw live SDK invocation objects.
         assert not {"agent", "model", "invocation_state", "request_state", "callback_handler"} & event.keys()
         events.append(event)
-    assert events[0]["type"] == "run_started"
+    assert events[0]["type"] == "run_started", events[0]
     assert events[-1]["type"] == "run_finished"
     assert events[-1]["status"] == status, events
     assert sum(e["type"] == "run_finished" for e in events) == 1
@@ -402,12 +403,12 @@ def test_simultaneous_http_requests_reserve_one_real_agent(offline):
 
 
 def test_root_retry_scope_retains_previous_cycle_and_child_output(offline):
-    """Perplexity config: `think` runs a child agent (fresh model, parent's tools);
-    its streamed events arrive under node_path=[<think toolUseId>] with no root
-    retry/cycle scoping, while the root retry is scoped to the root only."""
+    """`recall` is a native harness subagent: its streamed child events arrive under
+    node_path=[<recall toolUseId>] with no root retry/cycle scoping, while the root
+    retry is scoped to the root only."""
     script, connect = offline
     script.throttle = True
-    script.uses.append(("think", {"thought": "reason offline"}))
+    script.uses.append(("recall", {"task": "reason offline"}))
 
     async def scenario():
         async with connect() as (client, manager):

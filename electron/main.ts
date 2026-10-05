@@ -1,4 +1,4 @@
-import { app, BrowserWindow, clipboard, ipcMain, Menu, WebContentsView } from 'electron'
+import { app, BrowserWindow, clipboard, desktopCapturer, dialog, ipcMain, Menu, NativeImage, WebContentsView } from 'electron'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
@@ -7,6 +7,7 @@ import {
   setTabController,
   type AutomationTab,
 } from 'electron-playwright-mcp'
+import { CURSOR_SVG, CURSOR_TIP } from '../src/lib/agent-cursor'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = join(__filename, '..')
@@ -102,6 +103,36 @@ function updateWebContentsViewBounds(): void {
 function attachPageContextMenu(tab: TabRecord): void {
   const view = tab.view
   if (!view) return
+  view.webContents.on('before-mouse-event', (_event, mouse) => {
+    if (mouse.type !== 'mouseUp' || mouse.button !== 'left' || mouse.clickCount !== 2) return
+    const sourceUrl = view.webContents.getURL()
+    // Let Chromium finish selecting the word before reading it in an isolated world.
+    setImmediate(() => {
+      if (!mainWindow?.isFocused() || view.webContents.isDestroyed() || tabsManager.activeTabId !== tab.id) return
+      void view.webContents.executeJavaScriptInIsolatedWorld(1001, [{ code: `(() => {
+        const selection = window.getSelection();
+        const node = selection?.anchorNode;
+        const element = node?.nodeType === Node.ELEMENT_NODE ? node : node?.parentElement;
+        if (document.activeElement?.matches('input, textarea') || document.activeElement?.isContentEditable ||
+            element?.closest('input, textarea') || element?.isContentEditable) return '';
+        return (selection?.toString() || '').trim().slice(0, 16000);
+      })()` }]).then((selected: unknown) => {
+        if (!mainWindow || view.webContents.isDestroyed() || tabsManager.activeTabId !== tab.id ||
+            view.webContents.getURL() !== sourceUrl || typeof selected !== 'string' || !selected) return
+        const bounds = calculateWebContentsViewBounds()
+        const x = Math.round(bounds.x + mouse.x)
+        const y = Math.round(bounds.y + mouse.y)
+        Menu.buildFromTemplate([{
+          label: 'Ask Ron about selection',
+          click: () => {
+            if (view.webContents.isDestroyed() || tabsManager.activeTabId !== tab.id ||
+                view.webContents.getURL() !== sourceUrl) return
+            mainWindow?.webContents.send('agent:ask-ron', { selectionText: selected, sourceUrl, x, y })
+          },
+        }]).popup({ window: mainWindow, x, y })
+      }).catch(() => { /* Navigation can destroy the frame before selection is read. */ })
+    })
+  })
   view.webContents.on('context-menu', (_event, params) => {
     if (!mainWindow || view.webContents.isDestroyed()) return
     const selection = params.selectionText.trim()
@@ -315,6 +346,10 @@ class TabsManager {
       }
       if (url.startsWith('ron://search')) tab.title = 'Search'
       else if (url.startsWith('ron://home')) tab.title = 'Home'
+      else if (url.startsWith('ron://read')) {
+        try { tab.title = new URL(url).searchParams.get('title') || 'Article' }
+        catch { tab.title = 'Article' }
+      }
       else tab.title = 'Ron'
 
       this.emitTabsUpdated()
@@ -635,6 +670,31 @@ async function createWindow() {
   }
   mainWindow = win
 
+  win.webContents.session.setDisplayMediaRequestHandler((request, callback) => {
+    if (!request.userGesture || !validateIpcSender(request.frame) || request.frame !== win.webContents.mainFrame) {
+      callback({})
+      return
+    }
+    void (async () => {
+      try {
+        const sources = await desktopCapturer.getSources({ types: ['screen', 'window'], thumbnailSize: { width: 0, height: 0 } })
+        if (!sources.length || win.isDestroyed()) { callback({}); return }
+        const choice = await dialog.showMessageBox(win, {
+          type: 'question', title: 'Teach Ron a skill',
+          message: 'Choose what to share with the agent',
+          detail: 'The selected screen or window is sent to Gemini while you demonstrate the workflow.',
+          buttons: ['Cancel', ...sources.map((source) => source.name)],
+          cancelId: 0, defaultId: 0, noLink: true,
+        })
+        const source = sources[choice.response - 1]
+        callback(source ? { video: source } : {})
+      } catch (error) {
+        console.error('Screen sharing could not start:', error)
+        callback({})
+      }
+    })()
+  }, { useSystemPicker: true })
+
   win.on('closed', () => {
     // Never keep a handle to a destroyed window: every `mainWindow?.` call
     // would otherwise throw "Object has been destroyed".
@@ -730,6 +790,14 @@ ipcMain.handle('browser:navigate', (event, url: string) => {
   return tabsManager.navigateActive(url)
 })
 
+ipcMain.handle('browser:search', (event, query: string, level?: string) => {
+  if (!validateIpcSender(event.senderFrame)) return
+  const trimmed = (query || '').trim()
+  if (!trimmed) return { success: false }
+  const suffix = level ? `&level=${encodeURIComponent(level)}` : ''
+  return tabsManager.navigateActive(`ron://search?q=${encodeURIComponent(trimmed)}${suffix}`)
+})
+
 ipcMain.handle('browser:go-back', (event) => {
   if (!validateIpcSender(event.senderFrame)) return false
   return tabsManager.goBackActive()
@@ -764,6 +832,39 @@ ipcMain.handle('browser:set-panel-open', (event, isOpen: boolean) => {
   if (!validateIpcSender(event.senderFrame)) return
   isAgentPanelOpen = isOpen
   updateWebContentsViewBounds()
+})
+
+ipcMain.handle('browser:set-agent-cursor', (event, point: { x?: number; y?: number } | null) => {
+  if (!validateIpcSender(event.senderFrame)) return
+  const view = tabsManager.activeTab?.view
+  if (!view || view.webContents.isDestroyed()) return
+  const x = typeof point?.x === 'number' && Number.isFinite(point.x) ? point.x : null
+  const y = typeof point?.y === 'number' && Number.isFinite(point.y) ? point.y : null
+  const script = `(() => {
+    const existing = document.getElementById('ron-agent-cursor');
+    if (${x == null || y == null}) { existing?.remove(); return; }
+    let node = existing;
+    if (!node || !node.isConnected) {
+      node?.remove();
+      node = document.createElement('div');
+      node.id = 'ron-agent-cursor';
+      node.setAttribute('aria-hidden', 'true');
+      node.style.cssText = 'position:fixed;left:0;top:0;z-index:2147483647;pointer-events:none;';
+      node.innerHTML = ${JSON.stringify(CURSOR_SVG)};
+      document.documentElement.append(node);
+    }
+    if (!document.getElementById('ron-agent-cursor-style')) {
+      const style = document.createElement('style');
+      style.id = 'ron-agent-cursor-style';
+      style.textContent = '@keyframes ron-cursor-breathe{0%,100%{opacity:.78}50%{opacity:1}}';
+      document.documentElement.append(style);
+    }
+    const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    node.style.transition = reduce ? 'none' : 'transform 450ms cubic-bezier(0.16, 1, 0.3, 1)';
+    node.style.animation = reduce ? 'none' : 'ron-cursor-breathe 5.5s ease-in-out infinite';
+    node.style.transform = ${JSON.stringify(x != null && y != null ? `translate(${x - CURSOR_TIP}px, ${y - CURSOR_TIP}px)` : '')};
+  })()`
+  void view.webContents.executeJavaScript(script).catch(() => undefined)
 })
 
 ipcMain.handle('browser:set-drawer-height', (event, height: number) => {
@@ -802,8 +903,10 @@ ipcMain.handle('interests:set-inset', (event, width: number) => {
 
 // Tabs IPC
 ipcMain.handle('create-tab', (event, url?: string, clientTabId?: string) => {
-  if (!validateIpcSender(event.senderFrame)) return
-  return tabsManager.create(clientTabId, url)
+  if (!validateIpcSender(event.senderFrame)) return { success: false }
+  // The record owns a WebContentsView. Returning it makes Electron try to clone that view's Session.
+  const created = tabsManager.create(clientTabId, url)
+  return { success: true, id: created.id, url: created.url, title: created.title, isExternal: created.isExternal }
 })
 
 ipcMain.handle('close-tab', (event, tabId: string) => {
@@ -819,6 +922,55 @@ ipcMain.handle('switch-tab', (event, tabId: string) => {
 ipcMain.handle('tabs:list', (event) => {
   if (!validateIpcSender(event.senderFrame)) return []
   return tabsManager.list()
+})
+
+ipcMain.handle('tabs:get-context', async (event, tabId: string) => {
+  if (!validateIpcSender(event.senderFrame)) return { success: false, error: 'Unauthorized' }
+  const tab = tabsManager.list().find((entry) => entry.id === tabId)
+  if (!tab) return { success: false, error: 'Unknown tab' }
+
+  const record = tabsManager.materializeView(tabId)
+  const webContents = record?.webContents
+  if (!webContents || webContents.isDestroyed()) {
+    return {
+      success: true,
+      context: {
+        id: tab.id,
+        url: tab.url,
+        title: tab.title,
+        favicon: tab.favicon,
+        isExternal: !tab.url.startsWith('ron://') && tab.url !== 'about:blank',
+      },
+    }
+  }
+
+  let pageText = ''
+  let pageHtml = ''
+  let metas: Array<{ name: string; content: string }> = []
+  try {
+    pageText = await webContents.executeJavaScript('document.body?.innerText ?? ""')
+  } catch { /* Detached or restricted document. */ }
+  try {
+    pageHtml = await webContents.executeJavaScript('document.documentElement?.outerHTML ?? ""')
+  } catch { /* Detached or restricted document. */ }
+  try {
+    metas = await webContents.executeJavaScript(`Array.from(document.querySelectorAll('meta[name], meta[property]')).map((node) => ({
+      name: node.getAttribute('name') || node.getAttribute('property') || '',
+      content: node.getAttribute('content') || '',
+    })).filter((entry) => entry.name && entry.content)`)
+  } catch { /* Optional metadata. */ }
+
+  return {
+    success: true,
+    context: {
+      id: tab.id,
+      url: tab.url,
+      title: tab.title,
+      favicon: tab.favicon,
+      isExternal: !tab.url.startsWith('ron://') && tab.url !== 'about:blank',
+      dom: { html: pageHtml, text: pageText, metas, localStorage: {}, sessionStorage: {} },
+    },
+  }
 })
 
 ipcMain.handle('browser:get-panel-context', async (event) => {
@@ -879,16 +1031,28 @@ ipcMain.handle('browser:get-text', async (event) => {
   return ''
 })
 
+const jpegDataUrl = (image: NativeImage) => image.isEmpty() ? '' : `data:image/jpeg;base64,${image.toJPEG(70).toString('base64')}`
+
 ipcMain.handle('browser:screenshot', async (event) => {
   if (!validateIpcSender(event.senderFrame)) return ''
   const activeTab = tabsManager.activeTab
   if (activeTab?.view && !activeTab.view.webContents.isDestroyed()) {
     try {
-      const nativeImage = await activeTab.view.webContents.capturePage()
-      return nativeImage.toDataURL()
+      const page = jpegDataUrl(await activeTab.view.webContents.capturePage())
+      if (page) return page
     } catch {}
   }
-  return ''
+  // Internal tabs (ron://) have no page view. Capture the window to the left of
+  // the side panel so the frame is the browser the user is looking at.
+  if (!mainWindow || mainWindow.isDestroyed()) return ''
+  try {
+    const [width, height] = mainWindow.getContentSize()
+    const panel = isAgentPanelOpen ? Math.min(agentPanelWidth, Math.max(0, width - 1)) : 0
+    const image = await mainWindow.webContents.capturePage({ x: 0, y: 0, width: Math.max(1, width - panel), height: Math.max(1, height) })
+    return jpegDataUrl(image)
+  } catch {
+    return ''
+  }
 })
 
 ipcMain.handle('browser:set-panel-mode', (event, mode: 'narrow' | 'wide' | 'fullscreen') => {
@@ -907,4 +1071,3 @@ ipcMain.handle('browser:set-panel-mode', (event, mode: 'narrow' | 'wide' | 'full
   updateWebContentsViewBounds()
   mainWindow.webContents.send('browser:panel-mode-changed', { mode, width: agentPanelWidth })
 })
-

@@ -13,11 +13,18 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from agent.api.core import public_tunnel
 from agent.api.core.config import CORS_ORIGINS, SESSION_STORAGE_DIR
+from agent.api.core.panel_storage import get_panel_storage
+from agent.api.core.tool_observation import setup_evals_exporter
 from agent.api.endpoints import chat
 from agent.api.endpoints import articles
 from agent.api.endpoints import projects
 from agent.api.endpoints import discover
+from agent.api.endpoints import search
+from agent.api.endpoints import bidi
 from agent.api.endpoints import memory
+from agent.api.endpoints import teaching, teaching_observe
+from agent.api.endpoints import tool_repairs
+from agent.api.core.teaching import get_teaching_service, mcp_app as skills_mcp_app
 
 
 @asynccontextmanager
@@ -25,14 +32,24 @@ async def lifespan(app: FastAPI):
     import logging
     logging.basicConfig(level=logging.INFO)
     SESSION_STORAGE_DIR.mkdir(parents=True, exist_ok=True)
+    # Storage is the authority: a misconfigured HF bucket/token fails here, at boot,
+    # instead of on the first chat request (never a silent in-memory fallback).
+    await asyncio.to_thread(get_panel_storage)
+    # RON_TOOL_OBSERVATION=1: retain spans in memory (strands_evals) for tool diagnosis.
+    setup_evals_exporter()
     manager = chat.create_runtime_manager()
     from agent.api.core.issue_agents import IssueAgentRuntime
     app.state.issue_agents = IssueAgentRuntime()
     app.state.panel_runtime = manager
     app.state.panel_a2a = None
+    # Per-user tool fixer (CAT-50/51); RON_TOOL_REPAIR=0 keeps the endpoints inert.
+    from agent.api.core.tool_repair import RepairService
+    app.state.tool_repairs = RepairService()
     mounted_routes = []
     try:
-        if os.getenv("PANEL_A2A_ENABLED", "").lower() in {"1", "true", "yes"}:
+        from agent.api.core.a2a_tools import a2a_enabled, panel_a2a_url
+
+        if a2a_enabled():
             from agent.api.core.panel_agent import build_model, default_selection
             from agent.api.core.panel_tools import build_core_tools
             from agent.api.core.panel_a2a import create_a2a_agent_factory, create_panel_a2a_server, mount_panel_a2a
@@ -49,20 +66,21 @@ async def lifespan(app: FastAPI):
                     system_prompt=chat.AGENT_SYSTEM_PROMPT,
                 )
                 integration = await asyncio.to_thread(
-                    create_panel_a2a_server, agent_factory=factory,
-                    http_url=os.getenv("PANEL_A2A_URL", "http://localhost:8765/a2a"),
+                    create_panel_a2a_server, agent_factory=factory, http_url=panel_a2a_url(),
                 )
                 app.state.panel_a2a = integration
                 previous = list(app.routes)
                 mount_panel_a2a(app, integration, enabled=True)
                 mounted_routes = [route for route in app.routes if route not in previous]
             else:
-                logging.getLogger(__name__).warning("PANEL_A2A_ENABLED: no provider configured; A2A is unavailable")
+                logging.getLogger(__name__).warning("A2A: no provider configured; the panel A2A server is unavailable")
         # Opt-in (RON_NGROK=1); only allow-listed webhook paths are reachable.
         app.state.public_url = await public_tunnel.start()
-        yield
+        async with skills_mcp_app.lifespan(app):
+            yield
     finally:
         try:
+            await get_teaching_service().shutdown()
             await public_tunnel.stop()
             await app.state.issue_agents.shutdown()
             await manager.shutdown()
@@ -96,7 +114,13 @@ app.include_router(chat.router, tags=["chat"])
 app.include_router(articles.router, tags=["articles"])
 app.include_router(projects.router, tags=["projects"])
 app.include_router(discover.router, tags=["discover"])
+app.include_router(search.router, tags=["search"])
+app.include_router(bidi.router, tags=["bidi"])
 app.include_router(memory.router, tags=["memory"])
+app.include_router(teaching.router, tags=["teaching"])
+app.include_router(teaching_observe.router, tags=["teaching"])
+app.include_router(tool_repairs.router, tags=["tool-repairs"])
+app.mount("/skills/mcp", skills_mcp_app)
 
 
 @app.get("/health")
@@ -142,4 +166,3 @@ def run() -> None:
 
 if __name__ == "__main__":
     run()
-

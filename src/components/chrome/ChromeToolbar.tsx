@@ -7,6 +7,8 @@ import { useAgentUi } from '@/context/AgentUiContext'
 import { useTabStore } from '@/stores/tabStore'
 import { cn } from '@/utils/cn'
 import { useState, useEffect } from 'react'
+import { TeachSkill } from '@/components/agent-panel/TeachSkill'
+import { useAuthStore } from '@/stores/authStore'
 
 // Navigation button component
 function NavButton({ 
@@ -47,6 +49,7 @@ function NavButton({
 
 export function ChromeToolbar() {
   const { togglePanel, isPanelOpen } = useAgentUi()
+  const user = useAuthStore((state) => state.user?.id || 'default')
   const [canGoBack, setCanGoBack] = useState(false)
   const [canGoForward, setCanGoForward] = useState(false)
 
@@ -195,6 +198,7 @@ export function ChromeToolbar() {
         </motion.button>
 
         {/* User Menu */}
+        <TeachSkill key={user} userId={user} agentId="panel" chrome />
         <UserMenu />
       </div>
     </div>

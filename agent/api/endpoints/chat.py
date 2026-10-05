@@ -296,6 +296,7 @@ async def _create_runtime_agent(*, user_id, session_id, selection, options, runt
         extra_tools=[], reasoning_effort=selection.get("reasoning_effort"),
         options=options, runtime_options=runtime_options,
         browser=selection.get("browser", default_browser()),
+        agent_scope=selection.get("destination", "panel"),
     )
 
 

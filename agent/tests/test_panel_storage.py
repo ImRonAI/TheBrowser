@@ -1,6 +1,7 @@
 """Native SDK integration tests; no credentials, model calls or HF network I/O."""
 
 import asyncio
+import hashlib
 import threading
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -28,6 +29,7 @@ class FakeHF:
         self.calls = []
         self.fail = {}
         self.skip_download = False
+        self.buckets = []
 
     def check(self, operation, token):
         self.calls.append((operation, threading.get_ident(), token))
@@ -35,7 +37,14 @@ class FakeHF:
             raise self.fail[operation]
 
     def file(self, key):
-        return BucketFile(type="file", path=key, size=len(self.data[key]), xetHash="fake")
+        # Content-addressed like the real bucket: the hash changes with the bytes.
+        digest = hashlib.sha256(self.data[key]).hexdigest()
+        return BucketFile(type="file", path=key, size=len(self.data[key]), xetHash=digest)
+
+    def create_bucket(self, bucket_id, *, private=None, exist_ok=False, token=None):
+        self.check("create-bucket", token)
+        assert private is True and exist_ok is True
+        self.buckets.append(bucket_id)
 
     def batch_bucket_files(self, bucket_id, *, add=None, delete=None, token=None):
         self.check("write" if add else "delete", token)
@@ -182,18 +191,164 @@ def test_singleton_and_environment(monkeypatch):
     monkeypatch.setenv("PANEL_STORAGE", "huggingface")
     assert panel.get_panel_storage() is backends[0]
     monkeypatch.setattr(panel, "_storage", None)
+    # HF is the authority: no token -> refuse (never an in-memory fallback).
+    with pytest.raises(ValueError, match="HF_TOKEN"):
+        panel.get_panel_storage()
+    assert panel._storage is None
+    monkeypatch.setenv("HF_TOKEN", "synthetic-test-token")
     with pytest.raises(ValueError, match="HF_BUCKET_ID"):
         panel.get_panel_storage()
     monkeypatch.setenv("HF_BUCKET_ID", "test/bucket")
-    monkeypatch.setenv("HF_TOKEN", "synthetic-test-token")
-    client_factory = Mock(return_value=FakeHF())
+    fake = FakeHF()
+    client_factory = Mock(return_value=fake)
     monkeypatch.setattr("huggingface_hub.HfApi", client_factory)
-    assert isinstance(panel.get_panel_storage(), panel.HuggingFaceBucketStorage)
+    storage = panel.get_panel_storage()
+    assert isinstance(storage, panel.HuggingFaceBucketStorage)
     client_factory.assert_called_once_with(token="synthetic-test-token")
+    # create_bucket(private, exist_ok) exactly once per process, on first use.
+    assert fake.buckets == ["test/bucket"]
+    assert panel.get_panel_storage() is storage
+    assert [c for c in fake.calls if c[0] == "create-bucket"] == [("create-bucket", threading.get_ident(), "synthetic-test-token")]
     monkeypatch.setattr(panel, "_storage", None)
     monkeypatch.setenv("PANEL_STORAGE", "s3")
     with pytest.raises(ValueError, match="PANEL_STORAGE"):
         panel.get_panel_storage()
+
+
+def test_bucket_creation_failure_is_a_storage_error_not_a_fallback(monkeypatch):
+    monkeypatch.setenv("PANEL_STORAGE", "huggingface")
+    monkeypatch.setenv("HF_BUCKET_ID", "test/bucket")
+    monkeypatch.setenv("HF_TOKEN", "synthetic-test-token")
+    fake = FakeHF()
+    fake.fail["create-bucket"] = HfHubHTTPError("forbidden", response=httpx.Response(
+        403, request=httpx.Request("POST", "https://example.invalid/bucket")))
+    monkeypatch.setattr("huggingface_hub.HfApi", Mock(return_value=fake))
+    with pytest.raises(StorageError) as caught:
+        panel.get_panel_storage()
+    assert caught.value.__cause__ is fake.fail["create-bucket"]
+    assert panel._storage is None
+
+
+def test_hf_search_strategy_is_indexed_on_write_and_consulted_on_search(hf):
+    """``search_strategy`` works like ``InMemoryStorage(search_strategy=)``: ``write`` indexes,
+    ``search`` delegates; the default is the SDK's ``KeywordSearchStrategy``."""
+    from strands.storage.search import KeywordSearchStrategy
+
+    _, client = hf
+    assert isinstance(panel.HuggingFaceBucketStorage("t/b", client=client)._search_strategy, KeywordSearchStrategy)
+
+    class Recording:
+        requires_host_fs = False
+
+        def __init__(self):
+            self.indexed, self.queries = [], []
+
+        async def index(self, storage, key, data, **kwargs):
+            self.indexed.append((key, bytes(data)))
+
+        async def search(self, storage, query, **kwargs):
+            self.queries.append(query)
+            return [panel.StorageSearchResult(key="notes/a.md", score=42.0)]
+
+    strategy = Recording()
+    storage = panel.HuggingFaceBucketStorage("test/bucket", client=client, search_strategy=strategy)
+
+    async def run():
+        await storage.write("notes/a.md", b"tea")
+        results = await storage.search("tea")
+        assert [r.key for r in results] == ["notes/a.md"] and results[0].score == 42.0
+        client.fail["write"] = OSError("transfer failed")
+        with pytest.raises(StorageError):
+            await storage.write("notes/b.md", b"coffee")
+
+    asyncio.run(run())
+    assert strategy.indexed == [("notes/a.md", b"tea")]  # a failed upload is never indexed
+    assert strategy.queries == ["tea"]
+
+
+def test_hf_xet_hash_read_cache_hits_and_invalidates(hf):
+    """Reads are cached by the content hash from the latest listing; own writes/deletes and a
+    changed hash (foreign writer) invalidate; a zero-byte cache never caches."""
+    storage, client = hf
+
+    def downloads():
+        return sum(1 for op, _, _ in client.calls if op == "read")
+
+    async def run():
+        await storage.write("notes/a.md", b"tea")
+        assert await storage.read("notes/a.md") == b"tea"
+        assert downloads() == 1
+        # Without a listing there is no hash to trust: still a download.
+        assert await storage.read("notes/a.md") == b"tea"
+        assert downloads() == 2
+        await storage.list("")
+        assert await storage.read("notes/a.md") == b"tea"  # downloads and caches under the listed hash
+        assert downloads() == 3
+        assert await storage.read("notes/a.md") == b"tea"  # served from cache
+        assert await storage.read("notes/a.md") == b"tea"
+        assert downloads() == 3
+        # Own write invalidates immediately, before any listing.
+        await storage.write("notes/a.md", b"tea coffee")
+        assert await storage.read("notes/a.md") == b"tea coffee"
+        assert downloads() == 4
+        await storage.list("notes/")
+        assert await storage.read("notes/a.md") == b"tea coffee"
+        assert downloads() == 5
+        assert await storage.read("notes/a.md") == b"tea coffee"
+        assert downloads() == 5
+        # A foreign writer changes the bytes behind our back: the next listing reports a new
+        # hash, so the stale entry is dropped and re-downloaded.
+        client.data["notes/a.md"] = b"chai"
+        assert await storage.read("notes/a.md") == b"tea coffee"  # listing not refreshed yet
+        await storage.list("")
+        assert await storage.read("notes/a.md") == b"chai"
+        assert downloads() == 6
+        # Own delete invalidates.
+        await storage.delete("notes/a.md")
+        assert await storage.read("notes/a.md") is None
+        # Search goes through the cache too (keyword strategy reads via storage.read).
+        await storage.write("notes/b.md", b"coffee beans")
+        await storage.list("")
+        before = downloads()
+        await storage.search("coffee")
+        await storage.search("beans")
+        assert downloads() == before + 1
+
+    asyncio.run(run())
+
+    uncached = panel.HuggingFaceBucketStorage("test/bucket", client=client, cache_bytes=0)
+
+    async def no_cache():
+        await uncached.list("")
+        start = downloads()
+        await uncached.read("notes/b.md")
+        await uncached.read("notes/b.md")
+        assert downloads() == start + 2
+
+    asyncio.run(no_cache())
+    with pytest.raises(ValueError):
+        panel.HuggingFaceBucketStorage("test/bucket", client=client, cache_bytes=-1)
+
+
+def test_hf_cache_is_bounded_lru(hf):
+    storage, client = hf
+    storage._cache_bytes = 8
+
+    async def run():
+        for key, payload in (("a", b"1234"), ("b", b"5678"), ("c", b"90ab")):
+            await storage.write(key, payload)
+        await storage.list("")
+        await storage.read("a")
+        await storage.read("b")
+        assert sorted(storage._cache) == ["a", "b"]
+        await storage.read("c")  # evicts the least recently used (a)
+        assert sorted(storage._cache) == ["b", "c"]
+        await storage.write("big", b"x" * 9)  # larger than the whole cache: never cached
+        await storage.list("")
+        await storage.read("big")
+        assert "big" not in storage._cache
+
+    asyncio.run(run())
 
 
 def test_memory_user_isolation_and_native_append(monkeypatch):
@@ -259,6 +414,8 @@ def test_memory_native_hf_roundtrip_and_write_failure_unlocks(hf, monkeypatch):
         await asyncio.wait_for(store.add("# Theme\ndark mode"), timeout=2)
         restored = panel.create_memory_config("user")["stores"][0]
         assert "dark mode" in (await restored.search("dark"))[0].content
+        # The own write below invalidates the cached object, so the next read must download.
+        await restored.add("# Theme\nhigh contrast")
         client.fail["read"] = OSError("read failed")
         with pytest.raises(StorageError):
             await restored.search("dark")
@@ -352,16 +509,24 @@ def _entry(topic, subject, created, tags, body):
     return ENTRY.format(topic=topic, subject=subject, created=created, tags=tags, body=body)
 
 
+def _journal(config):
+    return next(store for store in config["stores"] if store.name == panel.JOURNAL_STORE_NAME)
+
+
+def _long_term(config):
+    return next(store for store in config["stores"] if store.name == panel.LONG_TERM_STORE_NAME)
+
+
 def test_journal_entries_become_per_topic_files(monkeypatch):
-    """Dreamed entries are one file each under <topic>/, named by timestamp and subject; plain
-    content keeps the SDK's slug-and-append behaviour."""
+    """Journal entries are one file each under <topic>/, named by the SERVER timestamp and subject
+    (the model's created_at is a placeholder); plain content keeps the SDK's slug-and-append."""
     backend = InMemoryStorage()
     monkeypatch.setattr(panel, "_storage", backend)
+    monkeypatch.setattr(panel, "_server_time", lambda: "2026-10-01T14:03:09")
 
     async def run():
-        store = panel.create_memory_config("u").stores[0] if hasattr(panel.create_memory_config("u"), "stores") \
-            else panel.create_memory_config("u")["stores"][0]
-        key = await store.add(_entry("ToDo's", "Mom's birthday dinner plan", "2026-10-01T14:03:09",
+        store = _journal(panel.create_memory_config("u"))
+        key = await store.add(_entry("ToDo's", "Mom's birthday dinner plan", "1999-01-01T00:00:00",
                                      "todo, family, food, birthday, schedule, reminder, deadline, home, decision, goal",
                                      "Book Thai place for Friday; invite Aunt May."))
         assert key == "todo-s/20261001T140309-mom-s-birthday-dinner-plan.md"
@@ -371,8 +536,45 @@ def test_journal_entries_become_per_topic_files(monkeypatch):
         assert text.startswith("<start_entry>") and text.rstrip().endswith("<end_entry/>")
         parsed = panel.parse_entry(text)
         assert parsed.topic == "ToDo's" and parsed.subject == "Mom's birthday dinner plan"
-        assert parsed.created_at == "2026-10-01T14:03:09"
+        assert parsed.created_at == "2026-10-01T14:03:09"  # server-stamped, not the model's value
+        assert "1999" not in text
         assert parsed.tags == ["todo", "family", "food", "birthday", "schedule", "reminder", "deadline", "home", "decision", "goal"]
+        # An entry without a created_at line at all is stamped too.
+        bare = ENTRY.replace("<created_at>{created}<created_at/>\n", "").format(
+            topic="Feedback", subject="Shorter answers please", created="", tags="", body="Be brief.")
+        bare_key = await store.add(bare)
+        assert panel.parse_entry((await store._storage.read(bare_key)).decode()).created_at == "2026-10-01T14:03:09"
+
+    asyncio.run(run())
+
+
+def test_long_term_entries_merge_by_subject_heading_newest_last(monkeypatch):
+    """The long-term store files a ``# Topic | Subject`` entry through the native slug-merge: the
+    second entry about the same subject is appended UNDER the first (recency = lowest block)."""
+    monkeypatch.setattr(panel, "_storage", InMemoryStorage())
+
+    async def run():
+        store = _long_term(panel.create_memory_config("u"))
+        first = "# LearnedAboutUser | Prefers Thai food\n" + _entry(
+            "LearnedAboutUser", "Prefers Thai food", "2026-09-20T09:00:00", "preference, food", "Loves Thai food.")
+        second = "# LearnedAboutUser | Prefers Thai food\n" + _entry(
+            "LearnedAboutUser", "Prefers Thai food", "2026-10-02T09:00:00", "preference, food, correction",
+            "Now prefers Vietnamese over Thai.")
+        key = await store.add(first)
+        assert key == "learnedaboutuser-prefers-thai-food.md"
+        assert await store.add(second) == key
+        text = (await store._storage.read(key)).decode()
+        entries = panel.parse_entries(text)
+        assert [e.created_at for e in entries] == ["2026-09-20T09:00:00", "2026-10-02T09:00:00"]
+        assert text.index("Loves Thai") < text.index("Vietnamese")
+        # The long-term store keeps the model's created_at (dreaming carries the journal stamp).
+        hits = await store.search("", {"order": ["subject"], "subject": "thai"})
+        assert [h.metadata["created_at"] for h in hits] == ["2026-10-02T09:00:00", "2026-09-20T09:00:00"]
+        assert all(h.metadata["path"] == key for h in hits)
+        # A bare entry (no heading) still lands in its subject file.
+        assert await store.add(_entry("LearnedAboutUser", "Prefers Thai food", "2026-10-03T09:00:00",
+                                      "food", "Back to Thai.")) == key
+        assert len(panel.parse_entries((await store._storage.read(key)).decode())) == 3
 
     asyncio.run(run())
 
@@ -395,13 +597,16 @@ def test_nested_search_filters_in_agent_chosen_order(monkeypatch):
     backend = InMemoryStorage()
     monkeypatch.setattr(panel, "_storage", backend)
 
+    stamps = iter(["2026-10-01T14:03:09", "2026-09-20T09:00:00", "2026-10-01T15:00:00"])
+    monkeypatch.setattr(panel, "_server_time", lambda: next(stamps))
+
     async def run():
-        store = panel.create_memory_config("u")["stores"][0]
-        await store.add(_entry("ToDo's", "Mom's birthday dinner plan", "2026-10-01T14:03:09",
+        store = _journal(panel.create_memory_config("u"))
+        await store.add(_entry("ToDo's", "Mom's birthday dinner plan", "x",
                                "todo, family, food, birthday", "Book Thai place for Friday."))
-        await store.add(_entry("LearnedAboutUser", "Prefers Thai food", "2026-09-20T09:00:00",
+        await store.add(_entry("LearnedAboutUser", "Prefers Thai food", "x",
                                "preference, food, family", "User's mom loves Thai food."))
-        await store.add(_entry("Feedback", "Shorter answers please", "2026-10-01T15:00:00",
+        await store.add(_entry("Feedback", "Shorter answers please", "x",
                                "feedback, style", "User asked for shorter replies."))
 
         both = await store.search("Thai", {"order": ["tags", "topic"], "tags": ["food"]})
@@ -423,22 +628,59 @@ def test_nested_search_filters_in_agent_chosen_order(monkeypatch):
     asyncio.run(run())
 
 
-def test_search_memories_tool_exposes_nested_filters(monkeypatch):
+def test_search_memories_is_the_journal_stores_native_tool_over_both_stores(monkeypatch):
+    """``search_memories`` is published through ``MemoryStore.get_tools`` (the SDK registers it on
+    ``MemoryManager.tools``), exactly once per manager, and searches the journal AND the
+    consolidated long-term store with the nested filters."""
+    from strands.memory import MemoryManager
+
     backend = InMemoryStorage()
     monkeypatch.setattr(panel, "_storage", backend)
+    monkeypatch.setattr(panel, "_server_time", lambda: "2026-10-01T14:03:09")
 
     async def run():
         config = panel.create_memory_config("u")
-        store = config["stores"][0]
-        await store.add(_entry("ToDo's", "Mom's birthday dinner plan", "2026-10-01T14:03:09",
-                               "todo, family, food", "Book Thai place."))
-        tool_instance = panel.create_search_memories_tool(config["stores"])
-        assert tool_instance.tool_name == "search_memories"
+        journal, long_term = _journal(config), _long_term(config)
+        await journal.add(_entry("ToDo's", "Mom's birthday dinner plan", "x", "todo, family, food", "Book Thai place."))
+        await long_term.add("# LearnedAboutUser | Prefers Thai food\n" + _entry(
+            "LearnedAboutUser", "Prefers Thai food", "2026-09-20T09:00:00", "preference, food", "Loves Thai food."))
+        assert journal.get_tools()[0].tool_name == "search_memories"
+        assert long_term.get_tools() == []
+        manager = MemoryManager(**config)
+        names = [tool.tool_name for tool in manager.tools]
+        assert names.count("search_memories") == 1 and {"search_memory", "add_memory"} <= set(names)
+        tool_instance = next(tool for tool in manager.tools if tool.tool_name == "search_memories")
         spec = tool_instance.tool_spec["inputSchema"]["json"]["properties"]
         assert {"query", "order", "since", "until", "tags", "topic", "subject", "max_results"} <= set(spec)
-        payload = await tool_instance._tool_func(query="Thai", order=["topic", "tags"], topic="ToDo's", tags=["food"])
-        assert payload[0]["topic"] == "ToDo's" and payload[0]["subject"] == "Mom's birthday dinner plan"
-        assert payload[0]["filter_order"] == ["topic", "tags"]
+        payload = await tool_instance(query="Thai", order=["tags"], tags=["food"])
+        assert [(item["store"], item["subject"]) for item in payload] == [
+            ("journal", "Mom's birthday dinner plan"), ("panel-memory", "Prefers Thai food")]
+        assert payload[0]["filter_order"] == ["tags"]
+        only_todo = await tool_instance(query="Thai", order=["topic", "tags"], topic="ToDo's", tags=["food"])
+        assert [item["topic"] for item in only_todo] == ["ToDo's"]
+
+    asyncio.run(run())
+
+
+def test_add_memory_writes_only_the_journal_store(monkeypatch):
+    """The manager's ``add_memory`` targets the journal alone (``MemoryAddToolConfig(stores=["journal"])``,
+    awaited); the long-term store is written by extraction only."""
+    from strands.memory import MemoryManager
+
+    monkeypatch.setattr(panel, "_storage", InMemoryStorage())
+    monkeypatch.setattr(panel, "_server_time", lambda: "2026-10-01T14:03:09")
+
+    async def run():
+        config = panel.create_memory_config("u")
+        manager = MemoryManager(**config)
+        add_memory = next(tool for tool in manager.tools if tool.tool_name == "add_memory")
+        outcome = await add_memory(entries=[_entry("Feedback", "Shorter answers please", "x", "", "Be brief.")])
+        assert outcome == {"stored": 1}
+        journal_keys = await _journal(config)._storage.list("")
+        assert journal_keys == ["feedback/20261001T140309-shorter-answers-please.md"]
+        assert await _long_term(config)._storage.list("") == []
+        hits = await manager.search("brief")
+        assert [hit.store_name for hit in hits] == ["journal"]
 
     asyncio.run(run())
 
@@ -448,12 +690,78 @@ def test_entry_with_native_heading_line_is_still_an_entry(monkeypatch):
     the store strips it and still files the entry per topic."""
     monkeypatch.setattr(panel, "_storage", InMemoryStorage())
 
+    monkeypatch.setattr(panel, "_server_time", lambda: "2026-10-01T00:00:01")
+
     async def run():
-        store = panel.create_memory_config("u")["stores"][0]
-        content = "# ToDo's | Two words\n" + _entry("ToDo's", "Two words", "2026-10-01T00:00:01", "a, b", "body")
+        store = _journal(panel.create_memory_config("u"))
+        content = "# ToDo's | Two words\n" + _entry("ToDo's", "Two words", "x", "a, b", "body")
         assert panel.is_entry(content)
         key = await store.add(content)
         assert key == "todo-s/20261001T000001-two-words.md"
         assert (await store._storage.read(key)).decode().startswith("<start_entry>")
 
     asyncio.run(run())
+
+
+
+def test_memory_config_is_the_sdk_shape_extraction_and_every_turn_injection(monkeypatch):
+    """Same wiring as strands_harness resolve_memory: long-term store with the dreaming
+    ``ExtractionConfig`` (ModelExtractor, exclude=[] so journal add_memory calls are seen), a
+    journal store that is the only add target, everyTurn injection."""
+    from strands.memory import MemoryMessageFilter
+    from agent.api.core.dreaming import DreamExtractor
+
+    monkeypatch.setattr(panel, "_storage", InMemoryStorage())
+    config = panel.create_memory_config("u")
+    assert [store.name for store in config["stores"]] == ["panel-memory", "journal"]
+    long_term, journal = config["stores"]
+    assert isinstance(long_term.extraction["extractor"], DreamExtractor)
+    assert long_term.extraction["filter"] == MemoryMessageFilter(exclude=[])
+    assert "trigger" not in long_term.extraction  # SDK default: every 5 turns
+    assert not journal.extraction and journal.entry_files and not long_term.entry_files
+    assert config["injection"] == {"trigger": "everyTurn"}
+    assert config["add_tool_config"] == {"stores": ["journal"], "wait_for_writes": True}
+    assert not panel.create_memory_config("u", extraction=False)["stores"][0].extraction
+
+
+def test_native_extraction_distills_the_conversation_on_aux_model(monkeypatch):
+    """MemoryManager.flush() runs the SDK extractor on agent.aux_model and the fact lands in the store."""
+    from strands.memory import MemoryManager
+
+    monkeypatch.setattr(panel, "_storage", InMemoryStorage())
+
+    class Scripted(Model):
+        def __init__(self, text):
+            self.text, self.calls = text, 0
+
+        def get_config(self):
+            return {"model_id": "scripted"}
+
+        def update_config(self, **kwargs):
+            pass
+
+        async def structured_output(self, *args, **kwargs):
+            raise NotImplementedError
+            yield
+
+        async def stream(self, messages, tool_specs=None, system_prompt=None, **kwargs):
+            self.calls += 1
+            yield {"messageStart": {"role": "assistant"}}
+            yield {"contentBlockDelta": {"contentBlockIndex": 0, "delta": {"text": self.text}}}
+            yield {"contentBlockStop": {"contentBlockIndex": 0}}
+            yield {"messageStop": {"stopReason": "end_turn"}}
+
+    main = Scripted("Noted.")
+    aux = Scripted('[{"content": "# Preferences\\nUser prefers short answers."}]')
+    config = panel.create_memory_config("u")
+    agent = Agent(model=main, aux_model=aux, memory_manager=MemoryManager(**config), callback_handler=None)
+
+    async def run():
+        await agent.invoke_async("I prefer short answers.")
+        await agent.memory_manager.flush()
+        return await _long_term(config).search("short answers"), await _journal(config)._storage.list("")
+
+    hits, journal_keys = asyncio.run(run())
+    assert aux.calls == 1 and main.calls == 1
+    assert hits and "User prefers short answers." in hits[0].content
+    assert journal_keys == []  # the journal store receives no extraction

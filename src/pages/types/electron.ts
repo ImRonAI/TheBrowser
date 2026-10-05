@@ -11,14 +11,16 @@ import type { InterestAction, InterestMenuPayload } from '@/lib/interest-menu'
 
 export interface BrowserAPI {
   navigate: (url: string) => Promise<{ success: boolean; url?: string; isExternal?: boolean }>
-  search: (query: string) => Promise<{ success: boolean; url?: string }>
+  search: (query: string, level?: string) => Promise<{ success: boolean; url?: string }>
   goBack: () => Promise<{ success: boolean }>
   goForward: () => Promise<{ success: boolean }>
   reload: () => Promise<{ success: boolean }>
   getUrl: () => Promise<string>
+  screenshot: () => Promise<string>
   canGoBack: () => Promise<boolean>
   canGoForward: () => Promise<boolean>
   setPanelOpen: (isOpen: boolean) => Promise<{ success: boolean }>
+  setAgentCursor: (point: { x: number; y: number }) => Promise<void>
   setDrawerHeight: (height: number) => Promise<{ success: boolean }>
   setChromeHeight: (height: number) => Promise<{ success: boolean }>
   setInterestMenu: (payload: InterestMenuPayload) => Promise<{ success: boolean }>

@@ -25,6 +25,7 @@ export interface DiscoverItem {
   published: string | null
   age: string | null
   video?: { duration?: string | null; creator?: string | null; publisher?: string | null; views?: number | null } | null
+  image?: { url?: string | null; width?: number | null; height?: number | null; thumbnail_width?: number | null; thumbnail_height?: number | null; confidence?: string | null } | null
   place?: Record<string, unknown> | null
   rich?: RichAnswer | null
 }
@@ -38,7 +39,9 @@ export interface FeedSection {
 }
 export interface FeedResponse { sections: FeedSection[] }
 
-export const DISCOVER_API = 'http://localhost:8765'
+import { API_BASE_URL } from './api-base'
+
+export const DISCOVER_API = API_BASE_URL
 /** Re-fetch when the cached feed is older than this. */
 export const FEED_TTL_MS = 30 * 60 * 1000
 

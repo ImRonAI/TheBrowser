@@ -1,0 +1,66 @@
+[     530ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=33a37ef5:22164
+[   54702ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ http://localhost:8765/sessions/agent-a8a80727-0acc-42f8-a1dd-5a55f3d96ac3?user_id=default:0
+[  107229ms] [WARNING] [Rive] The `stateMachines` parameter is deprecated: please use `stateMachine` with a single state machine name instead. @ http://localhost:5173/node_modules/.vite/deps/@rive-app_react-webgl2.js?v=33a37ef5:7117
+[  107237ms] [ERROR] Connecting to 'https://unpkg.com/@rive-app/webgl2@2.42.2/rive.wasm' violates the following Content Security Policy directive: "connect-src 'self' http://localhost:* ws://localhost:* https://api.perplexity.ai https://*.supabase.co https://mock.supabase.co https://*.public.blob.vercel-storage.com". The action has been blocked. @ http://localhost:5173/node_modules/.vite/deps/@rive-app_react-webgl2.js?v=33a37ef5:683
+[  107238ms] [ERROR] Fetch API cannot load https://unpkg.com/@rive-app/webgl2@2.42.2/rive.wasm. Refused to connect because it violates the document's Content Security Policy. @ http://localhost:5173/node_modules/.vite/deps/@rive-app_react-webgl2.js?v=33a37ef5:683
+[  107240ms] [ERROR] wasm streaming compile failed: TypeError: Failed to fetch @ http://localhost:5173/node_modules/.vite/deps/@rive-app_react-webgl2.js?v=33a37ef5:686
+[  107241ms] [ERROR] falling back to ArrayBuffer instantiation @ http://localhost:5173/node_modules/.vite/deps/@rive-app_react-webgl2.js?v=33a37ef5:686
+[  107241ms] [ERROR] Connecting to 'https://unpkg.com/@rive-app/webgl2@2.42.2/rive.wasm' violates the following Content Security Policy directive: "connect-src 'self' http://localhost:* ws://localhost:* https://api.perplexity.ai https://*.supabase.co https://mock.supabase.co https://*.public.blob.vercel-storage.com". The action has been blocked. @ http://localhost:5173/node_modules/.vite/deps/@rive-app_react-webgl2.js?v=33a37ef5:632
+[  107241ms] [ERROR] Fetch API cannot load https://unpkg.com/@rive-app/webgl2@2.42.2/rive.wasm. Refused to connect because it violates the document's Content Security Policy. @ http://localhost:5173/node_modules/.vite/deps/@rive-app_react-webgl2.js?v=33a37ef5:632
+[  107241ms] [ERROR] failed to asynchronously prepare wasm: both async and sync fetching of the wasm failed @ http://localhost:5173/node_modules/.vite/deps/@rive-app_react-webgl2.js?v=33a37ef5:677
+[  107241ms] [ERROR] Aborted(both async and sync fetching of the wasm failed) @ http://localhost:5173/node_modules/.vite/deps/@rive-app_react-webgl2.js?v=33a37ef5:654
+[  107242ms] [WARNING] Failed to load WASM from https://unpkg.com/@rive-app/webgl2@2.42.2/rive.wasm (Aborted(both async and sync fetching of the wasm failed). Build with -sASSERTIONS for more info.), trying fallback URL: https://cdn.jsdelivr.net/npm/@rive-app/webgl2@2.42.2/rive_fallback.wasm @ http://localhost:5173/node_modules/.vite/deps/@rive-app_react-webgl2.js?v=33a37ef5:200
+[  107243ms] [ERROR] Connecting to 'https://cdn.jsdelivr.net/npm/@rive-app/webgl2@2.42.2/rive_fallback.wasm' violates the following Content Security Policy directive: "connect-src 'self' http://localhost:* ws://localhost:* https://api.perplexity.ai https://*.supabase.co https://mock.supabase.co https://*.public.blob.vercel-storage.com". The action has been blocked. @ http://localhost:5173/node_modules/.vite/deps/@rive-app_react-webgl2.js?v=33a37ef5:683
+[  107243ms] [ERROR] Fetch API cannot load https://cdn.jsdelivr.net/npm/@rive-app/webgl2@2.42.2/rive_fallback.wasm. Refused to connect because it violates the document's Content Security Policy. @ http://localhost:5173/node_modules/.vite/deps/@rive-app_react-webgl2.js?v=33a37ef5:683
+[  107243ms] [ERROR] wasm streaming compile failed: TypeError: Failed to fetch @ http://localhost:5173/node_modules/.vite/deps/@rive-app_react-webgl2.js?v=33a37ef5:686
+[  107243ms] [ERROR] falling back to ArrayBuffer instantiation @ http://localhost:5173/node_modules/.vite/deps/@rive-app_react-webgl2.js?v=33a37ef5:686
+[  107243ms] [ERROR] Connecting to 'https://cdn.jsdelivr.net/npm/@rive-app/webgl2@2.42.2/rive_fallback.wasm' violates the following Content Security Policy directive: "connect-src 'self' http://localhost:* ws://localhost:* https://api.perplexity.ai https://*.supabase.co https://mock.supabase.co https://*.public.blob.vercel-storage.com". The action has been blocked. @ http://localhost:5173/node_modules/.vite/deps/@rive-app_react-webgl2.js?v=33a37ef5:632
+[  107243ms] [ERROR] Fetch API cannot load https://cdn.jsdelivr.net/npm/@rive-app/webgl2@2.42.2/rive_fallback.wasm. Refused to connect because it violates the document's Content Security Policy. @ http://localhost:5173/node_modules/.vite/deps/@rive-app_react-webgl2.js?v=33a37ef5:632
+[  107243ms] [ERROR] failed to asynchronously prepare wasm: both async and sync fetching of the wasm failed @ http://localhost:5173/node_modules/.vite/deps/@rive-app_react-webgl2.js?v=33a37ef5:677
+[  107243ms] [ERROR] Aborted(both async and sync fetching of the wasm failed) @ http://localhost:5173/node_modules/.vite/deps/@rive-app_react-webgl2.js?v=33a37ef5:654
+[  107243ms] [ERROR] Could not load Rive WASM file from the configured WASM URL or its fallback (https://cdn.jsdelivr.net/npm/@rive-app/webgl2@2.42.2/rive_fallback.wasm).
+Possible reasons:
+- Network connection is down
+- WebAssembly is not supported in this environment
+- The WASM file is corrupted or incompatible
+
+Error details:
+- Type: RuntimeError
+- Message: Aborted(both async and sync fetching of the wasm failed). Build with -sASSERTIONS for more info.
+- WebAssembly-specific error: true
+
+To resolve, you may need to:
+1. Check your network connection
+2. Set a new WASM source via RuntimeLoader.setWasmUrl()
+3. Call RuntimeLoader.awaitInstance() again @ http://localhost:5173/node_modules/.vite/deps/@rive-app_react-webgl2.js?v=33a37ef5:221
+[  386824ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=33a37ef5:22164
+[  387271ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ http://localhost:8765/sessions/agent-a8a80727-0acc-42f8-a1dd-5a55f3d96ac3?user_id=default:0
+[  387286ms] [WARNING] [Rive] The `stateMachines` parameter is deprecated: please use `stateMachine` with a single state machine name instead. @ http://localhost:5173/node_modules/.vite/deps/@rive-app_react-webgl2.js?v=33a37ef5:7117
+[  387324ms] [ERROR] wasm streaming compile failed: TypeError: WebAssembly.instantiate(): Import #0 "env": module is not an object or function @ http://localhost:5173/node_modules/.vite/deps/@rive-app_react-webgl2.js?v=33a37ef5:686
+[  387324ms] [ERROR] falling back to ArrayBuffer instantiation @ http://localhost:5173/node_modules/.vite/deps/@rive-app_react-webgl2.js?v=33a37ef5:686
+[  387339ms] [ERROR] failed to asynchronously prepare wasm: TypeError: WebAssembly.instantiate(): Import #0 "env": module is not an object or function @ http://localhost:5173/node_modules/.vite/deps/@rive-app_react-webgl2.js?v=33a37ef5:677
+[  387339ms] [ERROR] Aborted(TypeError: WebAssembly.instantiate(): Import #0 "env": module is not an object or function) @ http://localhost:5173/node_modules/.vite/deps/@rive-app_react-webgl2.js?v=33a37ef5:654
+[  387339ms] [WARNING] Failed to load WASM from /node_modules/@rive-app/webgl2/rive.wasm (Aborted(TypeError: WebAssembly.instantiate(): Import #0 "env": module is not an object or function). Build with -sASSERTIONS for more info.), trying fallback URL: https://cdn.jsdelivr.net/npm/@rive-app/webgl2@2.42.2/rive_fallback.wasm @ http://localhost:5173/node_modules/.vite/deps/@rive-app_react-webgl2.js?v=33a37ef5:200
+[  387340ms] [ERROR] Connecting to 'https://cdn.jsdelivr.net/npm/@rive-app/webgl2@2.42.2/rive_fallback.wasm' violates the following Content Security Policy directive: "connect-src 'self' http://localhost:* ws://localhost:* https://api.perplexity.ai https://*.supabase.co https://mock.supabase.co https://*.public.blob.vercel-storage.com". The action has been blocked. @ http://localhost:5173/node_modules/.vite/deps/@rive-app_react-webgl2.js?v=33a37ef5:683
+[  387340ms] [ERROR] Fetch API cannot load https://cdn.jsdelivr.net/npm/@rive-app/webgl2@2.42.2/rive_fallback.wasm. Refused to connect because it violates the document's Content Security Policy. @ http://localhost:5173/node_modules/.vite/deps/@rive-app_react-webgl2.js?v=33a37ef5:683
+[  387340ms] [ERROR] wasm streaming compile failed: TypeError: Failed to fetch @ http://localhost:5173/node_modules/.vite/deps/@rive-app_react-webgl2.js?v=33a37ef5:686
+[  387340ms] [ERROR] falling back to ArrayBuffer instantiation @ http://localhost:5173/node_modules/.vite/deps/@rive-app_react-webgl2.js?v=33a37ef5:686
+[  387340ms] [ERROR] Connecting to 'https://cdn.jsdelivr.net/npm/@rive-app/webgl2@2.42.2/rive_fallback.wasm' violates the following Content Security Policy directive: "connect-src 'self' http://localhost:* ws://localhost:* https://api.perplexity.ai https://*.supabase.co https://mock.supabase.co https://*.public.blob.vercel-storage.com". The action has been blocked. @ http://localhost:5173/node_modules/.vite/deps/@rive-app_react-webgl2.js?v=33a37ef5:632
+[  387340ms] [ERROR] Fetch API cannot load https://cdn.jsdelivr.net/npm/@rive-app/webgl2@2.42.2/rive_fallback.wasm. Refused to connect because it violates the document's Content Security Policy. @ http://localhost:5173/node_modules/.vite/deps/@rive-app_react-webgl2.js?v=33a37ef5:632
+[  387340ms] [ERROR] failed to asynchronously prepare wasm: both async and sync fetching of the wasm failed @ http://localhost:5173/node_modules/.vite/deps/@rive-app_react-webgl2.js?v=33a37ef5:677
+[  387340ms] [ERROR] Aborted(both async and sync fetching of the wasm failed) @ http://localhost:5173/node_modules/.vite/deps/@rive-app_react-webgl2.js?v=33a37ef5:654
+[  387340ms] [ERROR] Could not load Rive WASM file from the configured WASM URL or its fallback (https://cdn.jsdelivr.net/npm/@rive-app/webgl2@2.42.2/rive_fallback.wasm).
+Possible reasons:
+- Network connection is down
+- WebAssembly is not supported in this environment
+- The WASM file is corrupted or incompatible
+
+Error details:
+- Type: RuntimeError
+- Message: Aborted(both async and sync fetching of the wasm failed). Build with -sASSERTIONS for more info.
+- WebAssembly-specific error: true
+
+To resolve, you may need to:
+1. Check your network connection
+2. Set a new WASM source via RuntimeLoader.setWasmUrl()
+3. Call RuntimeLoader.awaitInstance() again @ http://localhost:5173/node_modules/.vite/deps/@rive-app_react-webgl2.js?v=33a37ef5:221

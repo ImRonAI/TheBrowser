@@ -1,0 +1,190 @@
+- generic [ref=f1e3]:
+  - generic [ref=f1e4]:
+    - generic [ref=f1e6]:
+      - generic [ref=f1e7]:
+        - button "Home" [ref=f1e8] [cursor=pointer]
+        - button "Go back" [disabled] [ref=f1e13]
+        - button "Go forward" [disabled] [ref=f1e17]
+        - button "Reload page" [ref=f1e21] [cursor=pointer]
+      - generic [ref=f1e27]:
+        - generic [ref=f1e29]:
+          - img "Ron" [ref=f1e30]
+          - generic [ref=f1e31]: ron
+        - textbox "Search or enter URL..." [ref=f1e33]: ron://home
+        - button "Search or navigate" [ref=f1e34] [cursor=pointer]
+      - generic [ref=f1e38]:
+        - 'button "Theme: dark (click to toggle)" [ref=f1e39] [cursor=pointer]'
+        - button "New Tab" [ref=f1e52] [cursor=pointer]
+        - button "Open Agent Panel" [ref=f1e55] [cursor=pointer]
+        - button "U" [ref=f1e59] [cursor=pointer]
+    - generic [ref=f1e66]:
+      - button "New Tab" [ref=f1e67] [cursor=pointer]
+      - generic [ref=f1e69]:
+        - generic [ref=f1e70] [cursor=pointer]:
+          - generic [ref=f1e71]: Palm Springs Pride 2026
+          - button "Close Tab" [ref=f1e72]
+        - generic [ref=f1e76] [cursor=pointer]:
+          - generic [ref=f1e77]: Calendar | Palm Springs Pride
+          - button "Close Tab" [ref=f1e78]
+        - generic [ref=f1e82] [cursor=pointer]:
+          - generic [ref=f1e83]: Palm Springs Gay Pride, Trans Pride, Gay Events Palm Springs, LGBTQ, Trans Events
+          - button "Close Tab" [ref=f1e84]
+        - generic [ref=f1e88] [cursor=pointer]:
+          - generic [ref=f1e89]: LGBTQ+ Events | Events in Greater Palm Springs
+          - button "Close Tab" [ref=f1e90]
+        - generic [ref=f1e94] [cursor=pointer]:
+          - generic [ref=f1e95]: "Palm Springs Pride 2026: Events, Parade & Festival Guide"
+          - button "Close Tab" [ref=f1e96]
+        - generic [ref=f1e100] [cursor=pointer]:
+          - generic [ref=f1e101]: Ron
+          - button "Close Tab" [ref=f1e102]
+        - generic [ref=f1e106] [cursor=pointer]:
+          - generic [ref=f1e107]: Palm Springs Gay Pride, Trans Pride, Gay Events Palm Springs, LGBTQ, Trans Events
+          - button "Close Tab" [ref=f1e108]
+        - generic [ref=f1e112] [cursor=pointer]:
+          - generic [ref=f1e113]: Palm Springs Leather Pride 2026 October dates - Google Search
+          - button "Close Tab" [ref=f1e114]
+        - generic [ref=f1e118] [cursor=pointer]:
+          - generic [ref=f1e120]: Gay Palm Springs Events
+          - button "Close Tab" [ref=f1e121]
+        - generic [ref=f1e125] [cursor=pointer]:
+          - generic [ref=f1e126]: LGBTQ+ Events | Events in Greater Palm Springs
+          - button "Close Tab" [ref=f1e127]
+        - generic [ref=f1e131] [cursor=pointer]:
+          - generic [ref=f1e132]: gay Palm Springs events October November December 2026 Leather Pride Halloween holiday calendar - Google Search
+          - button "Close Tab" [ref=f1e133]
+  - button "Navigation" [ref=f1e140] [cursor=pointer]
+  - generic [ref=f1e144]:
+    - generic [ref=f1e147]:
+      - generic [ref=f1e148]:
+        - generic [ref=f1e150]:
+          - generic [ref=f1e155]:
+            - heading "Operational Hub" [level=1] [ref=f1e156]
+            - paragraph [ref=f1e157]: 7 tasks • All tasks
+          - generic [ref=f1e158]:
+            - button "New Project" [ref=f1e159] [cursor=pointer]
+            - button "New Issue" [ref=f1e160] [cursor=pointer]
+        - generic [ref=f1e163]:
+          - textbox "Search tasks..." [ref=f1e168]
+          - button "Filters" [ref=f1e169] [cursor=pointer]
+          - generic [ref=f1e175]:
+            - button "Kanban" [ref=f1e176] [cursor=pointer]
+            - button "Calendar" [ref=f1e177] [cursor=pointer]
+            - button "Gantt" [ref=f1e178] [cursor=pointer]
+            - button "List" [ref=f1e179] [cursor=pointer]
+          - button "Projects" [ref=f1e180] [cursor=pointer]
+      - generic [ref=f1e186]:
+        - generic [ref=f1e187]:
+          - generic [ref=f1e189]:
+            - generic [ref=f1e194]:
+              - heading "Backlog" [level=3] [ref=f1e195]
+              - generic [ref=f1e196]: Queued work
+            - generic [ref=f1e197]: "1"
+          - generic [ref=f1e202] [cursor=pointer]:
+            - heading "Write privacy policy documentation" [level=4] [ref=f1e210]
+            - generic [ref=f1e211]: Legal
+          - button "Add task" [ref=f1e215] [cursor=pointer]
+        - generic [ref=f1e219]:
+          - generic [ref=f1e221]:
+            - generic [ref=f1e226]:
+              - heading "In Progress" [level=3] [ref=f1e227]
+              - generic [ref=f1e228]: Active work
+            - generic [ref=f1e229]: "2"
+          - generic [ref=f1e232]:
+            - generic [ref=f1e234] [cursor=pointer]:
+              - generic [ref=f1e238]: 2d
+              - heading "Design new onboarding flow with voice interaction" [level=4] [ref=f1e248]
+              - generic [ref=f1e249]:
+                - generic [ref=f1e250]:
+                  - generic [ref=f1e251]: Design
+                  - generic [ref=f1e252]:
+                    - generic [ref=f1e253]: AC
+                    - generic [ref=f1e254]: SK
+                    - generic [ref=f1e255]: "+1"
+                - generic [ref=f1e256]: 63%
+              - generic [ref=f1e260]: 5/8
+            - generic [ref=f1e266] [cursor=pointer]:
+              - generic [ref=f1e270]: Tomorrow
+              - heading "Implement agent memory persistence" [level=4] [ref=f1e278]
+              - generic [ref=f1e279]:
+                - generic [ref=f1e280]:
+                  - generic [ref=f1e281]: Engineering
+                  - generic [ref=f1e282]: AC
+                - generic [ref=f1e284]: 25%
+              - generic [ref=f1e288]: 1/4
+          - button "Add task" [ref=f1e294] [cursor=pointer]
+        - generic [ref=f1e298]:
+          - generic [ref=f1e300]:
+            - generic [ref=f1e305]:
+              - heading "Review" [level=3] [ref=f1e306]
+              - generic [ref=f1e307]: Pending approval
+            - generic [ref=f1e308]: "1"
+          - generic [ref=f1e313] [cursor=pointer]:
+            - generic [ref=f1e317]: 1d overdue
+            - heading "Research competitor AI browsers" [level=4] [ref=f1e328]
+            - generic [ref=f1e329]:
+              - generic [ref=f1e330]:
+                - generic [ref=f1e331]: Research
+                - generic [ref=f1e332]:
+                  - generic [ref=f1e333]: SK
+                  - generic [ref=f1e334]: EL
+                  - generic [ref=f1e335]: "+1"
+              - generic [ref=f1e336]: 100%
+            - generic [ref=f1e340]: 3/3
+          - button "Add task" [ref=f1e346] [cursor=pointer]
+        - generic [ref=f1e350]:
+          - generic [ref=f1e352]:
+            - generic [ref=f1e357]:
+              - heading "Done" [level=3] [ref=f1e358]
+              - generic [ref=f1e359]: Completed
+            - generic [ref=f1e360]: "0"
+          - paragraph [ref=f1e368]: No tasks
+          - button "Add task" [ref=f1e370] [cursor=pointer]
+    - region "Agent Panel" [ref=f1e388]:
+      - generic [ref=f1e389]:
+        - generic [ref=f1e390]:
+          - generic [ref=f1e391]:
+            - generic [ref=f1e392]:
+              - generic [ref=f1e393]: R
+              - generic [ref=f1e394]:
+                - heading "Agent Panel" [level=2] [ref=f1e395]
+                - status [ref=f1e396]: Ready
+            - generic [ref=f1e397]:
+              - generic [ref=f1e398]:
+                - generic [ref=f1e399]: Voice
+                - switch "Voice agent" [ref=f1e400] [cursor=pointer]
+              - button "New chat" [ref=f1e401] [cursor=pointer]
+              - button "Close agent panel" [ref=f1e404] [cursor=pointer]
+          - generic [ref=f1e407]:
+            - 'button "Model configuration: Backend default / Provider default" [ref=f1e408] [cursor=pointer]':
+              - generic [ref=f1e409]: Backend default / Provider default
+            - group "Browser target" [ref=f1e412]:
+              - button "Your browser" [pressed] [ref=f1e413] [cursor=pointer]
+              - button "Cloud browser" [ref=f1e414] [cursor=pointer]
+          - group [ref=f1e415]:
+            - generic "Runtime · auto context · concurrent tools" [ref=f1e416] [cursor=pointer]
+            - option "Automatic" [selected]
+            - option "Agentic"
+            - option "Sliding window"
+            - option "Concurrent" [selected]
+            - option "Sequential"
+        - button "Teach a skill Show Ron how you work" [ref=f1e418] [cursor=pointer]:
+          - generic [ref=f1e421]:
+            - strong [ref=f1e422]: Teach a skill
+            - generic [ref=f1e423]: Show Ron how you work
+        - generic [ref=f1e427]:
+          - generic [ref=f1e428]: R
+          - heading "How can I help?" [level=3] [ref=f1e429]
+          - paragraph [ref=f1e430]: Browse, search, analyze, and accomplish.
+        - generic [ref=f1e431]:
+          - generic [ref=f1e433]:
+            - button "Add Context" [ref=f1e435] [cursor=pointer]
+            - textbox "Message Ron" [active] [ref=f1e438]:
+              - /placeholder: Ask anything…
+            - button "Send message" [disabled] [ref=f1e439]: Send
+          - paragraph [ref=f1e440]: ↵ to send · Shift + ↵ for a new line
+    - button "AI Web Design 8" [ref=f1e375] [cursor=pointer]:
+      - generic [ref=f1e383]:
+        - generic [ref=f1e384]: AI
+        - generic [ref=f1e385]: Web Design
+      - generic [ref=f1e386]: "8"

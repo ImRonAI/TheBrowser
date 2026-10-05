@@ -2,6 +2,8 @@
 node_modules/
 venv/
 .venv/
+# Recreated from GitHub by deploy/prepare-strands.sh, with the tracked native patch.
+agent/api/core/harness-sdk/
 
 # secrets
 .env

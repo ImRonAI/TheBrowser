@@ -1,0 +1,166 @@
+- generic [ref=e3]:
+  - generic [ref=e4]:
+    - generic [ref=e6]:
+      - generic [ref=e7]:
+        - button "Home" [ref=e8] [cursor=pointer]
+        - button "Go back" [disabled] [ref=e13]
+        - button "Go forward" [disabled] [ref=e17]
+        - button "Reload page" [ref=e21] [cursor=pointer]
+      - generic [ref=e27]:
+        - generic [ref=e29]:
+          - img "Ron" [ref=e30]
+          - generic [ref=e31]: ron
+        - textbox "Search or enter URL..." [ref=e33]: ron://home
+        - button "Search or navigate" [ref=e34] [cursor=pointer]
+      - generic [ref=e38]:
+        - 'button "Theme: dark (click to toggle)" [ref=e39] [cursor=pointer]'
+        - button "New Tab" [ref=e52] [cursor=pointer]
+        - button "Open Agent Panel" [ref=e55] [cursor=pointer]
+        - button "Teach Ron" [ref=e59] [cursor=pointer]
+        - button "U" [ref=e64] [cursor=pointer]
+    - generic [ref=e71]:
+      - button "New Tab" [ref=e72] [cursor=pointer]
+      - generic [ref=e74]:
+        - generic [ref=e75] [cursor=pointer]:
+          - img "Ron" [ref=e76]
+          - generic [ref=e77]: Home
+          - button "Close Tab" [ref=e78]
+        - generic [ref=e82] [cursor=pointer]:
+          - img "Ron" [ref=e84]
+          - generic [ref=e85]: Home
+          - button "Close Tab" [ref=e86]
+  - generic [ref=e93]:
+    - generic [ref=e96]:
+      - button "Add Context" [ref=e98] [cursor=pointer]
+      - textbox "Ask anything..." [ref=e104]
+      - button [disabled] [ref=e105]
+    - generic [ref=e109]:
+      - button "Discover" [ref=e110] [cursor=pointer]
+      - button "Execute" [ref=e116] [cursor=pointer]
+      - button "Calendar" [ref=e123] [cursor=pointer]
+      - button "Vibe" [ref=e128] [cursor=pointer]
+      - button "Build" [ref=e135] [cursor=pointer]
+    - button "Collapse navigation" [ref=e141] [cursor=pointer]
+  - generic [ref=e144]:
+    - main [ref=e147]:
+      - generic [ref=e148]:
+        - generic [ref=e149]:
+          - generic [ref=e150]: Ron / Discover
+          - generic [ref=e151]: Live from your interests
+        - generic [ref=e152]:
+          - generic [ref=e153]:
+            - heading "A little more perspective." [level=1] [ref=e154]
+            - paragraph [ref=e155]: Your interests, worth a closer look. Read something. Make something of it.
+          - generic [ref=e156]:
+            - button "Personalize your feed" [ref=e157] [cursor=pointer]: Personalize
+            - button "Refresh feed" [ref=e161] [cursor=pointer]: Refresh
+            - button "Auto-play off" [ref=e167] [cursor=pointer]
+        - generic [ref=e170]:
+          - generic [ref=e171]: Technology
+          - generic [ref=e172]: AI
+          - generic [ref=e173]: Design
+          - status [ref=e174]: Updated just now
+      - region "Stories by interest" [ref=e175]:
+        - generic [ref=e332]:
+          - button "Technology NYTimes · 3 days ago As A.I. Accelerates, Governments Are Increasingly Being Left Behind - The New York Times The gap between technology and policymaking has gotten wider than ever with artificial intelligence, leaving a global policy vacuum as A.I. models rapidly advance. Read story" [ref=e335] [cursor=pointer]:
+            - generic [ref=e336]: Technology
+            - generic [ref=e338]:
+              - paragraph [ref=e339]: NYTimes · 3 days ago
+              - heading "As A.I. Accelerates, Governments Are Increasingly Being Left Behind - The New York Times" [level=3] [ref=e340]
+              - paragraph [ref=e341]: The gap between technology and policymaking has gotten wider than ever with artificial intelligence, leaving a global policy vacuum as A.I. models rapidly advance.
+              - generic [ref=e342]: Read story
+          - generic [ref=e345]:
+            - generic [ref=e346]: 01 / 6 in Technology
+            - generic [ref=e347]:
+              - button "Previous Technology story" [ref=e348] [cursor=pointer]
+              - button "Next Technology story" [ref=e351] [cursor=pointer]
+        - generic [ref=e354]:
+          - button "AI Fox Business · 7 hours ago Trump signs executive order rebranding AI as 'Super Intelligence' as tech titans ink separate SI accord The executive order makes \"Super Intelligence\" the federal government's preferred term for AI in official documents and communications. Read story" [ref=e357] [cursor=pointer]:
+            - generic [ref=e358]: AI
+            - generic [ref=e360]:
+              - paragraph [ref=e361]: Fox Business · 7 hours ago
+              - heading "Trump signs executive order rebranding AI as 'Super Intelligence' as tech titans ink separate SI accord" [level=3] [ref=e362]
+              - paragraph [ref=e363]: The executive order makes "Super Intelligence" the federal government's preferred term for AI in official documents and communications.
+              - generic [ref=e364]: Read story
+          - generic [ref=e367]:
+            - generic [ref=e368]: 01 / 6 in AI
+            - generic [ref=e369]:
+              - button "Previous AI story" [ref=e370] [cursor=pointer]
+              - button "Next AI story" [ref=e373] [cursor=pointer]
+        - generic [ref=e376]:
+          - button "Design Designboom · 15 hours ago es devlin’s rotating library holds 2,000 books inside london’s design museum A series of concentric desks holds drawings, photographs and more than 30 models from Devlin’s design process. The display includes work connected to The Lehman Trilogy, the London 2012 Olympics closing ceremony and Forest of Us in Miami. Along the gallery walls, sketches and collages reach ... Read story" [ref=e379] [cursor=pointer]:
+            - generic [ref=e380]: Design
+            - generic [ref=e382]:
+              - paragraph [ref=e383]: Designboom · 15 hours ago
+              - heading "es devlin’s rotating library holds 2,000 books inside london’s design museum" [level=3] [ref=e384]
+              - paragraph [ref=e385]: A series of concentric desks holds drawings, photographs and more than 30 models from Devlin’s design process. The display includes work connected to The Lehman Trilogy, the London 2012 Olympics closing ceremony and Forest of Us in Miami. Along the gallery walls, sketches and collages reach ...
+              - generic [ref=e386]: Read story
+          - generic [ref=e389]:
+            - generic [ref=e390]: 01 / 6 in Design
+            - generic [ref=e391]:
+              - button "Previous Design story" [ref=e392] [cursor=pointer]
+              - button "Next Design story" [ref=e395] [cursor=pointer]
+        - generic [ref=e398]:
+          - 'button "AI · Video youtube.com · 2 weeks ago AI News: The AI Slowdown: What You Need to Know - YouTube Here''s the AI News you probably missed from this week.Discover More:🛠️ Explore AI Tools & News: https://futuretools.io/📰 Weekly Newsletter: https://futuret... Read story" [ref=e401] [cursor=pointer]':
+            - generic [ref=e402]: AI · Video
+            - generic [ref=e404]:
+              - paragraph [ref=e405]: youtube.com · 2 weeks ago
+              - 'heading "AI News: The AI Slowdown: What You Need to Know - YouTube" [level=3] [ref=e406]'
+              - paragraph [ref=e407]: "Here's the AI News you probably missed from this week.Discover More:🛠️ Explore AI Tools & News: https://futuretools.io/📰 Weekly Newsletter: https://futuret..."
+              - generic [ref=e408]: Read story
+          - generic [ref=e411]:
+            - generic [ref=e412]: 01 / 4 in AI · Video
+            - generic [ref=e413]:
+              - button "Previous AI · Video story" [ref=e414] [cursor=pointer]
+              - button "Next AI · Video story" [ref=e417] [cursor=pointer]
+    - region "Agent Panel" [ref=e421]:
+      - generic [ref=e422]:
+        - generic [ref=e423]:
+          - generic [ref=e424]:
+            - generic [ref=e425]:
+              - generic [ref=e426]: R
+              - generic [ref=e427]:
+                - heading "Agent Panel" [level=2] [ref=e428]
+                - status [ref=e429]: Ready
+            - generic [ref=e430]:
+              - generic [ref=e431]:
+                - generic [ref=e432]: Voice
+                - switch "Voice agent" [checked] [active] [ref=e433] [cursor=pointer]
+              - button "New chat" [ref=e434] [cursor=pointer]
+              - button "Close agent panel" [ref=e437] [cursor=pointer]
+          - generic [ref=e440]:
+            - 'button "Model configuration: Perplexity / xai/grok-4.5 / Provider default" [ref=e441] [cursor=pointer]':
+              - generic [ref=e442]: Perplexity / xai/grok-4.5 / Provider default
+            - group "Browser target" [ref=e445]:
+              - button "Your browser" [pressed] [ref=e446] [cursor=pointer]
+              - button "Cloud browser" [ref=e447] [cursor=pointer]
+        - generic [ref=e464]:
+          - generic [ref=e465]:
+            - region "Agent presence" [ref=e466]:
+              - generic [ref=e468]:
+                - status [ref=e469]: Not connected
+                - paragraph [ref=e471]: Gemini 3.8 Live · Extended Thinking
+            - group "Voice settings" [ref=e472]:
+              - button "Microphone" [ref=e473] [cursor=pointer]:
+                - generic [ref=e474]: Select microphone...
+              - 'button "Agent voice: Kore" [ref=e475] [cursor=pointer]':
+                - generic [ref=e477]: Kore
+                - generic [ref=e478]: Firm
+              - 'button "Reasoning effort: High" [ref=e481] [cursor=pointer]':
+                - generic [ref=e490]: High effort
+            - generic [ref=e493]:
+              - button "Connect voice" [ref=e494] [cursor=pointer]
+              - button "Enable microphone" [disabled] [ref=e498]
+              - group "Share" [ref=e505]:
+                - button "Share screen" [disabled] [ref=e506]
+                - button "Share camera" [disabled] [ref=e510]
+            - paragraph [ref=e514]: Continuous recording goes to the voice API. Gemini receives backend-decoded video at up to 1 frame/second. Share one screen or camera at a time.
+            - region "Transcript" [ref=e515]:
+              - heading "Transcript" [level=3] [ref=e516]
+              - paragraph [ref=e517]: Ron’s spoken replies appear here.
+          - generic [ref=e518]:
+            - generic [ref=e519]:
+              - textbox "Message voice agent" [disabled] [ref=e520]:
+                - /placeholder: Connect voice to send text
+              - button "Send message" [disabled] [ref=e521]: Send
+            - paragraph [ref=e524]: Voice and effort apply when you connect · microphone can be changed while muted
