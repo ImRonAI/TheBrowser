@@ -191,6 +191,41 @@ def _compose(browser: str) -> str:
     return AGENT_SYSTEM_PROMPT_BASE + browser_prompt_section(browser) + WORKSPACE_ADDENDUM
 
 
+#: Live (BidiAgent) deltas from the text agent: the browser server is pre-loaded and declared, and the
+#: tools BidiAgent cannot run are absent. Everything else above applies verbatim, so the voice agent
+#: carries the same task-completion and browser-automation discipline as the text agent.
+LIVE_ADDENDUM = """
+
+## Voice session (Live) differences
+You are speaking with the user over a live voice connection; the rest of these instructions still
+apply. Your tool set is fixed when the call starts and is already declared, so there is nothing to
+connect or load: the browser server ({server}) is already loaded and its {server}_playwright_* tools
+are in your registry now. Do not call tool_catalog or mcp_client (you do not have them). You also
+have no think, recall, ask_user or {server}_playwright_browser_take_screenshot: use scoped snapshots
+instead of screenshots, search_memories/search_memory instead of recall, decide and act instead of
+reasoning aloud, and ask the user directly in speech only when a required decision or permission is
+genuinely missing. Carry multi-step work through to
+completion in one turn; narrate progress in one short sentence at a time. When a tool returns an
+error, read the actual error text, say what it was and what it means, then inspect and recover
+(snapshot, retry, alternative path); do not stop at reporting it."""
+
+
+def live_system_prompt(browser: str) -> str:
+    """The Live agent's prompt: the text agent's full prompt (same browser target) + the Live deltas.
+
+    The skills/specialists and journal directives that ``create_panel_agent`` appends for the text
+    agent are appended here too, so both agents are composed from the same sources.
+    """
+    from agent.api.core.panel_agent import MEMORY_JOURNAL_DIRECTIVE, SKILLS_AND_SPECIALISTS_DIRECTIVE
+
+    return (
+        _compose(browser)
+        + SKILLS_AND_SPECIALISTS_DIRECTIVE
+        + MEMORY_JOURNAL_DIRECTIVE
+        + LIVE_ADDENDUM.format(server=server_name(browser))
+    )
+
+
 #: Backwards-compatible default prompt (default browser, no think addendum) for main.py's A2A card.
 AGENT_SYSTEM_PROMPT = _compose(default_browser())
 

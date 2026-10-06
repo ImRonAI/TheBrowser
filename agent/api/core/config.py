@@ -61,6 +61,30 @@ XAI_DEFAULT_MODEL = XAI_MODEL
 
 # Gemini AI Studio / Mistral defaults from the Strands provider docs.
 GEMINI_DEFAULT_MODEL = os.getenv("GEMINI_MODEL") or "gemini-flash-latest"
+
+# --- Live Music (Lyria RealTime) for the Live agent's music_* tools (core/live_music.py) ---
+#: ``client.aio.live.music.connect(model=...)`` model resource name (experimental preview model).
+LIVE_MUSIC_MODEL = os.getenv("RON_LIVE_MUSIC_MODEL", "models/lyria-realtime-exp")
+#: google-genai http_options.api_version for the music client (BidiGenerateMusic is served on
+#: v1alpha and v1beta; the official sample uses v1beta). Verified live 2026-10-06 on both.
+LIVE_MUSIC_API_VERSION = os.getenv("RON_LIVE_MUSIC_API_VERSION", "v1beta")
+#: RON_LIVE_MUSIC=0 removes the music_* tools and the Lyria skill from the Live agent.
+LIVE_MUSIC_ENABLED = os.getenv("RON_LIVE_MUSIC", "1") != "0"
+#: Rolling take kept in memory per Live session for ``music_save`` (48 kHz stereo PCM16 = 192 KB/s;
+#: 240 s = 46 MB, under Supabase Storage's default 50 MB per-file limit). Oldest audio is dropped when full.
+LIVE_MUSIC_RECORD_SECONDS = float(os.getenv("RON_LIVE_MUSIC_RECORD_SECONDS", "240"))
+#: Refuse uploads above this before contacting Storage (Supabase default global limit is 50 MB; raise both
+#: this and the project/bucket limit together).
+LIVE_MUSIC_MAX_UPLOAD_BYTES = int(float(os.getenv("RON_LIVE_MUSIC_MAX_UPLOAD_MB", "50")) * 1_000_000)
+#: Supabase Storage bucket for saved takes (created private on first save if missing).
+LIVE_MUSIC_BUCKET = os.getenv("RON_LIVE_MUSIC_BUCKET", "music")
+
+# --- Batch music generation (core/music_generation.py): Lyria 3.5 via the Interactions API, ElevenLabs Music ---
+ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY") or os.getenv("XI_API_KEY")
+#: One Lyria 3.5 song or ElevenLabs composition is a single blocking request (Lyria Clip measured ~93 s).
+MUSIC_GENERATION_TIMEOUT = float(os.getenv("RON_MUSIC_GENERATION_TIMEOUT", "420"))
+#: RON_MUSIC_GENERATION=0 removes the batch generation tools from every agent.
+MUSIC_GENERATION_ENABLED = os.getenv("RON_MUSIC_GENERATION", "1") != "0"
 MISTRAL_DEFAULT_MODEL = os.getenv("MISTRAL_MODEL") or "mistral-large-latest"
 
 XAI_CONTEXT_WINDOW_LIMIT = int(os.getenv("XAI_CONTEXT_WINDOW_LIMIT", "500000"))
@@ -78,6 +102,17 @@ XAI_COLLECTION_IDS = [
 # xai_sdk binds its tracer at import time and emits a duplicate chat.stream span,
 # so this must be set before xai_sdk is first imported.
 os.environ.setdefault("XAI_SDK_DISABLE_TRACING", "1")
+
+# Host tools (installed strands_tools shell/editor/environment/http_request and the vendored
+# library) gate every mutating action behind a prompt_toolkit "[y/*]" confirmation on stdin
+# unless BYPASS_TOOL_CONSENT=true. The API has no TTY (systemd on the VPS, a detached npm
+# script locally), so without the bypass each such call dies with
+# "[Errno 22] Invalid argument" and every agent -- text, Live, issue, fixer -- reports an
+# unexplained tool error. AGENTS.md already declares these tools unsandboxed host execution
+# with agent output trusted, so the bypass is the only consistent policy. Set it in the
+# process environment to opt out (RON_TOOL_CONSENT=prompt), e.g. for an interactive REPL.
+if os.getenv("RON_TOOL_CONSENT", "bypass").lower() != "prompt":
+    os.environ.setdefault("BYPASS_TOOL_CONSENT", "true")
 
 # Model overrides
 PERPLEXITY_MODEL = os.getenv("PERPLEXITY_MODEL")

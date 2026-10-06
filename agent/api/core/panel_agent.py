@@ -83,8 +83,8 @@ from agent.api.core.panel_browser import (
 from agent.api.core.panel_storage import create_memory_config, get_user_session_storage
 from agent.api.core.tool_observation import ToolObservation, trace_attributes
 from agent.api.core.panel_tools import (
-    ChildSpec, GraphSpec, ManagedMCP, PanelToolCatalog, SwarmSpec, ThinkToolsGuard,
-    adapt_native_tool, build_core_tools, create_formation_tool,
+    ChildSpec, GraphSpec, ManagedMCP, MCPConnectionGuard, PanelToolCatalog, SwarmSpec, ThinkToolsGuard,
+    build_core_tools, create_formation_tool,
     create_skill_tool, create_tool_catalog, load_vendored_think, skills_from_env,
 )
 
@@ -104,6 +104,20 @@ def memory_aux_model_id() -> str:
 
     return os.getenv("RON_MEMORY_AGENT_MODELS", "").split(",")[0].strip() or DEFAULT_MODELS[0]
 
+
+#: Learned skills + create_harness specialists; appended to every panel-family prompt (text and Live).
+SKILLS_AND_SPECIALISTS_DIRECTIVE = (
+    "\nYou can learn workflows from the user's Teach a skill screen demonstration. "
+    "Use list_learned_skills to discover this agent's saved skills, and use_skill to execute "
+    "their ordered SOPs. New skills become available immediately, including in this session."
+    "\nFor a recurring specialised job, build a specialist agent with create_harness (its tools, "
+    "skills and MCP servers), recall saved specialists with list_harness_agents, and delegate to "
+    "one with a2a_send_message at its a2a_url."
+    "\nTo make a finished song, use lyria_generate_song (Lyria 3.5: full song with vocals and lyrics, "
+    "or lyria-3-clip-preview for a 30 s clip; one shot, 1-3 minutes) or elevenlabs_compose_song "
+    "(ElevenLabs Music v2.5; draft and agree a structure first with elevenlabs_composition_plan). "
+    "Both save to the user's music library when they are signed in; tell them the title and length."
+)
 
 #: Journal-first memory discipline shared by the panel agent and its think child. Entries are
 #: written with native add_memory (journal store); native extraction (dreaming) and everyTurn
@@ -636,11 +650,10 @@ class _MCPToolView(ToolProvider):
 
 
 class _OwnedPanelCatalog(PanelToolCatalog):
-    """Native provider ownership also releases long-lived Agent.as_tool children."""
+    """Catalog that can release its native provider consumers when construction fails."""
 
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
-        self.children: list[Agent] = []
         self.consumers: set[Any] = set()
 
     def add_consumer(self, consumer_id: Any, **kwargs: Any) -> None:
@@ -649,29 +662,11 @@ class _OwnedPanelCatalog(PanelToolCatalog):
 
     def remove_consumer(self, consumer_id: Any, **kwargs: Any) -> None:
         self.consumers.discard(consumer_id)
-        try:
-            super().remove_consumer(consumer_id, **kwargs)
-        finally:
-            if not self.consumers:
-                self.close_children()
-
-    def close_children(self) -> None:
-        children, self.children = self.children, []
-        errors = []
-        for child in reversed(children):
-            try:
-                child.cleanup()
-            except Exception as error:
-                errors.append(error)
-        if errors:
-            raise ExceptionGroup("Panel child cleanup failed", errors)
+        super().remove_consumer(consumer_id, **kwargs)
 
     def close(self) -> None:
-        try:
-            for consumer in tuple(self.consumers):
-                self.remove_consumer(consumer)
-        finally:
-            self.close_children()
+        for consumer in tuple(self.consumers):
+            self.remove_consumer(consumer)
 
 
 def _assigned_tools(agent: Agent, names: Any) -> tuple[Any, ...]:
@@ -699,7 +694,7 @@ def _assigned_tools(agent: Agent, names: Any) -> tuple[Any, ...]:
         if isinstance(value, MCPAgentTool):
             mcp_assignments.setdefault(value.mcp_client, []).append(value.tool_name)
         else:
-            selected.append(adapt_native_tool(value))
+            selected.append(value)
     selected.extend(_MCPToolView(client, names) for client, names in mcp_assignments.items())
     return tuple(selected)
 
@@ -847,7 +842,7 @@ def create_panel_agent(
     clients = [value for value in extra_tools if isinstance(value, MCPClient)]
     if any(isinstance(value, MCPAgentTool) for value in extra_tools):
         raise ValueError("Pass the owning MCPClient in extra_tools, not unowned MCP tool references")
-    local_tools = [adapt_native_tool(value) for value in extra_tools if not isinstance(value, MCPClient)]
+    local_tools = [value for value in extra_tools if not isinstance(value, MCPClient)]
     from agent.api.core.tool_repair import (
         RepairConfig, ToolRepairTrigger, adapt_tool, browser_server_env, revision_notice, revision_resolver,
     )
@@ -899,14 +894,7 @@ def create_panel_agent(
         catalog.add_tools(create_learned_skill_tools(
             user_id, agent_scope, model_factory, additional_tools=skill_tools(), tool_supplier=skill_tools,
         ))
-        system_prompt += (
-            "\nYou can learn workflows from the user's Teach a skill screen demonstration. "
-            "Use list_learned_skills to discover this agent's saved skills, and use_skill to execute "
-            "their ordered SOPs. New skills become available immediately, including in this session."
-            "\nFor a recurring specialised job, build a specialist agent with create_harness (its tools, "
-            "skills and MCP servers), recall saved specialists with list_harness_agents, and delegate to "
-            "one with a2a_send_message at its a2a_url."
-        )
+        system_prompt += SKILLS_AND_SPECIALISTS_DIRECTIVE
         storage = get_user_session_storage(user_id)
         memory = user_memory_config(user_id, agent_scope)
         system_prompt += MEMORY_JOURNAL_DIRECTIVE
@@ -923,7 +911,11 @@ def create_panel_agent(
         # Specialists built with strands_harness create_harness, stored in Supabase, served over A2A.
         from agent.api.core.harness_agents import create_harness_tools
         catalog.add_tools(create_harness_tools(user_id))
-        plugins: list[Any] = []
+        # Batch music generation (Lyria 3.5 / Clip via the Interactions API, ElevenLabs Music); saves to the songs library.
+        from agent.api.core.music_generation import music_generation_tools
+        catalog.add_tools(music_generation_tools(user_id))
+        # Native BeforeToolCallEvent cancel: an active mcp_client connection is never re-connected or re-loaded.
+        plugins: list[Any] = [MCPConnectionGuard()]
         if repair_config.enabled:
             # userTurn note "<tool> was repaired and is active", once per live session (agent.state).
             plugins.append(revision_notice(user_id))

@@ -76,7 +76,7 @@ export interface SignUpData extends AuthCredentials {
   name: string
 }
 
-export type OAuthProvider = 'google' | 'apple' | 'microsoft' | 'github'
+export type OAuthProvider = 'google' | 'microsoft' | 'github'
 
 export interface AuthState {
   user: User | null

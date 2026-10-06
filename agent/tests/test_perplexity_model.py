@@ -386,3 +386,20 @@ def test_user_image_blocks_format_as_input_image_on_agent_api():
     types = [block["type"] for block in user["content"]]
     assert types == ["input_text", "input_image"]
     assert user["content"][1]["image_url"].startswith("data:image/jpeg;base64,")
+
+
+def test_tool_result_turn_text_follows_function_call_outputs():
+    """``ContextInjector(everyTurn)`` folds text into the last user message; on a tool-result
+    turn the Perplexity Agent API requires ``function_call_output`` items before that text."""
+    from agent.api.core.perplexity_model import PerplexityResponsesModel
+
+    messages = [
+        {"role": "user", "content": [{"text": "go"}]},
+        {"role": "assistant", "content": [{"toolUse": {"toolUseId": "c1", "name": "demo", "input": {}}}]},
+        {"role": "user", "content": [
+            {"toolResult": {"toolUseId": "c1", "status": "success", "content": [{"text": "42"}]}},
+            {"text": "Browser context: ron://home"},
+        ]},
+    ]
+    kinds = [item.get("type") or item["role"] for item in PerplexityResponsesModel._format_request_messages(messages)]
+    assert kinds == ["user", "function_call", "function_call_output", "user"]

@@ -149,6 +149,12 @@ export interface LiveState {
   conversationId?: string
   /** Tool names fixed at connect (from `ready.tools`). */
   tools?: string[]
+  /** `ready.music`: the Live Music (Lyria RealTime) tools are registered on this session. */
+  musicAvailable?: boolean
+  /** `ready.agent_id`: the BidiAgent id, used by the music deck to address this session's stream (`/music/*`). */
+  agentId?: string
+  /** Live Music stream state, folded from the `music_*` frames (`agent/api/core/live_music.py`). */
+  music: MusicState
   /** `snapshot` = a persisted Live snapshot for this conversation restored and client history was ignored. */
   historySource?: 'snapshot' | 'client' | 'none'
   /** Last `context_applied.mode`. */
@@ -166,7 +172,89 @@ export interface LiveState {
   usage?: { input: number; output: number; total: number }
 }
 
-export const EMPTY_LIVE_STATE: LiveState = { status: 'idle', activity: 'idle', processing: false, playing: false, turns: [], reasoning: '', warnings: [] }
+// ─── Live Music (Lyria RealTime) ─────────────────────────────────────────────
+
+export interface WeightedPrompt { text: string; weight: number }
+export type MusicPlayback = 'idle' | 'playing' | 'paused' | 'stopped'
+export interface MusicState {
+  /** Lyria session open on the backend (`music_ready` … `music_closed`). */
+  connected: boolean
+  model?: string
+  playback: MusicPlayback
+  prompts: WeightedPrompt[]
+  config: Record<string, unknown>
+  /** Prompts Lyria's safety filter dropped, newest last (kept to 10). */
+  filtered: { text?: string; reason?: string }[]
+  error?: string
+  /** Audio chunks received on this socket (each is 2 s of 48 kHz stereo PCM). */
+  chunks: number
+  /** Rolling take held on the backend for saving (`music_take`, also estimated from audio deltas). */
+  take: { seconds: number; segments: MusicSegment[]; maxSeconds?: number }
+}
+export interface MusicSegment { start_s: number; duration_s: number; prompts: WeightedPrompt[]; config: Record<string, unknown> }
+
+export const EMPTY_MUSIC_STATE: MusicState = { connected: false, playback: 'idle', prompts: [], config: {}, filtered: [], chunks: 0, take: { seconds: 0, segments: [] } }
+
+export const EMPTY_LIVE_STATE: LiveState = { status: 'idle', activity: 'idle', processing: false, playing: false, turns: [], reasoning: '', warnings: [], music: EMPTY_MUSIC_STATE }
+
+/** Frame types the Live Music session emits on the `/bidi` socket. `music_audio_delta` is handled by the music sink before the reducer. */
+export const isMusicFrame = (type: string): boolean => type.startsWith('music_')
+
+/** Reduce one `music_*` frame into `MusicState`. Unknown music frames leave the state untouched. */
+export function reduceMusicEvent(music: MusicState, data: Record<string, unknown>): MusicState {
+  switch (str(data.type)) {
+    case 'music_ready':
+      return { ...music, connected: true, model: str(data.model) || music.model, error: undefined }
+    case 'music_setup_complete':
+      return { ...music, connected: true }
+    case 'music_prompts': {
+      const prompts = Array.isArray(data.prompts)
+        ? data.prompts.filter((p): p is WeightedPrompt => !!p && typeof p === 'object' && typeof (p as WeightedPrompt).text === 'string' && typeof (p as WeightedPrompt).weight === 'number')
+        : music.prompts
+      return { ...music, connected: true, prompts }
+    }
+    case 'music_config':
+      return { ...music, connected: true, config: data.config && typeof data.config === 'object' ? data.config as Record<string, unknown> : music.config }
+    case 'music_playback': {
+      const state = str(data.state)
+      return { ...music, connected: true, playback: state === 'playing' || state === 'paused' || state === 'stopped' ? state : music.playback }
+    }
+    case 'music_audio_delta': {
+      // Each chunk is bytes/(rate*channels*2) seconds; the backend's take grows by the same amount.
+      const bytes = typeof data.audio === 'string' ? Math.floor(data.audio.length * 3 / 4) : 0
+      const rate = typeof data.sample_rate === 'number' && data.sample_rate > 0 ? data.sample_rate : 48000
+      const channels = data.channels === 1 ? 1 : 2
+      const seconds = bytes / (rate * channels * 2)
+      // The backend recorder is rolling: never report more than it can hold.
+      const total = music.take.seconds + seconds
+      const clamped = music.take.maxSeconds ? Math.min(total, music.take.maxSeconds) : total
+      return { ...music, connected: true, playback: music.playback === 'idle' ? 'playing' : music.playback, chunks: music.chunks + 1,
+        take: { ...music.take, seconds: clamped } }
+    }
+    case 'music_take':
+      return { ...music, take: takeFromFrame(music.take, data) }
+    case 'music_filtered_prompt':
+      return { ...music, filtered: [...music.filtered, { text: str(data.text) || undefined, reason: str(data.reason) || undefined }].slice(-10) }
+    case 'music_error':
+      return { ...music, error: str(data.message) || 'Live music failed.' }
+    case 'music_closed':
+      return { ...music, connected: false, playback: 'idle' }
+    default:
+      return music
+  }
+}
+
+/** Fold a backend `MusicTake` shape (`music_take` frame or `/music/take*` response) into the state. */
+export function takeFromFrame(current: MusicState['take'], data: Record<string, unknown>): MusicState['take'] {
+  const segments = Array.isArray(data.segments) ? data.segments as MusicSegment[] : current.segments
+  const maxSeconds = typeof data.max_seconds === 'number' && data.max_seconds > 0 ? data.max_seconds : current.maxSeconds
+  return { seconds: typeof data.seconds === 'number' ? data.seconds : current.seconds, segments, maxSeconds }
+}
+
+/** Decode a `music_audio_delta` frame: base64 PCM16 LE, stereo 48 kHz by default (Lyria's `audio/l16;rate=48000;channels=2`). */
+export function decodeMusicPcm16(frame: Record<string, unknown>, decodeBase64: (text: string) => Uint8Array = defaultBase64): DecodedPcm | null {
+  return decodePcm16({ ...frame, channels: frame.channels === 1 ? 1 : 2, sample_rate: typeof frame.sample_rate === 'number' && frame.sample_rate > 0 ? frame.sample_rate : 48000 }, decodeBase64)
+}
 
 /** Side effects the component must perform; the reducer itself is pure. */
 export type LiveEffect = 'stop_playback' | 'close'
@@ -189,6 +277,7 @@ export function reduceLiveEvent(state: LiveState, event: unknown): LiveReduction
   const type = str(data.type)
   const effects: LiveEffect[] = []
   const derive = (next: LiveState): LiveState => ({ ...next, activity: deriveActivity(next) })
+  if (isMusicFrame(type)) return { effects, state: { ...state, music: reduceMusicEvent(state.music ?? EMPTY_MUSIC_STATE, data) } }
 
   switch (type) {
     case 'ready': {
@@ -197,6 +286,8 @@ export function reduceLiveEvent(state: LiveState, event: unknown): LiveReduction
         model: str(data.model) || state.model, voice: str(data.voice) || state.voice, effort: str(data.effort) || state.effort,
         conversationId: str(data.conversation_id) || state.conversationId,
         tools: Array.isArray(data.tools) ? data.tools.map(String) : state.tools,
+        musicAvailable: data.music === true, agentId: str(data.agent_id) || undefined,
+        music: { ...EMPTY_MUSIC_STATE, take: { ...EMPTY_MUSIC_STATE.take, maxSeconds: typeof data.music_max_seconds === 'number' && data.music_max_seconds > 0 ? data.music_max_seconds : undefined } },
         historySource: source === 'snapshot' || source === 'client' || source === 'none' ? source : state.historySource }) }
     }
     case 'error':
@@ -231,7 +322,7 @@ export function reduceLiveEvent(state: LiveState, event: unknown): LiveReduction
         ? 'The Live connection restarted and cut off the last turn. Repeat it if you did not get an answer.' : undefined } }
     case 'bidi_connection_stop':
       effects.push('stop_playback', 'close')
-      return { effects, state: derive({ ...state, status: 'idle', processing: false }) }
+      return { effects, state: derive({ ...state, status: 'idle', processing: false, music: { ...state.music, connected: false, playback: 'idle' } }) }
     case 'bidi_response_start':
       return { effects, state: derive({ ...state, processing: true }) }
     case 'bidi_response_stop':

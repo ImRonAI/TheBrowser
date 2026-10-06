@@ -34,7 +34,6 @@ strands-agents-evals==1.4.0
 huggingface_hub==1.20.1
 strands-agents-tools>=0.8.5
 strands-xai==0.6.1
-strands-shell==0.3.3
 xai-sdk==1.19.0
 perplexityai==0.43.5
 strands-agents-sops @ git+https://github.com/strands-agents/agent-sop.git@2634a6ee3cf755d52919e442b024e021429d127a#subdirectory=python

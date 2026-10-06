@@ -22,6 +22,8 @@ import { VoiceAgent } from './VoiceAgent'
 import { Checkpoint, CheckpointIcon, CheckpointTrigger } from '@/components/ai-elements/checkpoint'
 import { PANEL_COMMANDS, parsePanelCommand } from '@/lib/panel-commands'
 import { historyFromMessages } from '@/lib/voice-events'
+import { OubliStage } from './OubliStage'
+import { flashAsking, useMascotStore } from '@/stores/mascotStore'
 import { liveKey, liveTurnsFor, unsharedLiveTurns, useLiveSessionStore } from '@/stores/liveSessionStore'
 import { Alert, AlertActions, AlertBody, AlertDescription, AlertTitle } from '@catalyst/alert'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@catalyst/table'
@@ -128,7 +130,27 @@ export function AgentConversation({ destination, embedded = false }: { destinati
     if (followOutput.current) messagesEndRef.current?.scrollIntoView({ behavior: 'instant' })
   }, [messages])
 
+  // Oubli reacts to the text agent: running = processing, an unfinished tool = working, and the
+  // newest reasoning text streams into his thought bubble (deltas only; a new part resets it).
+  const reasoningSeen = useRef<{ key: string; length: number } | null>(null)
+  useEffect(() => {
+    if (destination !== 'panel' || voice) return
+    const mascot = useMascotStore.getState()
+    const last = messages[messages.length - 1]
+    const working = active && (last?.parts.some((part) => part.kind === 'tool' && !part.finished) ?? false)
+    mascot.set({ processing: active, working })
+    const reasoning = last?.role === 'assistant' ? [...last.parts].reverse().find((part) => part.kind === 'reasoning' && !part.discarded) : undefined
+    if (reasoning && reasoning.kind === 'reasoning' && active) {
+      const seen = reasoningSeen.current
+      if (!seen || seen.key !== reasoning.key) { mascot.thought({ kind: 'clear' }); mascot.thought({ kind: 'delta', text: reasoning.text }) }
+      else if (reasoning.text.length > seen.length) mascot.thought({ kind: 'delta', text: reasoning.text.slice(seen.length) })
+      reasoningSeen.current = { key: reasoning.key, length: reasoning.text.length }
+    } else if (!active && reasoningSeen.current) { mascot.thought({ kind: 'settle' }); reasoningSeen.current = null }
+  }, [messages, active, destination, voice])
+  useEffect(() => () => { if (destination === 'panel') useMascotStore.getState().set({ processing: false, working: false }) }, [destination])
+
   const dispatchExternal = useCallback((text: string) => {
+    flashAsking()
     // Native steering applies immediately; no second /chat invocation while running.
     const id = sessionRef.current
     void sendMessage(text).then((sent) => { if (!sent && sessionRef.current === id) setInput((current) => current || text) })
@@ -227,6 +249,7 @@ export function AgentConversation({ destination, embedded = false }: { destinati
     if (unavailable || (active && draft.articles.length > 0)) return
     setCommandFeedback('')
     followOutput.current = true
+    flashAsking()
     void sendMessage(text, 'message', undefined, () => {
       useArticleDraftStore.getState().clearSent(draftKey, input, draft.articles.map((article) => article.id))
     })
@@ -305,7 +328,7 @@ export function AgentConversation({ destination, embedded = false }: { destinati
                 if (element) followOutput.current = element.scrollHeight - element.scrollTop - element.clientHeight < 100
               }}>
                 {!messages.length && !active && <div className="h-full min-h-40 flex flex-col items-center justify-center px-6">
-                  <div className="mb-7 w-16 h-16 rounded-2xl bg-gradient-to-br from-indigo-500 via-indigo-600 to-violet-700 flex items-center justify-center shadow-xl shadow-indigo-600/30 text-2xl text-white font-display">R</div>
+                  <OubliStage pinned className="mb-4" />
                   <h3 className="text-display-sm font-display font-light text-center mb-2">How can I help?</h3>
                   <p className="text-body-sm text-ink-muted dark:text-ink-inverse-muted text-center">Browse, search, analyze, and accomplish.</p>
                 </div>}
@@ -318,6 +341,8 @@ export function AgentConversation({ destination, embedded = false }: { destinati
                 {active && <div role="status" className="flex items-center gap-2 text-xs text-ink-muted dark:text-ink-inverse-muted"><span className="h-2 w-2 rounded-full bg-indigo-500 animate-pulse" />Run in progress · send a message to steer</div>}
                 <div ref={messagesEndRef} />
               </div>
+              {/* Oubli peeks out from the panel edge whenever Ron is asked something or is working. */}
+              {(messages.length > 0 || active) && destination === 'panel' && <OubliStage className="-mb-1 shrink-0" />}
 
               {chat.historyIncomplete && <div role="status" className="mx-4 mb-3 rounded-xl border border-amber-200 dark:border-amber-900 bg-amber-50/60 dark:bg-amber-950/20 p-3 text-xs">
                 {active || chat.followPending

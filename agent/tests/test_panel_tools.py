@@ -29,7 +29,6 @@ from agent.api.core.panel_tools import (
     accept_browser_elicitation,
     ChildSpec,
     GraphSpec,
-    LoopCallbackBridge,
     ManagedMCP,
     PanelToolCatalog,
     SwarmSpec,
@@ -39,8 +38,6 @@ from agent.api.core.panel_tools import (
     create_tool_catalog,
     create_formation_tool,
     create_skill_tool,
-    create_subagent_tool,
-    list_mcp_tools,
     serializable_event,
     skills_from_env,
 )
@@ -101,14 +98,7 @@ async def call_tool(value, inputs, *, agent=None):
     return events, events[-1]["tool_result"]
 
 
-def test_catalog_rejects_sync_imports_duplicates():
-    @tool
-    def sync_tool() -> str:
-        """A forbidden synchronous application tool."""
-        return "no"
-
-    with pytest.raises(TypeError, match="must be async"):
-        PanelToolCatalog(tools=[sync_tool])
+def test_catalog_rejects_imports_and_duplicates():
     with pytest.raises(TypeError, match="explicit AgentTool"):
         PanelToolCatalog(tools=["strands_tools.shell"])
     with pytest.raises(ValueError, match="Duplicate"):
@@ -196,17 +186,16 @@ def test_managed_mcp_native_consumer_lifecycle_and_refresh():
         add, remove = client.add_consumer, client.remove_consumer
         client.add_consumer = Mock(wraps=add)
         client.remove_consumer = Mock(wraps=remove)
-        refresh = AsyncMock(return_value=[beta])
-        catalog = PanelToolCatalog(managed_mcp=[ManagedMCP(client, refresh)])
+        catalog = PanelToolCatalog(managed_mcp=[ManagedMCP(client)])
         agent = Agent(model=OfflineModel(), tools=[catalog], callback_handler=None)
         catalog.bind(agent)
         assert len(client._consumers) == 1
         assert client.add_consumer.call_count == 1
         client.load_tools.assert_awaited_once()
-        catalog.request_refresh()
+        # Native tools-changed notification (prefix/filters already applied by the client).
+        client.on_tools_changed(["alpha"], [beta])
         await agent.invoke_async("refresh")
         assert agent.tool_registry.registry == {"beta": beta}
-        refresh.assert_awaited_once()
         agent.cleanup()
         agent.cleanup()
         assert not client._consumers
@@ -224,22 +213,6 @@ def test_managed_mcp_partial_startup_cleanup():
         Agent(model=OfflineModel(), tools=[catalog], callback_handler=None)
     assert not first._consumers
     assert not second._consumers
-
-
-def test_mcp_fresh_listing_pagination():
-    class Page(list):
-        def __init__(self, values, token):
-            super().__init__(values)
-            self.pagination_token = token
-
-    async def scenario():
-        client = MCPClient(lambda: None)
-        client.list_tools_sync = Mock(side_effect=[Page([alpha], "next"), Page([beta], None)])
-        assert await list_mcp_tools(client, prefix="p", tool_filters={"allowed": ["alpha"]}) == [alpha, beta]
-        assert client.list_tools_sync.call_args_list[-1].args == ("next",)
-        assert client.list_tools_sync.call_args.kwargs["prefix"] == "p"
-
-    asyncio.run(scenario())
 
 
 def test_skills_environment_native_plugin_and_explicit_child_assignments(tmp_path):
@@ -403,23 +376,6 @@ def test_checkpoint_config_rejected_and_nested_checkpoint_not_reported_success(m
     asyncio.run(scenario())
 
 
-def test_native_as_tool_isolation():
-    async def scenario():
-        model = OfflineModel()
-        value = await create_subagent_tool(ChildSpec("delegate", "Help", (alpha,)), model_factory=lambda _: model)
-        assert value.tool_type == "agent"
-        assert value.agent._session_manager is None
-        assert not value.agent._checkpointing
-        for prompt in ["one", "two"]:
-            _, result = await call_tool(value, {"input": prompt})
-            assert result["status"] == "success"
-        assert len(model.calls) == 2
-        assert len(model.calls[0]["messages"]) == len(model.calls[1]["messages"]) == 1
-        value.agent.cleanup()
-
-    asyncio.run(scenario())
-
-
 def test_formation_cancellation_joins_native_stream_before_provider_cleanup():
     async def scenario():
         entered, stopped = asyncio.Event(), asyncio.Event()
@@ -473,28 +429,6 @@ def test_formation_build_failure_cleans_previously_created_children():
         assert result["status"] == "error"
         assert "model unavailable" in result["content"][0]["text"]
         assert not client._consumers
-
-    asyncio.run(scenario())
-
-
-def test_callback_bridge_thread_to_loop_drains_and_reports_errors():
-    async def scenario():
-        owner = threading.get_ident()
-        seen = []
-        async def handler(event):
-            assert threading.get_ident() == owner
-            seen.append(event)
-            if event.get("fail"):
-                raise ValueError("delivery failed")
-
-        bridge = LoopCallbackBridge(handler)
-        await asyncio.to_thread(lambda: [bridge(index=index) for index in range(10)])
-        bridge(fail=True)
-        bridge(index=10)
-        with pytest.raises(ExceptionGroup, match="delivery failed"):
-            await bridge.aclose()
-        bridge(index=11)
-        assert [item["index"] for item in seen if "index" in item] == list(range(11))
 
     asyncio.run(scenario())
 

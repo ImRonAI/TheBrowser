@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Persona } from '@/components/ai-elements/persona'
 import { WebPreview, WebPreviewBody } from '@/components/ai-elements/web-preview'
 import { Conversation, ConversationContent, ConversationEmptyState, ConversationScrollButton } from '@/components/ai-elements/conversation'
 import { Message, MessageContent } from '@/components/ai-elements/message'
@@ -22,18 +21,17 @@ import { acquireScreenCapture, clearLiveTools, noteLiveTools, rememberSnapshot }
 import { cn } from '@/utils/cn'
 import { recordingCanSend, recordingMimeType } from '@/lib/bidi-recording'
 import pcmWorkletUrl from '@/lib/bidi-pcm.worklet.js?url'
-import { RuntimeLoader } from '@rive-app/react-webgl2'
-import riveWasmUrl from '@rive-app/webgl2/rive.wasm?url'
 import { getAccessToken } from '@/api/supabase'
 import { useLivePlayback } from './useLivePlayback'
+import { useMusicPlayback } from './useMusicPlayback'
+import { useLiveMusicStore } from '@/stores/liveMusicStore'
+import { useMascotStore } from '@/stores/mascotStore'
+import { genreFromPrompts } from '@/lib/mascot'
+import { COMPACT_SCALE, OubliStage, PINNED_SCALE } from './OubliStage'
+import { MusicDeck } from './MusicDeck'
 import { LIVE_API_BASE_URL } from '@/pages/types/api'
 import { checkLiveApi, liveSocketUrl } from '@/lib/live-api'
 import { projectEndpoint } from '@/lib/project-endpoint'
-
-// Rive defaults to fetching its runtime from unpkg/jsdelivr, which the app CSP
-// (connect-src 'self' …) blocks, so the Persona never rendered. Serve the
-// bundled copy from this origin instead.
-RuntimeLoader.setWasmUrl(riveWasmUrl)
 
 type Capture = { stream: MediaStream; recorder: MediaRecorder }
 
@@ -88,6 +86,32 @@ export function VoiceAgent({ userId = 'default', agentScope = 'panel', browser =
 
   const commit = useCallback((next: LiveState) => { state.current = next; setLive(next); noteLiveTools(historyKey, next.turns) }, [historyKey])
   const sink = useLivePlayback(useCallback((playing: boolean) => commit(withPlayback(state.current, playing)), [commit]))
+  // Lyria RealTime audio (`music_audio_delta`) has its own 48 kHz stereo sink; barge-in never cuts it.
+  const musicSink = useMusicPlayback(useCallback((playing: boolean) => useLiveMusicStore.getState().publish({ playing }), []))
+  const musicStore = useLiveMusicStore
+  useEffect(() => {
+    if (agentScope !== 'panel') return
+    musicStore.getState().attach({ setVolume: musicSink.setVolume })
+    return () => { musicStore.getState().attach(null); musicStore.getState().reset() }
+  }, [agentScope, musicSink.setVolume, musicStore])
+  useEffect(() => {
+    if (agentScope !== 'panel') return
+    musicStore.getState().publish({ liveStatus: live.status, available: Boolean(live.musicAvailable), music: live.music })
+  }, [agentScope, live.status, live.musicAvailable, live.music, musicStore])
+  // Oubli: the analyser taps (voice = mouth, music = body), Live flags, costume and beat clock.
+  useEffect(() => {
+    if (agentScope !== 'panel') return
+    useMascotStore.getState().attachTaps({ voice: sink.frequencyData, music: musicSink.frequencyData })
+    return () => { useMascotStore.getState().attachTaps({ voice: null, music: null }); useMascotStore.getState().set({ liveOpen: false, thinking: false, working: false, musicOn: false, genre: null, bpm: 0 }) }
+  }, [agentScope, sink.frequencyData, musicSink.frequencyData])
+  useEffect(() => {
+    if (agentScope !== 'panel') return
+    const bpm = typeof live.music.config.bpm === 'number' ? live.music.config.bpm : 0
+    useMascotStore.getState().set({
+      liveOpen: live.status === 'ready', thinking: live.processing, working: live.turns.some((turn) => turn.kind === 'tool' && !turn.final),
+      musicOn: live.music.connected && live.music.playback === 'playing', genre: genreFromPrompts(live.music.prompts), bpm,
+    })
+  }, [agentScope, live.status, live.processing, live.turns, live.music])
 
   function stopVideo() {
     const current = capture.current
@@ -132,6 +156,7 @@ export function VoiceAgent({ userId = 'default', agentScope = 'panel', browser =
     socket.current = null
     ws?.close()
     sink.close()
+    musicSink.close()
     setStopping(false)
     useLiveSessionStore.getState().release(historyKey, owner)
     commit({ ...EMPTY_LIVE_STATE, turns: state.current.turns, journalHtml: state.current.journalHtml, journalSaved: state.current.journalSaved,
@@ -227,6 +252,7 @@ export function VoiceAgent({ userId = 'default', agentScope = 'panel', browser =
     commit({ ...state.current, status: 'connecting', error: undefined, errorCode: undefined, restartNotice: undefined })
     stopAcknowledged.current = false
     if (!await sink.start()) { setError('Audio output could not start.'); disconnect(); return }
+    if (!await musicSink.start()) { setError('Music output could not start.'); disconnect(); return }
     try { await checkLiveApi(apiBaseUrl) }
     catch (cause) {
       if (epoch === generation.current) {
@@ -261,6 +287,12 @@ export function VoiceAgent({ userId = 'default', agentScope = 'panel', browser =
       try { data = JSON.parse(event.data) } catch { setError('Could not decode a Live event.'); return }
       const frame = data as { type?: string } | null
       if (frame?.type === 'bidi_audio_delta') { sink.play(data as Record<string, unknown>); return }
+      if (frame?.type === 'music_audio_delta') {
+        musicSink.play(data as Record<string, unknown>)
+        commit(reduceLiveEvent(state.current, data).state)
+        return
+      }
+      if (frame?.type === 'music_closed') musicSink.stop()
       if (frame?.type === 'tool_result') {
         const result = (data as { tool_result?: { content?: unknown } }).tool_result
         if (result) rememberSnapshot(result.content ?? result)
@@ -268,6 +300,13 @@ export function VoiceAgent({ userId = 'default', agentScope = 'panel', browser =
       const { state: next, effects } = reduceLiveEvent(state.current, data)
       recordFinalTurns(state.current, next)
       commit(next)
+      if (agentScope === 'panel') {
+        const mascot = useMascotStore.getState()
+        if (frame?.type === 'bidi_reasoning_delta') mascot.thought({ kind: 'delta', text: String((data as { delta?: unknown }).delta ?? '') })
+        else if (frame?.type === 'bidi_reasoning_block') { mascot.thought({ kind: 'clear' }); mascot.thought({ kind: 'delta', text: String((data as { text?: unknown }).text ?? '') }) }
+        else if (frame?.type === 'bidi_response_stop' || frame?.type === 'bidi_barge_in') mascot.thought({ kind: 'settle' })
+        else if (frame?.type === 'bidi_response_start') mascot.thought({ kind: 'clear' })
+      }
       if (frame?.type === 'ready') clearTimeout(timeout)
       if (frame?.type === 'error') { clearTimeout(timeout); setError(next.error ?? 'Live session failed.') }
       for (const effect of effects) {
@@ -417,15 +456,16 @@ export function VoiceAgent({ userId = 'default', agentScope = 'panel', browser =
         {foreignOwner && <div role="alert" className="rounded-xl border border-amber-300/60 bg-amber-50/80 p-3 text-xs dark:border-amber-900 dark:bg-amber-950/30">
           A Live session for this conversation is already open in another view ({holder}). Stop it there before connecting here.
         </div>}
-        <section aria-label="Agent presence" className="mb-8 flex shrink-0 flex-col items-center gap-1" style={{ maxHeight: 'min(140px, 22vh)' }}>
-          <div className="shrink-0" style={{ width: compact ? 48 : 'min(4.5rem, 11vh)', height: compact ? 48 : 'min(4.5rem, 11vh)' }}>
-            <Persona className="size-full" state={presence} variant="obsidian" />
-          </div>
+        <section aria-label="Agent presence" className="mb-4 flex w-full shrink-0 flex-col items-center gap-1 [&>.oubli-frame]:w-full">
+          {agentScope === 'panel'
+            ? <OubliStage pinned scale={compact ? COMPACT_SCALE : PINNED_SCALE} />
+            : <div aria-hidden className={cn('rounded-full bg-gradient-to-br from-indigo-500 via-indigo-600 to-violet-700 shadow-lg shadow-indigo-600/30', presence === 'speaking' && 'motion-safe:animate-pulse')} style={{ width: compact ? 48 : 72, height: compact ? 48 : 72 }} />}
           <p role="status" className="flex items-center gap-2 text-xs font-medium text-ink-muted dark:text-ink-inverse-muted">
             <span aria-hidden className={cn('h-2 w-2 rounded-full', status === 'ready' ? 'bg-indigo-500' : status === 'connecting' ? 'bg-amber-400 motion-safe:animate-pulse' : 'bg-surface-300 dark:bg-surface-600')} />
             {stopping ? 'Finishing pending work…' : caption}{status === 'ready' && live.processing && !live.playing ? ' · working' : ''}
           </p>
         </section>
+        {agentScope === 'panel' && (live.musicAvailable || live.music.connected) && <MusicDeck userId={userId} agentId={live.agentId} className="shrink-0" />}
         <div className="flex shrink-0 items-center justify-center gap-2">
           <Button type="button" size="icon" variant="outline" className={iconButton} disabled={status !== 'ready' || stopping} aria-pressed={mic} aria-label={mic ? 'Mute microphone' : 'Enable microphone'} onClick={() => mic ? stopMic() : void startMic()}>
             {mic ? <MicIcon /> : <MicOffIcon />}

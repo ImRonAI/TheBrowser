@@ -24,6 +24,7 @@ from agent.api.endpoints import bidi
 from agent.api.endpoints import memory
 from agent.api.endpoints import teaching, teaching_observe
 from agent.api.endpoints import tool_repairs
+from agent.api.endpoints import music
 from agent.api.core.harness_agents import harness_a2a_host
 from agent.api.core.teaching import get_teaching_service, mcp_app as skills_mcp_app
 
@@ -122,6 +123,7 @@ app.include_router(memory.router, tags=["memory"])
 app.include_router(teaching.router, tags=["teaching"])
 app.include_router(teaching_observe.router, tags=["teaching"])
 app.include_router(tool_repairs.router, tags=["tool-repairs"])
+app.include_router(music.router, tags=["music"])
 app.mount("/skills/mcp", skills_mcp_app)
 # Stored harness specialists over native A2A (<PANEL_A2A_URL>/agents/<id>). Mounted before the
 # lifespan's /a2a mount so this prefix wins; loopback-only like /a2a (never on the ngrok allowlist).

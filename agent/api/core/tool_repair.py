@@ -12,11 +12,11 @@ Pipeline (each piece is a public surface that already exists in this repo):
    can emit ``tool_repair_proposed``. Nothing runs without the user's click.
 2. ``start_repair`` (``POST /tools/repairs``) runs one **fixer** per user: a fresh ``create_harness``
    child (same pattern as ``recall``) on a ``ModelRouter(FallbackStrategy)`` over the Perplexity
-   chain with ``hosted_tools=True`` (so the Perplexity ``sandbox`` tool exists), whose tools are
-   the Strands Shell MCP (copy-bound library at ``/sources/tools``, copy-bound ``agent/api/core`` at
-   ``/sources/core`` for the wrapper audit, direct-bound repair workspace at ``/workspace``), the
-   vendored ``code_interpreter`` (Docker -> local fallback, flagged), read-only memory search, and
-   two application ``@tool``s: ``record_demonstration`` and ``submit_repair``.
+   chain, whose tools are the harness built-ins ``shell``/``read``/``write``/``edit`` routed through
+   the SDK ``Agent(sandbox=)`` seam (a per-run ``DockerSandbox``: the library at ``/sources/tools``,
+   ``agent/api/core`` at ``/sources/core`` for the wrapper audit, the repair workspace at
+   ``/workspace``; the ``NotASandboxLocalEnvironment`` fallback is flagged), read-only memory
+   search, and two application ``@tool``s: ``record_demonstration`` and ``submit_repair``.
 3. Diagnosis = ``strands_evals.detectors.diagnose_session`` over the in-memory exporter spans
    (``RON_TOOL_OBSERVATION=1``) or, without it, the ``agent.state`` outcomes — redacted by
    ``tool_observation.redact_outcome`` before anything leaves the session. The **wrapper audit**

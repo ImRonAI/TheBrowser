@@ -202,3 +202,50 @@ test('decodePcm16 handles mono/stereo little-endian frames and rejects non-pcm',
   assert.equal(decodePcm16({ audio: '' }), null)
   assert.equal(decodePcm16({}), null)
 })
+
+test('ready.music and music_* frames fold into LiveState.music; decodeMusicPcm16 defaults to 48 kHz stereo', async () => {
+  const { EMPTY_MUSIC_STATE, decodeMusicPcm16, reduceMusicEvent } = await import('./voice-events.ts')
+  let state = reduceLiveEvent(EMPTY_LIVE_STATE, { type: 'ready', model: 'gemini-3.8-live', voice: 'Kore', tools: ['music_status'], music: true }).state
+  assert.equal(state.musicAvailable, true)
+  assert.deepEqual({ ...state.music, take: { seconds: state.music.take.seconds, segments: state.music.take.segments } }, EMPTY_MUSIC_STATE)
+  state = reduceLiveEvent(state, { type: 'music_ready', model: 'models/lyria-realtime-exp' }).state
+  state = reduceLiveEvent(state, { type: 'music_prompts', prompts: [{ text: 'minimal techno', weight: 1 }, { bad: true }] }).state
+  state = reduceLiveEvent(state, { type: 'music_config', config: { bpm: 120, density: 0.4 } }).state
+  state = reduceLiveEvent(state, { type: 'music_playback', action: 'play', state: 'playing' }).state
+  state = reduceLiveEvent(state, { type: 'music_filtered_prompt', text: 'x', reason: 'safety' }).state
+  assert.equal(state.music.connected, true)
+  assert.equal(state.music.model, 'models/lyria-realtime-exp')
+  assert.deepEqual(state.music.prompts, [{ text: 'minimal techno', weight: 1 }])
+  assert.equal(state.music.config.bpm, 120)
+  assert.equal(state.music.playback, 'playing')
+  assert.deepEqual(state.music.filtered, [{ text: 'x', reason: 'safety' }])
+  assert.equal(state.status, 'ready', 'music frames never change the Live status')
+  state = reduceLiveEvent(state, { type: 'music_audio_delta', audio: 'AAAA', sample_rate: 48000, channels: 2 }).state
+  assert.equal(state.music.chunks, 1)
+  state = reduceLiveEvent(state, { type: 'music_error', message: 'boom' }).state
+  assert.equal(state.music.error, 'boom')
+  state = reduceLiveEvent(state, { type: 'music_closed' }).state
+  assert.equal(state.music.connected, false); assert.equal(state.music.playback, 'idle')
+  // music state reset on connection stop
+  const stopped = reduceLiveEvent({ ...state, music: { ...state.music, connected: true, playback: 'playing' } }, { type: 'bidi_connection_stop' }).state
+  assert.equal(stopped.music.connected, false)
+  // pure reducer
+  assert.equal(reduceMusicEvent(EMPTY_MUSIC_STATE, { type: 'music_unknown' }), EMPTY_MUSIC_STATE)
+  // 4 bytes = one stereo frame
+  const decoded = decodeMusicPcm16({ audio: Buffer.from(new Int16Array([16384, -16384]).buffer).toString('base64') })
+  assert.ok(decoded)
+  assert.equal(decoded.channels, 2); assert.equal(decoded.sampleRate, 48000); assert.equal(decoded.frames, 1)
+  assert.ok(Math.abs(decoded.samples[0][0] - 0.5) < 1e-6 && Math.abs(decoded.samples[1][0] + 0.5) < 1e-6)
+})
+
+test('music take estimate is clamped to the backend rolling window and replaced by music_take', async () => {
+  const { takeFromFrame } = await import('./voice-events.ts')
+  let state = reduceLiveEvent(EMPTY_LIVE_STATE, { type: 'ready', music: true, music_max_seconds: 4, agent_id: 'live-1' }).state
+  assert.equal(state.agentId, 'live-1'); assert.equal(state.music.take.maxSeconds, 4)
+  const twoSeconds = Buffer.alloc(2 * 48000 * 2 * 2).toString('base64')
+  for (let i = 0; i < 4; i++) state = reduceLiveEvent(state, { type: 'music_audio_delta', audio: twoSeconds, sample_rate: 48000, channels: 2 }).state
+  assert.equal(state.music.take.seconds, 4, 'never more than the server can hold')
+  state = reduceLiveEvent(state, { type: 'music_take', seconds: 0, segments: [], max_seconds: 4 }).state
+  assert.equal(state.music.take.seconds, 0)
+  assert.deepEqual(takeFromFrame(state.music.take, { seconds: 1.5 }), { seconds: 1.5, segments: [], maxSeconds: 4 })
+})

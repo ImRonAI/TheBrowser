@@ -19,7 +19,7 @@ from strands.bidi.models.google import GoogleGeminiLiveModel
 
 from agent.api.core import config
 from agent.api.core.live_io import LiveSocketInput, WebSocketOutput, context_text, local_origin
-from agent.api.core.live_tools import create_live_agent
+from agent.api.core.live_tools import close_live_music, create_live_agent
 
 logger = logging.getLogger(__name__)
 
@@ -67,6 +67,20 @@ async def _send(websocket: WebSocket, payload: dict[str, Any]) -> None:
     await websocket.send_text(json.dumps(payload))
 
 
+def _music_emitter(websocket: WebSocket) -> Any:
+    """Live Music frames (``music_audio_delta`` etc.) ride the same socket as the native ``bidi_*`` events.
+
+    A frame that cannot be sent (socket already closed) is dropped: the music session is closed by the
+    socket's ``finally`` and must not fail a tool call over a renderer that went away.
+    """
+    async def emit(frame: dict[str, Any]) -> None:
+        try:
+            await websocket.send_text(json.dumps(frame))
+        except Exception:
+            logger.debug("music frame dropped: socket closed")
+    return emit
+
+
 @router.websocket("/bidi")
 async def bidi(
     websocket: WebSocket,
@@ -98,6 +112,7 @@ async def bidi(
             return
         agent, prefix = create_live_agent(
             live_model(model, voice, effort), user_id or "default", agent_scope or "panel", browser,
+            emit=_music_emitter(websocket),
         )
         names = list(agent.tool_names)
         await _send(websocket, {
@@ -108,6 +123,9 @@ async def bidi(
             "conversation_id": conversation_id,
             "tools": names,
             "history_source": "client" if context else "none",
+            "music": any(name.startswith("music_") for name in names),
+            "music_max_seconds": config.LIVE_MUSIC_RECORD_SECONDS,
+            "agent_id": agent.agent_id,
         })
         if not any(name.startswith(f"{prefix}_") for name in names):
             await _send(websocket, {
@@ -130,6 +148,10 @@ async def bidi(
             return
     finally:
         if agent is not None:
+            try:
+                await close_live_music(agent)
+            except Exception:
+                logger.exception("Live music cleanup failed")
             try:
                 agent.tool_registry.cleanup()
             except Exception:

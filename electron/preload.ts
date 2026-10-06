@@ -28,6 +28,12 @@ const electronAPI = {
     return () => ipcRenderer.removeListener('deep-link', handler)
   },
 
+  // Supabase OAuth: a loopback redirect URL for signInWithOAuth, and the system browser for the provider page.
+  auth: {
+    oauthRedirect: (): Promise<string> => ipcRenderer.invoke('auth:oauth-redirect'),
+    openExternal: (url: string): Promise<void> => ipcRenderer.invoke('auth:open-external', url),
+  },
+
   agent: {
     startStream: (streamId: string, request: StreamRequest) =>
       ipcRenderer.invoke('agent:start-stream', streamId, request),

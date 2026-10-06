@@ -262,7 +262,7 @@ See [storage implementation details](../agent/docs/panel-storage.md).
 ## Tools
 
 The agent always carries the mandated core set, registered from the installed
-`strands_tools` package (sync bodies offloaded via `adapt_native_tool`) plus the
+`strands_tools` package (registered as the native tool objects; the SDK offloads sync bodies) plus the
 vendored Strands `@tool`:
 
 | Tool | Source | Purpose |
@@ -539,8 +539,8 @@ captured for that acceptance test. One journal-tool attempt received the provide
 spoken "system error"; transport acceptance does not establish full workflow/tool
 acceptance.
 
-`WebSocket /bidi` (`agent/api/endpoints/bidi.py`, `core/bidi_runtime.py`,
-`core/bidi_agent.py`) runs one native `strands.bidi.BidiAgent` per socket on the
+`WebSocket /bidi` (`agent/api/endpoints/bidi.py`, `core/live_tools.py`,
+`core/live_io.py`) runs one native `strands.bidi.BidiAgent` per socket on the
 native `GoogleGeminiLiveModel` from `strands.bidi.models.google`; there is no provider subclass. Settings are query
 parameters and every one is validated, never ignored: `model`
 (`gemini-3.8-live` default | `gemini-3.8-live-extended-thinking`; the renderer's
@@ -578,6 +578,14 @@ advertises the catalogue.
   Panel `user_id` is a trusted-local namespace, not authenticated multi-tenant isolation:
   another trusted local client can choose it. Never expose this host-execution API publicly.
   Issue credentials travel only in the auth frame, not the URL.
+- **The system prompt is the text agent's prompt.** `chat.live_system_prompt(browser)`
+  returns `system_prompt_for`'s composition for the pinned browser target (task completion,
+  core tools, browser automation, persistent workspace) + `SKILLS_AND_SPECIALISTS_DIRECTIVE`
+  + `MEMORY_JOURNAL_DIRECTIVE` + `LIVE_ADDENDUM`; the addendum is the only Live-specific text
+  (tools pre-declared, no `tool_catalog`/`mcp_client`/`think`/`recall`/`ask_user`/screenshot,
+  explain and recover from tool errors). `core/live_tools.py` composes through that function
+  — never a second hand-written prompt — and
+  `test_panel_prompt.py::test_live_prompt_is_the_text_prompt_plus_live_deltas` pins it.
 - **Tools are the text agent's tools except those `BidiAgent` cannot run**
   (`core/live_tools.py`). `BidiAgent` declares tools to the model once per connection
   (`bidi/agent/loop.py` `start`/`_restart_model`) and rejects tool interrupts, so Live
@@ -653,6 +661,44 @@ relayed verbatim. `ready` lists `tools` and `workspace`. `STOP_DEMONSTRATION` is
 interrupting turn, and the lesson is `recorded` only when `finish_observation` saved a
 summary, the interaction is `idle` and no tools are pending. The review/approval digest
 chain and SOP compilation in `core/teaching.py` are unchanged.
+
+### Live Music (Lyria RealTime)
+
+The panel-scope Live agent carries the **Live Music API** as native class-based async
+`@tool`s (`agent/api/core/live_music.py::LiveMusicTools`), one per client message of the
+reference plus take management: `music_set_weighted_prompts` → `BidiGenerateMusicClientContent`
+(text + non-zero weight, list replaces list), `music_set_generation_config` → the full
+`BidiGenerateMusicGenerationConfig` (`temperature` 0–3, `top_k` 1–1000, `seed`, `guidance` 0–6,
+`bpm` 60–200, `density`/`brightness` 0–1, `scale` enum, `mute_bass`, `mute_drums`,
+`only_bass_and_drums`, `music_generation_mode` QUALITY|DIVERSITY|VOCALIZATION; the whole config
+is sent each call and bpm/scale changes report `reset_context_required`), `music_playback_control`
+→ `PLAY|PAUSE|STOP|RESET_CONTEXT`, `music_status`, `music_take_status`, `music_save`,
+`music_discard_take`, `music_close`. The transport is the unmodified google-genai client:
+`LiveMusicSession._run` enters `client.aio.live.music.connect(model=RON_LIVE_MUSIC_MODEL)` (the
+client sends `setup` and awaits `setupComplete`) and a receive task forwards every
+`LiveMusicServerMessage` on the same `/bidi` socket: `music_setup_complete`, `music_audio_delta`
+(base64 PCM16; `sample_rate`/`channels` parsed from `audio/l16;rate=48000;channels=2`; `source` =
+the chunk's `sourceMetadata`), `music_filtered_prompt`; Ron adds `music_ready`, `music_prompts`,
+`music_config`, `music_playback`, `music_take`, `music_error`, `music_closed`, and `ready` carries
+`music: true` + `agent_id`. The reference's `warning` field is dropped by google-genai 2.24.0's
+model before `receive()` yields, so it cannot be surfaced. Verified live 2026-10-06 on `v1beta`
+and `v1alpha`: 2 s chunks every ~2 s, pause/resume and `reset_context` round-trip, metadata
+present on every chunk. The prompt guide is an Agent Skill (`agent/skills/lyria-realtime-prompting`)
+whose native `skills` tool and `<available_skills>` block `live_music_tools` installs by hand
+because `BidiAgent` has no plugins. **Saving**: `TakeRecorder` holds a rolling
+`RON_LIVE_MUSIC_RECORD_SECONDS` of PCM segmented at every `sourceMetadata` change;
+`music_save`/`POST /music/save` writes WAV to the private Supabase Storage bucket
+`RON_LIVE_MUSIC_BUCKET` and a `songs` row (`supabase/migrations/012_songs.sql`, owner RLS);
+guests cannot save. `/music/*` is loopback-only, signed-in only, and binds the per-socket random
+`agent_id` to the caller's `user_id` (Projects identity): `control`
+(deck Play/Pause/Stop/Reset through the same `playback_control`), `take`, `take/discard`,
+`save`, `songs`, `DELETE songs/{id}`. The renderer plays the stream in `useMusicPlayback`
+(48 kHz stereo `AudioContext`, 2 s lead, analyser tap for the mascot) and renders
+`MusicDeck` under Oubli with AI Elements `Button`/`ButtonGroup` transport and the
+`AudioPlayer` composition for saved songs. Saved songs can be grouped into **playlists or albums**
+(`013_playlists.sql`; `/music/playlists*`; agent tools `music_library`, `music_playlists`,
+`music_playlist_create|add|remove|reorder|delete`) and played continuously in order or shuffled with
+repeat off/all/one (`src/lib/playlist.ts` queue, `usePlaylistPlayer`, `PlaylistShelf`).
 
 ## Verification
 

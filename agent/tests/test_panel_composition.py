@@ -153,7 +153,6 @@ def test_real_constructor_defaults_stream_and_complete_cleanup(offline):
     assert "review" not in names and "load_tool" not in names and "discover_tools" not in names
     # No long-lived child agents: think/formations build children per call.
     assert len(models) == 1
-    assert catalogs[0].children == []
     result = asyncio.run(agent.invoke_async("hello"))
     assert result.stop_reason == "end_turn"
     # Memory is the SDK's: the native aux_model (the first fast memory model) runs extraction,
@@ -166,7 +165,6 @@ def test_real_constructor_defaults_stream_and_complete_cleanup(offline):
     assert [b["text"] for m in models[0].calls[-1] for b in m["content"] if "text" in b] == ["hello"]
     agent.cleanup()
     agent.cleanup()
-    assert catalogs[0].children == []
 
 
 @pytest.mark.parametrize("mode", ["auto", "agentic", "sliding"])
@@ -383,7 +381,7 @@ def test_bind_failure_and_postconstruction_failure_cleanup(offline, monkeypatch)
     with pytest.raises(ValueError, match="bind failure"):
         build()
     assert len(cleanup_calls) == 1  # parent; no long-lived children remain
-    assert catalogs[0].children == [] and not catalogs[0].consumers
+    assert not catalogs[0].consumers
 
 
 def test_constructor_failure_also_releases_catalog_children(offline, monkeypatch):
@@ -399,7 +397,7 @@ def test_constructor_failure_also_releases_catalog_children(offline, monkeypatch
     monkeypatch.setattr(Agent, "cleanup", cleanup)
     with pytest.raises(ValueError, match="constructor failure"):
         build()
-    assert len(cleanups) == 0 and catalogs[0].children == []
+    assert len(cleanups) == 0
 
 
 def test_explicit_skill_assignments_and_unknown_tool_rejected(offline, monkeypatch, tmp_path):
@@ -411,7 +409,6 @@ def test_explicit_skill_assignments_and_unknown_tool_rejected(offline, monkeypat
     monkeypatch.setenv("PANEL_SKILL_TOOLS", '{"summarize": ["does_not_exist"]}')
     with pytest.raises(ValueError, match="not registered"):
         build()
-    assert catalogs[0].children == []
     monkeypatch.setenv("PANEL_SKILL_TOOLS", '{"summarize": []}')
     agent = build()
     models[-1].uses = [("run_skill", {"skill_name": "summarize", "prompt": "text"})]
@@ -555,7 +552,6 @@ def test_real_constructor_partial_mcp_startup_failure_releases_every_owner(offli
     with pytest.raises(ValueError, match="startup failed"):
         build(extra_tools=[first, second])
     assert not first._consumers and not second._consumers
-    assert catalogs[0].children == []
     assert cleaned == []  # no long-lived children exist to release
 
 
@@ -572,22 +568,6 @@ def test_unassigned_skill_never_inherits_parent_tools(offline, monkeypatch, tmp_
     assert results[0]["status"] == "error"
     assert "explicit tool assignment" in json.dumps(results)
     assert len(models) == 1  # No child model was even constructed.
-
-
-def test_cleanup_attempts_all_children_even_when_one_fails(offline):
-    build, _, catalogs, _, _ = offline
-    agent = build()
-    # The catalog owns any long-lived children an application registers (none by
-    # default now); seed two to verify cleanup fans out and reports all failures.
-    children = [Agent(model=OfflineModel(), tools=[], callback_handler=None, context_manager=False) for _ in range(2)]
-    catalogs[0].children.extend(children)
-    first = Mock(wraps=children[0].cleanup)
-    children[0].cleanup = first
-    children[1].cleanup = Mock(side_effect=RuntimeError("cleanup failed"))
-    with pytest.raises(ExceptionGroup, match="child cleanup failed"):
-        agent.cleanup()
-    first.assert_called_once()
-    assert catalogs[0].children == []
 
 
 def test_runtime_background_config_cannot_detach_or_background_children(offline):

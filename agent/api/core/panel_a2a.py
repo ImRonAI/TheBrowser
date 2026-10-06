@@ -13,7 +13,9 @@ from strands import Agent
 from strands.models.model import Model
 from strands.tools.mcp import MCPClient
 
-from agent.api.core.panel_tools import PanelToolCatalog, _check_async
+from strands.types.tools import AgentTool
+
+from agent.api.core.panel_tools import PanelToolCatalog
 
 __all__ = [
     "PanelA2A", "create_a2a_agent_factory", "create_panel_a2a_client",
@@ -53,8 +55,8 @@ def create_a2a_agent_factory(
             raise TypeError("model_factory must return an explicit Strands Model instance")
         tools = list(tools_factory(context_id))
         for value in tools:
-            if not isinstance(value, (MCPClient, PanelToolCatalog)):
-                _check_async(value)
+            if not isinstance(value, (MCPClient, PanelToolCatalog, AgentTool)):
+                raise TypeError("A2A agent tools must be AgentTool, MCPClient or PanelToolCatalog instances")
         agent = Agent(
             model=model,
             name=name,

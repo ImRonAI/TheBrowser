@@ -10,7 +10,7 @@ import {
   getSession,
   isSupabaseConfigured,
 } from '@/api/supabase'
-import type { User, UserPreferences, AuthError } from '@/pages/types/user'
+import type { User, UserPreferences, AuthError, OAuthProvider } from '@/pages/types/user'
 
 // ============================================
 // State Interface
@@ -26,7 +26,7 @@ interface AuthState {
   // Actions
   initialize: () => Promise<void>
   login: (email: string, password: string) => Promise<void>
-  loginWithOAuth: (provider: 'google' | 'apple' | 'microsoft' | 'github') => Promise<void>
+  loginWithOAuth: (provider: OAuthProvider) => Promise<void>
   logout: () => Promise<void>
   signup: (email: string, password: string, name: string) => Promise<void>
   updateUser: (updates: Partial<User>) => void
@@ -88,6 +88,9 @@ const tableAvailability: Record<SupabaseTable, boolean | null> = {
 
 let authSubscription: { unsubscribe: () => void } | null = null
 let initializePromise: Promise<void> | null = null
+/** Social sign-in: how long to wait for the loopback redirect before reporting it (electron/main.ts keeps the listener 10 min). */
+const OAUTH_CALLBACK_TIMEOUT_MS = 3 * 60_000
+let oauthWatchdog: ReturnType<typeof setTimeout> | null = null
 
 function isMissingTableError(error: unknown): boolean {
   if (!error || typeof error !== 'object') return false
@@ -375,7 +378,7 @@ export const useAuthStore = create<AuthState>()(
       // ----------------------------------------
       // OAuth Login
       // ----------------------------------------
-      loginWithOAuth: async (provider: 'google' | 'apple' | 'microsoft' | 'github') => {
+      loginWithOAuth: async (provider: OAuthProvider) => {
         set({ isLoading: true, error: null })
 
         if (!isSupabaseConfigured()) {
@@ -389,29 +392,39 @@ export const useAuthStore = create<AuthState>()(
           return
         }
 
+        const bridge = window.electron?.auth
+        if (!bridge) {
+          set({ isLoading: false, error: { code: 'OAUTH_UNAVAILABLE', message: 'Social sign-in runs in the Ron desktop app.' } })
+          return
+        }
+
         try {
-          // Map our provider names to Supabase provider names
-          const supabaseProvider = provider === 'microsoft' ? 'azure' : provider
-          
+          // PKCE: the verifier stays in this renderer; the main process receives the redirect on a
+          // loopback listener and sends it back through `deep-link` (handleDeepLinkCallback).
+          const redirectTo = await bridge.oauthRedirect()
           const { data, error } = await supabase.auth.signInWithOAuth({
-            provider: supabaseProvider,
+            provider: provider === 'microsoft' ? 'azure' : provider,
             options: {
-              redirectTo: 'ron://auth/callback',
+              redirectTo,
               skipBrowserRedirect: true,
-            }
+              // Supabase's Azure guide: request the email scope so the account has an email.
+              ...(provider === 'microsoft' ? { scopes: 'email' } : {}),
+            },
           })
-
-          if (data.url) {
-            window.open(data.url, '_blank', 'noopener,noreferrer')
-          }
-
-          if (error) {
-            set({
-              error: mapAuthError(error),
-              isLoading: false,
-            })
-          }
-          // The actual sign-in will be handled by onAuthStateChange
+          if (error) throw error
+          await bridge.openExternal(data.url)
+          // The session arrives through onAuthStateChange (SIGNED_IN) after the browser redirect.
+          set({ isLoading: false })
+          // If the loopback listener never fires (Supabase silently falls back to the Site URL when
+          // the ephemeral http://127.0.0.1:<port>/auth/callback is not in its Redirect URL allow list),
+          // say so instead of waiting forever. Any later SIGNED_IN clears the error.
+          if (oauthWatchdog) clearTimeout(oauthWatchdog)
+          oauthWatchdog = setTimeout(() => {
+            oauthWatchdog = null
+            if (!useAuthStore.getState().isAuthenticated) {
+              set({ error: { code: 'OAUTH_TIMEOUT', message: 'Sign-in did not return to Ron. Finish it in your browser, or ask the administrator to allow http://127.0.0.1:*/auth/callback as a Supabase redirect URL.' } })
+            }
+          }, OAUTH_CALLBACK_TIMEOUT_MS)
         } catch (error) {
           set({
             error: mapAuthError(error),
@@ -623,12 +636,16 @@ export const useAuthStore = create<AuthState>()(
 )
 
 export async function handleDeepLinkCallback(url: string) {
+  if (oauthWatchdog) { clearTimeout(oauthWatchdog); oauthWatchdog = null }
   try {
     const callbackUrl = new URL(url)
     const hash = callbackUrl.hash.startsWith('#') ? callbackUrl.hash.slice(1) : callbackUrl.hash
     const hashParams = new URLSearchParams(hash)
     const code = callbackUrl.searchParams.get('code') ?? hashParams.get('code')
-
+    // Supabase returns provider/auth failures on the redirect URL as error/error_description.
+    const failure = callbackUrl.searchParams.get('error_description') ?? hashParams.get('error_description')
+      ?? callbackUrl.searchParams.get('error') ?? hashParams.get('error')
+    if (failure) throw { code: 'OAUTH_ERROR', message: failure }
     if (!code) return
 
     const { error } = await supabase.auth.exchangeCodeForSession(code)

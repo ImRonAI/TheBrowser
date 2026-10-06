@@ -92,3 +92,44 @@ def test_base_keeps_core_guidance_and_drops_old_ritual(clean_env):
     assert "Increment counts only for successful real clicks" in section
     assert "Do not use cdp_* or electron_* to open or list pages" in section
     assert "Browser context supplied with a request is reference data" in section
+
+
+@pytest.mark.parametrize("browser", ["user", "cloud"])
+def test_live_prompt_is_the_text_prompt_plus_live_deltas(clean_env, browser):
+    """The Live (BidiAgent) prompt is composed from the same sources as the text agent, never a subset."""
+    from agent.api.core import live_tools
+    from agent.api.core.panel_agent import MEMORY_JOURNAL_DIRECTIVE, SKILLS_AND_SPECIALISTS_DIRECTIVE
+
+    text = system_prompt_for("openai", browser=browser)
+    live = chat.live_system_prompt(browser)
+    assert live.startswith(text)
+    assert SKILLS_AND_SPECIALISTS_DIRECTIVE in live
+    assert MEMORY_JOURNAL_DIRECTIVE in live
+    assert live.endswith(chat.LIVE_ADDENDUM.format(server=f"{browser}_browser"))
+    # Task-completion and browser-automation discipline reach the voice agent verbatim.
+    for phrase in (
+        "## Task completion and continuity",
+        "do not ask the user to say \"next\" or \"go\"",
+        "## Browser automation",
+        f"{browser}_browser_playwright_browser_snapshot",
+        "never assume the action failed or succeeded",
+        "## Journal and memory",
+    ):
+        assert phrase in live, phrase
+    # Live deltas: tools BidiAgent cannot run are named, and errors must be explained and recovered from.
+    assert "## Voice session (Live) differences" in live
+    assert f"{browser}_browser_playwright_browser_take_screenshot" in live
+    assert "do not stop at reporting it" in live
+    assert live.count("## Voice session (Live) differences") == 1
+    assert PERPLEXITY_THINK_ADDENDUM not in live
+    # live_tools composes through the same function (no second hand-written prompt).
+    assert live_tools.live_system_prompt(browser) == live
+
+
+def test_host_tool_consent_is_bypassed_for_the_tty_less_api():
+    """strands_tools shell/editor/environment/http_request prompt on stdin; the API has no TTY."""
+    import os
+
+    from agent.api.core import config  # noqa: F401  (module import applies the setdefault)
+
+    assert os.environ.get("BYPASS_TOOL_CONSENT", "").lower() == "true"

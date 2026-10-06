@@ -1,4 +1,5 @@
-import { app, BrowserWindow, clipboard, desktopCapturer, dialog, ipcMain, Menu, NativeImage, WebContentsView } from 'electron'
+import { app, BrowserWindow, clipboard, desktopCapturer, dialog, ipcMain, Menu, NativeImage, shell, WebContentsView } from 'electron'
+import { createServer, type Server } from 'node:http'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
@@ -742,6 +743,48 @@ app.on('window-all-closed', () => {
 
 app.on('activate', () => {
   if (!mainWindow || mainWindow.isDestroyed()) void openMainWindow()
+})
+
+// Supabase OAuth (PKCE) for a desktop app: the provider page opens in the system browser (Google
+// rejects embedded browsers) and Supabase redirects to a one-shot loopback listener (RFC 8252 §7.3).
+// A ron:// deep link cannot reach Ron on macOS unless a packaged Info.plist declares the scheme.
+// The callback URL goes to the renderer, which holds the PKCE verifier and calls exchangeCodeForSession.
+let oauthServer: Server | null = null
+
+ipcMain.handle('auth:oauth-redirect', async (event) => {
+  if (!validateIpcSender(event.senderFrame)) throw new Error('Untrusted sender')
+  oauthServer?.close()
+  const server = createServer((request, response) => {
+    const callback = new URL(request.url ?? '/', `http://${request.headers.host}`)
+    if (callback.pathname !== '/auth/callback') {
+      response.writeHead(404).end()
+      return
+    }
+    response.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' })
+      .end('<!doctype html><meta charset="utf-8"><title>Ron</title><p style="font:16px system-ui;margin:3rem">Sign-in finished. You can close this tab and return to Ron.</p>')
+    server.close()
+    if (oauthServer === server) oauthServer = null
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('deep-link', callback.toString())
+      mainWindow.show()
+      mainWindow.focus()
+    }
+  })
+  await new Promise<void>((resolve, reject) => {
+    server.once('error', reject)
+    server.listen(0, '127.0.0.1', resolve)
+  })
+  oauthServer = server
+  setTimeout(() => { if (oauthServer === server) { server.close(); oauthServer = null } }, 10 * 60_000).unref()
+  const address = server.address()
+  if (!address || typeof address === 'string') throw new Error('OAuth listener has no port')
+  return `http://127.0.0.1:${address.port}/auth/callback`
+})
+
+ipcMain.handle('auth:open-external', async (event, url: string) => {
+  if (!validateIpcSender(event.senderFrame)) throw new Error('Untrusted sender')
+  if (new URL(url).protocol !== 'https:') throw new Error('Sign-in pages must use https')
+  await shell.openExternal(url)
 })
 
 // IPC window controls

@@ -33,6 +33,27 @@ def test_live_tools_are_native_and_exclude_tools_bidi_cannot_run():
     assert all(isinstance(value, (DecoratedFunctionTool, PythonAgentTool)) for value in host)
 
 
+def test_live_music_tools_and_lyria_skill_join_only_with_a_renderer_socket():
+    """Every Live Music API message is a native async tool; the prompt guide is an Agent Skill (`skills`)."""
+    from agent.api.core.live_tools import live_music_tools
+
+    assert live_music_tools(None) == ([], "", None), "no socket to carry audio -> no music tools"
+
+    async def emit(_frame):
+        return None
+
+    tools, addendum, music = live_music_tools(emit, "user-1")
+    names = {value.tool_name for value in tools}
+    assert names == {
+        "music_set_weighted_prompts", "music_set_generation_config", "music_playback_control", "music_status",
+        "music_take_status", "music_save", "music_discard_take", "music_close", "music_library", "music_playlists",
+        "music_playlist_create", "music_playlist_add", "music_playlist_remove", "music_playlist_reorder", "music_playlist_delete", "skills",
+    }
+    assert all(isinstance(value, DecoratedFunctionTool) for value in tools)
+    assert music.user_id == "user-1"
+    assert "## Live music (Lyria RealTime)" in addendum and "<name>lyria-realtime-prompting</name>" in addendum
+
+
 def test_live_browser_client_rejects_image_results_natively():
     client = browser_client_factory("user", tool_filters={"rejected": list(LIVE_REJECTED_BROWSER_TOOLS)})()
     assert isinstance(client, MCPClient)

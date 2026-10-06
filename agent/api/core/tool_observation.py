@@ -14,10 +14,10 @@ without new types.
 back to sessions (``StrandsInMemorySessionMapper``) for diagnosis.
 
 Provenance (CAT-50 prerequisite): each outcome also names the registered tool's
-``implementation`` class, the ``wrapped`` chain of Ron's own facades
-(``_AsyncNativeTool``/``_RenamedTool``/``_IdempotentMCPTool`` expose ``.wrapped``) and the
-``source`` file of the innermost callable (vendored path relative to ``PROJECT_TOOLS_DIR`` plus
-its ``sha256``), so a repair can tell a wrapper defect from a library defect.
+``implementation`` class, the ``wrapped`` chain (only ``tool_repair._AdaptedTool`` exposes
+``.wrapped``: a user's active adapter revision around the registered tool) and the ``source``
+file of the innermost callable (vendored path relative to ``PROJECT_TOOLS_DIR`` plus its
+``sha256``), so a repair can tell an adapter defect from a library defect.
 """
 
 from __future__ import annotations
@@ -71,7 +71,7 @@ def _tools_dir() -> Path:
 
 
 def wrapped_chain(tool: Any) -> list[Any]:
-    """``[outermost, ..., innermost]`` following ``.wrapped`` on Ron's facade tools."""
+    """``[outermost, ..., innermost]`` following ``.wrapped`` (``tool_repair._AdaptedTool``)."""
     chain: list[Any] = []
     current = tool
     while current is not None and len(chain) < _MAX_WRAPPED:

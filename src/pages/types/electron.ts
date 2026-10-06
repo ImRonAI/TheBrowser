@@ -68,6 +68,12 @@ export interface ElectronWindow {
     // Deep Links
     onDeepLink: (callback: (url: string) => void) => () => void
 
+    // Supabase OAuth (loopback redirect + system browser)
+    auth: {
+      oauthRedirect: () => Promise<string>
+      openExternal: (url: string) => Promise<void>
+    }
+
     // Agent Streaming
     agent: {
       startStream: (streamId: string, request: {

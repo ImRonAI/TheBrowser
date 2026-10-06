@@ -12,7 +12,6 @@ import base64
 import copy
 import importlib
 import importlib.util
-import inspect
 import os
 import sys
 import threading
@@ -37,12 +36,10 @@ from strands.multiagent import GraphBuilder, Swarm
 from strands.multiagent.graph import Graph
 from strands.multiagent.base import MultiAgentResult, NodeResult, Status
 from strands.tools import ToolProvider
-from strands.tools.loader import load_tools_from_module
-from strands.tools.decorator import DecoratedFunctionTool
+from strands.tools.loader import load_tools_from_file_path, load_tools_from_module
 from strands.tools.mcp import MCPClient
 from strands.tools.mcp.mcp_agent_tool import MCPAgentTool
 from strands.tools.registry import ToolRegistry
-from strands.tools.tools import PythonAgentTool
 from strands.types.tools import AgentTool, ToolContext
 from strands.vended_plugins.skills import AgentSkills
 
@@ -53,12 +50,12 @@ MCPClientFactory: TypeAlias = Callable[[], MCPClient]
 
 __all__ = [
     "AsyncToolLoader", "ChildSpec", "GraphSpec", "MCPClientFactory",
-    "LoopCallbackBridge", "ManagedMCP", "ModelFactory", "PanelToolCatalog",
+    "ManagedMCP", "ModelFactory", "PanelToolCatalog",
     "SwarmSpec", "ToolAssignment", "create_child_agent",
-    "create_formation_tool", "create_skill_tool", "create_subagent_tool",
-    "list_mcp_tools", "serializable_event", "skills_from_env",
-    "adapt_native_tool", "accept_browser_elicitation", "load_vendored_think", "THINK_EXCLUDED_TOOLS",
-    "ThinkToolsGuard", "is_parent_only_tool",
+    "create_formation_tool", "create_skill_tool",
+    "serializable_event", "skills_from_env",
+    "accept_browser_elicitation", "load_vendored_think", "THINK_EXCLUDED_TOOLS",
+    "ThinkToolsGuard", "MCPConnectionGuard", "is_parent_only_tool",
     "CORE_TOOL_NAMES", "VENDORED_PACKAGE", "build_core_tools", "create_tool_catalog",
     "import_vendored_module", "import_vendored_revision", "load_library_tool", "scan_vendored_tools", "stamp_source",
 ]
@@ -86,23 +83,17 @@ async def accept_browser_elicitation(
     return ElicitResult(action="accept", content={})
 
 
-def _check_async(value: AgentTool) -> None:
-    if not isinstance(value, AgentTool):
-        raise TypeError("Catalog entries must be explicit AgentTool instances, not import strings")
-    if isinstance(value, DecoratedFunctionTool):
-        # No public async introspection API exists in 1.56.0.
-        function = value._tool_func
-        if not (inspect.iscoroutinefunction(function) or inspect.isasyncgenfunction(function)):
-            raise TypeError(f"Application tool {value.tool_name!r} must be async")
-    elif not inspect.isasyncgenfunction(value.stream):
-        raise TypeError(f"Tool {value.tool_name!r} must implement async stream")
-
-
 def _validated(tools: Sequence[AgentTool]) -> dict[str, AgentTool]:
+    """Spec-validate and de-duplicate through a scratch native registry.
+
+    Every ``AgentTool`` streams asynchronously by contract; ``DecoratedFunctionTool`` and
+    ``PythonAgentTool`` offload synchronous bodies with ``asyncio.to_thread`` themselves.
+    """
     registry = ToolRegistry()
     names: set[str] = set()
     for value in tools:
-        _check_async(value)
+        if not isinstance(value, AgentTool):
+            raise TypeError("Catalog entries must be explicit AgentTool instances, not import strings")
         name = value.tool_name.replace("-", "_")
         if name in names:
             raise ValueError(f"Duplicate catalog tool name: {value.tool_name}")
@@ -114,35 +105,9 @@ def _validated(tools: Sequence[AgentTool]) -> dict[str, AgentTool]:
 
 @dataclass(frozen=True)
 class ManagedMCP:
-    """Native provider plus optional *fresh*, async discovery callback.
-
-    Native on_tools_changed supplies refreshed lists with prefix/filters intact.
-    An optional refresh callback additionally supports explicit polling.
-    """
+    """A catalog-owned native ``MCPClient``; its ``on_tools_changed`` supplies refreshed lists."""
 
     client: MCPClient
-    refresh: AsyncToolLoader | None = None
-
-
-async def list_mcp_tools(
-    client: MCPClient, *, prefix: str | None = None, tool_filters: Any = None
-) -> list[AgentTool]:
-    """Fresh paginated discovery on an already registry-owned MCP connection."""
-    def discover() -> list[AgentTool]:
-        result: list[AgentTool] = []
-        token = None
-        seen: set[str] = set()
-        while True:
-            page = client.list_tools_sync(token, prefix=prefix, tool_filters=tool_filters)
-            result.extend(page)
-            token = page.pagination_token
-            if token is None:
-                return result
-            if token in seen:
-                raise RuntimeError("MCP tools/list repeated a pagination token")
-            seen.add(token)
-
-    return await asyncio.to_thread(discover)
 
 
 #: agent -> bound catalog (weak on the agent so closed sessions are collected).
@@ -354,10 +319,8 @@ class PanelToolCatalog(ToolProvider):
             return
 
         dynamic = await self._loader() if self._loader else ()
-        providers = [
-            list(await entry.refresh()) if entry.refresh else updates.get(entry.client, previous)
-            for entry, previous in zip(entries, previous_tools, strict=True)
-        ]
+        providers = [updates.get(entry.client, previous)
+                     for entry, previous in zip(entries, previous_tools, strict=True)]
         desired = _validated(self._adapted([*self._static, *dynamic, *loaded.values(), *(t for p in providers for t in p)]))
         registry = event.agent.tool_registry
         # Check both maps before changing anything. SDK plugin/dynamic-only tools
@@ -411,14 +374,13 @@ class PanelToolCatalog(ToolProvider):
                 # imports resolve. Other users keep importing the library file.
                 override = self._revision_resolver(name, path) if self._revision_resolver else None
                 return load_library_tool(root, path, name, revision_file=override)
-            staging = ToolRegistry()
-            staging.load_tool_from_filepath(name, str(path))
-            if name not in staging.registry:
-                raise ValueError(f"File does not export tool {name!r}; found {list(staging.registry)}")
-            adapted = adapt_native_tool(staging.registry[name])
-            adapted.mark_dynamic()
-            stamp_source(adapted, path)
-            return adapted
+            loaded = {value.tool_name: value for value in load_tools_from_file_path(str(path))}
+            if name not in loaded:
+                raise ValueError(f"File does not export tool {name!r}; found {list(loaded)}")
+            value = loaded[name]
+            value.mark_dynamic()
+            stamp_source(value, path)
+            return value
 
         value = await asyncio.to_thread(load)
         with self._lock:
@@ -449,8 +411,9 @@ class PanelToolCatalog(ToolProvider):
             current = registry.registry.get(name)
             if current is None or self._snapshot.get(name) is not current:
                 return False
-            base = getattr(current, "wrapped", None) if type(current).__name__ == "_AdaptedTool" else current
-            value = build(base if base is not None else current)
+            from agent.api.core.tool_repair import _AdaptedTool
+
+            value = build(current.wrapped if isinstance(current, _AdaptedTool) else current)
             if name in self._loaded:
                 self._loaded[name] = value
             elif any(item.tool_name == name for item in self._static):
@@ -619,78 +582,42 @@ class PanelToolCatalog(ToolProvider):
         return tuple(selected)
 
 
-class _AsyncNativeTool(AgentTool):
-    """Async facade preserving SDK schemas/context/results and native thread offload."""
+class MCPConnectionGuard(Plugin):
+    """Make the installed ``strands_tools.mcp_client`` idempotent through a native ``BeforeToolCallEvent``.
 
-    def __init__(self, wrapped: AgentTool) -> None:
-        super().__init__()
-        self.wrapped = wrapped
-
-    @property
-    def tool_name(self):
-        return self.wrapped.tool_name
-
-    @property
-    def tool_spec(self):
-        return self.wrapped.tool_spec
-
-    @property
-    def tool_type(self):
-        return self.wrapped.tool_type
-
-    async def stream(self, tool_use, invocation_state, **kwargs):
-        async with aclosing(self.wrapped.stream(tool_use, invocation_state, **kwargs)) as stream:
-            async for event in stream:
-                yield event
-
-
-def adapt_native_tool(value: AgentTool) -> AgentTool:
-    """Adapt installed SDK function tools; their native stream offloads sync bodies.
-
-    No agent(...) call, second event loop or global monkeypatch is introduced.
-    Custom AgentTools must already have an async streaming implementation.
-    """
-    if isinstance(value, (DecoratedFunctionTool, PythonAgentTool)):
-        return _AsyncNativeTool(value)
-    _check_async(value)
-    return value
-
-
-class _IdempotentMCPTool(_AsyncNativeTool):
-    """Avoid setup retries without replacing native MCP execution or registration.
-
-    Installed strands_tools treats an active connection as an error. It also
-    re-registers every tool on load_tools. Check the *calling agent's* registry,
-    not just the process-global connection list (children have separate tools).
+    That tool rejects ``connect`` on an active connection and re-registers every tool on
+    ``load_tools``. When the connection is already active (and, for ``load_tools``, its tools are
+    already in THIS agent's registry) the call is cancelled with a success-shaped note instead of
+    running; the SDK writes ``cancel_tool`` into the tool result, so no facade around the tool is needed.
     """
 
-    async def stream(self, tool_use, invocation_state, **kwargs):
+    @property
+    def name(self) -> str:
+        return "ron:mcp-connection-guard"
+
+    def init_agent(self, agent: Agent) -> None:
+        agent.add_hook(self.before_tool_call, BeforeToolCallEvent)
+
+    def before_tool_call(self, event: BeforeToolCallEvent) -> None:
+        if event.tool_use.get("name") != "mcp_client":
+            return
         from strands_tools import mcp_client as module
 
-        inputs = tool_use.get("input", {})
+        inputs = event.tool_use.get("input") or {}
         connection_id = inputs.get("connection_id")
         connection = module._get_connection(connection_id)
-        action = inputs.get("action")
-        agent = kwargs.get("agent")
-        ready = False
-        if connection and connection.is_active:
-            if action == "connect":
-                ready = True
-            elif action == "load_tools" and agent is not None:
-                names = set(connection.loaded_tool_names)
-                registry = agent.tool_registry.registry
-                ready = bool(names) and all(
-                    getattr(registry.get(name), "_connection_id", None) == connection_id for name in names
-                )
-        if ready:
-            yield {"toolUseId": tool_use["toolUseId"], "status": "success", "content": [{"text":
-                f"Connection {connection_id!r} is active. " +
-                ("Tools are already callable in this agent; execute the next browser action."
-                 if action == "load_tools" else "Reuse it; load_tools only if tools are not in your registry.")}]}
+        if not (connection and connection.is_active):
             return
-        async with aclosing(super().stream(tool_use, invocation_state, **kwargs)) as stream:
-            async for event in stream:
-                yield event
+        action = inputs.get("action")
+        if action == "connect":
+            event.cancel_tool = (f"Connection {connection_id!r} is already active. Reuse it; "
+                                 "load_tools only if its tools are not in your registry.")
+        elif action == "load_tools":
+            names = set(connection.loaded_tool_names)
+            registry = event.agent.tool_registry.registry
+            if names and all(getattr(registry.get(name), "_connection_id", None) == connection_id for name in names):
+                event.cancel_tool = (f"Connection {connection_id!r} is active and its tools are already "
+                                     "callable in this agent; execute the next action directly.")
 
 
 def _vendored_module_name(root: Path, path: Path) -> str:
@@ -803,7 +730,7 @@ def stamp_source(tool: AgentTool, source_file: Path) -> None:
 
 def load_library_tool(root: Path, path: Path, name: str, revision_file: Path | None = None) -> AgentTool:
     """Import vendored ``path`` (or its repaired ``revision_file``) and return tool ``name``
-    adapted, marked dynamic and stamped with its provenance."""
+    marked dynamic and stamped with its provenance."""
     module = import_vendored_revision(root, path, revision_file) if revision_file is not None \
         else import_vendored_module(root, path)
     staging = ToolRegistry()
@@ -811,10 +738,10 @@ def load_library_tool(root: Path, path: Path, name: str, revision_file: Path | N
         staging.register_tool(value)
     if name not in staging.registry:
         raise ValueError(f"File does not export tool {name!r}; found {list(staging.registry)}")
-    adapted = adapt_native_tool(staging.registry[name])
-    adapted.mark_dynamic()
-    stamp_source(adapted, revision_file if revision_file is not None else path)
-    return adapted
+    value = staging.registry[name]
+    value.mark_dynamic()
+    stamp_source(value, revision_file if revision_file is not None else path)
+    return value
 
 
 def scan_vendored_tools(root: Path, *, exclude: Sequence[str] = ()) -> list[dict[str, Any]]:
@@ -952,12 +879,11 @@ def _install_mcp_client_elicitation() -> None:
 def build_core_tools(project_tools_dir: Path) -> list[AgentTool]:
     """The always-registered tool set (minus `tool_catalog`, which needs the catalog).
 
-    Installed strands_tools are synchronous; adapt_native_tool offloads them.
-    perplexity_search is the vendored Strands @tool (research/perplexity_search_api.py,
-    async, uses the official `perplexityai` SDK), loaded through the framework's
-    module loader and registered under the user-facing name `perplexity_search`.
+    Installed strands_tools are registered as the native tools their modules export
+    (``DecoratedFunctionTool``/``PythonAgentTool`` offload synchronous bodies themselves).
+    ``perplexity_search`` is the vendored ``research/perplexity_search_api.py`` ``@tool`` re-declared
+    under the user-facing name with ``@tool(name=...)`` over its ``__wrapped__`` function.
     """
-    from strands.tools.loader import load_tools_from_module
     from strands_tools import editor, environment, http_request, mcp_client, shell
 
     _install_mcp_client_elicitation()
@@ -969,39 +895,14 @@ def build_core_tools(project_tools_dir: Path) -> list[AgentTool]:
         loaded = [t for t in load_tools_from_module(module, short) if t.tool_name == short]
         if not loaded:
             raise RuntimeError(f"strands_tools.{short} did not export a tool named {short!r}")
-        tools.append(_IdempotentMCPTool(loaded[0]) if short == "mcp_client" else adapt_native_tool(loaded[0]))
+        tools.append(loaded[0])
     root = project_tools_dir.expanduser().resolve()
-    search_module = import_vendored_module(root, root / "research" / "perplexity_search_api.py")
-    search = next(t for t in load_tools_from_module(search_module, "perplexity_search_api")
-                  if t.tool_name == "perplexity_search_api")
-    # Same native DecoratedFunctionTool, exposed under the mandated name.
-    tools.append(_RenamedTool(search, "perplexity_search"))
+    search_path = root / "research" / "perplexity_search_api.py"
+    search = import_vendored_module(root, search_path).perplexity_search_api
+    renamed = tool(name="perplexity_search")(search.__wrapped__)
+    stamp_source(renamed, search_path)
+    tools.append(renamed)
     return tools
-
-
-class _RenamedTool(AgentTool):
-    """Expose a native AgentTool under a different registry name; delegates everything else."""
-
-    def __init__(self, wrapped: AgentTool, name: str) -> None:
-        super().__init__()
-        self.wrapped, self._name = wrapped, name
-
-    @property
-    def tool_name(self) -> str:
-        return self._name
-
-    @property
-    def tool_spec(self):
-        return {**self.wrapped.tool_spec, "name": self._name}
-
-    @property
-    def tool_type(self) -> str:
-        return self.wrapped.tool_type
-
-    async def stream(self, tool_use, invocation_state, **kwargs):
-        async with aclosing(self.wrapped.stream(tool_use, invocation_state, **kwargs)) as stream:
-            async for event in stream:
-                yield event
 
 
 def skills_from_env(environ: Mapping[str, str] | None = None) -> AgentSkills | None:
@@ -1054,8 +955,8 @@ class ChildSpec:
         for value in self.tools:
             if isinstance(value, MCPAgentTool):
                 raise ValueError("Assign MCPClient or a scoped ToolProvider to a child, not an unowned MCPAgentTool")
-            if not isinstance(value, ToolProvider):
-                _check_async(value)
+            if not isinstance(value, (ToolProvider, AgentTool)):
+                raise TypeError("Child tools must be AgentTool or ToolProvider instances")
 
 
 async def create_child_agent(
@@ -1088,12 +989,6 @@ async def create_child_agent(
         child = await startup
         await asyncio.to_thread(child.cleanup)
         raise
-
-
-async def create_subagent_tool(spec: ChildSpec, *, model_factory: ModelFactory) -> AgentTool:
-    """Native Agent.as_tool; caller must clean up returned_tool.agent."""
-    child = await create_child_agent(spec, model_factory=model_factory)
-    return child.as_tool(name=spec.name, description=spec.description, preserve_context=False)
 
 
 def create_skill_tool(
@@ -1169,8 +1064,10 @@ class ThinkToolsGuard(Plugin):
     ``research/think.py`` inherits every parent tool when its ``tools`` argument is omitted and
     looks each explicit name up in the parent registry otherwise. This plugin rewrites the writable
     ``tool_use`` input before the tool runs: an omitted list becomes the parent registry minus
-    :func:`is_parent_only_tool`; an explicit list is intersected with that set. The vendored file
-    itself is never modified.
+    :func:`is_parent_only_tool`; an explicit list is intersected with that set. A blank
+    ``model_provider`` (models emit ``""`` for "unset") is dropped so think.py takes its documented
+    ``None`` branch (the parent's model) instead of warning about an unknown provider. The vendored
+    file itself is never modified.
     """
 
     @property
@@ -1191,6 +1088,8 @@ class ThinkToolsGuard(Plugin):
             inputs["tools"] = [name for name in allowed if name in wanted]
         else:
             inputs["tools"] = allowed
+        if not inputs.get("model_provider"):
+            inputs.pop("model_provider", None)
         event.tool_use["input"] = inputs
 
 
@@ -1207,7 +1106,7 @@ def load_vendored_think(tools_dir: Path) -> AgentTool:
     loaded = [value for value in load_tools_from_module(module, "think") if value.tool_name == "think"]
     if not loaded:
         raise RuntimeError("vendored research/think.py did not export a `think` tool")
-    return adapt_native_tool(loaded[0])
+    return loaded[0]
 
 
 @dataclass(frozen=True)
@@ -1340,42 +1239,3 @@ def create_formation_tool(
                 raise ExceptionGroup("Formation child cleanup failed", errors)
 
     return formation
-
-
-class LoopCallbackBridge:
-    """Marshal synchronous SDK/MCP callbacks to one owning asyncio loop.
-
-    A strong worker reference owns queued deliveries. aclose drains all accepted
-    callbacks and reports handler errors. No agent scheduling is performed here.
-    """
-
-    def __init__(self, handler: Callable[[dict[str, Any]], Awaitable[None]]) -> None:
-        self._loop = asyncio.get_running_loop()
-        self._handler = handler
-        self._queue: asyncio.Queue[dict[str, Any] | None] = asyncio.Queue()
-        self._lock = threading.Lock()
-        self._closed = False
-        self._errors: list[Exception] = []
-        self._worker = self._loop.create_task(self._deliver())
-
-    def __call__(self, **event: Any) -> None:
-        payload = serializable_event(event)
-        with self._lock:
-            if not self._closed:
-                self._loop.call_soon_threadsafe(self._queue.put_nowait, payload)
-
-    async def _deliver(self) -> None:
-        while (event := await self._queue.get()) is not None:
-            try:
-                await self._handler(event)
-            except Exception as exc:
-                self._errors.append(exc)
-
-    async def aclose(self) -> None:
-        with self._lock:
-            if not self._closed:
-                self._closed = True
-                self._loop.call_soon_threadsafe(self._queue.put_nowait, None)
-        await asyncio.shield(self._worker)
-        if self._errors:
-            raise ExceptionGroup("Panel callback delivery failed", self._errors)
