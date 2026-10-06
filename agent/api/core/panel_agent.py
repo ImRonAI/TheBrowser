@@ -892,7 +892,7 @@ def create_panel_agent(
         from agent.api.core.teaching import create_learned_skill_tools, get_teaching_service
         def skill_tools() -> list[Any]:
             available = list(agent.tool_registry.registry.values()) if agent is not None else [*core, *local_tools]
-            excluded = {"use_skill", "list_learned_skills", "think", "ask_user", "tool_catalog"}
+            excluded = {"use_skill", "list_learned_skills", "think", "ask_user", "tool_catalog", "create_harness"}
             return [value for value in available if value.tool_name not in excluded
                     and not value.tool_name.startswith("strands_") and not is_browser_tool(value.tool_name)]
 
@@ -903,6 +903,9 @@ def create_panel_agent(
             "\nYou can learn workflows from the user's Teach a skill screen demonstration. "
             "Use list_learned_skills to discover this agent's saved skills, and use_skill to execute "
             "their ordered SOPs. New skills become available immediately, including in this session."
+            "\nFor a recurring specialised job, build a specialist agent with create_harness (its tools, "
+            "skills and MCP servers), recall saved specialists with list_harness_agents, and delegate to "
+            "one with a2a_send_message at its a2a_url."
         )
         storage = get_user_session_storage(user_id)
         memory = user_memory_config(user_id, agent_scope)
@@ -917,6 +920,9 @@ def create_panel_agent(
         # Native A2A client tools over Ron's agents (panel A2A server + RON_A2A_AGENTS).
         from agent.api.core.a2a_tools import a2a_tools
         catalog.add_tools(a2a_tools())
+        # Specialists built with strands_harness create_harness, stored in Supabase, served over A2A.
+        from agent.api.core.harness_agents import create_harness_tools
+        catalog.add_tools(create_harness_tools(user_id))
         plugins: list[Any] = []
         if repair_config.enabled:
             # userTurn note "<tool> was repaired and is active", once per live session (agent.state).

@@ -1,6 +1,7 @@
 """Exercise the real upstream Agent SOP server without an LLM or network service."""
 
 import pytest
+from types import SimpleNamespace
 from pathlib import Path
 from strands import tool
 from unittest.mock import AsyncMock
@@ -32,7 +33,8 @@ def test_learning_a_new_skill_is_loaded_by_the_native_mcp_server():
     assert '<agent-sop name="learning-a-new-skill">' in prompt
     assert "# Learning a New Skill" in prompt
     assert "MUST" in prompt and "MUST NOT" in prompt
-    assert prompt.index("### 3. Register dependencies first") < prompt.index("### 4. Document and load the learned SOP")
+    assert prompt.index("### 1. Observe and journal the live demonstration") < prompt.index("### 2. Establish the demonstrated process")
+    assert prompt.index("### 4. Register dependencies first") < prompt.index("### 5. Document and load the learned SOP")
     assert "tool_catalog" in prompt
 
 
@@ -77,11 +79,10 @@ async def test_learned_execution_uses_one_agent_with_real_native_sop_prompt(tmp_
             self.invocations = []
             constructed.append(self)
 
-        async def invoke_async(self, prompt):
-            self.invocations.append(prompt)
-
-        async def structured_output_async(self, schema, prompt):
-            return schema(complete=True, evidence="Both steps verified", result="success")
+        async def invoke_async(self, prompt, structured_output_model=None):
+            self.invocations.append(prompt[0]["text"])
+            output = structured_output_model(complete=True, evidence="Both steps verified", result="success")
+            return SimpleNamespace(structured_output=output)
 
     monkeypatch.setattr(teaching, "Agent", Agent)
     tools = teaching.create_learned_skill_tools("owner", "panel", lambda _: object(), [read_example])

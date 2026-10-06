@@ -1146,7 +1146,7 @@ def create_skill_tool(
 
 #: Tools the think child never inherits: itself (no recursion), user interrupts
 #: (the parent owns the conversation), and catalog loading (parent registry only).
-THINK_EXCLUDED_TOOLS = frozenset({"think", "ask_user", "tool_catalog"})
+THINK_EXCLUDED_TOOLS = frozenset({"think", "ask_user", "tool_catalog", "create_harness"})
 
 
 def is_parent_only_tool(name: str) -> bool:

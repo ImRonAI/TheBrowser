@@ -129,44 +129,90 @@ class LiveSocketInput:
             return decode_client_frame(frame)
 
 
+class LessonStopped(Exception):
+    """Raised by ``TeachingObserveInput`` to end ``BidiAgent.run`` once the stop grace period expires."""
+
+
+#: Realtime text sent while frames arrive: Gemini Live answers only on user activity, so a silent
+#: demonstration otherwise never produces a turn (measured: 0 journal entries from 36 frames).
+OBSERVATION_TICK = (
+    "[observation tick] Journal what changed on the shared screen since your last journal entry, "
+    "using the journal tool. Do not speak unless you have a question for the user."
+)
+#: Text turn sent when the user presses Finish; the observer settles the journal and calls finish_observation.
+STOP_REQUEST = (
+    "The user has stopped the demonstration. Journal every remaining observed detail now, "
+    "then call finish_observation with the final summary."
+)
+
+
 class TeachingObserveInput:
     """Teach Ron studio frames as native ``BidiAgent`` inputs.
 
     The studio sends ``frame``, ``note``, ``audio``, ``audio_stream_end``, and ``stop``.
     ``BidiAgent.send`` accepts realtime video, a text turn, an audio delta, or
     ``audio_stream_end``. A note is a text turn so the observer can call ``journal``.
+
+    NOT NATIVE: the SDK has no proactive-observation option, so every ``tick_seconds`` of
+    incoming frames this stream adds one native ``RealtimeInput(text=OBSERVATION_TICK)``.
+    ``BidiAgent.cancel()`` only acts after a tool group, so ``stop`` asks the observer to call
+    ``finish_observation`` (whose ``cancel()`` ends the run natively) and raises
+    ``LessonStopped`` after ``stop_grace_seconds`` if it has not.
     """
 
-    def __init__(self, websocket: WebSocket) -> None:
+    def __init__(self, websocket: WebSocket, *, tick_seconds: float = 8.0, stop_grace_seconds: float = 20.0,
+                 clock: Any = None) -> None:
         self._websocket = websocket
         self._agent: Any = None
+        self._tick_seconds = tick_seconds
+        self._stop_grace_seconds = stop_grace_seconds
+        self._clock = clock
+        self._last_tick: float | None = None
+        self._pending: list[dict[str, Any]] = []
+        self.stop_requested = False
+        self.counts = {"frames": 0, "audio": 0, "notes": 0, "ticks": 0}
 
     async def start(self, agent: Any) -> None:
         self._agent = agent
+        self._last_tick = self._now()
         await self._websocket.send_text(json.dumps({"type": "ready", "audio": True}))
+
+    def _now(self) -> float:
+        return self._clock() if self._clock is not None else asyncio.get_running_loop().time()
 
     async def stop(self) -> None:
         return
 
     async def __call__(self) -> Any:
+        if self._pending:
+            return self._pending.pop(0)
+        if self.stop_requested:
+            await asyncio.sleep(self._stop_grace_seconds)
+            raise LessonStopped("observer did not call finish_observation within the stop grace period")
         while True:
             frame = json.loads(await self._websocket.receive_text())
             if not isinstance(frame, dict):
                 continue
             kind = frame.get("type")
             if kind == "frame" and isinstance(frame.get("data"), str) and frame["data"]:
+                self.counts["frames"] += 1
+                now = self._now()
+                if self._tick_seconds > 0 and self._last_tick is not None and now - self._last_tick >= self._tick_seconds:
+                    self._last_tick = now
+                    self.counts["ticks"] += 1
+                    self._pending.append({"realtime_input": {"text": OBSERVATION_TICK}})
                 return {"realtime_input": {"video": {"format": "jpeg", "source": {"bytes": base64.b64decode(frame["data"])}}}}
             if kind == "note" and isinstance(frame.get("text"), str) and frame["text"].strip():
+                self.counts["notes"] += 1
                 return {"text": frame["text"].strip()}
             if kind == "audio" and isinstance(frame.get("data"), str) and frame["data"]:
+                self.counts["audio"] += 1
                 return {"audio_delta": {"format": "pcm", "source": {"bytes": base64.b64decode(frame["data"])}}}
             if kind == "audio_stream_end":
                 return {"realtime_input": {"audio_stream_end": True}}
             if kind == "stop":
-                if self._agent is not None:
-                    self._agent.cancel()
-                await self._websocket.send_text(json.dumps({"type": "stopped"}))
-                await asyncio.Event().wait()
+                self.stop_requested = True
+                return {"text": STOP_REQUEST}
 
 
 class WebSocketOutput:
