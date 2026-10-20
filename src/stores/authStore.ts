@@ -11,6 +11,7 @@ import {
   isSupabaseConfigured,
 } from '@/api/supabase'
 import type { User, UserPreferences, AuthError, OAuthProvider } from '@/pages/types/user'
+import { closeSignIn } from '@/lib/sign-in'
 
 // ============================================
 // State Interface
@@ -91,6 +92,27 @@ let initializePromise: Promise<void> | null = null
 /** Social sign-in: how long to wait for the loopback redirect before reporting it (electron/main.ts keeps the listener 10 min). */
 const OAUTH_CALLBACK_TIMEOUT_MS = 3 * 60_000
 let oauthWatchdog: ReturnType<typeof setTimeout> | null = null
+/** Ron tab that is showing the provider page, closed when the loopback callback arrives. */
+let oauthTabId: string | null = null
+
+async function closeOAuthTab() {
+  const id = oauthTabId
+  oauthTabId = null
+  const tabs = window.electron?.tabs
+  if (!tabs) return
+  const ids = new Set<string>()
+  if (id) ids.add(id)
+  try {
+    const list = await tabs.list()
+    for (const tab of list) {
+      try {
+        const url = new URL(tab.url)
+        if (url.hostname === '127.0.0.1' && url.pathname === '/auth/callback') ids.add(tab.id)
+      } catch { /* tab url is not absolute */ }
+    }
+  } catch { /* listing tabs is best-effort */ }
+  await Promise.all([...ids].map((tabId) => tabs.close(tabId).catch(() => undefined)))
+}
 
 function isMissingTableError(error: unknown): boolean {
   if (!error || typeof error !== 'object') return false
@@ -401,6 +423,8 @@ export const useAuthStore = create<AuthState>()(
         try {
           // PKCE: the verifier stays in this renderer; the main process receives the redirect on a
           // loopback listener and sends it back through `deep-link` (handleDeepLinkCallback).
+          // Google and GitHub are sent Supabase's own callback
+          // (https://<project>.supabase.co/auth/v1/callback), not this loopback URL.
           const redirectTo = await bridge.oauthRedirect()
           const { data, error } = await supabase.auth.signInWithOAuth({
             provider: provider === 'microsoft' ? 'azure' : provider,
@@ -412,8 +436,25 @@ export const useAuthStore = create<AuthState>()(
             },
           })
           if (error) throw error
-          await bridge.openExternal(data.url)
-          // The session arrives through onAuthStateChange (SIGNED_IN) after the browser redirect.
+          if (!data.url || new URL(data.url).protocol !== 'https:') {
+            throw new Error('Sign-in pages must use https')
+          }
+          // Leave the sign-in screen so the provider page is a visible Ron tab. Provider popups
+          // already become tabs via setWindowOpenHandler; nothing is handed to the system browser.
+          closeSignIn()
+          const tabs = window.electron?.tabs
+          if (!tabs) throw new Error('Social sign-in opens in a Ron tab.')
+          if (oauthTabId) {
+            const previous = oauthTabId
+            oauthTabId = null
+            await tabs.close(previous).catch(() => undefined)
+          }
+          const tabId = `tab-oauth-${Date.now()}`
+          oauthTabId = tabId
+          await tabs.create(data.url, tabId)
+          await tabs.switch(tabId)
+          // The session arrives through onAuthStateChange (SIGNED_IN) after the provider redirects
+          // back through the loopback listener.
           set({ isLoading: false })
           // If the loopback listener never fires (Supabase silently falls back to the Site URL when
           // the ephemeral http://127.0.0.1:<port>/auth/callback is not in its Redirect URL allow list),
@@ -422,7 +463,7 @@ export const useAuthStore = create<AuthState>()(
           oauthWatchdog = setTimeout(() => {
             oauthWatchdog = null
             if (!useAuthStore.getState().isAuthenticated) {
-              set({ error: { code: 'OAUTH_TIMEOUT', message: 'Sign-in did not return to Ron. Finish it in your browser, or ask the administrator to allow http://127.0.0.1:*/auth/callback as a Supabase redirect URL.' } })
+              set({ error: { code: 'OAUTH_TIMEOUT', message: 'Sign-in did not finish. Google and GitHub must allow this project’s Supabase callback (https://<project>.supabase.co/auth/v1/callback), and Supabase must allow http://127.0.0.1:*/auth/callback.' } })
             }
           }, OAUTH_CALLBACK_TIMEOUT_MS)
         } catch (error) {
@@ -637,6 +678,7 @@ export const useAuthStore = create<AuthState>()(
 
 export async function handleDeepLinkCallback(url: string) {
   if (oauthWatchdog) { clearTimeout(oauthWatchdog); oauthWatchdog = null }
+  await closeOAuthTab()
   try {
     const callbackUrl = new URL(url)
     const hash = callbackUrl.hash.startsWith('#') ? callbackUrl.hash.slice(1) : callbackUrl.hash

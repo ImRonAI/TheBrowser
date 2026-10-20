@@ -1,5 +1,6 @@
 import { useCallback, useRef } from 'react'
 import { decodeMusicPcm16 } from '@/lib/voice-events'
+import { ChunkSchedule, type MusicPosition } from '@/lib/music-position'
 
 /**
  * Scheduled playback for Lyria RealTime `music_audio_delta` frames (48 kHz stereo
@@ -23,6 +24,8 @@ export function useMusicPlayback(onPlaying: (playing: boolean) => void) {
   const nodes = useRef(new Set<AudioBufferSourceNode>())
   const playAt = useRef(0)
   const started = useRef(false)
+  /** Every scheduled chunk's [start, end): the finest position Lyria RealTime lets a client name. */
+  const schedule = useRef(new ChunkSchedule())
   /** Last requested volume; applied when the GainNode is created so a pre-start setVolume is not lost. */
   const volume = useRef(1)
   const notify = useRef(onPlaying)
@@ -47,6 +50,7 @@ export function useMusicPlayback(onPlaying: (playing: boolean) => void) {
   const stop = useCallback(() => {
     nodes.current.forEach((node) => { try { node.stop() } catch { /* Already ended. */ } })
     nodes.current.clear()
+    schedule.current.clear()
     playAt.current = 0
     started.current = false
     notify.current(false)
@@ -84,6 +88,8 @@ export function useMusicPlayback(onPlaying: (playing: boolean) => void) {
     }
     if (playAt.current - sink.currentTime > MAX_BACKLOG_SECONDS) { stop(); playAt.current = sink.currentTime + LEAD_SECONDS; started.current = true }
     node.start(playAt.current)
+    schedule.current.prune(sink.currentTime)
+    schedule.current.add(playAt.current, buffer.duration)
     playAt.current += buffer.duration
     nodes.current.add(node)
     notify.current(true)
@@ -98,5 +104,11 @@ export function useMusicPlayback(onPlaying: (playing: boolean) => void) {
     return { data, binHz: sink.sampleRate / tap.fftSize }
   }, [])
 
-  return { start, stop, close, play, setVolume, frequencyData }
+  /** The chunk audible right now (its [start, end) window and stream offset); null when nothing is playing. */
+  const position = useCallback((): MusicPosition | null => {
+    const sink = context.current
+    return sink ? schedule.current.positionAt(sink.currentTime) : null
+  }, [])
+
+  return { start, stop, close, play, setVolume, frequencyData, position }
 }

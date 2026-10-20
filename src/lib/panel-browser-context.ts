@@ -1,5 +1,4 @@
 import type { ContextItem } from '@/components/agent-panel/ContextPicker'
-import type { LiveContextTurn } from '@/lib/voice-events'
 
 async function enrichTabContext(item: ContextItem): Promise<ContextItem> {
   if (item.type !== 'tab') return item
@@ -11,14 +10,10 @@ async function enrichTabContext(item: ContextItem): Promise<ContextItem> {
 }
 
 /** Build ephemeral `browser_context` for POST /chat — only explicit user selections. */
-export async function browserContextForSend(
-  contexts: ContextItem[],
-  liveHistory?: LiveContextTurn[],
-): Promise<Record<string, unknown> | null> {
+export async function browserContextForSend(contexts: ContextItem[]): Promise<Record<string, unknown> | null> {
   const payload: Record<string, unknown> = {}
   if (contexts.length) {
     payload.selected_contexts = await Promise.all(contexts.map(enrichTabContext))
   }
-  if (liveHistory?.length) payload.live_conversation = liveHistory
   return Object.keys(payload).length ? payload : null
 }

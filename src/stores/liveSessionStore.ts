@@ -2,10 +2,13 @@ import { create } from 'zustand'
 import type { LiveContextTurn } from '../lib/voice-events.ts'
 
 /**
- * Per user/scope/conversation Live state that must outlive the VoiceAgent
- * component: final transcripts (so Chat can show them read-only and Live can
- * re-render them after a mode switch) and a single-owner claim so one
- * conversation never has two concurrent Live sockets from different views.
+ * Per user/scope/conversation Live state that must outlive the VoiceAgent component.
+ *
+ * Owner claim: one conversation never has two concurrent Live sockets from different views.
+ *
+ * Recorded turns: used by the **issue** panes only (`IssueRonPane`, `IssueDescriptionRon`:
+ * read-only recap + "latest proposal"). The panel's Chat and Live agents share a native Strands
+ * thread (`session_id` + `SnapshotSessionManager`) and never bridge history through this store.
  *
  * In-memory only. Nothing here is persisted or written into SDK messages.
  */

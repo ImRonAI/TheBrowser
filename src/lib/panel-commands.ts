@@ -5,7 +5,7 @@ export const PANEL_COMMANDS = [
   { name: '/goal', usage: '/goal <objective> | off', description: 'Set the native goal loop objective' },
   { name: '/background', usage: '/background on | off', description: 'Enable or disable native background tasks' },
   { name: '/tools', usage: '/tools concurrent | sequential', description: 'Choose the native tool executor' },
-  { name: '/context', usage: '/context auto | agentic | sliding', description: 'Choose context management' },
+  { name: '/context', usage: '/context auto | agentic | sliding', description: 'Offload and summarize, let the model manage context, or trim a sliding window' },
   { name: '/checkpoints', usage: '/checkpoints on | off', description: 'Pause at native SDK checkpoints' },
 ] as const
 

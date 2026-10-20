@@ -9,6 +9,9 @@ import type { InterestAction, InterestMenuPayload } from '@/lib/interest-menu'
 // Browser API Types
 // ============================================
 
+export type ChromeShortcut = 'ask-ron' | 'search' | 'toggle-sidebar' | 'focus-url'
+export interface ChromeShortcutEvent { shortcut: ChromeShortcut; selectionText?: string; sourceUrl?: string }
+
 export interface BrowserAPI {
   navigate: (url: string) => Promise<{ success: boolean; url?: string; isExternal?: boolean }>
   search: (query: string, level?: string) => Promise<{ success: boolean; url?: string }>
@@ -23,9 +26,16 @@ export interface BrowserAPI {
   setAgentCursor: (point: { x: number; y: number }) => Promise<void>
   setDrawerHeight: (height: number) => Promise<{ success: boolean }>
   setChromeHeight: (height: number) => Promise<{ success: boolean }>
+  setSidebarWidth: (width: number) => Promise<{ success: boolean }>
+  /** ⌘J Ask Ron, ⌘K Search, ⌘\\ sidebar, ⌘L address bar — delivered even while a website has focus. */
+  onChromeShortcut: (callback: (data: ChromeShortcutEvent) => void) => () => void
   setInterestMenu: (payload: InterestMenuPayload) => Promise<{ success: boolean }>
   setInterestInset: (width: number) => Promise<{ success: boolean }>
   onInterestAction: (callback: (action: InterestAction) => void) => () => void
+  /** Native repair surface: mirror the current investigation (`null` hides it). */
+  setRepairSurface: (state: { repair: unknown; notification?: { title: string; body: string } | null }) => Promise<{ success: boolean }>
+  /** Decisions the user took on the native surface; the shell performs them against the API. */
+  onRepairAction: (callback: (action: { type: 'approve' | 'decline' | 'cancel' | 'rollback' | 'open' | 'dismiss'; rev: string }) => void) => () => void
   getPanelContext: () => Promise<any>
   setPanelMode: (mode: 'narrow' | 'wide' | 'fullscreen') => Promise<void>
   onPanelModeChanged: (callback: (data: { mode: 'narrow' | 'wide' | 'fullscreen'; width: number }) => void) => () => void
@@ -68,10 +78,9 @@ export interface ElectronWindow {
     // Deep Links
     onDeepLink: (callback: (url: string) => void) => () => void
 
-    // Supabase OAuth (loopback redirect + system browser)
+    // Supabase OAuth (loopback redirect; the provider page opens as a Ron tab)
     auth: {
       oauthRedirect: () => Promise<string>
-      openExternal: (url: string) => Promise<void>
     }
 
     // Agent Streaming

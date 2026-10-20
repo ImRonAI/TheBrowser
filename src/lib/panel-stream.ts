@@ -76,17 +76,8 @@ export interface PanelMessage {
   runId?: string
   parts: PanelPart[]
 }
-/** `tool_repair_proposed`: a library tool kept failing; the user may start the per-user fixer. */
-export interface RepairProposal {
-  id: string
-  tool: string
-  /** Where the tool lives; every kind is repaired per user (file / adapter / server revision). */
-  kind: 'library' | 'mcp' | 'core' | 'other'
-  exceptionClass?: string
-  count?: number
-  /** False when RON_TOOL_OBSERVATION is off: diagnosis degrades to recorded outcomes. */
-  observation: boolean
-}
+/** Where a failing tool lives; every kind is repaired per user (file / adapter / server revision). */
+export type RepairKind = 'library' | 'mcp' | 'core' | 'other'
 export interface RepairDemonstration {
   kind: 'failing' | 'context'
   input: unknown
@@ -96,17 +87,42 @@ export interface RepairDemonstration {
   dry_run: boolean
   source?: 'session' | 'synthetic'
 }
-/** `tool_repair_ready`: a verified (or failed/unverified/needs_maintainer) user-scoped revision. */
-export interface RepairReady {
+/**
+ * One investigation of a failing tool, as the panel sees it. It starts from the server's native
+ * tool-failure hook (`tool_repair_investigating`), may wait for the user (`tool_repair_approval`:
+ * the verified artifact plus the fixer's parked interrupt and the approval token the panel echoes),
+ * and ends with `tool_repair_ready` (applied / declined / failed / blocked / cancelled /
+ * needs_maintainer / not_reproducible / verified-but-not-applied).
+ */
+export interface RepairInvestigation {
   tool: string
   rev: string
+  state: 'investigating' | 'approval' | 'done'
+  kind?: RepairKind
+  exceptionClass?: string
+  count?: number
+  status?: string
+  summary?: string
+  diff?: string
   /** file (library module), adapter (wraps any tool, incl. MCP) or server (repaired browser MCP server). */
   repairKind?: 'file' | 'adapter' | 'server'
-  status: string
-  summary: string
   demonstrations: RepairDemonstration[]
   sandbox?: string
   route?: string
+  /** Present while `approval`: proof the panel must send back with Approve. */
+  approvalToken?: string
+  interrupt?: { interruptId: string; name?: string; reason?: unknown }
+  applied?: boolean
+  declined?: boolean
+}
+/** Kept for stored sessions that recorded the former proposal event. */
+export interface RepairProposal {
+  id: string
+  tool: string
+  kind: RepairKind
+  exceptionClass?: string
+  count?: number
+  observation: boolean
 }
 export interface PanelState {
   sessionId: string
@@ -116,7 +132,7 @@ export interface PanelState {
   status: RunStatus
   interrupts: PanelInterrupt[]
   repairProposal?: RepairProposal
-  repairReady?: RepairReady
+  repair?: RepairInvestigation
   checkpoint?: unknown
   error?: string
   stopReason?: string
@@ -154,6 +170,17 @@ export function isBrowserUnavailable(reason: unknown): boolean {
   return resolveBrowserSelection(browser) !== null && typeof question === 'string' && question.length > 0
 }
 
+/** Native HumanInTheLoop interrupt. The reason is the handler's approve prompt. */
+export function isHitlApproval(reason: unknown): boolean {
+  return typeof reason === 'string' && reason.startsWith('Approve "')
+}
+
+/** Title for the Repair chain card (`repair:<rev>`): the fixer's A2A progress. */
+export function repairToolTitle(part: { name: string; finished: boolean }): string | null {
+  if (part.name !== 'repair') return null
+  return part.finished ? 'Repair finished' : 'Repairing…'
+}
+
 export function emptyPanelState(sessionId: string): PanelState {
   return { sessionId, messages: [], sequence: 0, status: 'idle', interrupts: [] }
 }
@@ -184,9 +211,8 @@ function repairProposalFrom(event: PanelEvent): RepairProposal | undefined {
     count: typeof event.count === 'number' ? event.count : undefined }
 }
 
-function repairReadyFrom(event: PanelEvent): RepairReady | undefined {
-  if (typeof event.tool !== 'string' || typeof event.rev !== 'string') return undefined
-  const demonstrations = Array.isArray(event.demonstrations) ? event.demonstrations.flatMap((item) => {
+function demonstrationsFrom(value: unknown): RepairDemonstration[] {
+  return Array.isArray(value) ? value.flatMap((item) => {
     const entry = record(item)
     const kind = entry.kind === 'failing' ? 'failing' : 'context'
     return [{ kind, input: entry.input, status: entry.status === 'passed' ? 'passed' : 'failed', dry_run: entry.dry_run === true,
@@ -194,10 +220,32 @@ function repairReadyFrom(event: PanelEvent): RepairReady | undefined {
       actual: typeof entry.actual === 'string' ? entry.actual : undefined,
       source: entry.source === 'synthetic' ? 'synthetic' : entry.source === 'session' ? 'session' : undefined } as RepairDemonstration]
   }) : []
-  return { tool: event.tool, rev: event.rev, status: displayValue(event.status) || 'failed', summary: displayValue(event.summary),
-    repairKind: event.repair_kind === 'adapter' || event.repair_kind === 'server' ? event.repair_kind : event.repair_kind === 'file' ? 'file' : undefined,
-    demonstrations, sandbox: typeof event.sandbox === 'string' ? event.sandbox : undefined,
-    route: typeof event.route === 'string' ? event.route : undefined }
+}
+
+function repairInvestigationFrom(event: PanelEvent, previous: RepairInvestigation | undefined): RepairInvestigation | undefined {
+  if (typeof event.tool !== 'string' || typeof event.rev !== 'string') return undefined
+  const base: RepairInvestigation = previous && previous.rev === event.rev ? { ...previous } : { tool: event.tool, rev: event.rev, state: 'investigating', demonstrations: [] }
+  if (event.type === 'tool_repair_investigating') {
+    const kind = event.kind === 'mcp' || event.kind === 'core' || event.kind === 'other' || event.kind === 'library' ? event.kind : undefined
+    return { ...base, state: 'investigating', kind,
+      exceptionClass: typeof event.exception_class === 'string' ? event.exception_class : base.exceptionClass,
+      count: typeof event.count === 'number' ? event.count : base.count }
+  }
+  const interrupt = record(event.interrupt)
+  const next: RepairInvestigation = { ...base,
+    state: event.type === 'tool_repair_approval' ? 'approval' : 'done',
+    status: displayValue(event.status) || (event.type === 'tool_repair_approval' ? 'verified' : 'failed'),
+    summary: displayValue(event.summary),
+    diff: typeof event.diff === 'string' ? event.diff : base.diff,
+    repairKind: event.repair_kind === 'adapter' || event.repair_kind === 'server' ? event.repair_kind : event.repair_kind === 'file' ? 'file' : base.repairKind,
+    demonstrations: Array.isArray(event.demonstrations) ? demonstrationsFrom(event.demonstrations) : base.demonstrations,
+    sandbox: typeof event.sandbox === 'string' ? event.sandbox : base.sandbox,
+    route: typeof event.route === 'string' ? event.route : base.route,
+    approvalToken: event.type === 'tool_repair_approval' && typeof event.approval_token === 'string' ? event.approval_token : undefined,
+    interrupt: event.type === 'tool_repair_approval' && typeof interrupt.interruptId === 'string'
+      ? { interruptId: interrupt.interruptId, name: typeof interrupt.name === 'string' ? interrupt.name : undefined, reason: interrupt.reason } : undefined,
+    applied: Boolean(event.applied), declined: event.declined === true }
+  return next
 }
 
 function interruptsFrom(value: unknown): PanelInterrupt[] {
@@ -339,11 +387,11 @@ export function reducePanelEvent(state: PanelState, event: PanelEvent): PanelSta
   }
   if (root && event.type === 'interrupt') next.interrupts = interruptsFrom(event.interrupts)
   if (root && event.type === 'tool_repair_proposed') next.repairProposal = repairProposalFrom(event) ?? state.repairProposal
-  if (root && event.type === 'tool_repair_ready') {
-    const ready = repairReadyFrom(event)
-    if (ready) {
-      next.repairReady = ready
-      if (next.repairProposal?.tool === ready.tool) next.repairProposal = undefined
+  if (root && (event.type === 'tool_repair_investigating' || event.type === 'tool_repair_approval' || event.type === 'tool_repair_ready')) {
+    const repair = repairInvestigationFrom(event, state.repair)
+    if (repair) {
+      next.repair = repair
+      if (next.repairProposal?.tool === repair.tool) next.repairProposal = undefined
     }
   }
   if (root && event.type === 'checkpoint') next.checkpoint = event.checkpoint
@@ -367,7 +415,7 @@ export function reducePanelEvent(state: PanelState, event: PanelEvent): PanelSta
   }
 
   const renderTypes = ['text_delta', 'reasoning_delta', 'tool_input', 'tool_progress', 'tool_result', 'native_tool',
-    'retry', 'node_event', 'background_event', 'steering_accepted', 'steering_applied', 'tool_repair_proposed', 'tool_repair_ready']
+    'retry', 'node_event', 'background_event', 'steering_accepted', 'steering_applied', 'tool_repair_proposed', 'tool_repair_investigating', 'tool_repair_approval', 'tool_repair_ready']
   if (!root && event.type === 'interrupt') renderTypes.push('interrupt')
   if (!renderTypes.includes(event.type) && !(event.type === 'error' && !root)) return next
   const messages = [...next.messages]
@@ -442,6 +490,8 @@ export function reducePanelEvent(state: PanelState, event: PanelEvent): PanelSta
     else if (event.type === 'steering_accepted') text = `Steering accepted · ${text}`
     else if (event.type === 'steering_applied') text = `Steering applied · ${text}`
     else if (event.type === 'tool_repair_proposed') text = `Repair proposed · ${displayValue(event.tool)} keeps failing (${displayValue(event.count)}× ${displayValue(event.exception_class) || 'error'})`
+    else if (event.type === 'tool_repair_investigating') text = `Investigating · ${displayValue(event.tool)} failed (${displayValue(event.count)}× ${displayValue(event.exception_class) || 'error'}); Ron's fixer is reproducing it in isolation`
+    else if (event.type === 'tool_repair_approval') text = `Repair ready for your approval · ${displayValue(event.tool)} revision ${displayValue(event.rev)}`
     else if (event.type === 'tool_repair_ready') text = `Repair ${displayValue(event.status)} · ${displayValue(event.tool)} revision ${displayValue(event.rev)}`
     parts.push({ kind: event.type === 'retry' ? 'retry' : 'activity', key, path: event.node_path, text })
   }
@@ -680,4 +730,47 @@ export function groupThinkParts(parts: PanelPart[], running: boolean): RenderIte
     items.push({ kind: 'part', part })
   }
   return items
+}
+/**
+ * `render_ui` views. The tool result's first content block is `{json: {ui: {...}}}`; the panel
+ * runtime forwards `content` verbatim and the SDK stores it in the thread, so a view renders live
+ * and again from history. A later render with the same `view_id` replaces the earlier one.
+ */
+export interface UiView { viewId: string; format: 'html' | 'jsx'; title: string; source: string; height: number }
+
+export const RENDER_UI_TOOL = 'render_ui'
+
+export function uiViewFromOutput(output: unknown): UiView | null {
+  if (!Array.isArray(output)) return null
+  for (const block of output) {
+    const json = record(record(block).json)
+    const ui = record(json.ui)
+    if (typeof ui.source !== 'string' || (ui.format !== 'html' && ui.format !== 'jsx')) continue
+    const height = typeof ui.height === 'number' && Number.isFinite(ui.height) ? Math.max(240, Math.min(ui.height, 2000)) : 520
+    return { viewId: String(ui.view_id || ''), format: ui.format, title: typeof ui.title === 'string' ? ui.title : '', source: ui.source, height }
+  }
+  return null
+}
+
+/** The latest finished render per view_id across a conversation; earlier renders of the same id are superseded. */
+export function supersededUiParts(messages: { parts: PanelPart[] }[]): Set<string> {
+  const latest = new Map<string, string>()
+  const keys: { key: string; viewId: string }[] = []
+  for (const message of messages) {
+    for (const part of message.parts) {
+      if (part.kind !== 'tool' || part.name !== RENDER_UI_TOOL || !part.finished) continue
+      const view = uiViewFromOutput(part.output)
+      if (!view?.viewId) continue
+      latest.set(view.viewId, part.key); keys.push({ key: part.key, viewId: view.viewId })
+    }
+  }
+  return new Set(keys.filter((entry) => latest.get(entry.viewId) !== entry.key).map((entry) => entry.key))
+}
+
+/** Text of the user turn that reports one `ron:ui_action` message; mirrors `render_ui_tool.ui_action_text`. */
+export function uiActionText(viewId: string, action: unknown, payload: unknown): string {
+  const label = typeof action === 'string' && /^[a-z][a-z0-9_:-]{0,63}$/.test(action) ? action : 'action'
+  let body = 'null'
+  if (payload !== undefined && payload !== null) { try { body = JSON.stringify(payload) } catch { body = String(payload) } }
+  return `[ui_action ${viewId}] action=${label} payload=${body.slice(0, 4000)}`
 }

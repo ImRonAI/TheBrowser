@@ -352,9 +352,10 @@ def test_opt_in_a2a_native_factory_mount_and_cleanup(monkeypatch):
         monkeypatch.setattr(panel_agent, "default_selection", lambda: ("openai", "offline"))
         models, tools, integrations = [], [], []
 
-        def model_factory(*args):
+        def model_factory(*args, hosted_tools=True):
             model = OfflineModel()
-            models.append(model)
+            if hosted_tools:  # the fixer builds its Perplexity models with hosted_tools=False
+                models.append(model)
             return model
 
         def shell_factory():
@@ -387,7 +388,10 @@ def test_opt_in_a2a_native_factory_mount_and_cleanup(monkeypatch):
                 assert card.status_code == 200
                 assert card.json()["name"] == "Ron"
                 assert (await client.get("/config")).json()["features"]["a2a"] is True
-                assert len(models) == 1 and tools == []  # Metadata construction never spawns shell.
+                # Metadata construction never spawns shell. The panel card model (the fixer card,
+                # `RepairService.agent_for` at /a2a/fixer, is built with hosted_tools=False).
+                assert len(models) == 1 and tools == []
+                assert app.state.fixer_a2a is not None
                 for context_id in ("first-context", "second-context"):
                     response = await client.post("/a2a/", json={
                         "jsonrpc": "2.0", "id": context_id, "method": "message/send",

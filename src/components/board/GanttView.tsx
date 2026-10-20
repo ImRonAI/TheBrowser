@@ -177,8 +177,8 @@ export function GanttView() {
               animate={{ opacity: 1, scaleY: 1 }}
               transition={{ delay: 0.3, duration: 0.5, ease: EASE }}
             >
-              <div className="w-full h-full bg-gradient-to-b from-indigo-500 to-violet-500 shadow-[0_0_8px_rgba(99,102,241,0.4)]" />
-              <div className="absolute top-0 left-1/2 -translate-x-1/2 w-3 h-3 rounded-full bg-indigo-500 shadow-[0_0_10px_rgba(99,102,241,0.6)] animate-pulse" />
+              <div className="w-full h-full bg-gradient-to-b from-indigo-500 to-violet-500 shadow-[0_0_8px_rgba(194,106,65,0.4)]" />
+              <div className="absolute top-0 left-1/2 -translate-x-1/2 w-3 h-3 rounded-full bg-indigo-500 shadow-[0_0_10px_rgba(194,106,65,0.6)] animate-pulse" />
             </motion.div>
 
             {/* Weekend stripes */}
@@ -213,7 +213,7 @@ export function GanttView() {
                         'absolute h-6 rounded-md',
                         'bg-gradient-to-r from-indigo-500 to-violet-500',
                         'hover:from-indigo-400 hover:to-violet-400',
-                        'hover:shadow-[0_0_16px_rgba(99,102,241,0.3)]',
+                        'hover:shadow-[0_0_16px_rgba(194,106,65,0.3)]',
                         'transition-shadow duration-300',
                         'cursor-pointer',
                         task.status === 'done' && 'opacity-40',

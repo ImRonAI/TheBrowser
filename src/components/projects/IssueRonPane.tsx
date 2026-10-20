@@ -8,8 +8,8 @@ import { projectInputClass } from './ProjectFieldInput'
 import { TeachSkill } from '@/components/agent-panel/TeachSkill'
 import { VoiceAgent } from '@/components/agent-panel/VoiceAgent'
 import { ModeSelector } from '@/components/agent-panel/AgentPanel'
-import type { LiveContextTurn } from '@/lib/voice-events'
 import { liveKey, liveTurnsFor, useLiveSessionStore } from '@/stores/liveSessionStore'
+import { AssistField } from '@/components/shared/TextAssist'
 
 interface IssueRun {
   id: string
@@ -136,10 +136,6 @@ function ConversationPane({ userId, issueId, issue, hasUnsavedChanges, draft, on
     }
   }
   const runs = [...new Map([...(conversation?.runs ?? []), ...older].map((run) => [run.id, run])).values()].reverse()
-  // Visible saved conversation → Live context (text only, no tool activity replayed).
-  const sharedHistory = useMemo<LiveContextTurn[]>(() => runs.flatMap((run) => [
-    { role: 'user' as const, text: run.message }, ...(run.output ? [{ role: 'assistant' as const, text: run.output }] : []),
-  ]), [runs])
   const switchMode = async (next: 'text' | 'voice') => {
     if (next === mode) return
     setModeNotice('')
@@ -184,7 +180,7 @@ function ConversationPane({ userId, issueId, issue, hasUnsavedChanges, draft, on
     {conversation?.owner_id && <TeachSkill userId={conversation.owner_id} agentId={`issue:${issueId}`} apiBaseUrl={projectEndpoint(userId, LIVE_API_BASE_URL)} />}
     {mode === 'voice' ? <div className="flex min-h-0 flex-1">
       {conversation?.owner_id
-        ? <VoiceAgent userId={userId} agentScope={`issue:${issueId}`} conversationId={issueId} sharedHistory={sharedHistory} owner="issue-pane"
+        ? <VoiceAgent userId={userId} agentScope={`issue:${issueId}`} sessionId={issueId} owner="issue-pane"
             issue={{ id: issueId, title: issue?.title, description: issue?.description }} registerHandOff={registerHandOff} />
         : <p className="p-6 text-sm text-ink-muted">Load the saved conversation before starting Live.</p>}
     </div> : <>
@@ -215,7 +211,9 @@ function ConversationPane({ userId, issueId, issue, hasUnsavedChanges, draft, on
       {hasUnsavedChanges && <p className="text-xs text-amber-600">Save your issue draft before starting Ron. Ron only sees saved data.</p>}
       {conversation && !conversation.available && <p className="text-xs text-amber-600">Configure an agent provider on the backend to enable execution.</p>}
       <label className="sr-only" htmlFor={`task-ron-${issueId}`}>Message task Ron</label>
-      <textarea id={`task-ron-${issueId}`} disabled={busy} rows={3} maxLength={20000} value={draft} onChange={(event) => onDraftChange(event.target.value)} className={projectInputClass} placeholder="What should Ron do for this issue?" />
+      <AssistField value={draft} onChange={onDraftChange} suggest count={5} placement="above">
+        {(field) => <textarea id={`task-ron-${issueId}`} disabled={busy} rows={3} maxLength={20000} value={draft} onChange={(event) => onDraftChange(event.target.value)} className={projectInputClass} placeholder="What should Ron do for this issue?" {...field} />}
+      </AssistField>
       <div className="flex justify-between items-center gap-3"><p className="text-xs text-ink-muted">Closing the pane does not stop a running task.</p>
         {running ? <button type="button" disabled={busy} onClick={() => void cancel()} className="text-sm text-rose-500">Stop run</button>
           : <button type="submit" disabled={busy || !conversation?.available || !draft.trim() || hasUnsavedChanges || needsReview || !!readError} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm text-white disabled:opacity-40">{busy ? 'Starting…' : 'Send to Ron'}</button>}

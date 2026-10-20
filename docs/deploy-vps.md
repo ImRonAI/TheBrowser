@@ -62,8 +62,8 @@ no IP or token is committed anywhere in this repository.
    validated; do not delete or reset it. Editable installs require the new install
    before restarting the API.
    Both Chat and Live install the same complete Python SDK from this checkout.
-   Screen/camera WebM ingress requires `ffmpeg` on the API host; bootstrap installs
-   it for fresh servers. Existing servers must install it before using Live video.
+   Live screen/camera sharing sends JPEG frames in JSON at 1 fps; it does not
+   require `ffmpeg` on the API host. Reload older renderers that still send WebM.
 4. **Env file** — fill `/etc/ronbrowser/ron.env` (`root:ron`, mode `640`) from
    `deploy/ron.env.example`: `HF_TOKEN`, `HF_BUCKET_ID`, provider keys. Build it in a
    temp file on your Mac, `scp` it, then delete the temp file. Create the bucket once:

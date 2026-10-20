@@ -28,10 +28,9 @@ const electronAPI = {
     return () => ipcRenderer.removeListener('deep-link', handler)
   },
 
-  // Supabase OAuth: a loopback redirect URL for signInWithOAuth, and the system browser for the provider page.
+  // Supabase OAuth: a loopback redirect URL for signInWithOAuth. The provider page opens as a Ron tab.
   auth: {
     oauthRedirect: (): Promise<string> => ipcRenderer.invoke('auth:oauth-redirect'),
-    openExternal: (url: string): Promise<void> => ipcRenderer.invoke('auth:open-external', url),
   },
 
   agent: {
@@ -89,12 +88,26 @@ const electronAPI = {
     setAgentCursor: (point: { x: number; y: number }) => ipcRenderer.invoke('browser:set-agent-cursor', point),
     setDrawerHeight: (height: number) => ipcRenderer.invoke('browser:set-drawer-height', height),
     setChromeHeight: (height: number) => ipcRenderer.invoke('browser:set-chrome-height', height),
+    setSidebarWidth: (width: number) => ipcRenderer.invoke('browser:set-sidebar-width', width),
+    onChromeShortcut: (callback: (data: { shortcut: 'ask-ron' | 'search' | 'toggle-sidebar' | 'focus-url'; selectionText?: string; sourceUrl?: string }) => void) => {
+      const handler = (_: unknown, data: { shortcut: 'ask-ron' | 'search' | 'toggle-sidebar' | 'focus-url'; selectionText?: string; sourceUrl?: string }) => callback(data)
+      ipcRenderer.on('chrome:shortcut', handler)
+      return () => ipcRenderer.removeListener('chrome:shortcut', handler)
+    },
     setInterestMenu: (payload: unknown) => ipcRenderer.invoke('interests:set-menu', payload),
     setInterestInset: (width: number) => ipcRenderer.invoke('interests:set-inset', width),
     onInterestAction: (callback: (action: unknown) => void) => {
       const handler = (_: unknown, action: unknown) => callback(action)
       ipcRenderer.on('interests:action', handler)
       return () => ipcRenderer.removeListener('interests:action', handler)
+    },
+    // Native repair surface (electron/repair-surface.ts): the shell mirrors the current
+    // investigation in; the surface's decisions come back here and the shell calls the API.
+    setRepairSurface: (state: unknown) => ipcRenderer.invoke('repair-surface:update', state),
+    onRepairAction: (callback: (action: unknown) => void) => {
+      const handler = (_: unknown, action: unknown) => callback(action)
+      ipcRenderer.on('repair-surface:action', handler)
+      return () => ipcRenderer.removeListener('repair-surface:action', handler)
     },
 
     onUrlChanged: (callback: (url: string) => void) => {

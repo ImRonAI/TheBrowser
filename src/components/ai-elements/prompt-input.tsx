@@ -55,6 +55,8 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+import { useTextAssist } from "@/hooks/useTextAssist";
+import { TextAssist, handleAssistKey } from "@/components/shared/TextAssist";
 import {
   CornerDownLeftIcon,
   ImageIcon,
@@ -73,6 +75,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { createPortal } from "react-dom";
 
 // ============================================================================
 // Helpers
@@ -794,12 +797,14 @@ export const PromptInput = ({
         type="file"
       />
       <form
-        className={cn("w-full", className)}
+        className={cn("relative w-full", className)}
         onSubmit={handleSubmit}
         ref={formRef}
         {...props}
       >
         <InputGroup className="overflow-hidden">{children}</InputGroup>
+        {/* Assist popovers escape the clipped InputGroup through this slot. */}
+        <div data-prompt-input-assist className="contents" />
       </form>
     </>
   );
@@ -829,18 +834,54 @@ export const PromptInputBody = ({
 
 export type PromptInputTextareaProps = ComponentProps<
   typeof InputGroupTextarea
->;
+> & {
+  /**
+   * Brave Suggest + Spellcheck for this field (`useTextAssist`). Pass `true` for both, or pick
+   * `{ suggest, spellcheck }`. The popover renders above the field; ↑/↓ + Enter/Tab pick, Esc dismisses.
+   */
+  assist?: boolean | { suggest?: boolean; spellcheck?: boolean };
+};
 
 export const PromptInputTextarea = ({
   onChange,
   onKeyDown,
   className,
   placeholder = "What would you like to know?",
+  assist: assistProp = false,
   ...props
 }: PromptInputTextareaProps) => {
   const controller = useOptionalPromptInputController();
   const attachments = usePromptInputAttachments();
   const [isComposing, setIsComposing] = useState(false);
+  // Uncontrolled mode keeps a shadow of the value for assist only; controlled mode reads the provider.
+  const [shadow, setShadow] = useState("");
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const assistEnabled = assistProp !== false;
+  const assistModes = typeof assistProp === "object" ? assistProp : {};
+  const currentValue = controller ? controller.textInput.value : shadow;
+  const assist = useTextAssist(currentValue, {
+    enabled: assistEnabled,
+    suggest: assistModes.suggest ?? true,
+    spellcheck: assistModes.spellcheck ?? true,
+  });
+  const applyAssist = useCallback(
+    (text: string) => {
+      if (controller) {
+        controller.textInput.setInput(text);
+      } else if (textareaRef.current) {
+        // Native setter so React sees the change in uncontrolled mode.
+        const setter = Object.getOwnPropertyDescriptor(
+          HTMLTextAreaElement.prototype,
+          "value"
+        )?.set;
+        setter?.call(textareaRef.current, text);
+        textareaRef.current.dispatchEvent(new Event("input", { bubbles: true }));
+        setShadow(text);
+      }
+      assist.dismiss();
+    },
+    [controller, assist]
+  );
 
   const handleKeyDown: KeyboardEventHandler<HTMLTextAreaElement> = useCallback(
     (e) => {
@@ -849,6 +890,10 @@ export const PromptInputTextarea = ({
 
       // If the external handler prevented default, don't run internal logic
       if (e.defaultPrevented) {
+        return;
+      }
+
+      if (assistEnabled && handleAssistKey(e, assist, applyAssist)) {
         return;
       }
 
@@ -886,7 +931,7 @@ export const PromptInputTextarea = ({
         }
       }
     },
-    [onKeyDown, isComposing, attachments]
+    [onKeyDown, isComposing, attachments, assistEnabled, assist, applyAssist]
   );
 
   const handlePaste: ClipboardEventHandler<HTMLTextAreaElement> = useCallback(
@@ -928,10 +973,15 @@ export const PromptInputTextarea = ({
         value: controller.textInput.value,
       }
     : {
-        onChange,
+        onChange: (e: ChangeEvent<HTMLTextAreaElement>) => {
+          if (assistEnabled) {
+            setShadow(e.currentTarget.value);
+          }
+          onChange?.(e);
+        },
       };
 
-  return (
+  const textarea = (
     <InputGroupTextarea
       className={cn("field-sizing-content max-h-48 min-h-16", className)}
       name="message"
@@ -940,9 +990,34 @@ export const PromptInputTextarea = ({
       onKeyDown={handleKeyDown}
       onPaste={handlePaste}
       placeholder={placeholder}
+      ref={textareaRef}
       {...props}
       {...controlledProps}
     />
+  );
+
+  if (!assistEnabled) {
+    return textarea;
+  }
+  // InputGroup clips overflow, so the popover is portalled to the form's assist slot (a sibling of
+  // the InputGroup, positioned against the relative form).
+  const slot = textareaRef.current?.form?.querySelector<HTMLElement>(
+    "[data-prompt-input-assist]"
+  );
+  return (
+    <>
+      {textarea}
+      {slot &&
+        createPortal(
+          <TextAssist
+            assist={assist}
+            onCorrect={applyAssist}
+            onPick={applyAssist}
+            placement="above"
+          />,
+          slot
+        )}
+    </>
   );
 };
 
@@ -1157,7 +1232,7 @@ export const PromptInputSelectTrigger = ({
   <SelectTrigger
     className={cn(
       "border-none bg-transparent font-medium text-muted-foreground shadow-none transition-colors",
-      "hover:bg-accent hover:text-foreground aria-expanded:bg-accent aria-expanded:text-foreground",
+      "hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground",
       className
     )}
     {...props}
@@ -1270,7 +1345,7 @@ export const PromptInputTabItem = ({
 }: PromptInputTabItemProps) => (
   <div
     className={cn(
-      "flex items-center gap-2 px-3 py-2 text-xs hover:bg-accent",
+      "flex items-center gap-2 px-3 py-2 text-xs hover:bg-muted",
       className
     )}
     {...props}

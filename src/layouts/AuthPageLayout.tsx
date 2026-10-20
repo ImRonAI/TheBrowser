@@ -52,20 +52,20 @@ function AuthPageLayoutInner({ children }: AuthPageLayoutProps) {
   }, [])
 
   return (
-    <div className="min-h-screen w-full bg-surface-50 dark:bg-surface-900 flex relative overflow-hidden">
+    <div className="h-screen w-full bg-surface-50 dark:bg-surface-900 flex relative overflow-hidden">
       {/* Dramatic geometric background - Light mode */}
       <div className="absolute inset-0 dark:hidden">
         {/* Large gradient orb */}
         <div 
           className="absolute -top-1/4 -right-1/4 w-[800px] h-[800px] rounded-full"
           style={{
-            background: 'radial-gradient(circle, rgba(99, 102, 241, 0.08) 0%, transparent 70%)',
+            background: 'radial-gradient(circle, rgba(194, 106, 65, 0.08) 0%, transparent 70%)',
           }}
         />
         <div 
           className="absolute -bottom-1/4 -left-1/4 w-[600px] h-[600px] rounded-full"
           style={{
-            background: 'radial-gradient(circle, rgba(55, 48, 163, 0.05) 0%, transparent 70%)',
+            background: 'radial-gradient(circle, rgba(169, 83, 46, 0.05) 0%, transparent 70%)',
           }}
         />
         {/* Grid pattern */}
@@ -87,13 +87,13 @@ function AuthPageLayoutInner({ children }: AuthPageLayoutProps) {
         <div 
           className="absolute top-0 right-0 w-[600px] h-[600px]"
           style={{
-            background: 'radial-gradient(circle at top right, rgba(99, 102, 241, 0.08) 0%, transparent 60%)',
+            background: 'radial-gradient(circle at top right, rgba(194, 106, 65, 0.08) 0%, transparent 60%)',
           }}
         />
         <div 
           className="absolute bottom-0 left-0 w-[500px] h-[500px]"
           style={{
-            background: 'radial-gradient(circle at bottom left, rgba(55, 48, 163, 0.06) 0%, transparent 60%)',
+            background: 'radial-gradient(circle at bottom left, rgba(169, 83, 46, 0.06) 0%, transparent 60%)',
           }}
         />
         {/* Subtle noise texture */}
@@ -156,7 +156,7 @@ function AuthPageLayoutInner({ children }: AuthPageLayoutProps) {
       </motion.div>
 
       {/* Right side - Auth form */}
-      <div className="flex-1 flex items-center justify-center p-6 lg:p-16 relative z-10">
+      <div className="flex-1 flex items-start lg:items-center justify-center p-6 lg:p-10 relative z-10 min-h-0 overflow-y-auto">
         <motion.div 
           className="w-full max-w-md"
           initial={{ opacity: 0, x: 24 }}

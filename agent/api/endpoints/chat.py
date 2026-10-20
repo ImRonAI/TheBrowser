@@ -38,8 +38,10 @@ from agent.api.core.panel_agent import (
     configured_providers,
     create_panel_agent,
     default_selection,
+    gemini_thinking_levels,
     infer_provider,
     list_provider_models,
+    mistral_reasoning_efforts,
     provider_api_key,
     provider_default_model,
     xai_reasoning_efforts,
@@ -315,22 +317,60 @@ class SteeringRequest(SessionControl):
     steering_id: Identifier | None = None
 
 
+#: The process's RepairService (bound by main.py's lifespan). Each panel agent gets its
+#: ``trigger(browser=)`` hook, so a tool failure starts an investigation without any HTTP hop.
+_REPAIR_SERVICE: Any = None
+
+
+def bind_repair_service(service: Any) -> None:
+    global _REPAIR_SERVICE
+    _REPAIR_SERVICE = service
+
+
+def repair_service() -> Any:
+    return _REPAIR_SERVICE
+
+
+def repair_emitter(manager: PanelRuntimeManager):
+    """``RepairService.bind_emitter`` target: deliver repair events into the originating session."""
+
+    async def emit(user_id: str, session_id: str, payload: dict[str, Any]) -> None:
+        session = manager._sessions.get((user_id, session_id))
+        if session is None:
+            session = await manager.get(user_id, session_id)
+        if session is not None:
+            await session.repair_event(payload)
+
+    return emit
+
+
 async def _create_runtime_agent(*, user_id, session_id, selection, options, runtime_options):
     # The manager calls this once per loaded session, never once per HTTP turn.
     # Core tools + tool_catalog (+ think for Perplexity) are composed inside
     # create_panel_agent; nothing is injected here.
+    if selection.get("browser") == "cloud":
+        # `cloud` is pinned only by the Live->Chat takeover (no user-facing selector): the run is
+        # unattended, so tools that wait for a person are cancelled natively instead of pausing it.
+        from agent.api.core.live_takeover import UnattendedRunGuard
+        runtime_options = {**runtime_options, "hooks": [*runtime_options.get("hooks", []), UnattendedRunGuard()]}
+    browser = selection.get("browser", default_browser())
+    service = repair_service()
+    if service is not None:
+        # The service's trigger is a native HookProvider; create_panel_agent recognises it among the
+        # runtime hooks and does not add its own bare trigger.
+        runtime_options = {**runtime_options, "hooks": [*runtime_options.get("hooks", []), service.trigger(browser=browser)]}
     return await asyncio.to_thread(
         create_panel_agent,
         provider=selection["provider"], model_id=selection["model_id"],
         session_id=session_id, user_id=user_id,
-        system_prompt=system_prompt_for(selection["provider"], browser=selection.get("browser", default_browser())) + {
+        system_prompt=system_prompt_for(selection["provider"], browser=browser) + {
             "panel": "",
             "search": "\nYou are Search Agent. Research the user's question, verify claims with search tools, and cite original sources.",
             "build": "\nYou are Build Agent. Turn the user's request and reference material into working implementations; inspect before editing and validate your work.",
         }[selection.get("destination", "panel")],
         extra_tools=[], reasoning_effort=selection.get("reasoning_effort"),
         options=options, runtime_options=runtime_options,
-        browser=selection.get("browser", default_browser()),
+        browser=browser,
         agent_scope=selection.get("destination", "panel"),
     )
 
@@ -478,6 +518,44 @@ async def chat(request: ChatRequest, http_request: Request) -> StreamingResponse
         return await _event_response(session, after, run_id)
     except (RuntimeConflict, ReplayOverflow, KeyError, ValueError) as error:
         raise _runtime_error(error) from error
+
+
+@router.get("/sessions")
+async def list_sessions(request: Request, user_id: Identifier = "default", destination: str | None = None,
+                        limit: Annotated[int, Query(ge=1, le=500)] = 100):
+    """The signed-in user's threads (Supabase read model of the native sessions), newest first.
+
+    Guests have no durable threads (RLS keys rows by auth user): `[]` with `sign_in_required`.
+    """
+    from agent.api.core.live_music import supabase_client
+    from agent.api.core.threads import list_threads, owner_uuid
+
+    owner = owner_uuid(user_id)
+    if owner is None:
+        return {"threads": [], "sign_in_required": True}
+    try:
+        return {"threads": await list_threads(await supabase_client(), owner, destination=destination, limit=limit),
+                "sign_in_required": False}
+    except Exception as error:
+        raise HTTPException(502, f"{type(error).__name__}: {error}") from error
+
+
+@router.get("/sessions/{session_id}/thread")
+async def get_thread(session_id: Identifier, request: Request, user_id: Identifier = "default"):
+    """One thread in sequential order (user prompts, reasoning, tool calls/results, outputs), either agent."""
+    from agent.api.core.live_music import supabase_client
+    from agent.api.core.threads import owner_uuid, read_thread
+
+    owner = owner_uuid(user_id)
+    if owner is None:
+        raise HTTPException(401, "Sign in to Ron to read saved threads.")
+    try:
+        thread = await read_thread(await supabase_client(), owner, session_id)
+    except Exception as error:
+        raise HTTPException(502, f"{type(error).__name__}: {error}") from error
+    if thread is None:
+        raise HTTPException(404, "Unknown thread")
+    return thread
 
 
 @router.get("/sessions/{session_id}")
@@ -661,8 +739,12 @@ async def get_model_efforts(model_id: str, provider: str = "") -> dict[str, Any]
 
     Perplexity: probes all six ReasoningConfig values live against
     ``POST /v1/responses`` (once per model per process, then cached).
-    xAI: grok-4.3 only, from the community provider docs (none/low/medium/high).
-    Mistral and Gemini: no adapter-documented effort enum.
+    xAI: documented per model (``XAI_REASONING_EFFORTS_BY_MODEL``).
+    Mistral: documented + live-verified ``reasoning_effort`` per model
+    (``MISTRAL_REASONING_EFFORTS_BY_MODEL``; most models take none/high).
+    Gemini: documented + live-verified ``thinking_level`` per model
+    (``GEMINI_THINKING_LEVELS_BY_MODEL``; minimal/low/medium/high subsets).
+    OpenAI/Anthropic: no verified per-model list (empty).
     """
     resolved = (provider.strip().lower() or infer_provider(model_id) or "")
     if resolved and resolved not in PROVIDERS:
@@ -677,6 +759,12 @@ async def get_model_efforts(model_id: str, provider: str = "") -> dict[str, Any]
 
     if provider_name == "xai":
         return {"model": model_id, "provider": provider_name, "efforts": list(xai_reasoning_efforts(model_id))}
+
+    if provider_name == "mistral":
+        return {"model": model_id, "provider": provider_name, "efforts": list(mistral_reasoning_efforts(model_id))}
+
+    if provider_name == "gemini":
+        return {"model": model_id, "provider": provider_name, "efforts": list(gemini_thinking_levels(model_id))}
 
     if provider_name != "perplexity":
         # No native model ID is ever sent to Perplexity generation probes.

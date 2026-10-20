@@ -10,6 +10,7 @@ import { ModeSelector } from '@/components/agent-panel/AgentPanel'
 import { VoiceAgent } from '@/components/agent-panel/VoiceAgent'
 import { liveKey, liveTurnsFor, useLiveSessionStore } from '@/stores/liveSessionStore'
 import { descriptionHtml, latestProposal } from '@/lib/issue-description-live'
+import { AssistField } from '@/components/shared/TextAssist'
 
 /** Both entry points use the same issue-agent endpoint and native snapshot. Never
  * send description edits to the legacy global task stream or apply raw model HTML.
@@ -133,9 +134,12 @@ export function IssueDescriptionRon({ issueId, issueTitle, currentDescription, d
     </div>
     {modeNotice && <p role="status" className="text-xs text-amber-600">{modeNotice}</p>}
     <div className="flex flex-wrap gap-2">
-      <input id={`description-ron-${issueId}`} className={`${projectInputClass} flex-1 min-w-[min(100%,12rem)]`} value={prompt} disabled={running}
-        onChange={(event) => setPrompt(event.target.value)} placeholder={mode === 'voice' ? 'What should Ron help you say? (handed to Live)' : 'What should this description say?'} maxLength={16000}
-        onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); void (mode === 'voice' ? prepareLive() : send()) } }} />
+      <AssistField value={prompt} onChange={setPrompt} suggest count={5} className="flex-1 min-w-[min(100%,12rem)]">
+        {(field) => <input id={`description-ron-${issueId}`} className={`${projectInputClass} w-full`} value={prompt} disabled={running}
+          onChange={(event) => setPrompt(event.target.value)} placeholder={mode === 'voice' ? 'What should Ron help you say? (handed to Live)' : 'What should this description say?'} maxLength={16000}
+          onFocus={field.onFocus} onBlur={field.onBlur}
+          onKeyDown={(event) => { field.onKeyDown(event); if (event.defaultPrevented) return; if (event.key === 'Enter') { event.preventDefault(); void (mode === 'voice' ? prepareLive() : send()) } }} />}
+      </AssistField>
       {mode === 'voice'
         ? <Button type="button" disabled={disabled || !prompt.trim() || !userId} onClick={() => void prepareLive()}>Prepare for Live</Button>
         : running ? <Button type="button" variant="outline" onClick={() => void cancel()}>Stop</Button>
@@ -150,7 +154,7 @@ export function IssueDescriptionRon({ issueId, issueTitle, currentDescription, d
     {mode === 'voice' && userId && <div className="space-y-2">
       <p className="text-xs text-ink-muted">Live uses this issue’s agent scope (same tool limits as the Ron pane). Your draft is saved before the session starts. Ron’s final text is applied to the draft only when you choose to.</p>
       <div className="flex min-h-[26rem] max-h-[70vh] flex-col overflow-hidden rounded-xl border border-surface-200 dark:border-surface-800">
-        <VoiceAgent userId={userId} agentScope={`issue:${issueId}`} conversationId={issueId} owner="issue-description" compact
+        <VoiceAgent userId={userId} agentScope={`issue:${issueId}`} sessionId={issueId} owner="issue-description" compact
           issue={{ id: issueId, title: issueTitle, description: currentDescription }} registerHandOff={registerHandOff} />
       </div>
       {lastProposal && <div className="flex flex-wrap items-center gap-2 rounded-lg border border-indigo-200/60 bg-indigo-50/40 p-2 text-xs dark:border-indigo-900 dark:bg-indigo-950/20">

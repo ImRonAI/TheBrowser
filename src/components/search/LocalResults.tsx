@@ -1,14 +1,15 @@
 /**
- * The Local panel — Brave place search as cards: a picture strip on top, then name,
- * star rating with review count, price-range dots, today's hours, address, phone and
- * distance. Cards open the place's own page in a new tab.
+ * The Places panel — Brave place search as compact cards: a 64px photo, the name,
+ * one line of rating ★ (reviews) · price dots · categories, then single-line hours
+ * and address, and phone + distance in small mono. Cards open the place's page.
  */
-import { motion } from 'framer-motion'
-import { Clock, MapPin, Phone, Star } from 'lucide-react'
+import { useState } from 'react'
+import { motion, useReducedMotion } from 'framer-motion'
+import { MapPin, Star } from 'lucide-react'
 import { sectionItems, type SearchRunState } from '@/lib/search-api'
 import type { DiscoverItem } from '@/lib/discover-feed'
 import { EmptyState, CardSkeleton, SourceErrorNotice } from './primitives'
-import { hueWash } from './tabs-meta'
+import { rowMotion } from './ResultRow'
 import { openResult } from './open-result'
 
 type Place = NonNullable<DiscoverItem['place']>
@@ -30,23 +31,21 @@ function formatHours(hours: unknown): string | null {
   return ranges.length ? ranges.join(' · ') : null
 }
 
-function PriceDots({ priceRange, hue }: { priceRange: unknown; hue: string }) {
+function PriceDots({ priceRange }: { priceRange: unknown }) {
   if (typeof priceRange !== 'string' || !priceRange) return null
   const level = (priceRange.match(/\$/g) || []).length || Math.min(4, Math.max(1, priceRange.length))
   return (
-    <span className="flex items-center gap-0.5" title={priceRange}>
+    <span className="flex items-center gap-[3px]" title={priceRange} aria-label={`Price ${priceRange}`} role="img">
       {Array.from({ length: 4 }, (_, i) => (
-        <span
-          key={i}
-          className="h-1 w-1 rounded-full"
-          style={{ backgroundColor: i < level ? hue : hueWash(hue, 0.2) }}
-        />
+        <span key={i} className={i < level ? 'h-1 w-1 rounded-full bg-ink-secondary dark:bg-ink-inverse-secondary' : 'h-1 w-1 rounded-full bg-surface-300 dark:bg-surface-700'} />
       ))}
     </span>
   )
 }
 
-function PlaceCard({ item, index, hue }: { item: DiscoverItem; index: number; hue: string }) {
+function PlaceCard({ item, index }: { item: DiscoverItem; index: number }) {
+  const reduced = useReducedMotion()
+  const [broken, setBroken] = useState(false)
   const place = (item.place || {}) as Place
   const pictures = Array.isArray(place.pictures) ? (place.pictures as string[]).filter(Boolean) : []
   const hero = pictures[0] || item.thumbnail
@@ -55,83 +54,61 @@ function PlaceCard({ item, index, hue }: { item: DiscoverItem; index: number; hu
   const hours = formatHours(place.hours_today)
   const distance = formatDistance(place.distance)
   const categories = Array.isArray(place.categories) ? (place.categories as string[]).slice(0, 2) : []
+  const address = typeof place.address === 'string' && place.address ? place.address : null
+  const phone = typeof place.phone === 'string' && place.phone ? place.phone : null
 
   return (
-    <motion.button
-      initial={{ opacity: 0, y: 14 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.4, delay: Math.min(index, 10) * 0.04, ease: [0.16, 1, 0.3, 1] }}
-      onClick={() => openResult(item.url)}
-      className="group overflow-hidden rounded-2xl border border-surface-200/70 bg-surface-0/80 text-left backdrop-blur-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-medium dark:border-surface-700/60 dark:bg-surface-800/60 dark:hover:shadow-dark-medium"
-    >
-      {hero && (
-        <span className="block h-28 w-full overflow-hidden bg-surface-100 dark:bg-surface-800">
-          <img src={hero} alt="" loading="lazy" className="h-full w-full object-cover transition-transform duration-500 ease-smooth group-hover:scale-[1.04]" />
+    <motion.li {...rowMotion(index, reduced)} className="list-none">
+      <button
+        type="button"
+        onClick={() => openResult(item.url)}
+        className="group flex w-full items-start gap-3 rounded-xl border border-surface-200/80 p-3 text-left transition-colors duration-150 hover:border-surface-300 hover:bg-surface-50 dark:border-surface-800 dark:hover:border-surface-700 dark:hover:bg-surface-850"
+      >
+        <span className="flex h-16 w-16 flex-shrink-0 items-center justify-center overflow-hidden rounded-lg bg-surface-100 dark:bg-surface-800">
+          {hero && !broken
+            ? <img src={hero} alt="" loading="lazy" onError={() => setBroken(true)} className="h-full w-full object-cover" />
+            : <MapPin className="h-5 w-5 text-ink-muted dark:text-ink-inverse-muted" strokeWidth={1.5} />}
         </span>
-      )}
-      <span className="block px-4 py-3.5">
-        <span className="flex items-start justify-between gap-2">
-          <span className="text-[15px] font-normal leading-snug text-ink dark:text-ink-inverse">{item.title}</span>
-          {distance && (
-            <span className="flex flex-shrink-0 items-center gap-1 font-mono text-[10px] text-ink-muted dark:text-ink-inverse-muted">
-              <MapPin className="h-3 w-3" />
-              {distance}
+        <span className="min-w-0 flex-1">
+          <span className="flex items-baseline justify-between gap-2">
+            <span className="truncate text-[14.5px] font-medium text-ink decoration-accent/50 underline-offset-[3px] group-hover:underline dark:text-ink-inverse">{item.title}</span>
+            {distance && <span className="flex-shrink-0 font-mono text-[10.5px] text-ink-muted dark:text-ink-inverse-muted">{distance}</span>}
+          </span>
+          <span className="mt-0.5 flex min-w-0 items-center gap-2 text-[12px] text-ink-secondary dark:text-ink-inverse-secondary">
+            {rating !== null && (
+              <span className="flex flex-shrink-0 items-center gap-0.5">
+                <Star className="h-3 w-3 fill-accent text-accent dark:fill-accent-light dark:text-accent-light" />
+                <span className="font-medium tabular-nums text-ink dark:text-ink-inverse">{rating.toFixed(1)}</span>
+                {reviews !== null && <span className="text-ink-muted dark:text-ink-inverse-muted">({reviews.toLocaleString()})</span>}
+              </span>
+            )}
+            <PriceDots priceRange={place.price_range} />
+            {categories.length > 0 && <span className="truncate text-ink-muted dark:text-ink-inverse-muted">{categories.join(' · ')}</span>}
+          </span>
+          {(hours || address) && (
+            <span className="mt-0.5 block truncate text-[12px] text-ink-muted dark:text-ink-inverse-muted">
+              {[hours, address].filter(Boolean).join(' · ')}
             </span>
           )}
+          {phone && <span className="mt-0.5 block font-mono text-[10.5px] text-ink-muted dark:text-ink-inverse-muted">{phone}</span>}
         </span>
-
-        <span className="mt-1.5 flex flex-wrap items-center gap-x-2.5 gap-y-1">
-          {rating !== null && (
-            <span className="flex items-center gap-1">
-              <Star className="h-3.5 w-3.5" style={{ color: hue, fill: hueWash(hue, 0.35) }} />
-              <span className="text-xs font-medium tabular-nums text-ink dark:text-ink-inverse">{rating.toFixed(1)}</span>
-              {reviews !== null && (
-                <span className="text-[11px] font-light text-ink-muted dark:text-ink-inverse-muted">({reviews.toLocaleString()})</span>
-              )}
-            </span>
-          )}
-          <PriceDots priceRange={place.price_range} hue={hue} />
-          {categories.length > 0 && (
-            <span className="truncate text-[11px] font-light text-ink-muted dark:text-ink-inverse-muted">
-              {categories.join(' · ')}
-            </span>
-          )}
-        </span>
-
-        {hours && (
-          <span className="mt-2 flex items-center gap-1.5 text-[11px] font-light text-ink-secondary dark:text-ink-inverse-secondary">
-            <Clock className="h-3 w-3 flex-shrink-0" style={{ color: hue }} />
-            {hours}
-          </span>
-        )}
-        {typeof place.address === 'string' && place.address && (
-          <span className="mt-1 block truncate text-[11px] font-light text-ink-muted dark:text-ink-inverse-muted">
-            {place.address}
-          </span>
-        )}
-        {typeof place.phone === 'string' && place.phone && (
-          <span className="mt-1 flex items-center gap-1.5 font-mono text-[10px] text-ink-muted dark:text-ink-inverse-muted">
-            <Phone className="h-3 w-3" />
-            {place.phone}
-          </span>
-        )}
-      </span>
-    </motion.button>
+      </button>
+    </motion.li>
   )
 }
 
-export function LocalResults({ state, hue, onRetry }: { state: SearchRunState; hue: string; onRetry?: () => void }) {
+export function LocalResults({ state, onRetry }: { state: SearchRunState; hue?: string; onRetry?: () => void }) {
   const section = state.sections.places
   if (!section) return <CardSkeleton cards={4} />
-  if (section.status === 'error') return <div className="mx-auto max-w-3xl"><SourceErrorNotice error={{ source: 'brave', ...section.error! }} onRetry={onRetry} /></div>
+  if (section.status === 'error') return <div className="max-w-[680px]"><SourceErrorNotice error={{ source: 'brave', ...section.error! }} onRetry={onRetry} /></div>
 
   const items = sectionItems(state, 'places')
   if (!items.length) {
     return <EmptyState title="No places found" hint="Add a city or neighborhood to your profile for sharper local results" />
   }
   return (
-    <div className="mx-auto grid max-w-3xl grid-cols-1 gap-4 sm:grid-cols-2">
-      {items.map((item, i) => <PlaceCard key={item.id} item={item} index={i} hue={hue} />)}
-    </div>
+    <ul className="grid max-w-4xl grid-cols-1 gap-3 md:grid-cols-2">
+      {items.map((item, i) => <PlaceCard key={item.id} item={item} index={i} />)}
+    </ul>
   )
 }

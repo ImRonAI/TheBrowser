@@ -1,4 +1,4 @@
-"""Teach Ron observe socket: observation ticks, graceful stop, SOP seed, refusals, silence markup."""
+"""Teach Ron observe socket: frames pass through untouched, graceful stop, SOP seed, refusals, silence markup."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from agent.api.core.live_io import OBSERVATION_TICK, STOP_REQUEST, LessonStopped, TeachingObserveInput
+from agent.api.core.live_io import DEBRIEF_REQUEST, STOP_REQUEST, LessonStopped, TeachingObserveInput
 from agent.api.core.teaching import TeachingService
 from agent.api.endpoints import teaching_observe
 
@@ -31,28 +31,63 @@ JPEG = base64.b64encode(b"\xff\xd8jpeg").decode()
 
 
 @pytest.mark.asyncio
-async def test_frames_add_one_realtime_observation_tick_per_interval():
-    now = [0.0]
-    socket = FakeSocket([{"type": "frame", "data": JPEG}] * 3)
-    stream = TeachingObserveInput(socket, tick_seconds=8, clock=lambda: now[0])  # type: ignore[arg-type]
+async def test_frames_are_forwarded_as_realtime_video_with_no_synthetic_turns():
+    """The model watches the stream itself: no text is ever injected between frames."""
+    socket = FakeSocket([{"type": "frame", "data": JPEG}] * 3 + [{"type": "note", "text": " hi "}])
+    stream = TeachingObserveInput(socket)  # type: ignore[arg-type]
     await stream.start(object())
     assert socket.sent == [{"type": "ready", "audio": True}]
 
-    now[0] = 5
-    first = await stream()
-    assert first["realtime_input"]["video"]["source"]["bytes"] == b"\xff\xd8jpeg"
-    now[0] = 9
+    for _ in range(3):
+        frame = await stream()
+        assert frame == {"realtime_input": {"video": {"format": "jpeg", "source": {"bytes": b"\xff\xd8jpeg"}}}}
+    assert await stream() == {"text": "hi"}
+    assert stream.counts == {"frames": 3, "audio": 0, "notes": 1}
+
+
+def test_observer_is_silent_during_the_demo_and_talks_in_the_debrief():
+    prompt = teaching_observe._OBSERVER_PROMPT
+    assert "stay completely silent" in prompt and "Speak only when they speak to you" in prompt
+    assert "talk back" not in prompt
+    # The debrief: understanding -> corrections -> questions -> implementation plan -> finish_observation.
+    assert "[demonstration finished]" in prompt
+    for phrase in ("your understanding", "ask every question", "implementation plan", "render_ui", "add_memory", "finish_observation last"):
+        assert phrase in prompt, phrase
+    # The goal is the outcome, re-implemented with Ron's own tools, not a click replay.
+    assert "learning the OUTCOME" in prompt and "not memorising clicks" in prompt
+
+
+@pytest.mark.asyncio
+async def test_finish_demo_starts_the_spoken_debrief_without_a_timer_and_drops_late_frames():
+    socket = FakeSocket([{"type": "frame", "data": JPEG}, {"type": "finish_demo"}, {"type": "frame", "data": JPEG},
+                         {"type": "finish_demo"}, {"type": "note", "text": "five to eight videos"}, {"type": "stop"}])
+    stream = TeachingObserveInput(socket, stop_grace_seconds=0)  # type: ignore[arg-type]
+    await stream.start(object())
     assert "video" in (await stream())["realtime_input"]
-    assert await stream() == {"realtime_input": {"text": OBSERVATION_TICK}}
-    now[0] = 10
-    assert "video" in (await stream())["realtime_input"]
-    assert stream.counts == {"frames": 3, "audio": 0, "notes": 0, "ticks": 1}
+    assert await stream() == {"text": DEBRIEF_REQUEST}
+    assert stream.debriefing and not stream.stop_requested
+    assert socket.sent[-1] == {"type": "debrief"}
+    # A frame still in flight and a repeated finish_demo are ignored; the user's answer reaches the model.
+    assert await stream() == {"text": "five to eight videos"}
+    assert stream.counts == {"frames": 1, "audio": 0, "notes": 1}
+    # Only "End conversation" (stop) arms the grace timer.
+    assert await stream() == {"text": STOP_REQUEST}
+    assert stream.stop_requested
+    with pytest.raises(LessonStopped):
+        await stream()
+
+
+def test_debrief_request_orders_understanding_questions_then_plan():
+    text = DEBRIEF_REQUEST
+    assert text.index("understanding") < text.index("every question") < text.index("implementation plan") < text.index("finish_observation")
+    for tool in ("http_request", "render_ui", "add_memory", "search_memory"):
+        assert tool in text
 
 
 @pytest.mark.asyncio
 async def test_stop_asks_for_finish_observation_then_ends_the_run_after_grace():
     socket = FakeSocket([{"type": "stop"}])
-    stream = TeachingObserveInput(socket, stop_grace_seconds=0, clock=lambda: 0.0)  # type: ignore[arg-type]
+    stream = TeachingObserveInput(socket, stop_grace_seconds=0)  # type: ignore[arg-type]
     await stream.start(object())
     assert await stream() == {"text": STOP_REQUEST}
     assert stream.stop_requested

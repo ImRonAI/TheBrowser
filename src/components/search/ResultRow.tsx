@@ -1,149 +1,124 @@
 /**
- * Web result cards. Every result is a real object on the page: a favicon tile with a
- * pastel domain-hashed fallback, the domain as identity anchor, markdown-rendered
- * title and snippet, a mono URL footer, and provenance marks (a single spark for
- * agent finds, interlocked sparks for consensus — both engines surfaced it).
- * ConsensusHero elevates the single best-corroborated result into a feature card.
+ * Web results — the truncated row grammar. Every result is one compact line pair:
+ * 16px favicon · domain · provenance mark · age, then a single-line title and a
+ * single-line snippet. No card chrome, no URL footer, no lift; hover is a quiet
+ * paper wash and an accent underline on the title. The best-corroborated result
+ * gets the same grammar with a two-line snippet and a "Consensus" label.
  */
-import { motion } from 'framer-motion'
-import { ArrowUpRight, Sparkle, Sparkles } from 'lucide-react'
+import { useState } from 'react'
+import { motion, useReducedMotion } from 'framer-motion'
 import type { MergedResult } from '@/lib/search-api'
+import { cn } from '@/utils/cn'
 import { InlineMarkdown } from './inline-markdown'
-import { domainHue, domainInitials, hostname, hueWash } from './tabs-meta'
+import { domainHue, domainInitials, hostname } from './tabs-meta'
 import { openResult } from './open-result'
 
-export function ProvenanceMark({ origin, hue }: { origin: MergedResult['origin']; hue: string }) {
+export function ProvenanceMark({ origin, hue: _hue }: { origin: MergedResult['origin']; hue?: string }) {
   if (origin === 'brave') return null
-  const Icon = origin === 'both' ? Sparkles : Sparkle
-  const title = origin === 'both' ? 'Consensus — found by the agent and Brave' : 'Agent pick'
+  const title = origin === 'both' ? 'Consensus — found by the agent and Brave' : 'Agent pick — a source the answer used'
   return (
-    <span
-      title={title}
-      aria-label={title}
-      className="inline-flex items-center justify-center rounded-full p-1"
-      style={{ color: hue, backgroundColor: hueWash(hue, origin === 'both' ? 0.16 : 0.1) }}
-    >
-      <Icon className="h-3 w-3" strokeWidth={2.2} />
+    <span title={title} className="inline-flex flex-shrink-0 items-center gap-[3px]" aria-label={title} role="img">
+      <span className="h-[5px] w-[5px] rounded-full bg-accent dark:bg-accent-light" />
+      {origin === 'both' && <span className="h-[5px] w-[5px] rounded-full bg-accent/45 dark:bg-accent-light/45" />}
     </span>
   )
 }
 
-function FaviconTile({ url, favicon, size = 'md' }: { url: string; favicon: string | null; size?: 'md' | 'lg' }) {
+export function Favicon({ url, favicon, size = 16 }: { url: string; favicon: string | null | undefined; size?: number }) {
+  const [broken, setBroken] = useState(false)
   const host = hostname(url)
-  const hue = domainHue(host)
-  const box = size === 'lg' ? 'h-12 w-12 rounded-2xl' : 'h-10 w-10 rounded-xl'
+  if (favicon && !broken) {
+    return (
+      <img
+        src={favicon}
+        alt=""
+        loading="lazy"
+        onError={() => setBroken(true)}
+        width={size}
+        height={size}
+        className="flex-shrink-0 rounded-[4px]"
+        style={{ width: size, height: size }}
+      />
+    )
+  }
   return (
     <span
-      className={`flex flex-shrink-0 items-center justify-center overflow-hidden ring-1 ring-black/5 dark:ring-white/10 ${box}`}
-      style={{ backgroundColor: hueWash(hue, 0.1) }}
+      aria-hidden
+      className="flex flex-shrink-0 items-center justify-center rounded-[4px] font-semibold text-white"
+      style={{ width: size, height: size, backgroundColor: domainHue(host), fontSize: Math.max(7, size * 0.45) }}
     >
-      {favicon ? (
-        <img src={favicon} alt="" loading="lazy" className={size === 'lg' ? 'h-6 w-6' : 'h-5 w-5'} />
-      ) : (
-        <span className="font-semibold" style={{ color: hue, fontSize: size === 'lg' ? 13 : 10 }}>
-          {domainInitials(url)}
-        </span>
-      )}
+      {domainInitials(url).slice(0, 1)}
     </span>
   )
 }
 
-const cardMotion = (index: number) => ({
-  initial: { opacity: 0, y: 12, filter: 'blur(4px)' },
-  animate: { opacity: 1, y: 0, filter: 'blur(0px)' },
-  transition: { duration: 0.4, delay: Math.min(index, 12) * 0.03, ease: [0.16, 1, 0.3, 1] as const },
-})
+/** Snippets from fetched pages can start with markdown headings/rules; show prose only. */
+function cleanSnippet(snippet: string): string {
+  return snippet.replace(/(^|\s)#{1,6}\s+/g, '$1').replace(/\s{2,}/g, ' ').trim()
+}
+
+export const rowMotion = (index: number, reduced: boolean | null) => reduced
+  ? {}
+  : {
+      initial: { opacity: 0, y: 4 },
+      animate: { opacity: 1, y: 0 },
+      transition: { duration: 0.22, delay: Math.min(index, 10) * 0.015, ease: [0.16, 1, 0.3, 1] as const },
+    }
 
 export interface ResultCardProps {
   result: MergedResult
   index?: number
-  hue: string
+  hue?: string
+  /** Lead treatment: two-line snippet + a small label. */
+  lead?: string
 }
 
-export function ResultCard({ result, index = 0, hue }: ResultCardProps) {
+export function ResultCard({ result, index = 0, lead }: ResultCardProps) {
+  const reduced = useReducedMotion()
+  const host = hostname(result.url)
   return (
-    <motion.button
-      {...cardMotion(index)}
-      onClick={() => openResult(result.url)}
-      className="group block w-full rounded-2xl border border-surface-200/70 bg-surface-0/80 px-4 py-4 text-left backdrop-blur-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-medium dark:border-surface-700/60 dark:bg-surface-800/60 dark:hover:shadow-dark-medium"
-      style={{ ['--card-hover-border' as string]: hueWash(hue, 0.45) }}
-      onMouseEnter={(e) => { e.currentTarget.style.borderColor = hueWash(hue, 0.45) }}
-      onMouseLeave={(e) => { e.currentTarget.style.borderColor = '' }}
-    >
-      <span className="flex items-start gap-3.5">
-        <FaviconTile url={result.url} favicon={result.favicon} />
-        <span className="min-w-0 flex-1">
-          <span className="flex items-center gap-1.5">
-            <span className="truncate text-[11px] font-medium uppercase tracking-wide text-ink-muted dark:text-ink-inverse-muted">
-              {hostname(result.url)}
+    <motion.li {...rowMotion(index, reduced)} className="list-none">
+      <button
+        type="button"
+        onClick={() => openResult(result.url)}
+        title={result.url}
+        className="group block w-full rounded-lg px-3 py-2.5 text-left transition-colors duration-150 hover:bg-surface-50 focus-visible:ring-offset-0 dark:hover:bg-surface-850"
+      >
+        <span className="flex items-center gap-2 text-[12px] text-ink-muted dark:text-ink-inverse-muted">
+          <Favicon url={result.url} favicon={result.favicon} />
+          <span className="truncate">{host}</span>
+          <ProvenanceMark origin={result.origin} />
+          {lead && (
+            <span className="flex-shrink-0 rounded bg-ember-50 px-1.5 py-px text-[10px] font-medium text-accent dark:bg-ember-950/60 dark:text-accent-light">
+              {lead}
             </span>
-            <ProvenanceMark origin={result.origin} hue={hue} />
-            {result.age && (
-              <span className="ml-auto flex-shrink-0 font-mono text-[10px] text-ink-muted/70 dark:text-ink-inverse-muted/70">
-                {result.age}
-              </span>
-            )}
-          </span>
-          <InlineMarkdown
-            text={result.title}
-            className="mt-1 line-clamp-2 block text-[15px] font-medium leading-snug text-ink transition-colors group-hover:text-accent-light dark:text-ink-inverse dark:group-hover:text-accent-muted"
-          />
-          {result.snippet && (
-            <InlineMarkdown
-              text={result.snippet}
-              className="mt-1 line-clamp-3 block text-[13px] font-light leading-relaxed text-ink-secondary dark:text-ink-inverse-secondary"
-            />
           )}
-          <span className="mt-2 flex items-center gap-1.5 font-mono text-[10px] text-ink-muted/60 dark:text-ink-inverse-muted/60">
-            <span className="truncate">{result.url}</span>
-            <ArrowUpRight className="h-3 w-3 flex-shrink-0 opacity-0 transition-opacity duration-200 group-hover:opacity-100" />
-          </span>
+          {result.kind === 'discussion' && (
+            <span className="flex-shrink-0 text-[11px] text-ink-muted dark:text-ink-inverse-muted">· Discussion</span>
+          )}
+          {result.age && (
+            <span className="ml-auto flex-shrink-0 pl-2 font-mono text-[10.5px] tabular-nums">{result.age}</span>
+          )}
         </span>
-      </span>
-    </motion.button>
+        <InlineMarkdown
+          text={result.title || host}
+          className="mt-1 block truncate text-[15px] font-medium leading-snug text-ink decoration-accent/50 underline-offset-[3px] group-hover:underline dark:text-ink-inverse dark:decoration-accent-light/50"
+        />
+        {result.snippet && (
+          <InlineMarkdown
+            text={cleanSnippet(result.snippet)}
+            className={cn(
+              'mt-0.5 block text-[13px] leading-relaxed text-ink-secondary dark:text-ink-inverse-secondary',
+              lead ? 'line-clamp-2' : 'truncate',
+            )}
+          />
+        )}
+      </button>
+    </motion.li>
   )
 }
 
 /** The single best-corroborated result: found by BOTH the agent and Brave. */
-export function ConsensusHero({ result, hue }: { result: MergedResult; hue: string }) {
-  return (
-    <motion.button
-      {...cardMotion(0)}
-      onClick={() => openResult(result.url)}
-      className="group relative block w-full overflow-hidden rounded-3xl p-px text-left"
-      style={{ background: `linear-gradient(135deg, ${hueWash(hue, 0.5)}, ${hueWash(hue, 0.08)} 45%, ${hueWash(hue, 0.3)})` }}
-    >
-      <span className="block rounded-[calc(1.5rem-1px)] bg-surface-0/95 px-5 py-5 backdrop-blur-xl transition-colors dark:bg-surface-900/90">
-        <span className="mb-3 flex items-center gap-2">
-          <Sparkles className="h-3.5 w-3.5" style={{ color: hue }} />
-          <span className="text-label uppercase" style={{ color: hue }}>Top consensus</span>
-          <span className="text-[10px] font-light text-ink-muted dark:text-ink-inverse-muted">
-            surfaced by the agent and Brave
-          </span>
-          {result.age && (
-            <span className="ml-auto font-mono text-[10px] text-ink-muted/70 dark:text-ink-inverse-muted/70">{result.age}</span>
-          )}
-        </span>
-        <span className="flex items-start gap-4">
-          <FaviconTile url={result.url} favicon={result.favicon} size="lg" />
-          <span className="min-w-0 flex-1">
-            <InlineMarkdown
-              text={result.title}
-              className="line-clamp-2 block text-lg font-normal leading-snug tracking-tight text-ink transition-colors group-hover:text-accent-light dark:text-ink-inverse dark:group-hover:text-accent-muted"
-            />
-            {result.snippet && (
-              <InlineMarkdown
-                text={result.snippet}
-                className="mt-1.5 line-clamp-3 block text-sm font-light leading-relaxed text-ink-secondary dark:text-ink-inverse-secondary"
-              />
-            )}
-            <span className="mt-2.5 flex items-center gap-1.5 font-mono text-[11px] text-ink-muted dark:text-ink-inverse-muted">
-              <span className="truncate">{result.url}</span>
-              <ArrowUpRight className="h-3.5 w-3.5 flex-shrink-0 opacity-60 transition-all duration-200 group-hover:translate-x-0.5 group-hover:opacity-100" />
-            </span>
-          </span>
-        </span>
-      </span>
-    </motion.button>
-  )
+export function ConsensusHero({ result, label = 'Top result' }: { result: MergedResult; hue?: string; label?: string }) {
+  return <ResultCard result={result} index={0} lead={label} />
 }

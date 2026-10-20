@@ -22,7 +22,8 @@ export default defineConfig({
       emptyOutDir: false,
       rollupOptions: {
         input: {
-          preload: resolve(__dirname, 'electron/preload.ts')
+          preload: resolve(__dirname, 'electron/preload.ts'),
+          'repair-surface-preload': resolve(__dirname, 'electron/repair-surface-preload.ts')
         }
       }
     }
@@ -40,7 +41,8 @@ export default defineConfig({
       outDir: 'dist/renderer',
       rollupOptions: {
         input: {
-          index: resolve(__dirname, 'index.html')
+          index: resolve(__dirname, 'index.html'),
+          'repair-surface': resolve(__dirname, 'repair-surface.html')
         }
       }
     }

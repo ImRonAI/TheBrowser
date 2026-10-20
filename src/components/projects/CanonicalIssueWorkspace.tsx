@@ -12,6 +12,7 @@ import { IssueRonPane } from './IssueRonPane'
 import { IssueDescriptionRon } from './IssueDescriptionRon'
 import { IssueWorkProducts } from './IssueWorkProducts'
 import { CreateIssueDialog } from './dialogs'
+import { AssistField } from '@/components/shared/TextAssist'
 
 export function CanonicalIssueWorkspace({ issue, project, onClose, onNavigate }: {
   issue: Issue; project: Project; onClose: () => void; onNavigate: (id: string) => void
@@ -112,7 +113,9 @@ export function CanonicalIssueWorkspace({ issue, project, onClose, onNavigate }:
   </div>
   const sidebar = <form ref={form} onSubmit={(event) => { event.preventDefault(); void save() }} className="w-full lg:w-72 shrink-0 lg:overflow-y-auto p-5 text-ink dark:text-ink-inverse">
     <fieldset disabled={disabled} className="space-y-4">
-      <Field label="Title"><input aria-label="Issue title" required maxLength={500} className={projectInputClass} value={draft.title} onChange={(e) => edit({ title: e.target.value })} /></Field>
+      <Field label="Title"><AssistField value={draft.title} onChange={(title) => edit({ title })} suggest count={5}>
+        {(field) => <input aria-label="Issue title" required maxLength={500} className={projectInputClass} value={draft.title} onChange={(e) => edit({ title: e.target.value })} {...field} />}
+      </AssistField></Field>
       <Field label="Status"><select aria-label="Issue status" className={projectInputClass} value={draft.status} onChange={(e) => edit({ status: e.target.value as Issue['status'] })}>{Object.entries(ISSUE_STATUS_CONFIG).map(([key, config]) => <option key={key} value={key}>{config.label}</option>)}</select></Field>
       <Field label="Priority"><select aria-label="Issue priority" className={projectInputClass} value={draft.priority} onChange={(e) => edit({ priority: e.target.value as Issue['priority'] })}>{Object.entries(ISSUE_PRIORITY_CONFIG).map(([key, config]) => <option key={key} value={key}>{config.label}</option>)}</select></Field>
       <Field label="Type"><select aria-label="Issue type" className={projectInputClass} value={draft.type} onChange={(e) => edit({ type: e.target.value })}>{definitions.map((d) => <option key={d.key} value={d.key}>{d.label}</option>)}</select></Field>

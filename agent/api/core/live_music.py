@@ -778,11 +778,12 @@ class LiveMusicTools:
     async def music_set_weighted_prompts(self, prompts: list[dict[str, Any]]) -> dict[str, Any]:
         """Start or steer the live music (Lyria RealTime) with weighted prompts.
 
-        Connects the music stream on first use. Sends BidiGenerateMusicClientContent: the full list
-        of weighted prompts replaces the previous list, so repeat prompts you want to keep. Weights are
-        normalized and must not all be 0. Cross-fade by sending intermediate weights over a few calls;
-        a drastic change in one call is an abrupt transition. Call music_playback_control("play") once
-        after the first prompts so audio starts.
+        Connects the music stream on first use and starts playback right away (the reference
+        sequence: set_weighted_prompts, then play). Sends BidiGenerateMusicClientContent: the full
+        list of weighted prompts replaces the previous list, so repeat prompts you want to keep.
+        Weights are normalized and must not all be 0. Cross-fade by sending intermediate weights over
+        a few calls; a drastic change in one call is an abrupt transition. Steering is forward-only:
+        new prompts change the music from now on, never audio already played.
 
         Args:
             prompts: Weighted prompts, each {"text": str, "weight": number != 0}.
@@ -790,10 +791,13 @@ class LiveMusicTools:
         try:
             cleaned = validate_prompts(prompts)
             await self.session.set_weighted_prompts(cleaned)
+            # First prompts on an idle stream: play immediately so the user hears music without a
+            # second model round-trip. Paused/stopped are the user's choice and are left alone.
+            if self.session.playback == "idle":
+                await self.session.playback_control("play")
         except Exception as error:
             return _error(f"{type(error).__name__}: {error}")
-        return {"prompts": cleaned, "playback": self.session.playback,
-                "hint": None if self.session.playback == "playing" else 'call music_playback_control("play") to start audio'}
+        return {"prompts": cleaned, "playback": self.session.playback}
 
     @tool
     async def music_set_generation_config(

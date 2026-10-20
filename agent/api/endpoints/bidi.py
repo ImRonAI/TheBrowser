@@ -18,8 +18,9 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from strands.bidi.models.google import GoogleGeminiLiveModel
 
 from agent.api.core import config
-from agent.api.core.live_io import LiveSocketInput, WebSocketOutput, context_text, local_origin
-from agent.api.core.live_tools import close_live_music, create_live_agent
+from agent.api.core.live_io import LiveSocketInput, ToolCallRecovery, WebSocketOutput, context_text, local_origin
+from agent.api.core.live_takeover import pending_work, start_takeover
+from agent.api.core.live_tools import close_live_music, create_live_agent, live_id_of
 
 logger = logging.getLogger(__name__)
 
@@ -28,9 +29,22 @@ router = APIRouter()
 MODELS = ("gemini-3.8-live-extended-thinking", "gemini-3.8-live")
 # Default is the regular model: gemini-3.8-live-extended-thinking usually announces a browser
 # action, never emits the toolCall, and then reports "a system error occurred" (reproduced on the
-# raw Live WebSocket with the official doc declaration, so it is provider-side). gemini-3.8-live
-# calls the same declarations every time.
+# raw Live WebSocket with the official doc declaration, so it is provider-side; tracked as
+# googleapis/python-genai#3015). gemini-3.8-live calls the same declarations every time. Extended
+# sessions get ``ToolCallRecovery`` (the community workaround: one text nudge once the model is idle).
 DEFAULT_MODEL = MODELS[1]
+
+
+def live_outputs(websocket: WebSocket, model: str) -> list[Any]:
+    """The socket output plus, for the extended model only, the dropped-tool-call recovery stream."""
+    outputs: list[Any] = [WebSocketOutput(websocket)]
+    if model == MODELS[0] and config.LIVE_TOOL_NUDGE_ENABLED:
+        outputs.append(ToolCallRecovery(
+            report=lambda frame: _send(websocket, frame),
+            stall_seconds=config.LIVE_TOOL_NUDGE_STALL_SECONDS,
+            max_per_turn=config.LIVE_TOOL_NUDGE_MAX_PER_TURN,
+        ))
+    return outputs
 VOICES = ("Puck", "Charon", "Kore", "Fenrir", "Aoede", "Leda", "Orus", "Zephyr")
 EFFORTS = ("low", "medium", "high")
 
@@ -90,6 +104,7 @@ async def bidi(
     browser: Literal["user", "cloud"] = "user",
     user_id: str = "default",
     agent_scope: str = "panel",
+    session_id: str = "",
     conversation_id: str = "",
 ) -> None:
     if not local_origin(websocket):
@@ -102,7 +117,11 @@ async def bidi(
         return
     if model != MODELS[0]:
         effort = None
+    # The thread this Live session belongs to (`conversation_id` is the renderer's older name for it).
+    # With a thread the BidiAgent carries a native SnapshotSessionManager over the same key as Chat.
+    thread_id = (session_id or conversation_id or "").strip()
     agent = None
+    end_reason = "the Live socket closed"
     try:
         try:
             context, pending = await _handshake(websocket)
@@ -112,20 +131,24 @@ async def bidi(
             return
         agent, prefix = create_live_agent(
             live_model(model, voice, effort), user_id or "default", agent_scope or "panel", browser,
-            emit=_music_emitter(websocket),
+            emit=_music_emitter(websocket), session_id=thread_id or None,
         )
+        restored = len(agent.messages)
         names = list(agent.tool_names)
         await _send(websocket, {
             "type": "ready",
             "model": model,
             "voice": voice,
             "effort": effort,
-            "conversation_id": conversation_id,
+            "conversation_id": thread_id,
+            "session_id": thread_id,
             "tools": names,
-            "history_source": "client" if context else "none",
+            # `snapshot`: the native session manager restored this thread's messages on construction.
+            "history_source": "snapshot" if restored else ("client" if context else "none"),
+            "restored_messages": restored,
             "music": any(name.startswith("music_") for name in names),
             "music_max_seconds": config.LIVE_MUSIC_RECORD_SECONDS,
-            "agent_id": agent.agent_id,
+            "agent_id": live_id_of(agent),
         })
         if not any(name.startswith(f"{prefix}_") for name in names):
             await _send(websocket, {
@@ -135,17 +158,18 @@ async def bidi(
             })
         await agent.run(
             inputs=[LiveSocketInput(websocket, pending, context)],
-            outputs=[WebSocketOutput(websocket)],
+            outputs=live_outputs(websocket, model),
         )
     except WebSocketDisconnect:
-        return
+        end_reason = "the app disconnected"
     except Exception as error:
         logger.exception("Live session failed")
+        end_reason = f"the Live session failed: {type(error).__name__}"
         try:
             await _send(websocket, {"type": "error", "code": "live_failed", "message": str(error)})
             await websocket.close(code=1011)
         except Exception:
-            return
+            pass
     finally:
         if agent is not None:
             try:
@@ -156,3 +180,30 @@ async def bidi(
                 agent.tool_registry.cleanup()
             except Exception:
                 logger.exception("Live tool cleanup failed")
+            await _maybe_take_over(websocket, agent, thread_id, user_id or "default", agent_scope or "panel", end_reason)
+
+
+async def _maybe_take_over(websocket: WebSocket, agent: Any, thread_id: str, user_id: str, agent_scope: str, reason: str) -> None:
+    """Live ended with work pending -> the Chat agent finishes the thread on the cloud browser.
+
+    Only for threads (a ``session_id`` was given, so the BidiAgent persisted natively) and only when
+    the recorded thread ends on unfinished work. The runtime is the one ``main.py`` started; a thread
+    that already has a reserved run is left alone (409 inside ``start``).
+    """
+    if not thread_id or not config.LIVE_TAKEOVER_ENABLED or not pending_work(list(agent.messages)):
+        return
+    manager = getattr(websocket.app.state, "panel_runtime", None)
+    if manager is None:
+        return
+    from agent.api.core.panel_agent import configured_providers, provider_default_model
+
+    providers = configured_providers()
+    if not providers:
+        logger.warning("session=<%s> | live takeover skipped: no Chat provider configured", thread_id)
+        return
+    provider = providers[0]
+    try:
+        await start_takeover(manager, user_id=user_id, session_id=thread_id, destination=agent_scope if agent_scope in ("panel", "search", "build") else "panel",
+                             provider=provider, model_id=provider_default_model(provider), reason=reason)
+    except Exception:
+        logger.exception("session=<%s> | live takeover could not start", thread_id)

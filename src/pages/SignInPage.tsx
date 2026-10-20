@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import { motion } from 'framer-motion'
 import { useAuthStore } from '@/stores/authStore'
-import { useOnboardingStore } from '@/stores/onboardingStore'
 
 // Sophisticated easing
 const EASE = [0.16, 1, 0.3, 1] as const
@@ -37,7 +36,7 @@ function MicrosoftIcon({ className }: { className?: string }) {
   )
 }
 
-export function SignInPage() {
+export function SignInPage({ onContinueAsGuest }: { onContinueAsGuest?: () => void } = {}) {
   const [isSignUp, setIsSignUp] = useState(false)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -255,7 +254,11 @@ export function SignInPage() {
         {[
           { provider: 'google' as const, icon: GoogleIcon, label: 'Google' },
           { provider: 'github' as const, icon: GitHubIcon, label: 'GitHub' },
-          { provider: 'microsoft' as const, icon: MicrosoftIcon, label: 'Microsoft' },
+          // Only providers enabled in the Supabase project (Authentication -> Providers).
+          // Microsoft (Supabase "azure") is not configured yet; flip VITE_AUTH_MICROSOFT=1 when it is.
+          ...(import.meta.env.VITE_AUTH_MICROSOFT === '1'
+            ? [{ provider: 'microsoft' as const, icon: MicrosoftIcon, label: 'Microsoft' }]
+            : []),
         ].map(({ provider, icon: Icon, label }) => (
           <motion.button
             key={provider}
@@ -294,68 +297,23 @@ export function SignInPage() {
         </button>
       </motion.p>
 
-      {/* Dev: Skip auth button */}
-      <motion.div 
-        className="pt-6 border-t border-surface-200 dark:border-surface-700"
+      {onContinueAsGuest && <motion.div
+        className="pt-5 border-t border-surface-200 dark:border-surface-700"
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ duration: 0.6, delay: 0.5, ease: EASE }}
       >
         <button
-          onClick={() => {
-            // Set authenticated but DO NOT complete onboarding
-            // This will redirect to onboarding questions
-            useAuthStore.setState({
-              isAuthenticated: true,
-              user: {
-                id: 'dev-user',
-                email: 'dev@ron.ai',
-                name: 'Guest',
-                tenantId: 'dev-user',
-                preferences: {
-                  theme: 'dark',
-                  interactionMode: 'type',
-                  searchMode: 'ai-web',
-                  contentDensity: 'comfortable',
-                  showAnimations: true,
-                  reduceMotion: false,
-                },
-                createdAt: new Date().toISOString(),
-                updatedAt: new Date().toISOString(),
-              }
-            })
-            // Reset onboarding to start fresh
-            useOnboardingStore.setState({
-              isComplete: false,
-              currentStep: 'interview',
-              currentQuestionIndex: 0,
-              answers: [],
-            })
-          }}
-          className="
-            w-full py-3.5 px-4
-            text-body-sm text-ink-muted dark:text-ink-inverse-muted
-            rounded-xl
-            border border-dashed border-surface-200 dark:border-surface-700
-            hover:border-accent hover:text-accent 
-            dark:hover:border-accent-light dark:hover:text-accent-light
-            transition-all duration-200
-            group
-          "
+          type="button"
+          onClick={onContinueAsGuest}
+          className="w-full py-3 px-4 text-body-sm text-ink-muted dark:text-ink-inverse-muted rounded-xl border border-dashed border-surface-200 dark:border-surface-700 hover:border-accent hover:text-accent dark:hover:border-accent-light dark:hover:text-accent-light transition-all duration-200"
         >
-          <span className="flex items-center justify-center gap-2">
-            Continue without signing in
-            <motion.span 
-              className="inline-block"
-              initial={{ x: 0 }}
-              whileHover={{ x: 4 }}
-              transition={{ duration: 0.2 }}
-            >
-              →
-            </motion.span>
-          </span>
+          Continue without an account →
         </button>
-      </motion.div>
+        <p className="mt-2 text-center text-xs text-ink-muted dark:text-ink-inverse-muted">
+          Guests can browse and talk to Ron; saving songs, playlists and specialists needs an account.
+        </p>
+      </motion.div>}
     </div>
   )
 }

@@ -1,20 +1,20 @@
 /**
- * Search Results Page — "Assembly"
+ * Search Results Page — "Brief"
  *
  * One query fans out to seven sources (Brave web/news/videos/images/places at maximum
  * counts + the Perplexity Agent API at the chosen depth + a domain-restricted shopping
  * agent) and the page assembles itself live around the results:
  *
- * - The Lens Bar: a floating, hue-keyed tab control with live counts and per-source
- *   status pips (AI Agent / Web / Local / News / Images / Videos / Shopping).
- * - The Web tab ranks by provenance: Consensus (agent ∩ Brave) first, then Agent
- *   picks, then the full breadth of Brave.
- * - The whole page quietly re-tints to whichever lens is active.
+ * - The Lens Bar: a sticky underline tab row with live counts and per-source status
+ *   (Answer / Web / News / Images / Videos / Places / Shopping).
+ * - The Web tab ranks by provenance — Consensus (agent ∩ Brave), Agent picks, then
+ *   the breadth of Brave — as truncated two-line rows beside an "At a glance" rail.
+ * - One ember accent throughout; no per-lens tinting.
  *
  * Route: ron://search?q=<query>&level=<fast|low|medium|high|xhigh>
  */
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { AnimatePresence, motion } from 'framer-motion'
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { SearchX } from 'lucide-react'
 import { useSearchResultsStore } from '@/stores/searchResultsStore'
 import { getDiscoverProfile } from '@/stores/discoverProfileStore'
@@ -27,7 +27,7 @@ import {
 import { cn } from '@/utils/cn'
 import { SearchBackdrop } from '@/components/search/SearchBackdrop'
 import { SearchHeader } from '@/components/search/SearchHeader'
-import { LensBar, type LensState } from '@/components/search/LensBar'
+import { LensBar, lensPanelId, lensTabId, type LensState } from '@/components/search/LensBar'
 import { tabHue, type SearchTab } from '@/components/search/tabs-meta'
 import { AgentAnswer } from '@/components/search/AgentAnswer'
 import { WebResults } from '@/components/search/WebResults'
@@ -51,6 +51,7 @@ const PANEL_KEY: Record<SearchTab, string> = {
 export function SearchResultsPage({ query, level, onBack }: SearchResultsPageProps) {
   const { run, isRunning, startedAt, fatal, start } = useSearchResultsStore()
   const [activeTab, setActiveTab] = useState<SearchTab>('agent')
+  const reduced = useReducedMotion()
 
   const fire = useCallback(() => {
     const profile = getDiscoverProfile()
@@ -126,25 +127,25 @@ export function SearchResultsPage({ query, level, onBack }: SearchResultsPagePro
 
       <LensBar active={activeTab} onChange={setActiveTab} lenses={lenses} />
 
-      <main className="relative z-10 mx-auto max-w-6xl px-6 pb-24 pt-8">
+      <main className="relative z-10 mx-auto max-w-6xl px-6 pb-24 pt-7 sm:px-10">
         {fatal ? (
           <motion.div
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
             className="mx-auto flex max-w-md flex-col items-center py-24 text-center"
+            role="alert"
           >
-            <SearchX className="h-8 w-8 text-ink-muted/50 dark:text-ink-inverse-muted/50" strokeWidth={1.5} />
-            <p className="mt-4 text-lg font-light text-ink dark:text-ink-inverse">Search couldn't run</p>
-            <p className="mt-1 text-sm font-light text-ink-muted dark:text-ink-inverse-muted">{fatal.message}</p>
+            <SearchX className="h-7 w-7 text-ink-muted dark:text-ink-inverse-muted" strokeWidth={1.5} />
+            <p className="mt-4 font-display text-2xl text-ink dark:text-ink-inverse">Search couldn’t run</p>
+            <p className="mt-1.5 text-[13.5px] text-ink-muted dark:text-ink-inverse-muted">{fatal.message}</p>
             <span className="mt-2 rounded bg-surface-100 px-2 py-0.5 font-mono text-[10px] uppercase text-ink-muted dark:bg-surface-800 dark:text-ink-inverse-muted">
               {fatal.code}
             </span>
             <button
               onClick={fire}
               className={cn(
-                'mt-6 rounded-xl px-5 py-2 text-sm font-light text-white',
-                'bg-gradient-to-r from-accent-indigo to-accent-light shadow-glow-accent',
-                'transition-transform hover:scale-[1.03] active:scale-[0.98]',
+                'mt-6 h-9 rounded-lg px-4 text-[13px] font-medium transition-colors',
+                'bg-ink text-surface-0 hover:bg-ink/85 dark:bg-ink-inverse dark:text-surface-900 dark:hover:bg-ink-inverse/85',
               )}
             >
               Try again
@@ -154,13 +155,18 @@ export function SearchResultsPage({ query, level, onBack }: SearchResultsPagePro
           <AnimatePresence mode="wait" initial={false}>
             <motion.div
               key={PANEL_KEY[activeTab]}
-              initial={{ opacity: 0, y: 12 }}
+              id={lensPanelId(activeTab)}
+              role="tabpanel"
+              aria-labelledby={lensTabId(activeTab)}
+              tabIndex={-1}
+              initial={reduced ? false : { opacity: 0, y: 6 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -8 }}
-              transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
+              exit={reduced ? undefined : { opacity: 0 }}
+              transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+              className="focus:outline-none"
             >
               {activeTab === 'agent' && <AgentAnswer run={run.agent} hue={hue} onRetry={fire} />}
-              {activeTab === 'web' && <WebResults state={run} hue={hue} onRetry={fire} />}
+              {activeTab === 'web' && <WebResults state={run} hue={hue} onRetry={fire} onOpenAnswer={() => setActiveTab('agent')} />}
               {activeTab === 'local' && <LocalResults state={run} hue={hue} onRetry={fire} />}
               {activeTab === 'news' && <NewsResults state={run} onRetry={fire} />}
               {activeTab === 'images' && <ImageMasonry state={run} hue={hue} onRetry={fire} />}

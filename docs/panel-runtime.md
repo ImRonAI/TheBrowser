@@ -172,7 +172,7 @@ issue workspace.
 
 | Option | Supported behavior |
 | --- | --- |
-| `context` | `auto` or `agentic` native context manager; `sliding` uses `SlidingWindowConversationManager` with the context plugin disabled. |
+| `context` | `auto` (default): `ContextOffloader` on the session storage (`retrieve_offloaded_content`) and `SummarizingConversationManager` with proactive compression. Summaries are produced by a fresh `Agent` on the panel model and written back into this thread's session. `agentic`: native context-manager tools (`summarize_context`, `truncate_context`, `pin_context`, `retrieve_context`). `sliding`: `SlidingWindowConversationManager`, still with `ContextOffloader`. |
 | `tool_execution` | Native `concurrent` (default) or `sequential` executor. |
 | `checkpointing` | Root native checkpoints; default false. Resume through the runtime. |
 | `background` | Native background execution; default false. Always waits for completion. Discovery/loading, editor, questions, skills, subagents and formations stay foreground-only. |
@@ -346,81 +346,33 @@ exception class/message, status, duration, provenance.
 
 **Tool repair is per user.** The tenant is `user_id`; a repaired tool is a user-scoped revision
 in the user's storage namespace (`panel/users/<sha256(user_id)>/tool-repairs/<tool>/...`), never a
-change to the shared library and never promoted to other users.
+change to the shared library. The flow is: **a tool fails → one `create_harness` fixer runs in the
+background → the user approves.**
 
-1. **Proposal.** `ToolRepairTrigger` (order 310; `RON_TOOL_REPAIR=0` disables) counts identical
-   `(tool, exception class)` failures of **every** tool; at `RON_TOOL_REPAIR_THRESHOLD` (2) it
-   writes `agent.state["panel.tool_repair.request"]` tagged with `target_kind`: `library`
-   (vendored file → can become this user's revision), `mcp` (browser/MCP server tool), `core`
-   (installed host tool) or `other` (plugin/agent tool). **Every kind is repaired per user**; the
-   kind selects the `repair_kind`: `file` (repaired copy of the vendored module; library only),
-   `adapter` (a module with `transform_input(input)` / `transform_result(result, input)` that
-   `_AdaptedTool` wraps around the registered tool in this user's registry — works for any tool,
-   including MCP/browser tools, without editing shared code) or `server` (a repaired copy of the
-   `electron_playwright_mcp` package that this user's browser MCP server process runs via
-   `PYTHONPATH`, `browser_client_factory(extra_env=browser_server_env(user_id))`). The sandbox
-   never talks to the browser or an MCP server: adapter/server logic is unit-tested directly and
-   live-server demonstrations are dry runs. After the native stream ends the runtime
-   emits the durable envelope `tool_repair_proposed {id, tool, kind, exception_class, count,
-   observation, outcome}`; the renderer shows a Catalyst `Alert` with **Repair / Not now**
-   (the text names the repair kind that applies). Nothing runs yet.
-2. **Fixer run.** `POST /tools/repairs {user_id, session_id, tool_name}` (loopback only; the session
-   must be idle) starts one fixer per user+tool: a fresh `create_harness` child (`memory=False`,
-   `session=False`) on `ModelRouter(FallbackStrategy)` over `RON_TOOL_REPAIR_MODELS` (default
-   `openai/gpt-6.1-sol`) at `RON_TOOL_REPAIR_EFFORT` (default `max`). Server-side Perplexity tools
-   ride on the model params (`fixer_hosted_tools`, `RON_TOOL_REPAIR_HOSTED_TOOLS`): `web_search`,
-   `fetch_url`, `image_search`, `sandbox`, the managed GitHub connector (`type: connector`,
-   `id: connector_github`; connect it on the Perplexity Project connectors page) and Context7's
-   remote MCP server (`type: mcp`, `CONTEXT7_MCP_URL`, `CONTEXT7_API_KEY` as `authorization`).
-   Agent-to-agent: like every Ron agent, the fixer carries the native A2A client tools from
-   `core/a2a_tools.py` (see "A2A everywhere" in AGENTS.md); `RON_TOOL_REPAIR_A2A_AGENTS` adds
-   fixer-only peers.
-   Tools: the harness built-ins `shell`/`read`/`write`/`edit`, all routed through the SDK
-   `Agent(sandbox=)` seam — a per-run `DockerSandbox` (`python:3.12-slim`) with the repair
-   workspace writable at `/workspace` and the library, Ron's core, installed `strands_tools` and
-   the MCP server package read-only under `/sources/*` (the SDK's local no-isolation environment
-   is the fallback, reported as sandbox `local`); the harness `todos` plugin; read-only memory
-   search; and the application tools `record_demonstration` / `submit_repair`.
-   The fixer's input **is** the native Agent SOP: `agent/sops/repairing-a-broken-tool.sop.md`
-   (package `agent-sop-format`: Overview / Parameters / Steps with RFC2119 constraints / Examples /
-   Troubleshooting) rendered by the pinned `strands_agents_sops` MCP server as
-   `Run this SOP: <agent-sop …><content>…</content><user-input>…</user-input></agent-sop>`, where
-   `user_input` is `sop_parameters(...)`: tool name and kind, source path and base sha, sandbox
-   kind, the redacted outcome, the exact failing `tool_use`, up to four context examples from this
-   user's session (the fixer synthesizes the rest from `tool_spec` as `synthetic`; side-effecting
-   tools are `dry_run`), the tool spec and the `strands_evals` diagnosis (`diagnose_session` over
-   retained spans when `RON_TOOL_OBSERVATION=1`, else stated absent).
-   The SOP order is fixed: reproduce → wrapper audit (direct vs wrapped call; a wrapper-only
-   failure is `WRAPPER_FIX` on `core/*` → `needs_maintainer`, never re-wrapped) → reflection 1–7 →
-   smallest diff → pytest → five demonstrations in the sandbox → `submit_repair`.
-   The fixer's events stream as `ToolStreamEvent`s under the synthetic root tool `repair:<rev>`
-   (ChainOfThought "Repair"); the result is the durable `tool_repair_ready {tool, rev, status,
-   summary, demonstrations, sandbox, route}` → Catalyst `Alert` + `Table` with **Activate /
-   Discard**. Statuses: `verified` (failing + four context demonstrations passed in an isolated
-   sandbox), `unverified` (local sandbox only; Activate disabled), `failed`, `not_reproducible`,
-   `needs_maintainer` (only a system-prompt defect or a Ron wrapper defect no adapter can sit in
-   front of; patch + test stored in the manifest only).
-3. **Activate / rollback.** `POST /tools/repairs/{tool}/activate {user_id, rev}` re-reads the
-   vendored file (`base_sha256` mismatch → 409), writes `active.json`, materializes the revision
-   under `<SESSION_STORAGE_DIR>/repairs/active/<scope>/` and calls `PanelToolCatalog.reload_tool`
-   on every live session of that user: the copy is executed under the vendored module name
-   (`import_vendored_revision`) and handed to native `ToolRegistry.replace`, which the SDK applies
-   at the **next** invocation — an in-flight call finishes on the old code. A userTurn
-   `ContextInjector` (`revision_notice`) tells each live session once. `adapter` revisions use
-   `PanelToolCatalog.replace_tool` (same `replace` semantics; also updates the MCP provider list so a
-   refresh re-applies the wrapper); `server` revisions restart this user's browser MCP server in
-   each live session (`PanelToolCatalog.restart_mcp_server`: the old stdio process is stopped, a
-   new one is spawned with the user's current `PYTHONPATH`, tools re-published at the next
-   boundary). New sessions load the active
-   `file` revision through the catalog's `revision_resolver(user_id)`, wrap tools through
-   `set_tool_adapter(adapt_tool)`, and spawn the browser server with the user's `PYTHONPATH`; other
-   users are untouched. `/rollback` removes `active.json` and reverses the same path. Restart
-   recovery: `restore_active_markers`.
+1. **Trigger.** `RepairService.trigger()` (`ToolRepairTrigger`, `AfterToolCallEvent`, order 310) on
+   every panel agent and the Live `BidiAgent`. One guided retry for an idempotent tool below
+   `RON_TOOL_REPAIR_THRESHOLD` (2); at the threshold, or on the first failure of a side-effecting
+   tool, it captures the evidence and calls `service.investigate()`, which starts the run as an
+   asyncio task and returns at once. The `ContextInjector` tells the agent the phase
+   (`investigating` → `approval` → `confirm` → `done`, or `declined`/`failed`).
+2. **Fixer.** `build_fixer` = one `create_harness` (model router over `RON_TOOL_REPAIR_MODELS`,
+   hosted Perplexity tools, built-in `shell`/`read`/`write`/`edit` through `Agent(sandbox=)`,
+   `todos`/`environment`, read-only memory search, `record_demonstration`/`submit_repair`).
+   `RepairService._run` streams `fixer.stream_async(sop_task(...))`; events render as the "Repair"
+   chain under `repair:<rev>`. Sandbox: a bounded `DockerSandbox` when Docker works, otherwise the
+   SDK local environment with absolute host paths (`sandbox: local`, shown to the user).
+3. **Result.** `tool_repair_approval` (verified: summary, diff, demonstrations, sandbox,
+   `approval_token`) or `tool_repair_ready` (failed / needs_maintainer / not_reproducible /
+   cancelled).
+4. **Approve = activate.** `POST /tools/repairs/{tool}/activate {user_id, rev, approval_token}`
+   re-checks owner, base sha (409), artifact digest (409) and token (403), writes `active.json` and
+   reloads the owner's live sessions through native `ToolRegistry.replace` (next invocation);
+   adapters use `replace_tool`, server revisions `restart_mcp_server`. New sessions load the
+   revision through `revision_resolver(user_id)`. `/decline`, `/cancel`, `/rollback`,
+   `GET /tools/repairs/active`.
 
-Verification: `agent/tests/test_tool_repair.py` (offline, scripted models, fake shell/sandbox) and
-the on-demand paid `agent/tests/evals/test_tool_repair_eval.py` (`RON_TOOL_REPAIR_EVAL=1`;
-`strands_evals` `Experiment` with `ToolParameterAccuracy`/`ToolSelectionAccuracy` on baseline vs
-revision → `eval.json` beside the manifest).
+Verification: `agent/tests/test_tool_repair.py` (offline, scripted models, fake sandbox) and the
+paid on-demand `agent/tests/evals/test_tool_repair_eval.py`.
 
 ## Explicit child assignments
 
@@ -603,8 +555,22 @@ advertises the catalogue.
   what was declared. `GoogleGeminiLiveModel` declares them `NON_BLOCKING`. The bidi
   loop sends the function response when the tool stream finishes.
 - **Input routes.** `{text}` is a `clientContent` user turn: it always interrupts and is
-  recorded. `{audio_delta}` and video frames (WebM → ffmpeg → native
-  `RealtimeInput(video=…)`) stream through the send gate and are not recorded.
+  recorded. `{audio_delta}` and video frames stream through the send gate and are
+  not recorded. Live screen/camera capture samples the local preview at 1 fps,
+  scales its longest edge to at most 1600 px, and sends JPEG as a JSON text frame:
+  `{"realtime_input":{"video":{"format":"jpeg","source":{"bytes":"<base64>"}}}}`.
+  `LiveSocketInput` decodes the bytes and the native Google model calls
+  `send_realtime_input(video=Blob(data=..., mime_type="image/jpeg"))`. There is no
+  WebM recorder or server-side ffmpeg decoder in this path. Binary packets from
+  an older renderer are discarded with one `unsupported_video` warning per socket
+  rather than crashing voice. Tests: `agent/tests/test_live_io.py` and
+  `src/lib/bidi-recording.test.ts`.
+  Real-device verification (2026-10-07): one session sent 21 shared-window frames
+  followed by 30 MacBook Pro camera frames; Gemini confirmed the browser tab strip
+  and then the change to a room. Both tracks ended on Stop sharing. Separate runs
+  still encountered upstream Google `1011` internal-error/service-unavailable
+  closures; this transport fix does not resolve those provider failures. A native
+  screen acquisition also timed out once before succeeding on retry.
   The handshake `context` seeds text-only history (`history_source: 'client'`; restored
   native history reports `'snapshot'` and receives new handoff text with native-state
   digest deduplication) with page/issue data appended as a trailing **user**

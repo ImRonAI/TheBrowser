@@ -1,17 +1,23 @@
 import { ReactNode, useState, useEffect, useRef } from 'react'
 import { motion } from 'framer-motion'
 import { ChromeToolbar } from '@/components/chrome/ChromeToolbar'
-import { TabBar } from '@/components/chrome/TabBar'
+import { TabBar, useTabSync } from '@/components/chrome/TabBar'
 import { AgentPanel } from '@/components/agent-panel/AgentPanel'
+import { MusicSidePanel } from '@/components/agent-panel/MusicSidePanel'
 import { ScreenVisionOverlay } from '@/components/agent-panel/ScreenVisionOverlay'
 import { InterestMenuSync } from '@/components/interests/InterestMenuSync'
 import { InterestsWidget } from '@/components/interests/InterestsWidget'
+import { RepairBridge } from '@/components/agent-panel/RepairBridge'
 import { ContextMenu } from '@/components/shared/ContextMenu'
 import { BrowserGlowBorder } from '@/components/shared/BrowserGlowBorder'
 import { AgentCursor } from '@/components/shared/AgentCursor'
-import { NavigationDrawer } from '@/components/navigation/NavigationDrawer'
+import { Sidebar } from '@/components/navigation/Sidebar'
 import { AgentUiProvider, useAgentUi } from '@/context/AgentUiContext'
 import { usePanelAgentStore } from '@/stores/panelAgentStore'
+import { useNavigationStore } from '@/stores/navigationStore'
+import { useTabStore } from '@/stores/tabStore'
+import { flashAsking } from '@/stores/mascotStore'
+import { shortcutFor, type ChromeShortcut } from '@/lib/shortcuts'
 import { cn } from '@/utils/cn'
 
 interface BrowserLayoutProps {
@@ -27,7 +33,9 @@ export function BrowserLayout({ children }: BrowserLayoutProps) {
 }
 
 function BrowserLayoutContent({ children }: BrowserLayoutProps) {
-  const { isPanelOpen, startAskRon } = useAgentUi()
+  const { isPanelOpen, startAskRon, openPanel } = useAgentUi()
+  const isSidebarOpen = useNavigationStore((state) => state.isSidebarOpen)
+  useTabSync()
   const panelWidth = usePanelAgentStore((state) => state.panelWidth)
   const teachingInset = usePanelAgentStore((state) => state.teachingInset)
   const sideInset = Math.max(isPanelOpen ? panelWidth : 0, teachingInset)
@@ -67,6 +75,55 @@ function BrowserLayoutContent({ children }: BrowserLayoutProps) {
       }
     }
   }, [startAskRon])
+
+  // Global shortcuts: ⌘J Ask Ron, ⌘K Search, ⌘\ sidebar, ⌘L address bar. In Electron
+  // the main process catches them (also while a website has focus) and sends
+  // `chrome:shortcut`; in a plain browser the renderer's own keydown handles them.
+  const runShortcut = useRef<(shortcut: ChromeShortcut, selectionText?: string, sourceUrl?: string) => void>(() => {})
+  runShortcut.current = (shortcut, selectionText, sourceUrl) => {
+    const nav = useNavigationStore.getState()
+    if (shortcut === 'search') { nav.requestSearchFocus(); return }
+    if (shortcut === 'toggle-sidebar') { nav.toggleSidebar(); return }
+    if (shortcut === 'focus-url') { nav.requestUrlFocus(); return }
+    // Ask Ron: with a selection, the same Ask Ron menu as the context menu;
+    // otherwise open the agent panel and put the cursor in its composer.
+    const selected = (selectionText ?? window.getSelection()?.toString() ?? '').trim()
+    if (selected) {
+      const url = sourceUrl || useTabStore.getState().getActiveTab()?.url || window.location.href
+      void startAskRon(selected, url)
+      const rect = chromeRef.current?.getBoundingClientRect()
+      setContextMenu({
+        x: Math.round(window.innerWidth / 2 - 160),
+        y: Math.round((rect?.bottom ?? 88) + 16),
+        isOpen: true,
+        selectedText: selected,
+      })
+      return
+    }
+    flashAsking()
+    openPanel()
+    // Already open: the panel's own open-effect will not run again, so focus directly.
+    window.setTimeout(() => {
+      const composer = document.querySelector<HTMLTextAreaElement>('section textarea[aria-label="Message Ron"], section textarea[aria-label="Steer the active run"]')
+      composer?.focus()
+    }, 320)
+  }
+
+  useEffect(() => {
+    const off = window.electron?.browser?.onChromeShortcut?.(({ shortcut, selectionText, sourceUrl }) => {
+      runShortcut.current(shortcut, selectionText, sourceUrl)
+    })
+    if (off) return off
+    // No Electron bridge (plain browser preview): read the keys in the renderer.
+    const onKeyDown = (event: KeyboardEvent) => {
+      const shortcut = shortcutFor(event)
+      if (!shortcut) return
+      event.preventDefault()
+      runShortcut.current(shortcut)
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [])
 
   // Keep the native WebContentsView below the real chrome: report the measured
   // header height on layout changes and on shell zoom (which fires `resize`).
@@ -122,61 +179,53 @@ function BrowserLayoutContent({ children }: BrowserLayoutProps) {
 
   return (
     <div className={cn(
-      "flex flex-col h-screen overflow-hidden",
-      "bg-surface-50 dark:bg-surface-950", // Deeper background
-      "selection:bg-accent/20 selection:text-accent dark:selection:bg-accent-light/20 dark:selection:text-accent-light"
+      'flex h-screen overflow-hidden text-ink dark:text-ink-inverse',
+      'ron-chrome',
+      'selection:bg-accent/15 dark:selection:bg-accent-light/25',
     )}>
       {/* Browser Tool Glow Effect - persists across entire app */}
       <BrowserGlowBorder />
-      {/* Browser Chrome - Elevated Header */}
-      <div ref={chromeRef} className={cn(
-        "flex-shrink-0 relative z-[100]",
-        // Background
-        "bg-surface-0/95 dark:bg-surface-900/95",
-        "backdrop-blur-xl",
-        // Border
-        "border-b border-surface-200/50 dark:border-surface-700/50",
-        // Shadow
-        "shadow-sm dark:shadow-none"
-      )}>
-        {/* Subtle inner glow at top */}
-        <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-surface-200 dark:via-surface-700 to-transparent" />
-        
-        <ChromeToolbar />
-        <TabBar />
-        
-        {/* Bottom accent line */}
-        <div className="absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-accent/10 dark:via-accent-light/10 to-transparent" />
-      </div>
 
-      {/* Navigation Drawer - OUTSIDE the relative container */}
-      <NavigationDrawer />
+      {/* Persistent left sidebar: search, destinations, tabs (⌘\ to toggle) */}
+      <Sidebar />
 
-      {/* Main Content Area - Below NavigationDrawer */}
-      <div className="flex-1 relative overflow-hidden">
-        {/* React content - hidden when WebContentsView is showing external websites */}
-        {!isExternalMode && (
-          <motion.div 
-            className="h-full overflow-auto scrollbar-thin"
-            animate={{
-              marginRight: sideInset,
-            }}
-            transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
-          >
-            {children}
-          </motion.div>
-        )}
+      <div className="flex min-w-0 flex-1 flex-col">
+        {/* Browser chrome: toolbar, plus the tab strip while the sidebar is closed */}
+        <div ref={chromeRef} className="relative z-[100] flex-shrink-0 border-b border-surface-200/80 dark:border-surface-800">
+          <ChromeToolbar />
+          {!isSidebarOpen && <TabBar />}
+        </div>
 
-        {/* Agent Panel - positioned within THIS container, below NavigationDrawer */}
-        <AgentPanel />
-        <AgentCursor />
-        <div id="ron-teaching-slot" className="pointer-events-none absolute inset-0 z-[60]" />
+        {/* Main Content Area */}
+        <div className="relative flex-1 overflow-hidden bg-surface-0 dark:bg-surface-900">
+          {/* React content - hidden when WebContentsView is showing external websites */}
+          {!isExternalMode && (
+            <motion.div
+              className="h-full overflow-auto scrollbar-thin"
+              animate={{
+                marginRight: sideInset,
+              }}
+              transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+            >
+              {children}
+            </motion.div>
+          )}
 
-        {/* Screen Vision Overlay */}
-        <ScreenVisionOverlay />
+          {/* Agent Panel - positioned within the content area */}
+          <AgentPanel />
+          <AgentCursor />
+          <div id="ron-teaching-slot" className="pointer-events-none absolute inset-0 z-[60]" />
+          {/* Music side tab + deck: visible only while Lyria RealTime is playing or a take awaits saving. */}
+          <MusicSidePanel />
 
-        <InterestMenuSync />
-        <InterestsWidget />
+          {/* Screen Vision Overlay */}
+          <ScreenVisionOverlay />
+
+          <InterestMenuSync />
+          <InterestsWidget />
+          {/* Native repair surface bridge: mirrors the current investigation into Electron's WebContentsView. */}
+          <RepairBridge />
+        </div>
       </div>
 
       {/* Context Menu */}

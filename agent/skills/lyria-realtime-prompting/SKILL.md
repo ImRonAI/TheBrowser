@@ -20,12 +20,16 @@ browser plays the audio; you never receive it.
 ## Workflow
 
 1. Build the opening prompt set from what the user asked for: lead with the primary genre, then
-   instruments, then mood. Two to four prompts is a good start. Call `music_set_weighted_prompts`.
-2. Optionally call `music_set_generation_config` (bpm, scale, density, brightness, mode).
-3. Call `music_playback_control("play")` once. Audio starts a few seconds later.
-4. To change the music, **steer gradually**: resend the full prompt list with adjusted weights, or
-   add one element at a time. Never send a completely different list in one step.
-5. `music_status` tells you what is in effect. `music_take_status` shows what has been recorded;
+   instruments, then mood. Two to four prompts is a good start. Call `music_set_weighted_prompts`
+   **immediately**: on first use it connects and plays at once, so the user hears music a few
+   seconds later without further calls.
+2. Optionally call `music_set_generation_config` (bpm, scale, density, brightness, mode). Changing
+   bpm or scale on a playing stream needs `music_playback_control("reset_context")`.
+3. To change the music, **steer gradually**: resend the full prompt list with adjusted weights, or
+   add one element at a time. Never send a completely different list in one step. Steering is
+   forward-only: Lyria RealTime has no seek or regenerate; a "[music edit at m:ss]" request from the
+   deck means change the music from now on in that direction.
+4. `music_status` tells you what is in effect. `music_take_status` shows what has been recorded;
    `music_save` keeps it in the user's library (signed in only) and `music_discard_take` starts a
    fresh take. `music_close` ends the stream when the user is done.
 

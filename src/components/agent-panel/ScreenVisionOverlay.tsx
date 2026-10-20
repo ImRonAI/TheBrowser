@@ -76,8 +76,8 @@ export function ScreenVisionOverlay() {
           <motion.div
             className="absolute left-0 right-0 h-px"
             style={{
-              background: 'linear-gradient(90deg, transparent 0%, rgba(45, 59, 135, 0.4) 20%, rgba(74, 59, 135, 0.6) 50%, rgba(45, 59, 135, 0.4) 80%, transparent 100%)',
-              boxShadow: '0 0 20px rgba(45, 59, 135, 0.5), 0 0 40px rgba(74, 59, 135, 0.3)',
+              background: 'linear-gradient(90deg, transparent 0%, rgba(107, 52, 32, 0.4) 20%, rgba(138, 66, 37, 0.6) 50%, rgba(107, 52, 32, 0.4) 80%, transparent 100%)',
+              boxShadow: '0 0 20px rgba(107, 52, 32, 0.5), 0 0 40px rgba(138, 66, 37, 0.3)',
             }}
             animate={{
               top: ['0%', '100%'],
@@ -102,7 +102,7 @@ export function ScreenVisionOverlay() {
             }}
           >
             <div className="w-full h-full rounded-sm border-2 border-royal dark:border-royal-light" style={{
-              boxShadow: '0 0 30px rgba(45, 59, 135, 0.4), inset 0 0 30px rgba(45, 59, 135, 0.2)',
+              boxShadow: '0 0 30px rgba(107, 52, 32, 0.4), inset 0 0 30px rgba(107, 52, 32, 0.2)',
             }} />
           </motion.div>
 
@@ -119,7 +119,7 @@ export function ScreenVisionOverlay() {
             }}
           >
             <div className="w-full h-full rounded-sm border-2 border-royal-purple dark:border-royal-light" style={{
-              boxShadow: '0 0 30px rgba(74, 59, 135, 0.4), inset 0 0 30px rgba(74, 59, 135, 0.2)',
+              boxShadow: '0 0 30px rgba(138, 66, 37, 0.4), inset 0 0 30px rgba(138, 66, 37, 0.2)',
             }} />
           </motion.div>
 
@@ -136,7 +136,7 @@ export function ScreenVisionOverlay() {
             }}
           >
             <div className="w-full h-full rounded-sm border-2 border-royal dark:border-royal-light" style={{
-              boxShadow: '0 0 30px rgba(45, 59, 135, 0.4), inset 0 0 30px rgba(45, 59, 135, 0.2)',
+              boxShadow: '0 0 30px rgba(107, 52, 32, 0.4), inset 0 0 30px rgba(107, 52, 32, 0.2)',
             }} />
           </motion.div>
 

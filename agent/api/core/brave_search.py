@@ -6,8 +6,11 @@ shapes were verified live on 2026-09-25 against the Search plan:
 - 200: /web/search, /news/search, /videos/search, /images/search,
   /local/place_search, /local/pois, /local/descriptions, /llm/context,
   /web/rich (two-step: ``enable_rich_callback=true`` -> ``rich.hint.callback_key``)
-- 400 OPTION_NOT_IN_PLAN: /suggest/search, /spellcheck/search
-  (separate Autosuggest / Spellcheck subscriptions are required)
+- 400 OPTION_NOT_IN_PLAN: /suggest/search, /spellcheck/search on the Search key.
+  They are separate plans with their own tokens (``BRAVE_SUGGEST_API_KEY`` /
+  ``BRAVE_SPELLCHECK_API_KEY``), verified 200 on 2026-10-07; policy ``100;w=1``.
+- Answers plan (``BRAVE_ANSWERS_API_KEY``): ``POST /chat/completions``, an
+  OpenAI-compatible SSE stream (``BraveAnswersClient``), policy ``2;w=1``.
 - rate limit policy header: ``50;w=1, 0;w=2592000`` (50 req/s, no monthly cap)
 
 Rich verticals seen live: weather (OpenWeatherMap, always metric regardless of
@@ -31,13 +34,21 @@ from urllib.parse import urlsplit
 import httpx
 from pydantic import BaseModel, Field
 
-from agent.api.core.config import BRAVE_SEARCH_API_KEY, BRAVE_SEARCH_BASE_URL, BRAVE_SEARCH_RPS
+from agent.api.core.config import (
+    BRAVE_ANSWERS_API_KEY, BRAVE_ANSWERS_MODEL, BRAVE_ANSWERS_RPS, BRAVE_ANSWERS_TIMEOUT, BRAVE_ASSIST_RPS,
+    BRAVE_SEARCH_API_KEY, BRAVE_SEARCH_BASE_URL, BRAVE_SEARCH_RPS, BRAVE_SPELLCHECK_API_KEY, BRAVE_SUGGEST_API_KEY,
+)
 
 ItemKind = Literal["article", "video", "image", "place", "discussion", "web", "rich"]
 Freshness = Literal["pd", "pw", "pm", "py"]
 SafeSearch = Literal["off", "moderate", "strict"]
 MAX_POI_IDS = 20
 SPARKLINE_POINTS = 60
+#: Suggest and Spellcheck ``q`` limits from the API reference: 400 characters and 50 words.
+ASSIST_MAX_CHARS = 400
+ASSIST_MAX_WORDS = 50
+#: ``/suggest/search`` ``count``: min 1, max 20, default 5.
+SUGGEST_MAX_COUNT = 20
 
 
 class BraveSearchError(Exception):
@@ -328,23 +339,37 @@ class BraveClient:
         limiter: RateLimiter | None = None,
         transport: httpx.AsyncBaseTransport | None = None,
         timeout: float = 15.0,
+        suggest_api_key: str | None = None,
+        spellcheck_api_key: str | None = None,
+        assist_limiter: RateLimiter | None = None,
     ):
         self.api_key = api_key
         self.base_url = base_url.rstrip("/")
         self.limiter = limiter or RateLimiter(BRAVE_SEARCH_RPS)
         self._transport = transport
         self._timeout = timeout
+        # Suggest / Spellcheck are separate Brave plans with their own tokens and a 100 req/s policy;
+        # they share one bucket because both back the same keystroke-driven text assist.
+        self.suggest_api_key = suggest_api_key if suggest_api_key is not None else BRAVE_SUGGEST_API_KEY
+        self.spellcheck_api_key = spellcheck_api_key if spellcheck_api_key is not None else BRAVE_SPELLCHECK_API_KEY
+        self.assist_limiter = assist_limiter or RateLimiter(BRAVE_ASSIST_RPS)
 
     @property
     def configured(self) -> bool:
         return bool(self.api_key)
 
-    async def get(self, path: str, params: dict[str, Any], *, headers: dict[str, str] | None = None) -> dict[str, Any]:
-        if not self.api_key:
+    @property
+    def assist_configured(self) -> dict[str, bool]:
+        return {"suggest": bool(self.suggest_api_key), "spellcheck": bool(self.spellcheck_api_key)}
+
+    async def get(self, path: str, params: dict[str, Any], *, headers: dict[str, str] | None = None,
+                  api_key: str | None = None, limiter: RateLimiter | None = None) -> dict[str, Any]:
+        key = api_key if api_key is not None else self.api_key
+        if not key:
             raise BraveSearchError("not_configured", "BRAVE_SEARCH_API_KEY is not set", status=503)
         clean = {k: (str(v).lower() if isinstance(v, bool) else v) for k, v in params.items() if v is not None}
-        headers = {"Accept": "application/json", "Accept-Encoding": "gzip", "X-Subscription-Token": self.api_key, **(headers or {})}
-        await self.limiter.acquire()
+        headers = {"Accept": "application/json", "Accept-Encoding": "gzip", "X-Subscription-Token": key, **(headers or {})}
+        await (limiter or self.limiter).acquire()
         try:
             async with httpx.AsyncClient(transport=self._transport, timeout=self._timeout) as client:
                 response = await client.get(f"{self.base_url}{path}", params=clean, headers=headers)
@@ -363,7 +388,8 @@ class BraveClient:
             raise BraveSearchError("rate_limited", message, status=429, retry_after=float(retry) if retry.replace(".", "", 1).isdigit() else None)
         if detail.get("code") == "OPTION_NOT_IN_PLAN":
             raise BraveSearchError("not_in_plan", message, status=response.status_code)
-        if response.status_code in (401, 403):
+        # Brave returns 422 SUBSCRIPTION_TOKEN_INVALID for a revoked/wrong key (seen live 2026-10-07).
+        if response.status_code in (401, 403) or detail.get("code") == "SUBSCRIPTION_TOKEN_INVALID":
             raise BraveSearchError("unauthorized", message, status=response.status_code)
         if response.status_code == 422:
             raise BraveSearchError("invalid_request", message, status=422)
@@ -443,14 +469,223 @@ class BraveClient:
         hint = await self.rich_hint(q, country=country)
         return await self.rich(hint["callback_key"], vertical=hint["vertical"]) if hint else []
 
-    async def suggest(self, q: str, *, count: int = 8, rich: bool = False, country: str = "US") -> list[dict[str, Any]]:
-        body = await self.get("/suggest/search", {"q": q, "count": count, "rich": rich, "country": country})
+    async def suggest(self, q: str, *, count: int = 5, rich: bool = False, country: str = "US",
+                      lang: str = "en") -> list[dict[str, Any]]:
+        """``GET /suggest/search`` (Autosuggest plan). Params per the reference: ``q`` (<=400 chars,
+        <=50 words), ``lang`` (default en), ``country`` (default US), ``count`` (1-20, default 5),
+        ``rich`` (paid autosuggest only). Returns the ``results`` list: ``{query, type?, title?,
+        description?, img?}`` where ``type`` is ``query`` | ``entity`` | ``calculator`` (unknown
+        values are plain query suggestions)."""
+        if not 1 <= count <= SUGGEST_MAX_COUNT:
+            raise BraveSearchError("invalid_request", f"count must be between 1 and {SUGGEST_MAX_COUNT}", status=422)
+        body = await self.get("/suggest/search", {"q": assist_query(q), "lang": lang, "country": country, "count": count, "rich": rich},
+                              api_key=self.suggest_api_key, limiter=self.assist_limiter)
         return body.get("results", [])
 
-    async def spellcheck(self, q: str, *, country: str = "US") -> str | None:
-        body = await self.get("/spellcheck/search", {"q": q, "country": country})
+    async def spellcheck(self, q: str, *, country: str = "US", lang: str = "en") -> str | None:
+        """``GET /spellcheck/search`` (Spellcheck plan). Params per the reference: ``q`` (<=400 chars,
+        <=50 words), ``lang`` (default en), ``country`` (default US). Returns ``results[0].query``,
+        the corrected phrase, or ``None`` when Brave offers no correction."""
+        body = await self.get("/spellcheck/search", {"q": assist_query(q), "lang": lang, "country": country},
+                              api_key=self.spellcheck_api_key, limiter=self.assist_limiter)
         results = body.get("results") or []
         return results[0].get("query") if results else None
+
+
+def assist_query(q: str) -> str:
+    """Enforce the Suggest/Spellcheck ``q`` contract: non-empty, <=400 characters, <=50 words."""
+    text = (q or "").strip()
+    if not text:
+        raise BraveSearchError("invalid_request", "q must not be empty", status=422)
+    if len(text) > ASSIST_MAX_CHARS or len(text.split()) > ASSIST_MAX_WORDS:
+        raise BraveSearchError("invalid_request", f"q is limited to {ASSIST_MAX_CHARS} characters and {ASSIST_MAX_WORDS} words", status=422)
+    return text
+
+
+AnswersModel = Literal["brave", "brave-pro"]
+SearchContextSize = Literal["low", "medium", "high"]
+#: Research-mode bounds from the API reference (min, max, default).
+RESEARCH_LIMITS: dict[str, tuple[int, int, int]] = {
+    "research_maximum_number_of_tokens_per_query": (1024, 16384, 8192),
+    "research_maximum_number_of_queries": (1, 50, 20),
+    "research_maximum_number_of_iterations": (1, 5, 4),
+    "research_maximum_number_of_seconds": (1, 300, 180),
+    "research_maximum_number_of_results_per_query": (1, 60, 30),
+}
+
+
+class AnswerCitation(BaseModel):
+    """One ``<citation>`` tag from the Answers stream (fields as documented)."""
+    number: int
+    url: str
+    start_index: int | None = None
+    end_index: int | None = None
+    favicon: str | None = None
+    snippet: str | None = None
+
+
+class Answer(BaseModel):
+    """A complete Brave Answers reply: the text with ``<citation>``/``<usage>`` tags removed, the
+    parsed citations, the ``<usage>`` metadata, and the chunk ``model``/``finish_reason``."""
+    text: str
+    citations: list[AnswerCitation] = Field(default_factory=list)
+    usage: dict[str, Any] = Field(default_factory=dict)
+    model: str | None = None
+    finish_reason: str | None = None
+
+
+def parse_answer_delta(delta: str) -> tuple[str, dict[str, Any] | None]:
+    """Classify one ``choices[0].delta.content`` per the documented stream format.
+
+    Returns ``("citation", obj)`` / ``("usage", obj)`` for a whole ``<citation>…</citation>`` or
+    ``<usage>…</usage>`` delta, else ``("text", None)``. Mirrors the reference's
+    ``delta.startswith(tag) and delta.endswith(close)`` check exactly.
+    """
+    import json
+
+    for tag in ("citation", "usage"):
+        open_, close = f"<{tag}>", f"</{tag}>"
+        if delta.startswith(open_) and delta.endswith(close):
+            try:
+                return tag, json.loads(delta.removeprefix(open_).removesuffix(close))
+            except ValueError:
+                return "text", None
+    return "text", None
+
+
+class BraveAnswersClient:
+    """Brave Answers (``POST /chat/completions``), the OpenAI-compatible endpoint documented at
+    api-dashboard.search.brave.com/documentation/services/answers.
+
+    Request body is exactly the reference schema: ``messages`` (exactly one user message), ``model``
+    (``brave`` | ``brave-pro``), ``stream`` (citations/entities/research require ``true``),
+    ``country``, ``language``, ``safesearch``, ``enable_citations``, ``enable_research`` and the
+    bounded ``research_*`` knobs, ``web_search_options.search_context_size``. The response is an SSE
+    stream of ``chat.completion.chunk`` objects whose ``delta.content`` is text or a whole
+    ``<citation>{json}</citation>`` / ``<usage>{json}</usage>`` tag.
+    """
+
+    def __init__(self, api_key: str | None = BRAVE_ANSWERS_API_KEY, *, base_url: str = BRAVE_SEARCH_BASE_URL,
+                 limiter: RateLimiter | None = None, transport: httpx.AsyncBaseTransport | None = None,
+                 timeout: float = BRAVE_ANSWERS_TIMEOUT, model: AnswersModel = BRAVE_ANSWERS_MODEL):  # type: ignore[assignment]
+        self.api_key = api_key
+        self.base_url = base_url.rstrip("/")
+        self.limiter = limiter or RateLimiter(BRAVE_ANSWERS_RPS)
+        self._transport = transport
+        self._timeout = timeout
+        self.model = model
+
+    @property
+    def configured(self) -> bool:
+        return bool(self.api_key)
+
+    def body(self, question: str, *, model: AnswersModel | None = None, country: str = "us", language: str = "en",
+             safesearch: SafeSearch = "moderate", enable_citations: bool = True, enable_research: bool = False,
+             search_context_size: SearchContextSize | None = None, **research: int) -> dict[str, Any]:
+        """The documented request body. ``research_*`` kwargs are clamped to the reference bounds."""
+        text = (question or "").strip()
+        if not text:
+            raise BraveSearchError("invalid_request", "question must not be empty", status=422)
+        payload: dict[str, Any] = {
+            "messages": [{"role": "user", "content": text}],
+            "model": model or self.model,
+            "stream": True,
+            "country": country,
+            "language": language,
+            "safesearch": safesearch,
+            "enable_citations": enable_citations and not enable_research,
+            "enable_research": enable_research,
+        }
+        if search_context_size is not None:
+            payload["web_search_options"] = {"search_context_size": search_context_size}
+        for key, value in research.items():
+            if key not in RESEARCH_LIMITS:
+                raise BraveSearchError("invalid_request", f"unknown research option {key}", status=422)
+            low, high, _ = RESEARCH_LIMITS[key]
+            payload[key] = max(low, min(high, int(value)))
+        return payload
+
+    async def stream(self, question: str, **options: Any):
+        """Yield ``(kind, payload)``: ``("text", str)``, ``("citation", AnswerCitation)``,
+        ``("usage", dict)``, ``("done", {"model", "finish_reason"})``."""
+        import json
+
+        if not self.api_key:
+            raise BraveSearchError("not_configured", "BRAVE_ANSWERS_API_KEY is not set", status=503)
+        payload = self.body(question, **options)
+        headers = {"Content-Type": "application/json", "Accept": "text/event-stream", "x-subscription-token": self.api_key}
+        await self.limiter.acquire()
+        try:
+            async with httpx.AsyncClient(transport=self._transport, timeout=self._timeout) as client:
+                async with client.stream("POST", f"{self.base_url}/chat/completions", json=payload, headers=headers) as response:
+                    if response.status_code != 200:
+                        await response.aread()
+                        raise self._error(response)
+                    model: str | None = None
+                    finish: str | None = None
+                    async for line in response.aiter_lines():
+                        if not line.startswith("data:"):
+                            continue
+                        data = line[5:].strip()
+                        if not data or data == "[DONE]":
+                            continue
+                        chunk = json.loads(data)
+                        model = chunk.get("model") or model
+                        for choice in chunk.get("choices") or []:
+                            finish = choice.get("finish_reason") or finish
+                            delta = (choice.get("delta") or {}).get("content")
+                            if not delta:
+                                continue
+                            kind, obj = parse_answer_delta(delta)
+                            if kind == "citation" and obj is not None:
+                                yield "citation", AnswerCitation.model_validate(obj)
+                            elif kind == "usage" and obj is not None:
+                                yield "usage", obj
+                            else:
+                                yield "text", delta
+                    yield "done", {"model": model, "finish_reason": finish}
+        except httpx.HTTPError as error:
+            raise BraveSearchError("network", type(error).__name__) from error
+
+    async def answer(self, question: str, **options: Any) -> Answer:
+        """Collect a full stream into one ``Answer``."""
+        text: list[str] = []
+        citations: list[AnswerCitation] = []
+        usage: dict[str, Any] = {}
+        meta: dict[str, Any] = {}
+        async for kind, payload in self.stream(question, **options):
+            if kind == "text" and isinstance(payload, str):
+                text.append(payload)
+            elif kind == "citation" and isinstance(payload, AnswerCitation):
+                citations.append(payload)
+            elif kind == "usage" and isinstance(payload, dict):
+                usage = payload
+            elif kind == "done" and isinstance(payload, dict):
+                meta = payload
+        return Answer(text="".join(text), citations=citations, usage=usage, model=meta.get("model"), finish_reason=meta.get("finish_reason"))
+
+    @staticmethod
+    def _error(response: httpx.Response) -> BraveSearchError:
+        detail: dict[str, Any] = {}
+        try:
+            detail = response.json().get("error") or {}
+        except ValueError:
+            pass
+        message = detail.get("detail") or response.reason_phrase or "Brave Answers request failed"
+        if response.status_code == 429:
+            retry = response.headers.get("retry-after") or (response.headers.get("x-ratelimit-reset") or "").split(",")[0].strip()
+            return BraveSearchError("rate_limited", message, status=429, retry_after=float(retry) if retry.replace(".", "", 1).isdigit() else None)
+        if detail.get("code") == "OPTION_NOT_IN_PLAN":
+            return BraveSearchError("not_in_plan", message, status=response.status_code)
+        if response.status_code == 402:
+            return BraveSearchError("payment_required", message, status=402)
+        if response.status_code in (401, 403, 422) and detail.get("code") == "SUBSCRIPTION_TOKEN_INVALID":
+            return BraveSearchError("unauthorized", message, status=response.status_code)
+        if response.status_code in (401, 403):
+            return BraveSearchError("unauthorized", message, status=response.status_code)
+        if response.status_code in (400, 422):
+            return BraveSearchError("invalid_request", message, status=response.status_code)
+        return BraveSearchError("upstream", message, status=response.status_code)
 
 
 class SectionRequest(BaseModel):

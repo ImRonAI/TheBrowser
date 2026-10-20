@@ -229,6 +229,7 @@ def test_efforts_endpoint_503_without_key(monkeypatch):
 
 @pytest.mark.parametrize("model,expected", [
     # https://docs.x.ai/docs/guides/reasoning summary table + strands_xai 0.6.1 docstring.
+    ("grok-4.7", ["low", "medium", "high", "xhigh"]),
     ("grok-4.6", ["low", "medium", "high", "xhigh"]),
     ("grok-4.6-0801", ["low", "medium", "high", "xhigh"]),
     ("grok-4.5", ["low", "medium", "high"]),
@@ -245,6 +246,106 @@ def test_xai_efforts_are_documented_not_probed(monkeypatch, model, expected):
     res = client.get(f"/models/{model}/efforts?provider=xai")
     assert res.status_code == 200
     assert res.json()["efforts"] == expected
+
+
+@pytest.mark.parametrize("model,expected", [
+    # https://docs.mistral.ai/studio/conversations/reasoning + live probe of the
+    # full models.list() catalogue on 2026-10-09 (reasoning_effort on /v1/chat/completions).
+    ("mistral-small-latest", ["none", "high"]),
+    ("mistral-small-2603", ["none", "high"]),
+    ("mistral-medium-3-5", ["none", "high"]),
+    ("mistral-medium-3.5", ["none", "high"]),
+    ("mistral-medium-latest", ["none", "high"]),
+    ("mistral-large-4-0", ["none", "high"]),
+    ("mistral-large-4", ["none", "high"]),
+    ("mistral-vibe-cli-fast", ["none", "high"]),
+    ("magistral-medium-latest", ["none", "high"]),
+    ("ft:mistral-small-latest:8e731c8a:20250811:f4462e68", ["none", "high"]),
+    ("zai-glm-5-3", ["low", "high", "max"]),
+    ("zai-glm-latest", ["low", "high", "max"]),
+    ("mistral-large-latest", []),  # -> mistral-large-2512: "reasoning_effort is not enabled for this model"
+    ("mistral-large-2512", []),
+    ("codestral-latest", []),
+    ("ministral-8b-latest", []),
+    ("voxtral-small-latest", []),
+    ("mistral-ocr-latest", []),
+    ("zai-glm-5-2", []),  # deprecated; accepts the enum live but Mistral documents no effort for it
+])
+def test_mistral_efforts_are_documented_not_probed(monkeypatch, model, expected):
+    _clear_provider_keys(monkeypatch)
+    monkeypatch.setattr(app_config, "MISTRAL_API_KEY", "mistral-test")
+
+    res = client.get(f"/models/{model}/efforts?provider=mistral")
+    assert res.status_code == 200
+    assert res.json()["efforts"] == expected
+
+
+@pytest.mark.parametrize("model,expected", [
+    # https://ai.google.dev/gemini-api/docs/thinking "Controlling thinking" table +
+    # image-generation guide, confirmed live on generateContent 2026-10-09.
+    ("gemini-3.8-flash", ["low", "medium", "high"]),
+    ("gemini-3.7-flash", ["low", "medium", "high"]),
+    ("gemini-3.6-flash", ["minimal", "low", "medium", "high"]),
+    ("gemini-3.5-flash", ["minimal", "low", "medium", "high"]),
+    ("gemini-3.5-flash-lite", ["minimal", "low", "medium", "high"]),
+    ("gemini-3.1-pro-preview", ["low", "medium", "high"]),
+    ("gemini-3.1-pro-preview-customtools", ["low", "medium", "high"]),
+    ("gemini-3.1-flash-lite", ["minimal", "low", "medium", "high"]),
+    ("gemini-3.1-flash-lite-preview", ["minimal", "low", "medium", "high"]),
+    ("gemini-3-flash-preview", ["minimal", "low", "medium", "high"]),
+    ("gemini-3-pro-preview", ["low", "high"]),
+    ("gemini-3.1-flash-image", ["minimal", "high"]),
+    ("gemini-3.1-flash-lite-image", ["minimal", "high"]),
+    ("gemini-nano-banana-2.1", ["minimal", "medium", "high"]),
+    ("gemini-2.5-pro", ["low", "medium", "high"]),
+    ("gemini-2.5-flash", ["low", "medium", "high"]),
+    ("gemini-2.5-flash-lite", ["low", "medium", "high"]),
+    ("gemini-flash-latest", ["low", "medium", "high"]),
+    ("gemini-flash-lite-latest", ["minimal", "low", "medium", "high"]),
+    ("gemini-pro-latest", ["low", "medium", "high"]),
+    ("gemini-robotics-er-2-preview", ["minimal", "low", "medium", "high"]),
+    ("models/gemini-3.8-flash", ["low", "medium", "high"]),
+    ("gemini-3.8-flash-tts", []),  # "Thinking level is not supported for this model"
+    ("gemini-3.5-transcribe", []),
+    ("gemini-2.5-flash-image", []),
+    ("gemini-3-pro-image", []),
+    ("gemini-omni-1.1-flash", []),
+    ("gemini-2.5-computer-use-preview-10-2025", []),
+])
+def test_gemini_efforts_are_documented_not_probed(monkeypatch, model, expected):
+    _clear_provider_keys(monkeypatch)
+    monkeypatch.setattr(app_config, "GEMINI_API_KEY", "gemini-test")
+
+    res = client.get(f"/models/{model}/efforts?provider=gemini")
+    assert res.status_code == 200
+    assert res.json()["efforts"] == expected
+
+
+def test_mistral_and_gemini_build_model_validate_effort(monkeypatch):
+    monkeypatch.setattr(app_config, "MISTRAL_API_KEY", "mistral-test")
+    monkeypatch.setattr(app_config, "GEMINI_API_KEY", "gemini-test")
+    from agent.api.core.mistral_model import RonMistralModel
+
+    with pytest.raises(ValueError, match="rejects the parameter"):
+        panel_agent.build_model("mistral", "mistral-large-latest", "high")
+    with pytest.raises(ValueError, match="supported: none, high"):
+        panel_agent.build_model("mistral", "mistral-small-latest", "medium")
+    model = panel_agent.build_model("mistral", "zai-glm-5-3", "max")
+    assert type(model) is RonMistralModel
+    assert model.reasoning_effort == "max"
+    assert panel_agent.build_model("mistral", "mistral-small-latest").reasoning_effort is None
+
+    with pytest.raises(ValueError, match="supported: low, medium, high"):
+        panel_agent.build_model("gemini", "gemini-3.8-flash", "minimal", hosted_tools=False)
+    with pytest.raises(ValueError, match="no thinking control"):
+        panel_agent.build_model("gemini", "gemini-3.8-flash-tts", "high", hosted_tools=False)
+    gemini = panel_agent.build_model("gemini", "gemini-3.5-flash", "minimal", hosted_tools=False)
+    thinking = gemini.config["params"]["thinking_config"]
+    assert thinking.include_thoughts is True
+    assert thinking.thinking_level == "MINIMAL"
+    assert panel_agent.build_model("gemini", "gemini-3.5-flash", hosted_tools=False).config["params"][
+        "thinking_config"
+    ].thinking_level is None
 
 
 def test_xai_build_model_rejects_unsupported_effort(monkeypatch):

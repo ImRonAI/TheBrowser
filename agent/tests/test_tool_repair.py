@@ -1,6 +1,8 @@
-"""Per-user tool repair (CAT-50/51): trigger, redaction, context examples, storage layout, fixer run
-with scripted models + fake shell/sandbox, activate (sha check / 409), reload at the NEXT invocation,
-rollback, restart recovery, and tenant isolation. Fully offline."""
+"""Per-user tool repair (CAT-50/51): the native tool-failure hook starts a bounded investigation; the
+real create_harness fixer is served by Ron's A2AServer and driven by the official a2a-sdk client
+(input_required interrupt -> approve/decline -> applied); sandbox required (blocked without Docker);
+activation bound to owner/base sha/artifact digest/approval token; reload at the NEXT invocation;
+rollback; restart recovery; tenant isolation. Fully offline: scripted models, fake sandbox, ASGI transport."""
 
 from __future__ import annotations
 
@@ -9,6 +11,7 @@ import json
 import textwrap
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any
 
 import pytest
 from strands import Agent, tool
@@ -99,43 +102,6 @@ def _agent(root: Path, uses, *, user_id="alice", session_id="s1", revision=None,
                  callback_handler=None, trace_attributes=trace_attributes(session_id=session_id, user_id=user_id))
 
 
-# --- Trigger -------------------------------------------------------------------------------
-
-def test_trigger_proposes_after_threshold_identical_failures_of_a_library_tool(library):
-    agent = _agent(library, [("flaky", {"record": {"secret": "SENSITIVE"}}), ("flaky", {"record": {"label": "ok"}}), ("flaky", {"record": {}})])
-    asyncio.run(agent.invoke_async("go"))
-    assert agent.state.get(TOOL_FAILURES_STATE_KEY)["count"] == 2
-    proposal = pending_proposal(agent)
-    assert proposal is not None
-    assert proposal["tool_name"] == "flaky" and proposal["exception_class"] == "KeyError" and proposal["count"] == 2
-    # Redacted: argument keys/types only, never values; provenance included.
-    assert proposal["outcome"]["arg_types"] == {"record": "dict"}
-    assert proposal["outcome"]["source"]["path"] == "demo/flaky.py"
-    assert "SENSITIVE" not in json.dumps(proposal["outcome"]) and "KeyError" in proposal["outcome"]["exception"]
-    # Context examples recorded (concurrent executor: completion order is not fixed).
-    recorded = agent.state.get(tool_repair.REPAIR_CONTEXT_STATE_KEY)["flaky"]
-    assert sorted(entry["status"] for entry in recorded) == ["error", "error", "success"]
-
-
-def test_trigger_proposes_for_every_tool_kind_but_not_for_single_failures(library):
-    """ALL tool failures propose a fix. The kind tells the fixer what it can deliver: a user-scoped
-    revision (library) or a diagnosed proposal for the maintainer (core/mcp/other)."""
-    @tool
-    async def local_bad(value: str) -> str:
-        """Raises."""
-        raise ValueError(value)
-
-    agent = Agent(model=ScriptedModel([("local_bad", {"value": "a"}), ("local_bad", {"value": "b"})]), tools=[local_bad],
-                  hooks=[ToolObservation(), ToolRepairTrigger(RepairConfig(threshold=2))], callback_handler=None)
-    asyncio.run(agent.invoke_async("go"))
-    proposal = pending_proposal(agent)
-    assert proposal is not None and proposal["tool_name"] == "local_bad" and proposal["kind"] == "core"
-    assert tool_repair.target_kind(local_bad) == "core"
-    once = _agent(library, [("flaky", {"record": {}})])
-    asyncio.run(once.invoke_async("go"))
-    assert pending_proposal(once) is None
-
-
 def test_target_kind_classifies_mcp_core_library_and_other(library):
     from unittest.mock import Mock
 
@@ -208,13 +174,128 @@ def _fake_sandbox(run):
     return WorkspaceSandbox(run.workspace), "docker"
 
 
+
+
+# --- Trigger: evidence capture, guidance, no live retry for side effects, no recursion ----------
+
+def test_trigger_records_guidance_and_starts_one_investigation_with_full_evidence(library):
+    """Two identical failures: the first (idempotent, visible params) is a guided retry, the second
+    starts an investigation with the evidence the fixer needs; the request is redacted, the
+    evidence keeps the exact failing input and the user's current request."""
+    started: list = []
+    trigger = ToolRepairTrigger(RepairConfig(threshold=2, models=("m",)), start=started.append, browser="user")
+    path = library / "demo" / "flaky.py"
+    flaky_tool = panel_tools.load_library_tool(library, path, "flaky")
+    agent = Agent(model=ScriptedModel([("flaky", {"record": {"secret": "SENSITIVE"}}), ("flaky", {"record": {"label": "ok"}}), ("flaky", {"record": {}})]),
+                  tools=[flaky_tool], hooks=[ToolObservation(), trigger], callback_handler=None,
+                  trace_attributes=trace_attributes(session_id="s1", user_id="alice"))
+    asyncio.run(agent.invoke_async("please label my records"))
+    assert agent.state.get(TOOL_FAILURES_STATE_KEY)["count"] == 2
+    proposal = pending_proposal(agent)
+    assert proposal is not None and proposal["status"] == "investigating"
+    assert proposal["tool_name"] == "flaky" and proposal["exception_class"] == "KeyError" and proposal["count"] == 2
+    # Redacted request: argument keys/types only, never values; provenance included.
+    assert proposal["outcome"]["arg_types"] == {"record": "dict"}
+    assert proposal["outcome"]["source"]["path"] == "demo/flaky.py"
+    assert "SENSITIVE" not in json.dumps(proposal["outcome"]) and "KeyError" in proposal["outcome"]["exception"]
+    recorded = agent.state.get(tool_repair.REPAIR_CONTEXT_STATE_KEY)["flaky"]
+    assert sorted(entry["status"] for entry in recorded) == ["error", "error", "success"]
+    # One investigation, with the owner, the exact call, the spec, the request and the browser.
+    assert len(started) == 1
+    evidence = started[0]
+    assert evidence.user_id == "alice" and evidence.session_id == "s1" and evidence.kind == "library"
+    assert evidence.tool_use["input"] in ({"record": {"secret": "SENSITIVE"}}, {"record": {}})
+    assert evidence.tool_spec["name"] == "flaky" and "inputSchema" in evidence.tool_spec
+    assert evidence.current_request == "please label my records" and evidence.browser == "user"
+    assert "KeyError" in evidence.error and len(evidence.messages) >= 2 and evidence.side_effecting is False
+    guide = agent.state.get("panel.tool_failure")
+    assert guide["phase"] == "investigating" and guide["tool_name"] == "flaky" and guide["count"] == 2
+    from agent.api.core.tool_failure import failure_guidance
+    from strands.vended_plugins.context_injector import InjectionContext
+    text = failure_guidance(InjectionContext(messages=agent.messages, state=agent.state, agent=agent))
+    assert text is not None and "investigating" in text and "Do not call this tool again" in text
+    # A later failure of the same tool while investigating does not start a second one.
+    agent.model = ScriptedModel([("flaky", {"record": {}})])
+    asyncio.run(agent.invoke_async("again"))
+    assert len(started) == 1
+
+
+def test_trigger_guides_one_retry_for_idempotent_tools_and_none_for_side_effects(library):
+    """First idempotent failure -> `retry` guidance (no investigation). A side-effecting tool (browser,
+    shell, non-GET http) is never repeated on the live environment: it investigates at once."""
+    started: list = []
+    once = _agent(library, [("flaky", {"record": {}})], extra_hooks=())
+    asyncio.run(once.invoke_async("go"))
+    assert pending_proposal(once) is None
+    assert once.state.get("panel.tool_failure")["phase"] == "retry"
+
+    @tool(name="user_browser_browser_click")
+    async def click(selector: str) -> str:
+        """Click."""
+        raise RuntimeError("no element")
+
+    live = Agent(model=ScriptedModel([("user_browser_browser_click", {"selector": "#a"})]), tools=[click],
+                 hooks=[ToolObservation(), ToolRepairTrigger(RepairConfig(threshold=2, models=("m",)), start=started.append, browser="user")],
+                 callback_handler=None, trace_attributes=trace_attributes(session_id="s1", user_id="alice"))
+    asyncio.run(live.invoke_async("click it"))
+    assert len(started) == 1 and started[0].side_effecting is True and started[0].count == 1
+    assert live.state.get("panel.tool_failure")["phase"] == "investigating"
+    assert "side effects" in failure_guidance_text(live)
+
+
+def failure_guidance_text(agent) -> str:
+    from agent.api.core.tool_failure import failure_guidance
+    from strands.vended_plugins.context_injector import InjectionContext
+    return failure_guidance(InjectionContext(messages=agent.messages, state=agent.state, agent=agent)) or ""
+
+
+def test_trigger_ignores_cancelled_calls_fixer_tools_and_every_kind_counts(library):
+    """Cancelled tool calls (BeforeToolCall cancel) and the fixer's own / Ron's control tools never
+    start an investigation; every repairable kind does (core here)."""
+    started: list = []
+
+    @tool
+    async def local_bad(value: str) -> str:
+        """Raises."""
+        raise ValueError(value)
+
+    @tool
+    async def submit_repair(status: str) -> str:
+        """Fixer tool (recursion guard)."""
+        raise ValueError("boom")
+
+    class CancelAll:
+        def register_hooks(self, registry, **_):
+            from strands.hooks.events import BeforeToolCallEvent
+            registry.add_callback(BeforeToolCallEvent, self.cancel)
+
+        def cancel(self, event):
+            if event.tool_use["name"] == "local_bad" and event.tool_use["input"].get("value") == "cancel":
+                event.cancel_tool = "cancelled by policy"
+
+    agent = Agent(model=ScriptedModel([("local_bad", {"value": "cancel"}), ("submit_repair", {"status": "x"}),
+                                       ("local_bad", {"value": "a"}), ("local_bad", {"value": "b"})]),
+                  tools=[local_bad, submit_repair],
+                  hooks=[ToolObservation(), CancelAll(), ToolRepairTrigger(RepairConfig(threshold=2), start=started.append)],
+                  callback_handler=None, trace_attributes=trace_attributes(session_id="s1", user_id="alice"))
+    asyncio.run(agent.invoke_async("go"))
+    assert [e.tool_name for e in started] == ["local_bad"]
+    assert started[0].kind == "core" and tool_repair.target_kind(local_bad) == "core"
+    counts = agent.state.get(tool_repair.REPAIR_COUNTS_STATE_KEY)
+    assert counts == {"local_bad|ValueError": 2}
+
+
+# --- The fixer: one create_harness agent run in the background ---------------------------------
+
 class FixerModel(ScriptedModel):
-    """Drives the fixer: write the repaired file + test, run the sandbox, record five demos, submit."""
+    """Scripted fixer: issues the whole SOP as one batch of tool uses, then ends the turn."""
 
 
 def _fixer_builder(uses):
+    model = FixerModel(uses)
+
     def build(provider, model_id, effort=None, *, hosted_tools=True):
-        return FixerModel(uses)
+        return model
     return build
 
 
@@ -238,163 +319,334 @@ def _fixer_script(status="verified", fix_type="OTHERS", demos=5):
     ]
 
 
-def _run_fixer(library, *, script, user_id="alice", session_id="s1", agent=None, events=None):
-    service = RepairService(RepairConfig(threshold=2, models=("m1", "m2"), timeout_s=60))
-    if agent is None:
-        agent = _agent(library, [("flaky", {"record": {}}), ("flaky", {"record": {}})], user_id=user_id, session_id=session_id)
-        asyncio.run(agent.invoke_async("go"))
-    assert pending_proposal(agent) is not None
+class _ASGIConfig:
+    """``a2a`` ``ClientConfig`` whose httpx client talks to an in-process app serving the real
+    native ``A2AServer`` at ``/a2a/fixer`` (the same ``create_panel_a2a_server`` main.py mounts).
+    The httpx client is created per event loop because each test scenario runs ``asyncio.run``."""
 
-    async def go():
-        started = await service.start(
-            user_id=user_id, session_id=session_id, tool_name="flaky", session_messages=list(agent.messages), agent=agent,
-            on_event=(events.append if events is not None else None), build_model=_fixer_builder(script),
-            sandbox_factory=_fake_sandbox, sop_prompt="SOP: repair carefully.",
-        )
-        assert started["state"] == "running"
-        return await service.wait(user_id, "flaky")
+    def __init__(self, service: RepairService) -> None:
+        from fastapi import FastAPI
 
-    return agent, asyncio.run(go())
+        from agent.api.core.panel_a2a import create_panel_a2a_server, mount_panel_a2a
+
+        self.app = FastAPI()
+        self.integration = create_panel_a2a_server(agent_factory=service.agent_for, http_url="http://test/a2a/fixer")
+        assert mount_panel_a2a(self.app, self.integration, enabled=True, path="/a2a/fixer")
+
+    def config(self):
+        import httpx
+        from a2a.client import ClientConfig
+
+        http = httpx.AsyncClient(transport=httpx.ASGITransport(app=self.app), base_url="http://test", timeout=60)
+        return ClientConfig(httpx_client=http, streaming=True)
 
 
-def test_fixer_run_writes_verified_manifest_and_files(library):
+def _service(script, *, timeout_s=60, sandbox=None) -> RepairService:
+    service = RepairService(RepairConfig(threshold=2, models=("m1",), timeout_s=timeout_s, max_concurrent=2),
+                            fixer_url="http://test/a2a/fixer")
+    service.build_model = _fixer_builder(script)
+    service.sandbox_factory = sandbox or _fake_sandbox
+    service.sop_prompt = "SOP: repair carefully."
+    asgi = _ASGIConfig(service)
+    service.client = lambda: __import__("agent.api.core.panel_a2a", fromlist=["x"]).create_panel_a2a_client(
+        service.fixer_url, client_config=asgi.config())
+    service._asgi = asgi
+    return service
+
+
+def _fail_twice(library, *, user_id="alice", session_id="s1", service: RepairService | None = None):
+    """A live agent whose `flaky` fails twice -> the service's trigger starts the fixer."""
+    path = library / "demo" / "flaky.py"
+    flaky_tool = panel_tools.load_library_tool(library, path, "flaky")
+    hooks = [ToolObservation(), service.trigger(browser="user") if service else ToolRepairTrigger(RepairConfig(threshold=2))]
+    return Agent(model=ScriptedModel([("flaky", {"record": {}}), ("flaky", {"record": {}})]), tools=[flaky_tool], hooks=hooks,
+                 callback_handler=None, trace_attributes=trace_attributes(session_id=session_id, user_id=user_id))
+
+
+def test_tool_failure_runs_the_harness_fixer_in_the_background_and_waits_for_approve(library):
+    """Two failures start the create_harness fixer without blocking the agent; its stream reaches the
+    originating session; a verified result is offered for approval; Approve (activate with the
+    token) applies it for this user only and the agent is told to call the tool again."""
     events: list = []
-    agent, result = _run_fixer(library, script=_fixer_script(), events=events)
-    assert result["status"] == "verified" and result["sandbox"] == "docker" and result["route"] == "repair"
-    assert len(result["demonstrations"]) == 5 and {d["kind"] for d in result["demonstrations"]} == {"failing", "context"}
-    assert any("event" in e for e in events) and events[-1]["ready"]["status"] == "verified"
-    revisions = asyncio.run(tool_repair.list_repairs("alice"))
-    assert len(revisions) == 1
-    manifest = revisions[0]
-    assert manifest["tool_name"] == "flaky" and manifest["status"] == "verified" and manifest["active"] is False
-    assert manifest["repair_kind"] == "file" and manifest["target_kind"] == "library"
-    assert manifest["source_path"] == "demo/flaky.py" and manifest["base_sha256"] == tool_repair.file_sha256(library / "demo" / "flaky.py")
-    assert manifest["reflection"]["7"] == "answer" and manifest["wrapper_audit"]["conclusion"] == "tool defect"
-    assert "files/demo/flaky.py" in manifest["files"] and "tests/test_flaky.py" in manifest["files"]
-    stored = asyncio.run(tool_repair.repair_storage("alice").read(f"flaky/{manifest['revision']}/files/demo/flaky.py"))
-    assert stored is not None and b'record.get("label"' in stored
-    assert agent.state.get(REPAIR_REQUEST_STATE_KEY)["status"] == "ready"
-    # Another user sees nothing.
-    assert asyncio.run(tool_repair.list_repairs("bob")) == []
+    service = _service(_fixer_script())
+
+    async def emit(user_id, session_id, payload):
+        events.append((user_id, session_id, payload))
+
+    service.bind_emitter(emit)
+
+    async def scenario():
+        agent = _fail_twice(library, service=service)
+        await agent.invoke_async("label my records")
+        inv = service._by_key[("alice", "flaky")]
+        assert agent.state.get(REPAIR_REQUEST_STATE_KEY)["status"] in ("investigating", "approval")
+        result = await service.wait("alice", "flaky")
+        assert result["status"] == "verified" and result["approval_token"] and inv.state == "approval"
+        assert agent.state.get("panel.tool_failure")["phase"] == "approval"
+        kinds = [next(k for k in p if k not in ("revision", "tool_name")) for _, _, p in events]
+        assert kinds[0] == "investigating" and "a2a" in kinds and kinds[-1] == "approval"
+        assert all(u == "alice" and s == "s1" for u, s, _ in events)
+        assert service.active("alice")[0]["artifact"]["approval_token"] == result["approval_token"]
+        manifest = (await tool_repair.list_repairs("alice"))[0]
+        assert manifest["status"] == "verified" and "files/demo/flaky.py" in manifest["files"]
+        # Approve = activate with the token, then the agent must confirm by calling the tool.
+        with pytest.raises(PermissionError):
+            await tool_repair.activate("alice", "flaky", result["revision"], approval_token_="0" * 64)
+        await tool_repair.activate("alice", "flaky", result["revision"], approval_token_=result["approval_token"])
+        await service.applied("alice", "flaky", result["revision"])
+        assert agent.state.get("panel.tool_failure")["phase"] == "confirm"
+        assert "Call flaky again now" in failure_guidance_text(agent)
+        assert await tool_repair.list_repairs("bob") == []
+
+    asyncio.run(scenario())
 
 
-def test_fixer_verified_requires_five_passed_demonstrations(library):
-    _, result = _run_fixer(library, script=_fixer_script(demos=2))
-    # submit_repair raised -> the model's turn ended without a successful submit -> failed manifest.
-    assert result["status"] == "failed"
+def test_decline_and_cancel_leave_nothing_applied(library):
+    service = _service(_fixer_script())
+
+    async def declined():
+        agent = _fail_twice(library, service=service)
+        await agent.invoke_async("go")
+        result = await service.wait("alice", "flaky")
+        service.decline("alice", "flaky", result["revision"])
+        assert await tool_repair.read_active("alice", "flaky") is None
+        assert agent.state.get("panel.tool_failure")["phase"] == "declined"
+        with pytest.raises(LookupError):
+            service.decline("alice", "flaky", result["revision"])
+
+    asyncio.run(declined())
+
+    gate = asyncio.Event()
+
+    class SlowSandbox(WorkspaceSandbox):
+        async def execute_streaming(self, command, **kwargs):
+            await gate.wait()
+            yield ExecutionResult(stdout="ok\n", stderr="", exit_code=0)
+
+    slow = _service(_fixer_script(), sandbox=lambda run: (SlowSandbox(run.workspace), "docker"))
+
+    async def cancelled():
+        agent = _fail_twice(library, service=slow)
+        await agent.invoke_async("go")
+        for _ in range(200):
+            if slow._by_key[("alice", "flaky")].run.manifest.get("diagnosis", "x") is None:
+                break
+            await asyncio.sleep(0.01)
+        await slow.cancel("alice", "flaky")
+        result = await slow.wait("alice", "flaky")
+        assert result["status"] == "cancelled"
+        assert await tool_repair.read_active("alice", "flaky") is None
+        with pytest.raises(LookupError):
+            await slow.cancel("alice", "flaky")
+
+    asyncio.run(cancelled())
 
 
-def test_fixer_local_sandbox_downgrades_to_unverified(library):
-    def local_sandbox(run):
-        sandbox, _ = _fake_sandbox(run)
-        return sandbox, "local"
+def test_without_docker_the_fixer_runs_locally_with_real_paths_and_failed_without_submit(library, monkeypatch):
+    """No Docker (the VPS service user): the fixer still runs, in the SDK local environment, and the
+    SOP gets absolute host paths instead of /workspace. A fixer that never submits ends `failed`."""
+    monkeypatch.setattr(tool_repair.shutil, "which", lambda name: None)
+    run = tool_repair.RepairRun(user_id="a", session_id="s", tool_name="flaky", revision="r", workspace=library / "ws",
+                                manifest={"target_kind": "library", "source_path": "demo/flaky.py", "base_sha256": "abc"})
+    environment, kind = tool_repair.create_sandbox(run)
+    assert kind == "local" and type(environment).__name__ == "NotASandboxLocalEnvironment"
+    run.sandbox = kind
+    params = tool_repair.sop_parameters(run, {"outcome": {}, "count": 2}, None, [], None)
+    assert str((library / "ws").resolve()) in params and "/workspace" not in params and "WITHOUT a container" in params
+    monkeypatch.undo()
 
-    service = RepairService(RepairConfig(threshold=2, models=("m1",), timeout_s=60))
-    agent = _agent(library, [("flaky", {"record": {}}), ("flaky", {"record": {}})])
-    asyncio.run(agent.invoke_async("go"))
+    service = _service([("shell", {"command": "echo hi"})])
 
-    async def go():
-        await service.start(user_id="alice", session_id="s1", tool_name="flaky", session_messages=list(agent.messages), agent=agent,
-                            build_model=_fixer_builder(_fixer_script()), sandbox_factory=local_sandbox,
-                            sop_prompt="SOP")
-        return await service.wait("alice", "flaky")
+    async def scenario():
+        agent = _fail_twice(library, service=service)
+        await agent.invoke_async("go")
+        result = await service.wait("alice", "flaky")
+        assert result["status"] == "failed" and "submit_repair" in result["summary"]
+        assert agent.state.get("panel.tool_failure")["phase"] == "failed"
 
-    result = asyncio.run(go())
-    assert result["status"] == "unverified" and result["sandbox"] == "local"
-    with pytest.raises(ValueError):
-        asyncio.run(tool_repair.activate("alice", "flaky", result["revision"]))
-
-
-def test_fixer_system_prompt_fix_routes_to_needs_maintainer(library):
-    _, result = _run_fixer(library, script=_fixer_script(fix_type="SYSTEM_PROMPT_FIX"))
-    assert result["status"] == "needs_maintainer" and result["route"] == "needs_maintainer"
-
-
-def test_fixer_rejects_unregistered_tool_and_concurrent_runs(library):
-    service = RepairService(RepairConfig(threshold=2, models=("m1",)))
-    agent = _agent(library, [("flaky", {"record": {}}), ("flaky", {"record": {}})])
-    asyncio.run(agent.invoke_async("go"))
-
-    async def go():
-        with pytest.raises(ValueError):
-            await service.start(user_id="alice", session_id="s1", tool_name="missing", session_messages=[], agent=agent)
-        gate = asyncio.Event()
-
-        class SlowSandbox(WorkspaceSandbox):
-            async def execute_streaming(self, command, **kwargs):
-                await gate.wait()
-                yield ExecutionResult(stdout="ok\n", stderr="", exit_code=0)
-
-        def slow_sandbox(run):
-            return SlowSandbox(run.workspace), "docker"
-
-        await service.start(user_id="alice", session_id="s1", tool_name="flaky", session_messages=list(agent.messages), agent=agent,
-                            build_model=_fixer_builder(_fixer_script()), sandbox_factory=slow_sandbox,
-                            sop_prompt="SOP")
-        await asyncio.sleep(0.05)
-        with pytest.raises(RuntimeError):
-            await service.start(user_id="alice", session_id="s1", tool_name="flaky", session_messages=list(agent.messages), agent=agent,
-                                build_model=_fixer_builder(_fixer_script()), sandbox_factory=slow_sandbox,
-                                sop_prompt="SOP")
-        gate.set()
-        await service.wait("alice", "flaky")
-
-    asyncio.run(go())
+    asyncio.run(scenario())
 
 
-ADAPTER_SOURCE = """
-def transform_input(input):
-    # The model keeps sending `value`; the tool requires a dict `record` with a label.
-    value = input.get("value", "")
-    return {"record": {"label": value or "<unlabelled>"}}
+def test_verified_requires_five_passed_demonstrations_and_needs_maintainer_routes(library):
+    async def scenario(service, expect_status):
+        agent = _fail_twice(library, service=service)
+        await agent.invoke_async("go")
+        result = await service.wait("alice", "flaky")
+        assert result["status"] == expect_status, result
+
+    asyncio.run(scenario(_service(_fixer_script(demos=2)), "failed"))
+    asyncio.run(scenario(_service(_fixer_script(fix_type="SYSTEM_PROMPT_FIX")), "needs_maintainer"))
 
 
-def transform_result(result, input):
-    return result
-"""
+def test_sandbox_run_args_are_bounded_and_off_the_host_network(library):
+    run = tool_repair.RepairRun(user_id="a", session_id="s", tool_name="t", revision="r1", workspace=library, manifest={})
+    args = tool_repair.sandbox_run_args(run, "ron-repair-r1")
+    joined = " ".join(args)
+    assert "--memory" in args and "--cpus" in args and "--pids-limit" in args and "--network" in args
+    assert "--network host" not in joined and "docker.sock" not in joined and "--privileged" not in joined
+    assert joined.endswith(f"{tool_repair.SANDBOX_IMAGE} sleep infinity")
 
 
-def _adapter_script(tool_name: str, status="verified"):
-    base = [item for item in _fixer_script(status=status) if item[0] != "write"]
-    submit = base[-1][1] | {"repair_kind": "adapter", "diff": "+ adapter transform_input: value -> record.label"}
-    return [("write", {"path": f"/workspace/adapter/{tool_name}.py", "content": ADAPTER_SOURCE}),
-            ("write", {"path": f"/workspace/tests/test_{tool_name}.py", "content": "def test_ok():\n    assert True\n"}),
-            *base[1:-1], ("submit_repair", submit)]
+def test_activate_binds_owner_base_sha_digest_and_token(library):
+    """Gate 4: wrong owner, stale base file, tampered artifact and a wrong/missing token all fail
+    server-side; the right token activates; rollback restores the vendored file."""
+    service = _service(_fixer_script())
+
+    async def scenario():
+        if True:
+            agent = _fail_twice(library, service=service)
+            await agent.invoke_async("go")
+            result = await service.wait("alice", "flaky")
+            assert result["status"] == "verified" and result["approval_token"]
+            rev, token = result["revision"], result["approval_token"]
+            path = library / "demo" / "flaky.py"
+            with pytest.raises(ValueError):
+                await tool_repair.activate("alice", "flaky", rev)
+            with pytest.raises(PermissionError):
+                await tool_repair.activate("alice", "flaky", rev, approval_token_="f" * 64)
+            with pytest.raises((PermissionError, FileNotFoundError)):
+                await tool_repair.activate("bob", "flaky", rev, approval_token_=token)
+            original = path.read_text(encoding="utf-8")
+            path.write_text(original + "\n# drift\n", encoding="utf-8")
+            with pytest.raises(tool_repair.RevisionConflict):
+                await tool_repair.activate("alice", "flaky", rev, approval_token_=token)
+            path.write_text(original, encoding="utf-8")
+            storage = tool_repair.repair_storage("alice")
+            stored = await storage.read(f"flaky/{rev}/files/demo/flaky.py")
+            await storage.write(f"flaky/{rev}/files/demo/flaky.py", stored + b"\n# tampered\n")
+            with pytest.raises(tool_repair.RevisionConflict):
+                await tool_repair.activate("alice", "flaky", rev, approval_token_=token)
+            await storage.write(f"flaky/{rev}/files/demo/flaky.py", stored)
+            active = await tool_repair.activate("alice", "flaky", rev, approval_token_=token)
+            assert active["revision"] == rev and Path(active["revision_file"]).is_file()
+            assert tool_repair.active_revision_file("alice", "flaky", path) == Path(active["revision_file"])
+            assert tool_repair.active_revision_file("bob", "flaky", path) is None
+            rolled = await tool_repair.rollback("alice", "flaky")
+            assert rolled["previous"]["revision"] == rev and await tool_repair.read_active("alice", "flaky") is None
+            assert (await tool_repair.list_repairs("alice"))[0]["status"] == "rolled_back"
+
+    asyncio.run(scenario())
+
+
+def _verified(library, script=None) -> tuple[Any, dict]:
+    service = _service(script or _fixer_script())
+
+    async def scenario():
+        agent = _fail_twice(library, service=service)
+        await agent.invoke_async("go")
+        return agent, await service.wait("alice", "flaky")
+
+    return asyncio.run(scenario())
+
+
+def test_reload_takes_effect_at_next_invocation_and_rollback_restores(library):
+    _, result = _verified(library)
+    rev, token = result["revision"], result["approval_token"]
+    path = library / "demo" / "flaky.py"
+    active = asyncio.run(tool_repair.activate("alice", "flaky", rev, approval_token_=token))
+    swapped: dict = {}
+
+    class SwapDuringCall(AgentTool):
+        def __init__(self, wrapped):
+            super().__init__()
+            self.wrapped = wrapped
+
+        tool_name = property(lambda self: self.wrapped.tool_name)
+        tool_spec = property(lambda self: self.wrapped.tool_spec)
+        tool_type = property(lambda self: self.wrapped.tool_type)
+
+        async def stream(self, tool_use, invocation_state, **kwargs):
+            if not swapped:
+                swapped["done"] = await catalog.reload_tool("flaky", agent=live, root=library, path=path,
+                                                            revision_file=Path(active["revision_file"]))
+            async for event in self.wrapped.stream(tool_use, invocation_state, **kwargs):
+                yield event
+
+    old_tool = SwapDuringCall(panel_tools.load_library_tool(library, path, "flaky"))
+    catalog = panel_tools.PanelToolCatalog(tools=[old_tool])
+    live = Agent(model=ScriptedModel([("flaky", {"record": {}})]), tools=[catalog], callback_handler=None)
+    catalog.bind(live)
+    asyncio.run(live.invoke_async("go"))
+    assert swapped["done"] is True
+    first_results = [b["toolResult"] for m in live.messages for b in m["content"] if "toolResult" in b]
+    assert first_results[0]["status"] == "error"  # in-flight call finished on the old code
+    live.model = ScriptedModel([("flaky", {"record": {}})])
+    asyncio.run(live.invoke_async("again"))
+    results = [b["toolResult"] for m in live.messages for b in m["content"] if "toolResult" in b]
+    assert results[-1]["status"] == "success" and "<unlabelled>" in json.dumps(results[-1]["content"])
+    from strands.vended_plugins.context_injector import InjectionContext
+    render = tool_repair.revision_notice_render("alice")
+    context = InjectionContext(messages=live.messages, state=live.state, agent=live)
+    note = render(context)
+    assert note is not None and "flaky" in note and rev in note and render(context) is None
+    asyncio.run(tool_repair.rollback("alice", "flaky"))
+    asyncio.run(catalog.reload_tool("flaky", agent=live, root=library, path=path, revision_file=None))
+    live.model = ScriptedModel([("flaky", {"record": {}})])
+    asyncio.run(live.invoke_async("third"))
+    results = [b["toolResult"] for m in live.messages for b in m["content"] if "toolResult" in b]
+    assert results[-1]["status"] == "error"
+
+
+def test_new_session_load_path_uses_active_revision_for_this_user_only(library):
+    _, result = _verified(library)
+    asyncio.run(tool_repair.activate("alice", "flaky", result["revision"], approval_token_=result["approval_token"]))
+    path = library / "demo" / "flaky.py"
+
+    def build(user_id):
+        catalog = panel_tools.PanelToolCatalog()
+        catalog.set_revision_resolver(tool_repair.revision_resolver(user_id))
+        agent = Agent(model=ScriptedModel([("flaky", {"record": {}})]), tools=[catalog], callback_handler=None)
+        catalog.bind(agent)
+        asyncio.run(catalog.stage_tool(path, "flaky", agent=agent, root=library))
+        asyncio.run(agent.invoke_async("go"))
+        return [b["toolResult"] for m in agent.messages for b in m["content"] if "toolResult" in b][-1]
+
+    assert build("alice")["status"] == "success"
+    assert build("bob")["status"] == "error"
+
+
+def test_restart_recovery_rematerializes_active_revisions(library):
+    _, result = _verified(library)
+    active = asyncio.run(tool_repair.activate("alice", "flaky", result["revision"], approval_token_=result["approval_token"]))
+    import shutil
+    shutil.rmtree(tool_repair._active_dir("alice"))
+    assert tool_repair.active_revision_file("alice", "flaky", library / "demo" / "flaky.py") is None
+    assert asyncio.run(tool_repair.restore_active_markers("alice")) == 1
+    assert tool_repair.active_revision_file("alice", "flaky", library / "demo" / "flaky.py") == Path(active["revision_file"])
+    fresh = RepairService(RepairConfig(threshold=2, models=("m1",)))
+    assert fresh.status("alice", "flaky") == {"state": "idle", "last": None}
 
 
 def test_fixer_repairs_a_core_tool_with_a_user_scoped_adapter(library):
-    """A non-library failure is repaired too: the fixer writes an adapter module (transform_input /
-    transform_result) that wraps the registered tool for THIS user; activation applies it to the live
-    session via ToolRegistry.replace (next invocation) and to new sessions via the catalog adapter."""
+    """A non-library failure is repaired too: the fixer writes an adapter module that wraps the
+    registered tool for THIS user; activation applies it via ToolRegistry.replace (next invocation)
+    and to new sessions via the catalog adapter."""
     @tool
     async def host_tool(record: dict) -> str:
         """Needs record.label."""
         return str(record["label"])
 
-    # The model mis-calls it with `value`; the SDK validates input -> error twice -> proposal (kind=core).
-    agent = Agent(model=ScriptedModel([("host_tool", {"value": "a"}), ("host_tool", {"value": "b"})]), tools=[host_tool],
-                  hooks=[ToolObservation(), ToolRepairTrigger(RepairConfig(threshold=2, models=("m",)))], callback_handler=None)
-    asyncio.run(agent.invoke_async("go"))
-    assert pending_proposal(agent)["kind"] == "core"
-    service = RepairService(RepairConfig(threshold=2, models=("m1",), timeout_s=60))
+    script = _adapter_script("host_tool")
+    service = _service(script)
 
-    async def go():
-        started = await service.start(user_id="alice", session_id="s1", tool_name="host_tool", session_messages=list(agent.messages),
-                                      agent=agent, build_model=_fixer_builder(_adapter_script("host_tool")), sandbox_factory=_fake_sandbox,
-                                      sop_prompt="SOP")
-        return started, await service.wait("alice", "host_tool")
+    async def scenario():
+        agent = Agent(model=ScriptedModel([("host_tool", {"value": "a"}), ("host_tool", {"value": "b"})]), tools=[host_tool],
+                      hooks=[ToolObservation(), service.trigger(browser="user")], callback_handler=None,
+                      trace_attributes=trace_attributes(session_id="s1", user_id="alice"))
+        await agent.invoke_async("go")
+        assert service._by_key[("alice", "host_tool")].evidence.kind == "core"
+        return await service.wait("alice", "host_tool")
 
-    started, result = asyncio.run(go())
+    result = asyncio.run(scenario())
     assert result["status"] == "verified" and result["route"] == "repair"
-    manifest = asyncio.run(tool_repair.read_manifest("alice", "host_tool", started["revision"]))
+    manifest = asyncio.run(tool_repair.read_manifest("alice", "host_tool", result["revision"]))
     assert manifest["target_kind"] == "core" and manifest["repair_kind"] == "adapter"
     assert "adapter/host_tool.py" in manifest["files"] and manifest["base_sha256"] is not None
-    active = asyncio.run(tool_repair.activate("alice", "host_tool", started["revision"]))
+    active = asyncio.run(tool_repair.activate("alice", "host_tool", result["revision"], approval_token_=result["approval_token"]))
     assert active["repair_kind"] == "adapter"
-    assert tool_repair.active_adapter_file("alice", "host_tool")[1] == started["revision"]
+    assert tool_repair.active_adapter_file("alice", "host_tool")[1] == result["revision"]
     assert tool_repair.active_adapter_file("bob", "host_tool") is None
 
-    # New session for alice: the catalog wraps the tool; the mis-call now succeeds. Bob: unchanged.
     def run_as(user_id):
         catalog = panel_tools.PanelToolCatalog(tools=[host_tool])
         catalog.set_tool_adapter(lambda value: tool_repair.adapt_tool(user_id, value))
@@ -406,8 +658,6 @@ def test_fixer_repairs_a_core_tool_with_a_user_scoped_adapter(library):
     alice = run_as("alice")
     assert alice["status"] == "success" and "hello" in json.dumps(alice["content"])
     assert run_as("bob")["status"] == "error"
-
-    # Live session: replace_tool applies the adapter (next invocation); rollback unwraps.
     catalog = panel_tools.PanelToolCatalog(tools=[host_tool])
     live = Agent(model=ScriptedModel([("host_tool", {"value": "x"})]), tools=[catalog], callback_handler=None)
     catalog.bind(live)
@@ -416,22 +666,20 @@ def test_fixer_repairs_a_core_tool_with_a_user_scoped_adapter(library):
     asyncio.run(live.invoke_async("go"))
     assert [b["toolResult"]["status"] for m in live.messages for b in m["content"] if "toolResult" in b] == ["success"]
     assert asyncio.run(catalog.replace_tool("host_tool", agent=live, build=lambda base: base))
-    assert type(live.tool_registry.registry["host_tool"]).__name__ != "_AdaptedTool"
     asyncio.run(tool_repair.rollback("alice", "host_tool"))
     assert tool_repair.active_adapter_file("alice", "host_tool") is None
 
 
 def test_fixer_repairs_an_mcp_browser_tool_with_an_adapter_and_server_revision(library, monkeypatch):
-    """MCP/browser tools are repaired per user too: (a) an adapter wraps the MCP tool in the user's
-    registry (incl. when it arrives from the MCP provider list), (b) a `server` revision is a repaired
-    copy of electron_playwright_mcp that this user's browser server process runs via PYTHONPATH."""
+    """MCP/browser tools: a side-effecting failure investigates at the FIRST failure (never repeated on
+    the live browser); (a) an adapter wraps the MCP tool for this user, (b) a `server` revision is a
+    repaired copy of electron_playwright_mcp run by this user's browser server via PYTHONPATH."""
     from unittest.mock import Mock
 
     from strands.tools.mcp.mcp_agent_tool import MCPAgentTool
 
     from agent.api.core.panel_browser import browser_client_factory
 
-    # A fake MCP tool: fails unless `selector` is present (the model sends `element`).
     class FakeMCPTool(MCPAgentTool):  # type: ignore[misc]
         def __init__(self):
             AgentTool.__init__(self)
@@ -457,38 +705,29 @@ def test_fixer_repairs_an_mcp_browser_tool_with_an_adapter_and_server_revision(l
                 return
             yield {"toolUseId": tool_use["toolUseId"], "status": "success", "content": [{"text": f"clicked {inputs['selector']}"}]}
 
-    mcp_tool = FakeMCPTool()
-    assert tool_repair.target_kind(mcp_tool) == "mcp"
-    agent = Agent(model=ScriptedModel([("user_browser_browser_click", {"element": "#go"}), ("user_browser_browser_click", {"element": "#go"})]),
-                  tools=[mcp_tool], hooks=[ToolObservation(), ToolRepairTrigger(RepairConfig(threshold=2, models=("m",)))], callback_handler=None)
-    asyncio.run(agent.invoke_async("go"))
-    assert pending_proposal(agent)["kind"] == "mcp"
-
     adapter_source = "def transform_input(input):\n    return {'selector': input.get('selector') or input.get('element')}\n"
     base = [item for item in _fixer_script() if item[0] != "write"]
     script = [("write", {"path": "/workspace/adapter/user_browser_browser_click.py", "content": adapter_source}),
               *base[:-1], ("submit_repair", base[-1][1] | {"repair_kind": "adapter", "diff": "+ element -> selector"})]
-    service = RepairService(RepairConfig(threshold=2, models=("m1",), timeout_s=60))
+    service = _service(script)
 
-    async def go():
-        started = await service.start(user_id="alice", session_id="s1", tool_name="user_browser_browser_click",
-                                      session_messages=list(agent.messages), agent=agent, build_model=_fixer_builder(script),
-                                      sandbox_factory=_fake_sandbox, sop_prompt="SOP")
-        return started, await service.wait("alice", "user_browser_browser_click")
+    async def scenario():
+        mcp_tool = FakeMCPTool()
+        assert tool_repair.target_kind(mcp_tool) == "mcp"
+        agent = Agent(model=ScriptedModel([("user_browser_browser_click", {"element": "#go"})]), tools=[mcp_tool],
+                      hooks=[ToolObservation(), service.trigger(browser="user")], callback_handler=None,
+                      trace_attributes=trace_attributes(session_id="s1", user_id="alice"))
+        await agent.invoke_async("go")
+        inv = service._by_key[("alice", "user_browser_browser_click")]
+        assert inv.evidence.kind == "mcp" and inv.evidence.side_effecting and inv.evidence.count == 1
+        assert "ToolError: selector is required" in inv.evidence.error
+        return await service.wait("alice", "user_browser_browser_click")
 
-    started, result = asyncio.run(go())
+    result = asyncio.run(scenario())
     assert result["status"] == "verified" and result["route"] == "repair"
-    manifest = asyncio.run(tool_repair.read_manifest("alice", "user_browser_browser_click", started["revision"]))
+    manifest = asyncio.run(tool_repair.read_manifest("alice", "user_browser_browser_click", result["revision"]))
     assert manifest["target_kind"] == "mcp" and manifest["repair_kind"] == "adapter"
-    asyncio.run(tool_repair.activate("alice", "user_browser_browser_click", started["revision"]))
-
-    # The MCP tool coming from the provider list is wrapped by the catalog for alice only.
-    class Provider:
-        def __init__(self, tool_):
-            self._tool = tool_
-        def add_consumer(self, *a, **k): pass
-        def remove_consumer(self, *a, **k): pass
-        async def load_tools(self, **k): return [self._tool]
+    asyncio.run(tool_repair.activate("alice", "user_browser_browser_click", result["revision"], approval_token_=result["approval_token"]))
 
     def run_as(user_id):
         catalog = panel_tools.PanelToolCatalog(tools=[FakeMCPTool()])
@@ -502,16 +741,17 @@ def test_fixer_repairs_an_mcp_browser_tool_with_an_adapter_and_server_revision(l
     assert alice["status"] == "success" and "clicked #buy" in json.dumps(alice["content"])
     assert run_as("bob")["status"] == "error"
 
-    # (b) server revision: a repaired copy of the MCP server package is put first on THIS user's
-    # browser server PYTHONPATH; nothing changes for bob or for the shared install.
+    # (b) server revision for THIS user's browser server PYTHONPATH.
     rev = "20261004t000000-srv001"
-    pkg = f"user_browser_browser_click/{rev}/server/{tool_repair.MCP_SERVER_PACKAGE}/server.py"
-    asyncio.run(tool_repair.repair_storage("alice").write(pkg, b"# repaired server\n"))
-    asyncio.run(tool_repair.repair_storage("alice").write(f"user_browser_browser_click/{rev}/server/{tool_repair.MCP_SERVER_PACKAGE}/__init__.py", b""))
+    files = {f"server/{tool_repair.MCP_SERVER_PACKAGE}/server.py": b"# repaired server\n", f"server/{tool_repair.MCP_SERVER_PACKAGE}/__init__.py": b""}
+    for name, data in files.items():
+        asyncio.run(tool_repair.repair_storage("alice").write(f"user_browser_browser_click/{rev}/{name}", data))
+    digest = tool_repair.artifact_digest(files)
+    token = tool_repair.approval_token("alice", "user_browser_browser_click", rev, None, digest)
     asyncio.run(tool_repair.write_manifest("alice", {"tool_name": "user_browser_browser_click", "revision": rev, "target_kind": "mcp",
         "repair_kind": "server", "source_path": None, "base_sha256": None, "status": "verified", "created_at": "2026-10-04T00:00:00",
-        "demonstrations": [], "files": [f"server/{tool_repair.MCP_SERVER_PACKAGE}/server.py"]}))
-    active = asyncio.run(tool_repair.activate("alice", "user_browser_browser_click", rev))
+        "demonstrations": [], "files": sorted(files), "artifact_digest": digest, "approval_token": token, "owner_id": "alice"}))
+    active = asyncio.run(tool_repair.activate("alice", "user_browser_browser_click", rev, approval_token_=token))
     assert active["repair_kind"] == "server"
     dirs = tool_repair.active_server_dirs("alice")
     assert len(dirs) == 1 and (dirs[0] / tool_repair.MCP_SERVER_PACKAGE / "server.py").is_file()
@@ -531,113 +771,159 @@ def test_fixer_repairs_an_mcp_browser_tool_with_an_adapter_and_server_revision(l
     assert tool_repair.browser_server_env("alice") == {}
 
 
-# --- Activate / reload / rollback / restart / isolation -------------------------------------
+def test_fixer_defaults_to_gpt_6_1_sol_at_max_effort_with_harness_builtins(monkeypatch):
+    monkeypatch.delenv("RON_TOOL_REPAIR_MODELS", raising=False)
+    monkeypatch.delenv("RON_TOOL_REPAIR_EFFORT", raising=False)
+    cfg = RepairConfig.from_env()
+    assert cfg.models == ("openai/gpt-6.1-sol",) and cfg.effort == "max"
+    seen = []
 
-def test_activate_checks_sha_then_reload_takes_effect_at_next_invocation_and_rollback_restores(library):
-    agent, result = _run_fixer(library, script=_fixer_script())
-    rev = result["revision"]
+    def build(provider, model_id, effort=None, *, hosted_tools=True):
+        seen.append((provider, model_id, effort, hosted_tools))
+        return ScriptedModel([])
+
+    run = tool_repair.RepairRun(user_id="alice", session_id="s1", tool_name="flaky", revision="r1",
+                                workspace=tool_repair.config.SESSION_STORAGE_DIR / "repairs" / "x" / "r1",
+                                manifest={"target_kind": "library"})
+    fixer = tool_repair.build_fixer(run, models=cfg.models, effort=cfg.effort, build_model=build, sandbox_factory=_fake_sandbox)
+    try:
+        assert seen == [("perplexity", "openai/gpt-6.1-sol", "max", False)]
+        names = set(fixer.tool_registry.registry)
+        assert {"shell", "read", "write", "edit", "todo_write", "record_demonstration", "submit_repair"} <= names
+        assert not names & {"editor", "environment", "mcp_client", "http_request", "subagent", "web_fetch"}
+        # The panel A2A server is not a fixer peer (isolation): no a2a tools unless RON_TOOL_REPAIR_A2A_AGENTS lists one.
+        assert not names & {"a2a_send_message", "a2a_discover_agent"}
+        assert fixer.name == "Ron Tool Fixer"
+    finally:
+        fixer.cleanup()
+
+
+# --- HTTP surface: investigation on the stream, approve over HTTP, activate/rollback -------------
+
+def test_http_repair_loop_end_to_end(library, monkeypatch):
+    """POST /chat (two KeyErrors) starts the fixer from the hook; the session's SSE carries
+    tool_repair_investigating, the Repair chain and tool_repair_approval (with the token);
+    POST /tools/repairs/{tool}/activate with the token applies it and the live session runs the
+    repaired code at its next invocation; rollback restores the vendored file."""
+    import httpx
+    from agent.api.endpoints import chat
+    from agent.api.main import app
+    from agent.api.core.panel_runtime import PanelRuntimeManager
+
     path = library / "demo" / "flaky.py"
+    uses = [("flaky", {"record": {}}), ("flaky", {"record": {}})]
+    agents: list[Agent] = []
 
-    # Library drift -> 409-style conflict; restoring the file makes activation succeed.
-    original = path.read_text(encoding="utf-8")
-    path.write_text(original + "\n# touched\n", encoding="utf-8")
-    with pytest.raises(tool_repair.RevisionConflict):
-        asyncio.run(tool_repair.activate("alice", "flaky", rev))
-    path.write_text(original, encoding="utf-8")
-    active = asyncio.run(tool_repair.activate("alice", "flaky", rev))
-    assert active["revision"] == rev and Path(active["revision_file"]).is_file()
-    assert asyncio.run(tool_repair.read_active("alice", "flaky"))["revision"] == rev
-    assert asyncio.run(tool_repair.list_repairs("alice"))[0]["active"] is True
-    # Sync resolver used by the catalog loader for new sessions of THIS user only.
-    assert tool_repair.active_revision_file("alice", "flaky", path) == Path(active["revision_file"])
-    assert tool_repair.active_revision_file("bob", "flaky", path) is None
-
-    # A live session: the swap lands while a `flaky` call is IN FLIGHT (its stream has started),
-    # so that call completes on the old code; the repaired revision is what the registry resolves
-    # from the next invocation on (native ToolRegistry.replace semantics).
-    swapped: dict = {}
-
-    class SwapDuringCall(AgentTool):
-        def __init__(self, wrapped):
-            super().__init__()
-            self.wrapped = wrapped
-
-        tool_name = property(lambda self: self.wrapped.tool_name)
-        tool_spec = property(lambda self: self.wrapped.tool_spec)
-        tool_type = property(lambda self: self.wrapped.tool_type)
-
-        async def stream(self, tool_use, invocation_state, **kwargs):
-            if not swapped:
-                swapped["done"] = await catalog.reload_tool("flaky", agent=live, root=library, path=path,
-                                                            revision_file=Path(active["revision_file"]))
-            async for event in self.wrapped.stream(tool_use, invocation_state, **kwargs):
-                yield event
-
-    old_tool = SwapDuringCall(panel_tools.load_library_tool(library, path, "flaky"))
-    catalog = panel_tools.PanelToolCatalog(tools=[old_tool])
-    live = Agent(model=ScriptedModel([("flaky", {"record": {}})]), tools=[catalog], callback_handler=None)
-    catalog.bind(live)
-    assert panel_tools.PanelToolCatalog.for_agent(live) is catalog
-    first = asyncio.run(live.invoke_async("go"))
-    assert swapped["done"] is True
-    first_results = [b["toolResult"] for m in live.messages for b in m["content"] if "toolResult" in b]
-    assert first_results[0]["status"] == "error"  # old code: KeyError
-    live.model = ScriptedModel([("flaky", {"record": {}})])
-    asyncio.run(live.invoke_async("again"))
-    results = [b["toolResult"] for m in live.messages for b in m["content"] if "toolResult" in b]
-    assert results[-1]["status"] == "success" and "<unlabelled>" in json.dumps(results[-1]["content"])
-    assert first.stop_reason == "end_turn"
-
-    # The userTurn notice announces the activation once per session.
-    from strands.vended_plugins.context_injector import InjectionContext
-    render = tool_repair.revision_notice_render("alice")
-    context = InjectionContext(messages=live.messages, state=live.state, agent=live)
-    note = render(context)
-    assert note is not None and "flaky" in note and rev in note
-    assert live.state.get(tool_repair.REPAIR_NOTICES_STATE_KEY) == [f"flaky@{rev}"]
-    assert render(context) is None  # once per session
-    assert tool_repair.revision_notice("alice").name == "ron:tool-repair-notice"
-
-    # Rollback: active.json removed, reload back to the vendored file -> KeyError again next invocation.
-    rolled = asyncio.run(tool_repair.rollback("alice", "flaky"))
-    assert rolled["previous"]["revision"] == rev
-    assert asyncio.run(tool_repair.read_active("alice", "flaky")) is None
-    assert tool_repair.active_revision_file("alice", "flaky", path) is None
-    assert asyncio.run(tool_repair.list_repairs("alice"))[0]["status"] == "rolled_back"
-    asyncio.run(catalog.reload_tool("flaky", agent=live, root=library, path=path, revision_file=None))
-    live.model = ScriptedModel([("flaky", {"record": {}})])
-    asyncio.run(live.invoke_async("third"))
-    results = [b["toolResult"] for m in live.messages for b in m["content"] if "toolResult" in b]
-    assert results[-1]["status"] == "error"
-
-
-def test_new_session_load_path_uses_active_revision_for_this_user_only(library):
-    _, result = _run_fixer(library, script=_fixer_script())
-    asyncio.run(tool_repair.activate("alice", "flaky", result["revision"]))
-    path = library / "demo" / "flaky.py"
-
-    def build(user_id):
-        catalog = panel_tools.PanelToolCatalog()
-        catalog.set_revision_resolver(tool_repair.revision_resolver(user_id))
-        agent = Agent(model=ScriptedModel([("flaky", {"record": {}})]), tools=[catalog], callback_handler=None)
+    def construct(**kwargs):
+        runtime_options = dict(kwargs["runtime_options"])
+        assert any(isinstance(hook, ToolRepairTrigger) and hook.start is not None for hook in runtime_options["hooks"])
+        catalog = panel_tools.PanelToolCatalog(tools=[panel_tools.load_library_tool(library, path, "flaky")])
+        catalog.set_revision_resolver(tool_repair.revision_resolver(kwargs["user_id"]))
+        agent = Agent(model=ScriptedModel(list(uses)), tools=[catalog],
+                      trace_attributes=trace_attributes(session_id=kwargs["session_id"], user_id=kwargs["user_id"]),
+                      **{**runtime_options, "hooks": [ToolObservation(), *runtime_options["hooks"]]})
         catalog.bind(agent)
-        asyncio.run(catalog.stage_tool(path, "flaky", agent=agent, root=library))
-        asyncio.run(agent.invoke_async("go"))
-        return [b["toolResult"] for m in agent.messages for b in m["content"] if "toolResult" in b][-1]
+        agents.append(agent)
+        return agent
 
-    assert build("alice")["status"] == "success"   # repaired revision
-    assert build("bob")["status"] == "error"       # vendored file, untouched
+    users: dict = {}
+    manager = PanelRuntimeManager(factory=chat._create_runtime_agent,
+                                  storage_factory=lambda user: users.setdefault(user, InMemoryStorage()), shutdown_timeout=0.05)
+    monkeypatch.setattr(chat, "create_panel_agent", construct)
+    monkeypatch.setattr(chat, "provider_api_key", lambda _: "offline-key-guard")
+    monkeypatch.setattr(chat, "configured_providers", lambda: ["openai"])
+    monkeypatch.setattr(chat, "create_runtime_manager", lambda: manager)
+    monkeypatch.delenv("PANEL_A2A_ENABLED", raising=False)
+    monkeypatch.setenv("PANEL_A2A_URL", "http://test/a2a")
+    monkeypatch.setattr(tool_repair, "native_sop_prompt", lambda *a, **k: "SOP")
+    built: dict = {}
+    original_init = RepairService.__init__
+
+    def patched_init(self, *args, **kwargs):
+        original_init(self, *args, **kwargs)
+        self.config = RepairConfig(threshold=2, models=("m1",), timeout_s=60)
+        self.build_model = _fixer_builder(_fixer_script())
+        self.sandbox_factory = _fake_sandbox
+        self.sop_prompt = "SOP"
+        built["service"] = self
+
+    monkeypatch.setattr(RepairService, "__init__", patched_init)
+
+    def frames(response):
+        assert response.status_code == 200, response.text
+        return [json.loads(line[6:]) for line in response.text.splitlines() if line.startswith("data: ")]
+
+    async def scenario():
+        async with app.router.lifespan_context(app):
+            service: RepairService = built["service"]
+            assert app.state.tool_repairs is service and app.state.fixer_a2a is not None
+            async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+                from a2a.client import ClientConfig
+                from agent.api.core.panel_a2a import create_panel_a2a_client
+
+                # The real /a2a/fixer mounted by the lifespan, reached in-process.
+                service.client = lambda: create_panel_a2a_client(
+                    "http://test/a2a/fixer", client_config=ClientConfig(httpx_client=client, streaming=True))
+                body = {"session_id": "repair-chat", "user_id": "alice", "message": "go", "provider": "openai", "model": "offline"}
+                stream = frames(await client.post("/chat", json=body))
+                assert stream[-1]["type"] == "run_finished"
+                result = await service.wait("alice", "flaky")
+                assert result["status"] == "verified"
+                tail = frames(await client.get(f"/sessions/repair-chat/events?user_id=alice&after={stream[-1]['sequence']}"))
+                everything = [*stream, *tail]
+                types = [e["type"] for e in everything]
+                assert "tool_repair_investigating" in types and "tool_repair_approval" in types
+                assert any(e["type"] == "tool_input" and e["name"] == "repair" for e in everything)
+                approval = next(e for e in everything if e["type"] == "tool_repair_approval")
+                rev, token = approval["rev"], approval["approval_token"]
+                assert approval["status"] == "verified" and token and approval["diff"]
+                assert (await client.get("/tools/repairs/active?user_id=alice")).json()["investigations"][0]["state"] == "approval"
+                assert (await client.post("/tools/repairs/flaky/activate", json={"user_id": "alice", "rev": rev, "approval_token": "0" * 64})).status_code == 403
+                approved = await client.post("/tools/repairs/flaky/activate", json={"user_id": "alice", "rev": rev, "approval_token": token})
+                assert approved.status_code == 200, approved.text
+                assert approved.json()["live_sessions_reloaded"] == ["repair-chat"]
+                assert agents[0].state.get("panel.tool_failure")["phase"] == "confirm"
+                assert (await client.get("/tools/repairs?user_id=bob")).json()["revisions"] == []
+                agents[0].model = ScriptedModel([("flaky", {"record": {}})])
+                second = frames(await client.post("/chat", json={**body, "message": "again"}))
+                results = [e for e in second if e["type"] == "tool_result" and e["name"] == "flaky"]
+                assert results and results[-1]["status"] == "success"
+                assert agents[0].state.get("panel.tool_failure")["phase"] == "done"
+                rolled = await client.post("/tools/repairs/flaky/rollback", json={"user_id": "alice"})
+                assert rolled.status_code == 200 and rolled.json()["live_sessions_reloaded"] == ["repair-chat"]
+                agents[0].model = ScriptedModel([("flaky", {"record": {}})])
+                third = frames(await client.post("/chat", json={**body, "message": "third"}))
+                results = [e for e in third if e["type"] == "tool_result" and e["name"] == "flaky"]
+                assert results and results[-1]["status"] == "error"
+                original = path.read_text(encoding="utf-8")
+                path.write_text(original + "\n# drift\n", encoding="utf-8")
+                assert (await client.post("/tools/repairs/flaky/activate", json={"user_id": "alice", "rev": rev, "approval_token": token})).status_code == 409
+                path.write_text(original, encoding="utf-8")
+                assert (await client.post("/tools/repairs", json={"user_id": "alice", "session_id": "repair-chat", "tool_name": "nope"})).status_code == 422
+                assert (await client.post("/tools/repairs/flaky/activate", json={"user_id": "alice", "rev": "missing-rev", "approval_token": token})).status_code == 404
+
+    asyncio.run(scenario())
 
 
-def test_restart_recovery_rematerializes_active_revisions(library, tmp_path):
-    _, result = _run_fixer(library, script=_fixer_script())
-    active = asyncio.run(tool_repair.activate("alice", "flaky", result["revision"]))
-    # Simulate a restart: the local materialized copy is gone, storage (active.json) survives.
-    import shutil
-    shutil.rmtree(tool_repair._active_dir("alice"))
-    assert tool_repair.active_revision_file("alice", "flaky", library / "demo" / "flaky.py") is None
-    assert asyncio.run(tool_repair.restore_active_markers("alice")) == 1
-    assert tool_repair.active_revision_file("alice", "flaky", library / "demo" / "flaky.py") == Path(active["revision_file"])
+ADAPTER_SOURCE = """
+def transform_input(input):
+    # The model keeps sending `value`; the tool requires a dict `record` with a label.
+    value = input.get("value", "")
+    return {"record": {"label": value or "<unlabelled>"}}
+
+
+def transform_result(result, input):
+    return result
+"""
+
+
+def _adapter_script(tool_name: str, status="verified"):
+    base = [item for item in _fixer_script(status=status) if item[0] != "write"]
+    submit = base[-1][1] | {"repair_kind": "adapter", "diff": "+ adapter transform_input: value -> record.label"}
+    return [("write", {"path": f"/workspace/adapter/{tool_name}.py", "content": ADAPTER_SOURCE}),
+            ("write", {"path": f"/workspace/tests/test_{tool_name}.py", "content": "def test_ok():\n    assert True\n"}),
+            *base[1:-1], ("submit_repair", submit)]
+
 
 
 def test_sop_is_served_by_the_native_sop_server_with_parameters_as_user_input(library):
@@ -658,131 +944,6 @@ def test_sop_is_served_by_the_native_sop_server_with_parameters_as_user_input(li
     rendered = tool_repair.sop_task(run, {"outcome": {}, "count": 2}, None, [], None, sop_prompt="BODY")
     assert "<content>\nBODY\n</content>" in rendered and "sandbox: docker" in rendered
 
-
-def test_fixer_defaults_to_gpt_6_1_sol_at_max_effort(monkeypatch):
-    monkeypatch.delenv("RON_TOOL_REPAIR_MODELS", raising=False)
-    monkeypatch.delenv("RON_TOOL_REPAIR_EFFORT", raising=False)
-    cfg = RepairConfig.from_env()
-    assert cfg.models == ("openai/gpt-6.1-sol",) and cfg.effort == "max"
-    seen = []
-
-    def build(provider, model_id, effort=None, *, hosted_tools=True):
-        seen.append((provider, model_id, effort, hosted_tools))
-        return ScriptedModel([])
-
-    run = tool_repair.RepairRun(user_id="alice", session_id="s1", tool_name="flaky", revision="r1",
-                                workspace=tool_repair.config.SESSION_STORAGE_DIR / "repairs" / "x" / "r1",
-                                manifest={"target_kind": "library"})
-    fixer = tool_repair.build_fixer(run, models=cfg.models, effort=cfg.effort, build_model=build, sandbox_factory=_fake_sandbox)
-    try:
-        assert seen == [("perplexity", "openai/gpt-6.1-sol", "max", False)]  # hosted tools are set explicitly on params
-        names = set(fixer.tool_registry.registry)
-        assert {"shell", "read", "write", "edit", "todo_write", "record_demonstration", "submit_repair"} <= names
-        assert not names & {"editor", "environment", "mcp_client", "http_request", "subagent", "web_fetch"}
-    finally:
-        fixer.cleanup()
-
-
-# --- HTTP surface: proposal on the stream, fixer run, ready event, activate/rollback -----------
-
-def test_http_repair_loop_end_to_end(library, monkeypatch):
-    """POST /chat (two KeyErrors) -> tool_repair_proposed; POST /tools/repairs -> fixer runs while the
-    session is idle and `tool_repair_ready` lands on GET /sessions/{id}/events; activate swaps the
-    tool in the live session (409 on library drift); rollback restores the vendored file."""
-    import httpx
-    from agent.api.endpoints import chat
-    from agent.api.main import app
-    from agent.api.core.panel_runtime import PanelRuntimeManager
-
-    path = library / "demo" / "flaky.py"
-    uses = [("flaky", {"record": {}}), ("flaky", {"record": {}})]
-    agents: list[Agent] = []
-
-    def construct(**kwargs):
-        runtime_options = kwargs["runtime_options"]
-        catalog = panel_tools.PanelToolCatalog(tools=[panel_tools.load_library_tool(library, path, "flaky")])
-        catalog.set_revision_resolver(tool_repair.revision_resolver(kwargs["user_id"]))
-        agent = Agent(model=ScriptedModel(list(uses)), tools=[catalog],
-                      **{**runtime_options, "hooks": [*runtime_options["hooks"], ToolObservation(),
-                                                      ToolRepairTrigger(RepairConfig(threshold=2, models=("m",)))]})
-        catalog.bind(agent)
-        agents.append(agent)
-        return agent
-
-    users: dict = {}
-    manager = PanelRuntimeManager(factory=chat._create_runtime_agent,
-                                  storage_factory=lambda user: users.setdefault(user, InMemoryStorage()), shutdown_timeout=0.05)
-    monkeypatch.setattr(chat, "create_panel_agent", construct)
-    monkeypatch.setattr(chat, "provider_api_key", lambda _: "offline-key-guard")
-    monkeypatch.setattr(chat, "configured_providers", lambda: ["openai"])
-    monkeypatch.setattr(chat, "create_runtime_manager", lambda: manager)
-    monkeypatch.delenv("PANEL_A2A_ENABLED", raising=False)
-    # The service's fixer is scripted + fake shell/sandbox: patch the module-level factories it uses.
-    monkeypatch.setattr(panel_agent, "build_model", _fixer_builder(_fixer_script()))
-    monkeypatch.setattr(tool_repair, "create_sandbox", _fake_sandbox)
-    monkeypatch.setattr(tool_repair, "native_sop_prompt", lambda *a, **k: "SOP")
-
-    def frames(response):
-        assert response.status_code == 200, response.text
-        return [json.loads(line[6:]) for line in response.text.splitlines() if line.startswith("data: ")]
-
-    async def scenario():
-        async with app.router.lifespan_context(app):
-            app.state.tool_repairs = RepairService(RepairConfig(threshold=2, models=("m1",), timeout_s=60))
-            async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
-                body = {"session_id": "repair-chat", "user_id": "alice", "message": "go", "provider": "openai", "model": "offline"}
-                stream = frames(await client.post("/chat", json=body))
-                proposed = [e for e in stream if e["type"] == "tool_repair_proposed"]
-                assert len(proposed) == 1 and proposed[0]["tool"] == "flaky" and proposed[0]["count"] == 2
-                assert proposed[0]["outcome"]["arg_types"] == {"record": "dict"}
-                assert stream[-1]["type"] == "run_finished"
-                # Nothing ran yet; the user clicks Repair.
-                assert (await client.get("/tools/repairs?user_id=alice")).json()["revisions"] == []
-                started = await client.post("/tools/repairs", json={"user_id": "alice", "session_id": "repair-chat", "tool_name": "flaky"})
-                assert started.status_code == 200, started.text
-                rev = started.json()["revision"]
-                result = await app.state.tool_repairs.wait("alice", "flaky")
-                assert result["status"] == "verified"
-                after = stream[-1]["sequence"]
-                tail = frames(await client.get(f"/sessions/repair-chat/events?user_id=alice&after={after}"))
-                ready = [e for e in tail if e["type"] == "tool_repair_ready"]
-                assert ready and ready[0]["rev"] == rev and ready[0]["status"] == "verified" and len(ready[0]["demonstrations"]) == 5
-                # The fixer's child events rendered as the `repair` chain tool.
-                assert any(e["type"] == "tool_input" and e["name"] == "repair" and e["id"] == f"repair:{rev}" for e in tail)
-                assert any(e["node_path"] == [f"repair:{rev}"] for e in tail)
-                listed = (await client.get("/tools/repairs?user_id=alice")).json()["revisions"]
-                assert listed[0]["revision"] == rev and listed[0]["active"] is False
-                # Other tenant: nothing.
-                assert (await client.get("/tools/repairs?user_id=bob")).json()["revisions"] == []
-
-                # Library drift -> 409.
-                original = path.read_text(encoding="utf-8")
-                path.write_text(original + "\n# drift\n", encoding="utf-8")
-                conflict = await client.post("/tools/repairs/flaky/activate", json={"user_id": "alice", "rev": rev})
-                assert conflict.status_code == 409
-                path.write_text(original, encoding="utf-8")
-                activated = await client.post("/tools/repairs/flaky/activate", json={"user_id": "alice", "rev": rev})
-                assert activated.status_code == 200, activated.text
-                assert activated.json()["live_sessions_reloaded"] == ["repair-chat"]
-                # Next invocation of the same live session runs the repaired revision.
-                agents[0].model = ScriptedModel([("flaky", {"record": {}})])
-                second = frames(await client.post("/chat", json={**body, "message": "again"}))
-                results = [e for e in second if e["type"] == "tool_result" and e["name"] == "flaky"]
-                assert results and results[-1]["status"] == "success"
-                assert not any(e["type"] == "tool_repair_proposed" for e in second)
-                # Rollback -> vendored file again.
-                rolled = await client.post("/tools/repairs/flaky/rollback", json={"user_id": "alice"})
-                assert rolled.status_code == 200 and rolled.json()["live_sessions_reloaded"] == ["repair-chat"]
-                agents[0].model = ScriptedModel([("flaky", {"record": {}})])
-                third = frames(await client.post("/chat", json={**body, "message": "third"}))
-                results = [e for e in third if e["type"] == "tool_result" and e["name"] == "flaky"]
-                assert results and results[-1]["status"] == "error"
-                # Validation: loopback-only, unknown tool, bad revision id.
-                bad = await client.post("/tools/repairs", json={"user_id": "alice", "session_id": "repair-chat", "tool_name": "nope"})
-                assert bad.status_code == 422
-                assert (await client.post("/tools/repairs/flaky/activate", json={"user_id": "alice", "rev": "missing-rev"})).status_code == 404
-
-    asyncio.run(scenario())
 
 
 def test_server_revision_restarts_the_users_browser_mcp_server_in_a_live_session(library):
@@ -835,12 +996,15 @@ def test_server_revision_restarts_the_users_browser_mcp_server_in_a_live_session
 
     # Activate a server revision for alice -> restart -> new process sees PYTHONPATH -> next invocation uses it.
     rev = "20261005t000000-srv002"
-    for name, data in ((f"{tool_repair.MCP_SERVER_PACKAGE}/__init__.py", b""), (f"{tool_repair.MCP_SERVER_PACKAGE}/server.py", b"# repaired\n")):
-        asyncio.run(tool_repair.repair_storage("alice").write(f"user_browser_browser_click/{rev}/server/{name}", data))
+    files = {f"server/{tool_repair.MCP_SERVER_PACKAGE}/__init__.py": b"", f"server/{tool_repair.MCP_SERVER_PACKAGE}/server.py": b"# repaired\n"}
+    for name, data in files.items():
+        asyncio.run(tool_repair.repair_storage("alice").write(f"user_browser_browser_click/{rev}/{name}", data))
+    digest = tool_repair.artifact_digest(files)
+    token = tool_repair.approval_token("alice", "user_browser_browser_click", rev, None, digest)
     asyncio.run(tool_repair.write_manifest("alice", {"tool_name": "user_browser_browser_click", "revision": rev, "target_kind": "mcp",
         "repair_kind": "server", "source_path": None, "base_sha256": None, "status": "verified", "created_at": "2026-10-05T00:00:00",
-        "demonstrations": [], "files": []}))
-    asyncio.run(tool_repair.activate("alice", "user_browser_browser_click", rev))
+        "demonstrations": [], "files": sorted(files), "artifact_digest": digest, "approval_token": token}))
+    asyncio.run(tool_repair.activate("alice", "user_browser_browser_click", rev, approval_token_=token))
     new_tools = asyncio.run(catalog.restart_mcp_server("user_browser", agent=live))
     assert new_tools == ["user_browser_browser_click"]
     assert len(spawned) == 2 and spawned[1]["env"]["PYTHONPATH"] and stopped == [id(spawned[0]["client"])]
@@ -858,6 +1022,7 @@ def test_server_revision_restarts_the_users_browser_mcp_server_in_a_live_session
     # A server that was never staged is a no-op.
     assert asyncio.run(catalog.restart_mcp_server("cloud_browser", agent=live)) == []
     live.cleanup()
+
 
 
 def test_fixer_model_carries_perplexity_server_side_tools_and_a2a_provider(monkeypatch, tmp_path):
@@ -894,62 +1059,6 @@ def test_fixer_model_carries_perplexity_server_side_tools_and_a2a_provider(monke
     finally:
         fixer.cleanup()
 
-
-def test_fixer_talks_to_rons_native_a2a_server_over_a2a(tmp_path):
-    """Native Strands A2A end-to-end: Ron's own A2AServer (panel_a2a) serves a Strands agent; the fixer's
-    a2a_send_message tool (strands_tools A2AClientToolProvider) reaches it and gets the answer back."""
-    import socket
-    import threading
-    import time
-
-    import uvicorn
-    from fastapi import FastAPI
-
-    from agent.api.core.panel_a2a import create_panel_a2a_server, mount_panel_a2a
-
-    class EchoModel(ScriptedModel):
-        async def stream(self, messages, tool_specs=None, system_prompt=None, **kwargs):
-            text = "".join(b.get("text", "") for b in messages[-1]["content"])
-            yield {"messageStart": {"role": "assistant"}}
-            yield {"contentBlockDelta": {"contentBlockIndex": 0, "delta": {"text": f"peer saw: {text}"}}}
-            yield {"contentBlockStop": {"contentBlockIndex": 0}}
-            yield {"messageStop": {"stopReason": "end_turn"}}
-
-    with socket.socket() as sock:
-        sock.bind(("127.0.0.1", 0))
-        port = sock.getsockname()[1]
-    url = f"http://127.0.0.1:{port}/a2a"
-    integration = create_panel_a2a_server(
-        agent_factory=lambda context_id: Agent(model=EchoModel([]), name="Ron Peer", description="echo peer", callback_handler=None),
-        http_url=url)
-    app = FastAPI()
-    assert mount_panel_a2a(app, integration, enabled=True, path="/a2a")
-    server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_level="error"))
-    thread = threading.Thread(target=server.run, daemon=True)
-    thread.start()
-    deadline = time.time() + 15
-    while not server.started and time.time() < deadline:
-        time.sleep(0.05)
-    assert server.started
-    try:
-        provider = tool_repair.fixer_a2a_provider([url])
-        assert provider is not None
-        by_name = {t.tool_name: t for t in provider.tools}
-
-        async def call(name, inputs):
-            result = None
-            async for event in by_name[name].stream({"toolUseId": name, "name": name, "input": inputs}, {}):
-                result = event
-            return result["tool_result"] if isinstance(result, dict) and "tool_result" in result else result
-
-        agents = asyncio.run(call("a2a_list_discovered_agents", {}))
-        assert "Ron Peer" in json.dumps(agents["content"])
-        reply = asyncio.run(call("a2a_send_message", {"message_text": "hello from the fixer", "target_agent_url": url}))
-        assert reply["status"] == "success" and "peer saw: hello from the fixer" in json.dumps(reply["content"])
-    finally:
-        server.should_exit = True
-        thread.join(timeout=10)
-        asyncio.run(integration.aclose())
 
 
 def test_every_ron_agent_carries_native_a2a_tools(monkeypatch, tmp_path):

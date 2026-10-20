@@ -138,7 +138,7 @@ function CollapsedOrb({ topInterests, onClick }: CollapsedOrbProps) {
       <motion.div
         className="absolute inset-0 rounded-full opacity-30"
         style={{
-          background: 'conic-gradient(from 0deg, rgba(45, 59, 135, 0.4), rgba(74, 59, 135, 0.4), rgba(45, 59, 135, 0.4))'
+          background: 'conic-gradient(from 0deg, rgba(107, 52, 32, 0.4), rgba(138, 66, 37, 0.4), rgba(107, 52, 32, 0.4))'
         }}
         animate={{ rotate: 360 }}
         transition={{ duration: 20, repeat: Infinity, ease: 'linear' }}

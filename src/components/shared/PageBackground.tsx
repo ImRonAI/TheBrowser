@@ -19,10 +19,10 @@ const NeuralGridBackground = memo(function NeuralGridBackground() {
       {/* Light mode grid */}
       <div className="dark:hidden">
         <div
-          className="absolute top-0 right-0 w-[600px] h-[600px] bg-[radial-gradient(circle_at_top_right,rgba(99,102,241,0.04)_0%,transparent_50%)]"
+          className="absolute top-0 right-0 w-[600px] h-[600px] bg-[radial-gradient(circle_at_top_right,rgba(194,106,65,0.04)_0%,transparent_50%)]"
         />
         <div
-          className="absolute bottom-0 left-0 w-[500px] h-[500px] bg-[radial-gradient(circle_at_bottom_left,rgba(55,48,163,0.03)_0%,transparent_50%)]"
+          className="absolute bottom-0 left-0 w-[500px] h-[500px] bg-[radial-gradient(circle_at_bottom_left,rgba(169,83,46,0.03)_0%,transparent_50%)]"
         />
         <div
           className="absolute inset-0 opacity-[0.02] bg-[linear-gradient(rgba(0,0,0,0.1)_1px,transparent_1px),linear-gradient(90deg,rgba(0,0,0,0.1)_1px,transparent_1px)] bg-[length:48px_48px]"
@@ -63,7 +63,7 @@ const AmbientBreathingGlow = memo(function AmbientBreathingGlow() {
         animate={{ scale: [1, 1.05, 1], opacity: [0.06, 0.09, 0.06] }}
         transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
         style={{
-          background: 'radial-gradient(ellipse, rgba(139,92,246,0.12), transparent 70%)',
+          background: 'radial-gradient(ellipse, rgba(194,106,65,0.12), transparent 70%)',
           filter: 'blur(80px)'
         }}
       />
@@ -73,7 +73,7 @@ const AmbientBreathingGlow = memo(function AmbientBreathingGlow() {
         animate={{ scale: [1, 1.03, 1], opacity: [0.04, 0.07, 0.04] }}
         transition={{ duration: 5, repeat: Infinity, ease: "easeInOut", delay: 0.5 }}
         style={{
-          background: 'radial-gradient(ellipse, rgba(124,58,237,0.08), transparent 70%)',
+          background: 'radial-gradient(ellipse, rgba(169,83,46,0.08), transparent 70%)',
           filter: 'blur(100px)'
         }}
       />
@@ -83,7 +83,7 @@ const AmbientBreathingGlow = memo(function AmbientBreathingGlow() {
         animate={{ scale: [1, 1.02, 1], opacity: [0.02, 0.04, 0.02] }}
         transition={{ duration: 6, repeat: Infinity, ease: "easeInOut", delay: 1 }}
         style={{
-          background: 'radial-gradient(ellipse, rgba(99,102,241,0.06), transparent 70%)',
+          background: 'radial-gradient(ellipse, rgba(194,106,65,0.06), transparent 70%)',
           filter: 'blur(120px)'
         }}
       />

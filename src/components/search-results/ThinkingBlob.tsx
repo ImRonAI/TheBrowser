@@ -44,11 +44,11 @@ export function ThinkingBlob({ className, size = 400 }: ThinkingBlobProps) {
         <radialGradient id="purpleCore" cx="35%" cy="25%" r="70%">
           <stop offset="0%" stopColor="#FFFFFF" />
           <stop offset="10%" stopColor="#F3E8FF" />
-          <stop offset="25%" stopColor="#C084FC" />
-          <stop offset="45%" stopColor="#A855F7" />
-          <stop offset="65%" stopColor="#7C3AED" />
-          <stop offset="85%" stopColor="#5B21B6" stopOpacity="0.6" />
-          <stop offset="100%" stopColor="#4C1D95" stopOpacity="0" />
+          <stop offset="25%" stopColor="#D6825A" />
+          <stop offset="45%" stopColor="#C26A41" />
+          <stop offset="65%" stopColor="#A9532E" />
+          <stop offset="85%" stopColor="#6B3420" stopOpacity="0.6" />
+          <stop offset="100%" stopColor="#6B3420" stopOpacity="0" />
         </radialGradient>
 
         {/* MINT CORE GLOW */}
@@ -76,9 +76,9 @@ export function ThinkingBlob({ className, size = 400 }: ThinkingBlobProps) {
         </linearGradient>
 
         <linearGradient id="frostPurple" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stopColor="#7C3AED" stopOpacity="0.35" />
-          <stop offset="50%" stopColor="#5B21B6" stopOpacity="0.25" />
-          <stop offset="100%" stopColor="#4C1D95" stopOpacity="0.3" />
+          <stop offset="0%" stopColor="#A9532E" stopOpacity="0.35" />
+          <stop offset="50%" stopColor="#6B3420" stopOpacity="0.25" />
+          <stop offset="100%" stopColor="#6B3420" stopOpacity="0.3" />
         </linearGradient>
 
         <linearGradient id="frostMint" x1="0%" y1="0%" x2="100%" y2="100%">
@@ -101,9 +101,9 @@ export function ThinkingBlob({ className, size = 400 }: ThinkingBlobProps) {
         </linearGradient>
 
         <linearGradient id="edgePurple" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stopColor="#9333EA" />
-          <stop offset="50%" stopColor="#7C3AED" />
-          <stop offset="100%" stopColor="#5B21B6" />
+          <stop offset="0%" stopColor="#A9532E" />
+          <stop offset="50%" stopColor="#A9532E" />
+          <stop offset="100%" stopColor="#6B3420" />
         </linearGradient>
 
         <linearGradient id="edgeMint" x1="0%" y1="0%" x2="100%" y2="100%">
@@ -120,9 +120,9 @@ export function ThinkingBlob({ className, size = 400 }: ThinkingBlobProps) {
         </radialGradient>
 
         <radialGradient id="ambientPurple" cx="50%" cy="50%" r="50%">
-          <stop offset="0%" stopColor="#C084FC" stopOpacity="0.4" />
-          <stop offset="60%" stopColor="#A855F7" stopOpacity="0.15" />
-          <stop offset="100%" stopColor="#7C3AED" stopOpacity="0" />
+          <stop offset="0%" stopColor="#D6825A" stopOpacity="0.4" />
+          <stop offset="60%" stopColor="#C26A41" stopOpacity="0.15" />
+          <stop offset="100%" stopColor="#A9532E" stopOpacity="0" />
         </radialGradient>
 
         <radialGradient id="ambientMint" cx="50%" cy="50%" r="50%">
@@ -250,7 +250,7 @@ export function ThinkingBlob({ className, size = 400 }: ThinkingBlobProps) {
           />
 
           {/* Primary blob */}
-          <path fill="#7C3AED" opacity="0.6" d="M -60 0 C -42 -58 42 -58 60 0 C 46 60 -46 60 -60 0 Z">
+          <path fill="#A9532E" opacity="0.6" d="M -60 0 C -42 -58 42 -58 60 0 C 46 60 -46 60 -60 0 Z">
             <animate
               attributeName="d"
               dur="6s"
@@ -283,7 +283,7 @@ export function ThinkingBlob({ className, size = 400 }: ThinkingBlobProps) {
           <g opacity="0">
             <animate attributeName="opacity" values="0;0.85;0" keyTimes="0;0.35;1" dur="3.2s" repeatCount="indefinite" begin="0.4s" />
             <animateTransform attributeName="transform" type="rotate" values="0;-260;0" dur="3.2s" repeatCount="indefinite" begin="0.4s" />
-            <polygon points="0,-7 6,5 -6,5" fill="none" stroke="#7C3AED" strokeWidth="1.2" />
+            <polygon points="0,-7 6,5 -6,5" fill="none" stroke="#A9532E" strokeWidth="1.2" />
             <animateMotion dur="3.2s" repeatCount="indefinite" rotate="0" begin="0.4s">
               <mpath href="#boomPath2" />
             </animateMotion>
@@ -313,7 +313,7 @@ export function ThinkingBlob({ className, size = 400 }: ThinkingBlobProps) {
           <g opacity="0">
             <animate attributeName="opacity" values="0;0.8;0" keyTimes="0;0.35;1" dur="3.4s" repeatCount="indefinite" begin="1.6s" />
             <animateTransform attributeName="transform" type="rotate" values="0;-340;0" dur="3.4s" repeatCount="indefinite" begin="1.6s" />
-            <polygon points="-6,-2 0,-6 6,-2 2,2 0,0 -2,2" fill="none" stroke="#C084FC" strokeWidth="1.1" />
+            <polygon points="-6,-2 0,-6 6,-2 2,2 0,0 -2,2" fill="none" stroke="#D6825A" strokeWidth="1.1" />
             <animateMotion dur="3.4s" repeatCount="indefinite" rotate="0" begin="1.6s">
               <mpath href="#boomPath2" />
             </animateMotion>

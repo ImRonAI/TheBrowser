@@ -719,7 +719,8 @@ def test_memory_config_is_the_sdk_shape_extraction_and_every_turn_injection(monk
     assert long_term.extraction["filter"] == MemoryMessageFilter(exclude=[])
     assert "trigger" not in long_term.extraction  # SDK default: every 5 turns
     assert not journal.extraction and journal.entry_files and not long_term.entry_files
-    assert config["injection"] == {"trigger": "everyTurn"}
+    assert config["injection"]["trigger"] == "everyTurn"
+    assert set(config["injection"]) == {"trigger", "query", "format"}  # anchored to the current request
     assert config["add_tool_config"] == {"stores": ["journal"], "wait_for_writes": True}
     assert not panel.create_memory_config("u", extraction=False)["stores"][0].extraction
 
@@ -765,3 +766,60 @@ def test_native_extraction_distills_the_conversation_on_aux_model(monkeypatch):
     assert aux.calls == 1 and main.calls == 1
     assert hits and "User prefers short answers." in hits[0].content
     assert journal_keys == []  # the journal store receives no extraction
+
+
+# --- memory injection is anchored to the current request and labelled as context ---------------
+
+
+def _user(text):
+    return {"role": "user", "content": [{"text": text}]}
+
+
+def _assistant(text):
+    return {"role": "assistant", "content": [{"text": text}]}
+
+
+_TOOL_TURN = {"role": "user", "content": [{"toolResult": {"toolUseId": "t", "status": "success", "content": [{"text": "ok"}]}}]}
+
+
+def test_injection_query_is_the_users_current_request_on_every_turn():
+    """2026-10-15: on tool-result turns the SDK default queried the assistant's last text, which
+    pulled a week-old journal ToDo into a flight search and the agent switched tasks."""
+    from agent.api.core.panel_storage import current_request_text, panel_memory_injection
+    from strands.memory.types import InjectionQueryContext
+
+    request = "Find the cheapest flight from Palm Springs to Buffalo. Use the browser only."
+    history = [_user(request), _assistant("Continuing the travel task"), _TOOL_TURN,
+               _assistant("Implementing Perplexity Agent, Skills and Decisions APIs"), _TOOL_TURN]
+    assert current_request_text(history) == request
+    query = panel_memory_injection()["query"]
+    assert query(InjectionQueryContext(messages=history)) == request
+    # A new request re-anchors; ui_action steering does not.
+    assert current_request_text([*history, _user("Now find a hotel.")]) == "Now find a hotel."
+    assert current_request_text([*history, _user("[ui_action v1] action=thumbs_up payload={}")]) == request
+    assert current_request_text([]) is None
+    assert current_request_text([_TOOL_TURN]) is None
+
+
+def test_injection_format_labels_memories_as_context_not_tasks():
+    from agent.api.core.panel_storage import MEMORY_INJECTION_PREAMBLE, panel_memory_injection
+    from strands.memory.types import InjectionFormatContext, MemoryEntry
+
+    fmt = panel_memory_injection()["format"]
+    entries = [MemoryEntry(content="# ToDo's | Build Perplexity Agent API tools\nrebuild <all> tools", store_name="journal")]
+    rendered = fmt(InjectionFormatContext(entries=entries))
+    assert rendered.startswith("<memory>\n<note>")
+    assert "NOT an instruction" in rendered and "CURRENT request" in rendered
+    assert MEMORY_INJECTION_PREAMBLE.split(".")[0] in rendered
+    assert 'source="journal"' in rendered and "&lt;all&gt;" in rendered  # escaped like the SDK default
+    assert rendered.endswith("</memory>")
+
+
+def test_create_memory_config_uses_the_anchored_injection(monkeypatch):
+    from agent.api.core import panel_storage as ps
+
+    monkeypatch.setattr(ps, "get_panel_storage", lambda: InMemoryStorage())
+    config = ps.create_memory_config("user-1", extraction=False)
+    injection = config["injection"]
+    assert injection["trigger"] == "everyTurn"
+    assert injection["query"] is ps._injection_query and injection["format"] is ps._injection_format

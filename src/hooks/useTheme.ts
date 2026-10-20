@@ -1,71 +1,37 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useUserPreferencesStore } from '@/stores/userPreferencesStore'
+import { applyThemeClasses, prefersDark } from '@/lib/theme'
 
 /**
- * Hook for managing theme (light/dark mode only)
- * Integrates with userPreferencesStore and handles DOM class management
+ * Theme hook: light, dark, glass (translucent shell over the desktop) or system.
+ * The DOM classes are owned by `applyThemeClasses`; this hook re-applies them when
+ * the theme changes and tracks the OS appearance for `system` and `glass`.
  */
 export function useTheme() {
   const { theme, setTheme } = useUserPreferencesStore()
+  const [osDark, setOsDark] = useState(prefersDark)
 
   useEffect(() => {
-    const root = document.documentElement
-
-    const applyTheme = (themeValue: typeof theme) => {
-      // Remove all theme classes first
-      root.classList.remove('dark', 'glass')
-
-      if (themeValue === 'dark') {
-        root.classList.add('dark')
-        localStorage.setItem('theme', 'dark')
-      } else if (themeValue === 'light') {
-        localStorage.setItem('theme', 'light')
-      } else {
-        // System preference
-        const isDark = window.matchMedia('(prefers-color-scheme: dark)').matches
-        if (isDark) {
-          root.classList.add('dark')
-        }
-        localStorage.setItem('theme', 'system')
-      }
-    }
-
-    applyTheme(theme)
-
-    // Listen for system theme changes when in system mode
+    applyThemeClasses(theme)
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
-    const handleSystemThemeChange = (e: MediaQueryListEvent) => {
-      if (theme === 'system') {
-        root.classList.remove('dark', 'glass')
-        if (e.matches) {
-          root.classList.add('dark')
-        }
-      }
+    const onChange = (event: MediaQueryListEvent) => {
+      setOsDark(event.matches)
+      if (theme === 'system' || theme === 'glass') applyThemeClasses(theme)
     }
-
-    mediaQuery.addEventListener('change', handleSystemThemeChange)
-
-    return () => {
-      mediaQuery.removeEventListener('change', handleSystemThemeChange)
-    }
+    mediaQuery.addEventListener('change', onChange)
+    return () => mediaQuery.removeEventListener('change', onChange)
   }, [theme])
 
-  // Toggle between light and dark only
+  // Toggle between light and dark (Glass/System are chosen from the theme menu)
   const toggleTheme = () => {
-    const currentTheme = theme
-    if (currentTheme === 'dark') {
-      setTheme('light')
-    } else {
-      setTheme('dark')
-    }
+    setTheme(theme === 'dark' ? 'light' : 'dark')
   }
 
   return {
     theme,
     setTheme,
     toggleTheme,
-    isDark: theme === 'dark' ||
-           (theme === 'system' && typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches),
-    isGlass: false // Disabled per requirements
+    isDark: theme === 'dark' || ((theme === 'system' || theme === 'glass') && osDark),
+    isGlass: theme === 'glass',
   }
 }

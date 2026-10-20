@@ -33,9 +33,22 @@ def test_learning_a_new_skill_is_loaded_by_the_native_mcp_server():
     assert '<agent-sop name="learning-a-new-skill">' in prompt
     assert "# Learning a New Skill" in prompt
     assert "MUST" in prompt and "MUST NOT" in prompt
-    assert prompt.index("### 1. Observe and journal the live demonstration") < prompt.index("### 2. Establish the demonstrated process")
-    assert prompt.index("### 4. Register dependencies first") < prompt.index("### 5. Document and load the learned SOP")
+    assert prompt.index("### 1. Observe silently and journal the demonstration") < prompt.index("### 2. Debrief out loud") \
+        < prompt.index("### 3. Establish the outcome and the agreed plan")
+    assert prompt.index("### 5. Register dependencies first") < prompt.index("### 6. Document and load the learned SOP")
     assert "tool_catalog" in prompt
+    # agent-sop-format: Overview, Parameters (bold snake_case with required/optional), Steps with
+    # **Constraints:** blocks, Examples and Troubleshooting; the observe step is silent and tick-free.
+    for heading in ("## Overview", "## Parameters", "## Steps", "## Examples", "## Troubleshooting"):
+        assert heading in prompt
+    assert "- **phase** (required)" in prompt and "- **journal** (optional)" in prompt
+    assert prompt.count("**Constraints:**") >= 8
+    assert "You MUST remain silent while observing" in prompt
+    assert "observation tick" not in prompt and "spoken question" not in prompt
+    # The lesson learns the outcome and re-implements it with Ron's tools; the debrief is spoken.
+    for phrase in ("render_ui", "add_memory", "http_request", "[demonstration finished]", "implementation plan",
+                   "`debrief*` entries as authoritative", "API, feed, search or HTTP call over driving the browser"):
+        assert phrase in prompt, phrase
 
 
 def test_native_mcp_server_rejects_invalid_workflow(tmp_path):

@@ -4,9 +4,27 @@ import { createJSONStorage, persist } from 'zustand/middleware'
 export type HomeTab = 'discover' | 'execute' | 'calendar' | 'vibe' | 'build'
 
 interface NavigationStore {
-  // Drawer state
+  /**
+   * Persistent left sidebar (replaces the old top navigation drawer). It stays
+   * open across every page, including websites, until the user closes it.
+   */
+  isSidebarOpen: boolean
+  setSidebarOpen: (open: boolean) => void
+  toggleSidebar: () => void
+
+  /** Bumped by ⌘K (or the toolbar search button): the sidebar opens and focuses its search field. */
+  searchFocusRequest: number
+  requestSearchFocus: () => void
+
+  /** Bumped by ⌘L: the address bar takes focus and selects its text. */
+  urlFocusRequest: number
+  requestUrlFocus: () => void
+
+  /** @deprecated Drawer API kept for existing callers; maps to the sidebar. */
   isDrawerExpanded: boolean
+  /** @deprecated Use setSidebarOpen. */
   setDrawerExpanded: (expanded: boolean) => void
+  /** @deprecated Use toggleSidebar. */
   toggleDrawer: () => void
 
   // Tab navigation
@@ -17,10 +35,23 @@ interface NavigationStore {
 export const useNavigationStore = create<NavigationStore>()(
   persist(
     (set) => ({
-      // Drawer defaults to expanded
+      isSidebarOpen: true,
+      setSidebarOpen: (open) => set({ isSidebarOpen: open, isDrawerExpanded: open }),
+      toggleSidebar: () => set((state) => ({ isSidebarOpen: !state.isSidebarOpen, isDrawerExpanded: !state.isSidebarOpen })),
+
+      searchFocusRequest: 0,
+      requestSearchFocus: () => set((state) => ({
+        isSidebarOpen: true,
+        isDrawerExpanded: true,
+        searchFocusRequest: state.searchFocusRequest + 1,
+      })),
+
+      urlFocusRequest: 0,
+      requestUrlFocus: () => set((state) => ({ urlFocusRequest: state.urlFocusRequest + 1 })),
+
       isDrawerExpanded: true,
-      setDrawerExpanded: (expanded) => set({ isDrawerExpanded: expanded }),
-      toggleDrawer: () => set((state) => ({ isDrawerExpanded: !state.isDrawerExpanded })),
+      setDrawerExpanded: (expanded) => set({ isSidebarOpen: expanded, isDrawerExpanded: expanded }),
+      toggleDrawer: () => set((state) => ({ isSidebarOpen: !state.isSidebarOpen, isDrawerExpanded: !state.isSidebarOpen })),
 
       // Default tab
       activeTab: 'discover',
@@ -29,16 +60,18 @@ export const useNavigationStore = create<NavigationStore>()(
     {
       name: 'ron-navigation',
       storage: createJSONStorage(() => localStorage),
-      version: 1,
+      version: 2,
       partialize: (state) => ({
-        isDrawerExpanded: state.isDrawerExpanded,
+        isSidebarOpen: state.isSidebarOpen,
+        isDrawerExpanded: state.isSidebarOpen,
         activeTab: state.activeTab,
       }),
-      migrate: (persisted: any) => {
-        if (persisted?.activeTab === 'tasks') {
-          return { ...persisted, activeTab: 'execute' }
-        }
-        return persisted
+      migrate: (persisted: any, version) => {
+        const next = { ...(persisted ?? {}) }
+        if (next.activeTab === 'tasks') next.activeTab = 'execute'
+        // v1 → v2: the drawer's expanded state becomes the sidebar's open state.
+        if (version < 2) next.isSidebarOpen = next.isDrawerExpanded ?? true
+        return next
       },
     }
   )

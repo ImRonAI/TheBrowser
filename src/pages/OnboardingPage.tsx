@@ -102,13 +102,13 @@ export function OnboardingPage() {
           <div 
             className="absolute top-0 left-1/4 w-[600px] h-[600px]"
             style={{
-              background: 'radial-gradient(circle, rgba(99, 102, 241, 0.05) 0%, transparent 60%)',
+              background: 'radial-gradient(circle, rgba(194, 106, 65, 0.05) 0%, transparent 60%)',
             }}
           />
           <div 
             className="absolute bottom-0 right-1/4 w-[500px] h-[500px]"
             style={{
-              background: 'radial-gradient(circle, rgba(55, 48, 163, 0.04) 0%, transparent 60%)',
+              background: 'radial-gradient(circle, rgba(169, 83, 46, 0.04) 0%, transparent 60%)',
             }}
           />
         </div>
@@ -117,7 +117,7 @@ export function OnboardingPage() {
           <div 
             className="absolute top-1/4 left-1/3 w-[500px] h-[500px]"
             style={{
-              background: 'radial-gradient(circle, rgba(99, 102, 241, 0.08) 0%, transparent 60%)',
+              background: 'radial-gradient(circle, rgba(194, 106, 65, 0.08) 0%, transparent 60%)',
               filter: 'blur(60px)',
             }}
           />

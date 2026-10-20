@@ -1,6 +1,34 @@
 import type { Config } from 'tailwindcss'
 import plugin from 'tailwindcss/plugin'
 
+const EMBER = {
+  '50': '#FBF5F0',
+  '100': '#F6E6DA',
+  '200': '#EDCBB4',
+  '300': '#E1A887',
+  '400': '#D6825A',
+  '500': '#C26A41',
+  '600': '#A9532E',
+  '700': '#8A4225',
+  '800': '#6B3420',
+  '900': '#4E271A',
+  '950': '#2C150D',
+}
+
+const GRAPHITE = {
+  '50': '#F8F7F4',
+  '100': '#F1EFEB',
+  '200': '#E4E1DB',
+  '300': '#D2CEC6',
+  '400': '#A8A39A',
+  '500': '#7F7971',
+  '600': '#5C5750',
+  '700': '#45413C',
+  '800': '#2A2825',
+  '900': '#1C1B19',
+  '950': '#131312',
+}
+
 const config: Config = {
   darkMode: ['class'],
   content: [
@@ -46,63 +74,75 @@ const config: Config = {
   			border: 'hsl(var(--border))',
   			input: 'hsl(var(--input))',
   			ring: 'hsl(var(--ring))',
+  			// Ron 2026 colour story: warm graphite + paper neutrals with a single
+  			// ember (burnt copper) accent. The legacy indigo/violet/purple, zinc/slate/gray
+  			// scales are remapped here so every existing class inherits the new palette.
   			accent: {
-  				DEFAULT: '#3730A3',
+  				DEFAULT: '#A9532E',
   				foreground: 'hsl(var(--accent-foreground))'
   			},
-  			'accent-indigo': '#3730A3',
-  			'accent-light': '#6366F1',
-  			'accent-muted': '#818CF8',
-  			'accent-subtle': '#C7D2FE',
+  			'accent-indigo': '#A9532E',
+  			'accent-light': '#D6825A',
+  			'accent-muted': '#DFA382',
+  			'accent-subtle': '#EBC6AE',
+  			ember: EMBER,
+  			indigo: EMBER,
+  			violet: EMBER,
+  			purple: EMBER,
+  			zinc: GRAPHITE,
+  			slate: GRAPHITE,
+  			gray: GRAPHITE,
   			surface: {
-  				'0': '#FFFFFF',
-  				'50': '#FAFAFA',
-  				'100': '#F5F5F5',
-  				'200': '#E5E5E5',
-  				'300': '#D4D4D4',
-  				'400': '#A3A3A3',
-  				'500': '#525252',
-  				'600': '#404040',
-  				'700': '#262626',
-  				'800': '#171717',
-  				'850': '#121212',
-  				'900': '#0A0A0A',
-  				'950': '#050505'
+  				'0': '#FFFEFC',
+  				'50': '#F8F7F4',
+  				'100': '#F1EFEB',
+  				'200': '#E4E1DB',
+  				'300': '#D2CEC6',
+  				'400': '#A8A39A',
+  				'500': '#6F6A63',
+  				'600': '#4E4A44',
+  				'700': '#2D2B28',
+  				'800': '#1F1E1C',
+  				'850': '#191817',
+  				'900': '#131312',
+  				'950': '#0C0C0B'
   			},
   			ink: {
-  				DEFAULT: '#0A0A0A',
-  				secondary: '#525252',
-  				muted: '#A3A3A3',
-  				ghost: '#D4D4D4',
-  				inverse: '#FFFFFF',
-  				'inverse-secondary': '#A3A3A3',
-  				'inverse-muted': '#737373'
+  				DEFAULT: '#1A1917',
+  				secondary: '#57524C',
+  				muted: '#7F7971',
+  				ghost: '#D2CEC6',
+  				inverse: '#F3F1ED',
+  				'inverse-secondary': '#ADA79F',
+  				'inverse-muted': '#86807A'
   			},
-  			success: '#059669',
-  			warning: '#D97706',
-  			danger: '#DC2626',
-  			info: '#0284C7',
+  			success: '#4F7A5A',
+  			warning: '#B7791F',
+  			danger: '#C2413B',
+  			info: '#4A6FA5',
   			royal: {
-  				DEFAULT: '#3730A3',
-  				light: '#6366F1',
-  				dark: '#312E81',
-  				purple: '#4C1D95'
+  				DEFAULT: '#A9532E',
+  				light: '#D6825A',
+  				dark: '#6B3420',
+  				purple: '#4E271A'
   			},
-  			'ron-white': '#FFFFFF',
-  			'ron-text': '#0A0A0A',
-  			'ron-black': '#0A0A0A',
-  			'ron-smoke': '#121212'
+  			'ron-white': '#FFFEFC',
+  			'ron-text': '#1A1917',
+  			'ron-black': '#131312',
+  			'ron-smoke': '#191817'
   		},
   		fontFamily: {
   			display: [
-  				'Playfair Display',
+  				'Newsreader Variable',
+  				'Iowan Old Style',
   				'Georgia',
   				'serif'
   			],
   			sans: [
-  				'Raleway',
-  				'system-ui',
+  				'Inter Variable',
   				'-apple-system',
+  				'BlinkMacSystemFont',
+  				'system-ui',
   				'sans-serif'
   			],
   			mono: [
@@ -111,28 +151,31 @@ const config: Config = {
   				'monospace'
   			],
   			georgia: [
+  				'Newsreader Variable',
   				'Georgia',
   				'serif'
   			],
   			raleway: [
-  				'Raleway',
+  				'Inter Variable',
+  				'system-ui',
   				'sans-serif'
   			]
   		},
   		fontWeight: {
-  			thin: '100',
-  			extralight: '200',
-  			light: '300',
+  			// Hairline weights were illegible on body copy; the floor is now 300.
+  			thin: '300',
+  			extralight: '300',
+  			light: '350',
   			normal: '400',
   			medium: '500',
   			semibold: '600',
   			bold: '700',
   			extrabold: '800',
   			black: '900',
-  			'raleway-thin': '100',
-  			'raleway-extralight': '200',
-  			'raleway-light': '300',
-  			'raleway-bold': '700'
+  			'raleway-thin': '300',
+  			'raleway-extralight': '300',
+  			'raleway-light': '350',
+  			'raleway-bold': '600'
   		},
   		fontSize: {
   			'display-2xl': [
@@ -231,16 +274,16 @@ const config: Config = {
   			medium: '0 4px 16px -4px rgb(0 0 0 / 0.1)',
   			bold: '0 8px 32px -8px rgb(0 0 0 / 0.15)',
   			dramatic: '0 24px 64px -16px rgb(0 0 0 / 0.25)',
-  			'glow-accent': '0 0 24px -4px rgb(99 102 241 / 0.35)',
-  			'glow-accent-lg': '0 0 48px -8px rgb(99 102 241 / 0.4)',
+  			'glow-accent': '0 0 24px -6px rgb(194 106 65 / 0.35)',
+  			'glow-accent-lg': '0 0 48px -10px rgb(194 106 65 / 0.4)',
   			'dark-subtle': '0 1px 2px 0 rgb(0 0 0 / 0.2)',
   			'dark-soft': '0 2px 8px -2px rgb(0 0 0 / 0.4)',
   			'dark-medium': '0 4px 16px -4px rgb(0 0 0 / 0.5)',
   			'dark-bold': '0 8px 32px -8px rgb(0 0 0 / 0.6)',
   			'inner-soft': 'inset 0 2px 4px 0 rgb(0 0 0 / 0.04)',
   			'inner-dark': 'inset 0 2px 4px 0 rgb(0 0 0 / 0.2)',
-  			glass: '0 8px 32px 0 rgba(55, 48, 163, 0.08)',
-  			'glass-hover': '0 12px 48px 0 rgba(55, 48, 163, 0.12)',
+  			glass: '0 8px 32px 0 rgba(26, 25, 23, 0.06)',
+  			'glass-hover': '0 12px 48px 0 rgba(26, 25, 23, 0.10)',
   			'glass-dark': '0 8px 32px 0 rgba(0, 0, 0, 0.3)'
   		},
   		animation: {
@@ -327,10 +370,10 @@ const config: Config = {
   			},
   			pulseGlow: {
   				'0%, 100%': {
-  					boxShadow: '0 0 32px -4px rgba(139, 92, 246, 0.5)'
+  					boxShadow: '0 0 32px -4px rgba(194, 106, 65, 0.4)'
   				},
   				'50%': {
-  					boxShadow: '0 0 48px -2px rgba(139, 92, 246, 0.7)'
+  					boxShadow: '0 0 48px -2px rgba(194, 106, 65, 0.55)'
   				}
   			},
   			shimmer: {

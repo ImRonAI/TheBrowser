@@ -23,21 +23,20 @@ function FavoriteBadge({ favorite, onOpen, onRemove }: FavoriteBadgeProps) {
         type="button"
         onClick={onOpen}
         className={cn(
-          'inline-flex h-8 items-center gap-2 rounded-full border border-surface-200/90 bg-white/80 pl-1.5 pr-3 text-xs font-semibold text-ink shadow-sm backdrop-blur transition-all duration-200',
-          'hover:-translate-y-px hover:border-indigo-300 hover:bg-indigo-50/70 hover:shadow-md',
-          'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-500',
-          'dark:border-surface-700 dark:bg-surface-850/80 dark:text-ink-inverse dark:hover:border-indigo-600 dark:hover:bg-indigo-950/40',
+          'inline-flex h-8 items-center gap-2 rounded-lg border border-surface-200 bg-surface-0 pl-1.5 pr-3 text-[12.5px] font-medium text-ink transition-colors duration-150',
+          'hover:border-surface-300 hover:bg-surface-50',
+          'dark:border-surface-800 dark:bg-surface-900 dark:text-ink-inverse dark:hover:border-surface-700 dark:hover:bg-surface-850',
         )}
       >
         {iconOk ? (
           <img
             src={faviconFor(url)}
             alt=""
-            className="h-5 w-5 rounded-full bg-surface-100 object-contain p-0.5 dark:bg-surface-800"
+            className="h-5 w-5 rounded-md bg-surface-100 object-contain p-0.5 dark:bg-surface-800"
             onError={() => setIconOk(false)}
           />
         ) : (
-          <Globe size={14} className="mx-0.5 text-indigo-500" />
+          <Globe size={14} className="mx-0.5 text-ink-muted dark:text-ink-inverse-muted" />
         )}
         <span className="max-w-[9rem] truncate">{title}</span>
       </button>
@@ -90,13 +89,13 @@ function AddFavorite({ onAdd }: AddFavoriteProps) {
       <PopoverTrigger asChild>
         <button
           type="button"
-          className="inline-flex h-8 items-center gap-1.5 rounded-full border border-dashed border-surface-300 px-3 text-xs font-semibold text-ink-muted transition-colors hover:border-indigo-400 hover:text-indigo-600 dark:border-surface-600 dark:text-ink-inverse-muted dark:hover:border-indigo-500 dark:hover:text-indigo-300"
+          className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-dashed border-surface-300 px-3 text-[12.5px] font-medium text-ink-muted transition-colors hover:border-surface-400 hover:text-ink dark:border-surface-700 dark:text-ink-inverse-muted dark:hover:border-surface-600 dark:hover:text-ink-inverse"
         >
           <Plus size={12} />
           Add
         </button>
       </PopoverTrigger>
-      <PopoverContent align="start" className="w-72 rounded-2xl p-3">
+      <PopoverContent align="start" className="w-72 rounded-xl p-3">
         <form onSubmit={handleSubmit} className="flex flex-col gap-2">
           <Input
             value={title}
@@ -118,7 +117,7 @@ function AddFavorite({ onAdd }: AddFavoriteProps) {
             autoFocus
           />
           {error ? (
-            <p role="alert" className="text-xs text-red-600">
+            <p role="alert" className="text-xs text-danger">
               {error}
             </p>
           ) : null}
@@ -150,7 +149,7 @@ export function FavoriteLinks() {
 
   return (
     <nav aria-label="Favorite links" className="mb-8 flex flex-wrap items-center gap-2">
-      <span className="mr-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-ink-muted dark:text-ink-inverse-muted">
+      <span className="mr-1 text-[11px] font-medium uppercase tracking-[0.12em] text-ink-muted dark:text-ink-inverse-muted">
         Favorites
       </span>
       {favorites.map((favorite) => (

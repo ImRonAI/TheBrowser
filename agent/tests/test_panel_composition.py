@@ -7,7 +7,8 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 from strands import Agent, tool
-from strands.agent.conversation_manager import SlidingWindowConversationManager
+from strands.agent.conversation_manager import SlidingWindowConversationManager, SummarizingConversationManager
+from strands.vended_plugins.context_offloader import ContextOffloader
 from strands.hooks.events import BeforeInvocationEvent
 from strands.models.model import Model
 from strands.plugins import Plugin
@@ -47,8 +48,11 @@ class OfflineModel(Model):
         uses = self.uses if not any("toolResult" in b for m in messages for b in m["content"]) else ()
         yield {"messageStart": {"role": "assistant"}}
         for index, (name, inputs) in enumerate(uses):
+            # Unique per model call like every real provider: the native HumanInTheLoop memoises
+            # classified toolUseIds, so a reused id would demand approval on the second cycle.
+            tool_use_id = f"use-{index}" if len(self.calls) == 1 else f"use-{len(self.calls)}-{index}"
             yield {"contentBlockStart": {"contentBlockIndex": index,
-                "start": {"toolUse": {"toolUseId": f"use-{index}", "name": name}}}}
+                "start": {"toolUse": {"toolUseId": tool_use_id, "name": name}}}}
             yield {"contentBlockDelta": {"contentBlockIndex": index,
                 "delta": {"toolUse": {"input": json.dumps(inputs)}}}}
             yield {"contentBlockStop": {"contentBlockIndex": index}}
@@ -141,7 +145,15 @@ def test_real_constructor_defaults_stream_and_complete_cleanup(offline):
     assert isinstance(kwargs["session_manager"], SnapshotSessionManager)
     assert kwargs["storage"] is storage
     assert agent.memory_manager is not None
-    assert kwargs["context_manager"] == "auto"
+    assert kwargs["context_manager"] is False
+    manager = kwargs["conversation_manager"]
+    assert isinstance(manager, SummarizingConversationManager)
+    assert manager._compression_threshold == 0.7
+    summarizer = manager.summarization_agent
+    assert isinstance(summarizer, Agent) and summarizer is not agent
+    assert summarizer.model is kwargs["model"]
+    assert summarizer._session_manager is None
+    assert any(isinstance(plugin, ContextOffloader) for plugin in kwargs["plugins"])
     assert isinstance(kwargs["tool_executor"], ConcurrentToolExecutor)
     assert kwargs["background_tasks"] is False
     assert kwargs["retry_strategy"]._max_attempts == 6
@@ -149,9 +161,10 @@ def test_real_constructor_defaults_stream_and_complete_cleanup(offline):
     # User-mandated core set is always registered; think is Perplexity-only.
     from agent.api.core.panel_tools import CORE_TOOL_NAMES
     assert set(CORE_TOOL_NAMES) <= names
-    assert {"ask_user", "think", "research_review", "reasoning_swarm", "nested_research_review"} <= names
+    assert {"ask_user", "think", "research_review", "reasoning_swarm", "nested_research_review",
+            "retrieve_offloaded_content"} <= names
     assert "review" not in names and "load_tool" not in names and "discover_tools" not in names
-    # No long-lived child agents: think/formations build children per call.
+    # The summarizer is one long-lived Agent on the panel model. think/formations still build per call.
     assert len(models) == 1
     result = asyncio.run(agent.invoke_async("hello"))
     assert result.stop_reason == "end_turn"
@@ -193,11 +206,19 @@ def test_runtime_merge_context_executor_and_retry(offline, monkeypatch, mode):
     assert runtime["hooks"] == [hook] and len(runtime["plugins"]) == 1
     assert isinstance(kwargs["tool_executor"], SequentialToolExecutor)
     assert kwargs["retry_strategy"]._max_attempts == 2
+    offloader = any(isinstance(plugin, ContextOffloader) for plugin in kwargs["plugins"])
     if mode == "sliding":
         assert kwargs["context_manager"] is False
         assert isinstance(kwargs["conversation_manager"], SlidingWindowConversationManager)
+        assert offloader
+    elif mode == "agentic":
+        assert kwargs["context_manager"] == "agentic"
+        assert "conversation_manager" not in kwargs
+        assert not offloader
     else:
-        assert kwargs["context_manager"] == mode
+        assert kwargs["context_manager"] is False
+        assert isinstance(kwargs["conversation_manager"], SummarizingConversationManager)
+        assert offloader
     asyncio.run(agent.invoke_async("hello"))
     assert sorted(calls) == ["hook", "plugin"]
 
@@ -287,7 +308,7 @@ def test_long_run_keeps_tools_and_host_files_across_turns(offline, tmp_path):
         try:
             session = await manager.start("user", "session", "Complete thirty steps")
             await asyncio.wait_for(session.wait(), 30)
-            assert session.status == "completed", session.error
+            assert session.status == "completed", (session.status, session.error, session.interrupts)
             assert calls == list(range(1, 31))
             assert len(session.agent.model.calls) == 31
             original_agent = session.agent
@@ -358,7 +379,7 @@ def test_native_question_pause_preserved_with_goal_and_runtime(offline, checkpoi
                 await manager.start("user", "session", action="interrupt", interrupt_responses=[
                     {"interruptResponse": {"interruptId": session.interrupts[0]["id"], "response": "A"}}])
                 await session.wait()
-                assert session.status == "completed"
+                assert session.status == "completed", session.interrupts
                 results = [b["toolResult"] for m in session.agent.messages for b in m["content"] if "toolResult" in b]
                 assert "A" in json.dumps(results)
         finally:
@@ -380,7 +401,9 @@ def test_bind_failure_and_postconstruction_failure_cleanup(offline, monkeypatch)
     monkeypatch.setattr(composition.PanelToolCatalog, "bind", Mock(side_effect=ValueError("bind failure")))
     with pytest.raises(ValueError, match="bind failure"):
         build()
-    assert len(cleanup_calls) == 1  # parent; no long-lived children remain
+    # Parent plus the summarizer built for context=auto. Nothing else stays open.
+    assert len(cleanup_calls) == 2
+    assert sum(agent._session_manager is None for agent in cleanup_calls) == 1
     assert not catalogs[0].consumers
 
 
@@ -397,7 +420,9 @@ def test_constructor_failure_also_releases_catalog_children(offline, monkeypatch
     monkeypatch.setattr(Agent, "cleanup", cleanup)
     with pytest.raises(ValueError, match="constructor failure"):
         build()
-    assert len(cleanups) == 0
+    # The panel agent never existed. The summarizer built for context=auto is released.
+    assert len(cleanups) == 1
+    assert cleanups[0]._session_manager is None
 
 
 def test_explicit_skill_assignments_and_unknown_tool_rejected(offline, monkeypatch, tmp_path):
@@ -520,10 +545,21 @@ def test_mcp_view_missing_assignment_fails_and_releases_child_consumer(offline):
     assert len(client._consumers) == 1
 
 
-@pytest.mark.parametrize("name", ["search_memory", "add_memory", "retrieve_context"])
-def test_parent_memory_and_context_tools_cannot_be_assigned(offline, name):
+@pytest.mark.parametrize(
+    ("name", "mode"),
+    [
+        ("search_memory", "auto"),
+        ("add_memory", "auto"),
+        ("retrieve_offloaded_content", "auto"),
+        ("retrieve_context", "agentic"),
+        ("summarize_context", "agentic"),
+        ("truncate_context", "agentic"),
+        ("pin_context", "agentic"),
+    ],
+)
+def test_parent_memory_and_context_tools_cannot_be_assigned(offline, name, mode):
     build, _, _, _, _ = offline
-    agent = build()
+    agent = build(options={"context": mode})
     assert name in agent.tool_registry.registry
     with pytest.raises(ValueError, match="parent-bound"):
         composition._assigned_tools(agent, [name])
@@ -552,7 +588,10 @@ def test_real_constructor_partial_mcp_startup_failure_releases_every_owner(offli
     with pytest.raises(ValueError, match="startup failed"):
         build(extra_tools=[first, second])
     assert not first._consumers and not second._consumers
-    assert cleaned == []  # no long-lived children exist to release
+    # Panel construction failed before the panel agent existed. The summarizer was
+    # already built for context=auto and is released with it.
+    assert len(cleaned) == 1
+    assert cleaned[0]._session_manager is None
 
 
 def test_unassigned_skill_never_inherits_parent_tools(offline, monkeypatch, tmp_path):
@@ -629,16 +668,18 @@ def test_create_panel_agent_merges_application_and_runtime_hooks(offline):
     app_hook, runtime_hook = Recorder("app"), Recorder("runtime")
     build(hooks=[app_hook], runtime_options={"hooks": [runtime_hook]})
     kwargs = constructed[-1][1]
-    # Application hooks first, then the always-present BrowserAvailabilityHook, ToolObservation and
-    # ToolRepairTrigger (RON_TOOL_REPAIR default on), then runtime hooks.
+    # Application hooks first, then the always-present BrowserAvailabilityHook, ToolObservation,
+    # ThreadProjection (Supabase threads read model) and ToolRepairTrigger (RON_TOOL_REPAIR default on),
+    # then runtime hooks.
     from agent.api.core.panel_browser import BrowserAvailabilityHook
+    from agent.api.core.threads import ThreadProjection
     from agent.api.core.tool_observation import ToolObservation
     from agent.api.core.tool_repair import ToolRepairTrigger
 
-    always = (BrowserAvailabilityHook, ToolObservation, ToolRepairTrigger)
+    always = (BrowserAvailabilityHook, ToolObservation, ThreadProjection, ToolRepairTrigger)
     assert [h for h in kwargs["hooks"] if not isinstance(h, always)] == [app_hook, runtime_hook]
     assert isinstance(kwargs["hooks"][1], BrowserAvailabilityHook) and isinstance(kwargs["hooks"][2], ToolObservation)
-    assert isinstance(kwargs["hooks"][3], ToolRepairTrigger)
+    assert isinstance(kwargs["hooks"][3], ThreadProjection) and isinstance(kwargs["hooks"][4], ToolRepairTrigger)
     assert order == ["app", "runtime"]
 
 
@@ -649,11 +690,12 @@ def test_create_panel_agent_without_hooks_is_unchanged(offline):
 
     from agent.api.core.tool_observation import ToolObservation
 
+    from agent.api.core.threads import ThreadProjection
     from agent.api.core.tool_repair import ToolRepairTrigger
 
     hooks = constructed[-1][1]["hooks"]
-    assert len(hooks) == 3 and isinstance(hooks[0], BrowserAvailabilityHook) and isinstance(hooks[1], ToolObservation)
-    assert isinstance(hooks[2], ToolRepairTrigger)
+    assert len(hooks) == 4 and isinstance(hooks[0], BrowserAvailabilityHook) and isinstance(hooks[1], ToolObservation)
+    assert isinstance(hooks[2], ThreadProjection) and isinstance(hooks[3], ToolRepairTrigger)
     assert constructed[-1][1]["trace_attributes"] == {"session.id": "session", "user.id": "user"}
 
 
@@ -740,3 +782,17 @@ def test_browser_tools_are_parent_only(offline):
     assert "tool_catalog" in THINK_EXCLUDED_TOOLS
     with pytest.raises(ValueError):
         composition._assigned_tools(agent, ["user_browser_x"])
+
+
+def test_xai_agents_get_the_state_pruner_hook(offline, monkeypatch):
+    """Only xAI threads carry strands_xai's encrypted-state blobs, so only they get XAIStatePruner."""
+    from agent.api.core import panel_agent as composition
+    from agent.api.core.xai_model import XAIStatePruner
+
+    build, _models, _catalogs, constructed, _storage = offline
+    build()
+    assert not any(isinstance(h, XAIStatePruner) for h in constructed[-1][1]["hooks"])
+    composition.create_panel_agent(provider="xai", model_id="grok-4.7", user_id="user", session_id="session",
+                                   system_prompt="Test composition", extra_tools=[])
+    hooks = constructed[-1][1]["hooks"]
+    assert sum(isinstance(h, XAIStatePruner) for h in hooks) == 1

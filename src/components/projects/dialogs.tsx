@@ -16,6 +16,7 @@ import { cn } from '@/utils/cn'
 import { X, FolderKanban, CheckSquare } from 'lucide-react'
 import { fromLocalDateTime } from '@/lib/project-issue-utils'
 import { ProjectFieldInput } from './ProjectFieldInput'
+import { AssistField } from '@/components/shared/TextAssist'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CREATE PROJECT DIALOG
@@ -109,13 +110,16 @@ export function CreateProjectDialog({ isOpen, onClose }: CreateProjectDialogProp
 
         {/* Summary */}
         <FormField label="Summary">
-          <textarea
-            value={summary}
-            onChange={(e) => setSummary(e.target.value)}
-            placeholder="Briefly describe what this project is about..."
-            rows={3}
-            className={cn(inputClasses, "resize-none")}
-          />
+          <AssistField value={summary} onChange={setSummary}>
+            {(field) => <textarea
+              value={summary}
+              onChange={(e) => setSummary(e.target.value)}
+              placeholder="Briefly describe what this project is about..."
+              rows={3}
+              className={cn(inputClasses, "resize-none")}
+              {...field}
+            />}
+          </AssistField>
         </FormField>
       </div>
 
@@ -337,24 +341,30 @@ function CreateIssueForm({
 
         {/* Title */}
         <FormField label="Title">
-          <input
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder="Issue title"
-            autoFocus
-            className={inputClasses}
-          />
+          <AssistField value={title} onChange={setTitle} suggest count={5}>
+            {(field) => <input
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="Issue title"
+              autoFocus
+              className={inputClasses}
+              {...field}
+            />}
+          </AssistField>
         </FormField>
 
         {/* Description */}
         <FormField label="Description">
-          <textarea
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            placeholder="Describe the issue..."
-            rows={3}
-            className={cn(inputClasses, "resize-none")}
-          />
+          <AssistField value={description} onChange={setDescription}>
+            {(field) => <textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="Describe the issue..."
+              rows={3}
+              className={cn(inputClasses, "resize-none")}
+              {...field}
+            />}
+          </AssistField>
         </FormField>
 
         {/* Status & Priority Row */}

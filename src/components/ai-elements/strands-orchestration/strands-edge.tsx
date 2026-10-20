@@ -153,7 +153,7 @@ export const GraphEdgeComponent = memo(function GraphEdgeComponent({
         style={{
           stroke: isActive
             ? isConditional
-              ? "rgb(139, 92, 246)"
+              ? "rgb(194, 106, 65)"
               : "rgb(14, 165, 233)"
             : "rgb(148, 163, 184)",
           strokeWidth: isActive ? 2.5 : 1.5,
@@ -167,7 +167,7 @@ export const GraphEdgeComponent = memo(function GraphEdgeComponent({
       {isAnimated && (
         <motion.circle
           r="4"
-          fill={isConditional ? "rgb(139, 92, 246)" : "rgb(14, 165, 233)"}
+          fill={isConditional ? "rgb(194, 106, 65)" : "rgb(14, 165, 233)"}
           filter="drop-shadow(0 0 4px currentColor)"
         >
           <animateMotion
@@ -251,7 +251,7 @@ export const SwarmEdgeComponent = memo(function SwarmEdgeComponent({
         path={edgePath}
         style={{
           stroke: isActive
-            ? "rgb(139, 92, 246)"
+            ? "rgb(194, 106, 65)"
             : "rgba(148, 163, 184, 0.4)",
           strokeWidth: isActive ? 2 : 1,
           strokeDasharray: isActive ? "none" : "6 4",
@@ -265,13 +265,13 @@ export const SwarmEdgeComponent = memo(function SwarmEdgeComponent({
         <>
           <motion.circle
             r="5"
-            fill="rgb(139, 92, 246)"
-            filter="drop-shadow(0 0 8px rgba(139, 92, 246, 0.6))"
+            fill="rgb(194, 106, 65)"
+            filter="drop-shadow(0 0 8px rgba(194, 106, 65, 0.6))"
           >
             <animateMotion dur="1s" path={edgePath} repeatCount="indefinite" />
           </motion.circle>
           {/* Trail */}
-          <motion.circle r="3" fill="rgba(139, 92, 246, 0.4)">
+          <motion.circle r="3" fill="rgba(194, 106, 65, 0.4)">
             <animateMotion dur="1s" path={edgePath} repeatCount="indefinite" begin="0.15s" />
           </motion.circle>
         </>
@@ -335,7 +335,7 @@ export function EdgeMarkerDefinitions() {
           markerHeight="6"
           orient="auto-start-reverse"
         >
-          <path d="M 0 0 L 10 5 L 0 10 z" fill="rgb(139, 92, 246)" />
+          <path d="M 0 0 L 10 5 L 0 10 z" fill="rgb(194, 106, 65)" />
         </marker>
 
         <marker
@@ -347,7 +347,7 @@ export function EdgeMarkerDefinitions() {
           markerHeight="7"
           orient="auto-start-reverse"
         >
-          <path d="M 0 0 L 10 5 L 0 10 z" fill="rgb(139, 92, 246)" />
+          <path d="M 0 0 L 10 5 L 0 10 z" fill="rgb(194, 106, 65)" />
         </marker>
       </defs>
     </svg>

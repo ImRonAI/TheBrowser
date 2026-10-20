@@ -44,9 +44,17 @@ async def lifespan(app: FastAPI):
     app.state.issue_agents = IssueAgentRuntime()
     app.state.panel_runtime = manager
     app.state.panel_a2a = None
-    # Per-user tool fixer (CAT-50/51); RON_TOOL_REPAIR=0 keeps the endpoints inert.
+    app.state.fixer_a2a = None
+    # Per-user tool repair (CAT-50/51): a tool failure makes RepairService send the repair over native
+    # A2A to /a2a/fixer, whose A2AServer builds the create_harness fixer for that context. The live
+    # objects are handed over here, never re-imported.
     from agent.api.core.tool_repair import RepairService
-    app.state.tool_repairs = RepairService()
+    from agent.api.endpoints.tool_repairs import reload_live_sessions
+
+    repairs = RepairService(reload_live_sessions=lambda *args: reload_live_sessions(manager, *args))
+    repairs.bind_emitter(chat.repair_emitter(manager))
+    app.state.tool_repairs = repairs
+    chat.bind_repair_service(repairs)
     mounted_routes = []
     try:
         from agent.api.core.a2a_tools import a2a_enabled, panel_a2a_url
@@ -57,25 +65,35 @@ async def lifespan(app: FastAPI):
             from agent.api.core.panel_a2a import create_a2a_agent_factory, create_panel_a2a_server, mount_panel_a2a
 
             selection = default_selection()
-            if selection is not None:
-                provider, model_id = selection
-                factory = create_a2a_agent_factory(
-                    model_factory=lambda _: build_model(provider, model_id),
-                    # Native A2AServer constructs a metadata agent for its card.
-                    # Actual contexts each own a fresh core tool set.
-                    tools_factory=lambda context: [] if context == "__agent_card__" else build_core_tools(chat.PROJECT_TOOLS_DIR),
-                    name="Ron", description="Ron browser agent with core tools",
-                    system_prompt=chat.AGENT_SYSTEM_PROMPT,
-                )
-                integration = await asyncio.to_thread(
-                    create_panel_a2a_server, agent_factory=factory, http_url=panel_a2a_url(),
-                )
-                app.state.panel_a2a = integration
-                previous = list(app.routes)
-                mount_panel_a2a(app, integration, enabled=True)
+            previous = list(app.routes)
+            try:
+                # /a2a/fixer is mounted before /a2a so the longer prefix wins.
+                try:
+                    fixer = await asyncio.to_thread(create_panel_a2a_server, agent_factory=repairs.agent_for,
+                                                    http_url=repairs.fixer_url)
+                    app.state.fixer_a2a = fixer
+                    mount_panel_a2a(app, fixer, enabled=True, path="/a2a/fixer")
+                except Exception:
+                    logging.getLogger(__name__).exception("A2A: the tool fixer server could not start")
+                if selection is None:
+                    logging.getLogger(__name__).warning("A2A: no provider configured; the panel A2A server is unavailable")
+                else:
+                    provider, model_id = selection
+                    factory = create_a2a_agent_factory(
+                        model_factory=lambda _: build_model(provider, model_id),
+                        # Native A2AServer constructs a metadata agent for its card.
+                        # Actual contexts each own a fresh core tool set.
+                        tools_factory=lambda context: [] if context == "__agent_card__" else build_core_tools(chat.PROJECT_TOOLS_DIR),
+                        name="Ron", description="Ron browser agent with core tools",
+                        system_prompt=chat.AGENT_SYSTEM_PROMPT,
+                    )
+                    integration = await asyncio.to_thread(
+                        create_panel_a2a_server, agent_factory=factory, http_url=panel_a2a_url(),
+                    )
+                    app.state.panel_a2a = integration
+                    mount_panel_a2a(app, integration, enabled=True)
+            finally:
                 mounted_routes = [route for route in app.routes if route not in previous]
-            else:
-                logging.getLogger(__name__).warning("A2A: no provider configured; the panel A2A server is unavailable")
         # Opt-in (RON_NGROK=1); only allow-listed webhook paths are reachable.
         app.state.public_url = await public_tunnel.start()
         async with skills_mcp_app.lifespan(app):
@@ -85,17 +103,22 @@ async def lifespan(app: FastAPI):
             await get_teaching_service().shutdown()
             await public_tunnel.stop()
             await app.state.issue_agents.shutdown()
+            await repairs.shutdown()
             await manager.shutdown()
         finally:
+            chat.bind_repair_service(None)
             try:
                 if app.state.panel_a2a is not None:
                     await app.state.panel_a2a.aclose()
+                if app.state.fixer_a2a is not None:
+                    await app.state.fixer_a2a.aclose()
                 await harness_a2a_host.aclose()
             finally:
                 for route in mounted_routes:
                     app.routes.remove(route)
                 app.state.panel_runtime = None
                 app.state.panel_a2a = None
+                app.state.fixer_a2a = None
 
 
 app = FastAPI(title="Ron Browser API", version="4.0.0", lifespan=lifespan)

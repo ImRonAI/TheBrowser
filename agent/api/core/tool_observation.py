@@ -204,7 +204,7 @@ class ToolObservation(HookProvider):
             if outcome["source"] is not None:
                 attributes["ron.tool.source"] = outcome["source"]["path"]
                 attributes["ron.tool.source_sha256"] = outcome["source"]["sha256"]
-            attributes.update(event.agent.trace_attributes)
+            attributes.update(getattr(event.agent, "trace_attributes", None) or {})  # BidiAgent has none
             span.add_event(TOOL_OUTCOME_EVENT, attributes=attributes)  # type: ignore[arg-type]
         failed = outcome["status"] != "success" or outcome["exception"] is not None
         if not failed:

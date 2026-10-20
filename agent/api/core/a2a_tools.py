@@ -59,7 +59,36 @@ def a2a_agent_urls(extra: Sequence[str] | None = None) -> list[str]:
     return urls
 
 
-def a2a_tools(*, extra_agents: Sequence[str] | None = None, timeout: int = 300) -> list[AgentTool]:
+def a2a_provider(known_agent_urls: list[str], *, timeout: int | None = None) -> Any:
+    """The installed ``A2AClientToolProvider``.
+
+    Its constructor does ``timeout = min(timeout, API_TOOL_TIMEOUT_SECONDS)`` and that constant
+    is read once, at import, default 7. A fixer run is this same ``a2a_send_message`` call and
+    lasts up to ``RON_TOOL_REPAIR_TIMEOUT_S``, so the first import of the provider sees that
+    limit. The env value is restored immediately so later tool modules keep their own default.
+    """
+    import sys
+
+    from agent.api.core.config import RON_TOOL_REPAIR_TIMEOUT_S
+
+    limit = RON_TOOL_REPAIR_TIMEOUT_S if timeout is None else timeout
+    if "strands_tools.a2a_client" not in sys.modules:
+        previous = os.environ.get("API_TOOL_TIMEOUT_SECONDS")
+        os.environ["API_TOOL_TIMEOUT_SECONDS"] = str(limit)
+        try:
+            from strands_tools.a2a_client import A2AClientToolProvider
+        finally:
+            if previous is None:
+                os.environ.pop("API_TOOL_TIMEOUT_SECONDS", None)
+            else:
+                os.environ["API_TOOL_TIMEOUT_SECONDS"] = previous
+    else:
+        from strands_tools.a2a_client import A2AClientToolProvider
+
+    return A2AClientToolProvider(known_agent_urls=known_agent_urls, timeout=limit)
+
+
+def a2a_tools(*, extra_agents: Sequence[str] | None = None, timeout: int | None = None) -> list[AgentTool]:
     """The native A2A client tools for one agent, or ``[]`` when A2A is disabled.
 
     Discovery is lazy (the provider fetches agent cards on first use), so building these tools
@@ -68,9 +97,7 @@ def a2a_tools(*, extra_agents: Sequence[str] | None = None, timeout: int = 300) 
     urls = a2a_agent_urls(extra_agents)
     if not urls:
         return []
-    from strands_tools.a2a_client import A2AClientToolProvider
-
-    return list(A2AClientToolProvider(known_agent_urls=urls, timeout=timeout).tools)
+    return list(a2a_provider(urls, timeout=timeout).tools)
 
 
 def is_a2a_tool(name: str) -> bool:
@@ -81,4 +108,7 @@ def a2a_tool_names(tools: Sequence[Any]) -> list[str]:
     return [tool.tool_name for tool in tools if is_a2a_tool(getattr(tool, "tool_name", ""))]
 
 
-__all__ = ["A2A_TOOL_NAMES", "a2a_agent_urls", "a2a_enabled", "a2a_tool_names", "a2a_tools", "is_a2a_tool", "panel_a2a_url"]
+__all__ = [
+    "A2A_TOOL_NAMES", "a2a_agent_urls", "a2a_enabled", "a2a_provider", "a2a_tool_names",
+    "a2a_tools", "is_a2a_tool", "panel_a2a_url",
+]

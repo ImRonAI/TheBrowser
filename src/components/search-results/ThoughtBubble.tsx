@@ -232,7 +232,7 @@ function ThinkingAnimation() {
           key={i}
           className="absolute w-2.5 h-2.5 rounded-full"
           style={{
-            background: i === 0 ? '#60A5FA' : i === 1 ? '#A855F7' : '#34D399',
+            background: i === 0 ? '#60A5FA' : i === 1 ? '#C26A41' : '#34D399',
             top: '50%',
             left: '50%',
             marginLeft: '-5px',
@@ -251,7 +251,7 @@ function ThinkingAnimation() {
           <motion.div
             className="w-2.5 h-2.5 rounded-full"
             style={{
-              background: i === 0 ? '#60A5FA' : i === 1 ? '#A855F7' : '#34D399',
+              background: i === 0 ? '#60A5FA' : i === 1 ? '#C26A41' : '#34D399',
               transform: `translateX(${20 + i * 4}px)`,
             }}
             animate={{

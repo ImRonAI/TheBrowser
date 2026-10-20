@@ -1,12 +1,20 @@
 """Per-user tool repair surface (CAT-50/51). Loopback only: never add to the ngrok allowlist —
-a repair run executes the fixer's sandboxes on this host.
+an investigation runs the fixer's isolated containers on this host and activation reloads live tools.
 
-- ``POST /tools/repairs {user_id, session_id, tool_name}`` starts the user's fixer for a tool that
-  the live session proposed (``tool_repair_proposed``); the result arrives as ``tool_repair_ready``
-  on the session's SSE stream and the revision is stored under the user's namespace.
+A tool failure starts the fixer by itself (``ToolRepairTrigger`` -> ``RepairService``: one
+``create_harness`` agent in the background). The only click is Approve. This surface lets the panel observe and decide:
+
+- ``GET /tools/repairs/active?user_id=`` lists this user's running investigations.
+- ``POST /tools/repairs {user_id, session_id, tool_name}`` starts an investigation of a tool the user
+  names (the same path the hook uses; the session must be idle).
+- ``POST /tools/repairs/{tool}/activate {user_id, rev, approval_token}`` is the panel's Approve (below).
+- ``POST /tools/repairs/{tool}/decline {user_id, rev}``: nothing is applied.
+- ``POST /tools/repairs/{tool}/cancel {user_id}`` stops a running investigation.
 - ``GET /tools/repairs?user_id=`` lists this user's revisions (manifests; ``active`` flag).
-- ``POST /tools/repairs/{tool}/activate {user_id, rev}`` re-checks the library sha (409 on drift),
-  writes ``active.json`` and swaps the tool in every live session of that user (next invocation).
+- ``POST /tools/repairs/{tool}/activate {user_id, rev, approval_token}`` re-checks owner, base sha,
+  artifact digest and token (409/403 on drift), writes ``active.json`` and swaps the tool in every
+  live session of that user. A token survives a restart only together with the stored artifact it
+  was computed from; a changed artifact invalidates it.
 - ``POST /tools/repairs/{tool}/rollback {user_id}`` removes ``active.json`` and swaps back.
 
 The requesting user is the only authority; nothing here touches another user's sessions or data.
@@ -34,8 +42,7 @@ def _require_loopback(request: Request) -> None:
 def _service(request: Request) -> tool_repair.RepairService:
     service = getattr(request.app.state, "tool_repairs", None)
     if service is None:
-        service = tool_repair.RepairService()
-        request.app.state.tool_repairs = service
+        raise HTTPException(503, "Tool repair has not started")
     return service
 
 
@@ -57,9 +64,16 @@ class RepairActivate(BaseModel):
     model_config = ConfigDict(extra="forbid")
     user_id: Identifier = "default"
     rev: str = Field(min_length=1, max_length=64, pattern=r"^[a-z0-9][a-z0-9-]*$")
+    approval_token: str = Field(min_length=64, max_length=64, pattern=r"^[0-9a-f]{64}$")
 
 
-class RepairRollback(BaseModel):
+class RepairDecline(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    user_id: Identifier = "default"
+    rev: str | None = Field(default=None, min_length=1, max_length=64, pattern=r"^[a-z0-9][a-z0-9-]*$")
+
+
+class RepairUser(BaseModel):
     model_config = ConfigDict(extra="forbid")
     user_id: Identifier = "default"
 
@@ -76,12 +90,18 @@ async def start_repair(body: RepairStart, request: Request) -> dict[str, Any]:
     try:
         return await _service(request).start(
             user_id=body.user_id, session_id=body.session_id, tool_name=body.tool_name,
-            session_messages=list(session.agent.messages), agent=session.agent, on_event=session.repair_event,
+            session_messages=list(session.agent.messages), agent=session.agent,
         )
     except ValueError as error:
         raise HTTPException(422, str(error)) from error
     except RuntimeError as error:
         raise HTTPException(409, str(error)) from error
+
+
+@router.get("/tools/repairs/active")
+async def active_repairs(request: Request, user_id: Identifier = "default") -> dict[str, Any]:
+    _require_loopback(request)
+    return {"user_id": user_id, "investigations": _service(request).active(user_id)}
 
 
 @router.get("/tools/repairs")
@@ -91,11 +111,32 @@ async def list_repairs(request: Request, user_id: Identifier = "default", tool: 
         revisions = await tool_repair.list_repairs(user_id, tool)
     except ValueError as error:
         raise HTTPException(422, str(error)) from error
+    # The token is server-side proof the panel must echo; the manifest list is the panel's source.
     return {"user_id": user_id, "revisions": revisions}
 
 
-async def _reload_live_sessions(request: Request, user_id: str, tool_name: str, revision_file: Any,
-                                repair_kind: str, *, rollback: bool = False) -> list[str]:
+@router.post("/tools/repairs/{tool}/decline")
+async def decline_repair(tool: str, body: RepairDecline, request: Request) -> dict[str, Any]:
+    _require_loopback(request)
+    try:
+        return _service(request).decline(body.user_id, tool, body.rev)
+    except LookupError as error:
+        raise HTTPException(404, str(error)) from error
+    except RuntimeError as error:
+        raise HTTPException(409, str(error)) from error
+
+
+@router.post("/tools/repairs/{tool}/cancel")
+async def cancel_repair(tool: str, body: RepairUser, request: Request) -> dict[str, Any]:
+    _require_loopback(request)
+    try:
+        return await _service(request).cancel(body.user_id, tool)
+    except LookupError as error:
+        raise HTTPException(404, str(error)) from error
+
+
+async def reload_live_sessions(manager: Any, user_id: str, tool_name: str, revision_file: Any,
+                               repair_kind: str, *, rollback: bool = False) -> list[str]:
     """Apply (or undo) a revision in every live session of this user. ``file``/``adapter`` go through
     the catalog -> native ``ToolRegistry.replace`` (next invocation). ``server`` restarts this user's
     browser MCP server in each live session (``PanelToolCatalog.restart_mcp_server``): the old stdio
@@ -106,7 +147,6 @@ async def _reload_live_sessions(request: Request, user_id: str, tool_name: str, 
     from agent.api.core.panel_agent import PROJECT_TOOLS_DIR
     from agent.api.core.panel_tools import PanelToolCatalog
 
-    manager = _manager(request)
     swapped: list[str] = []
     for (owner, session_id), session in list(manager._sessions.items()):
         if owner != user_id or session.agent is None:
@@ -146,7 +186,7 @@ async def _reload_live_sessions(request: Request, user_id: str, tool_name: str, 
                     continue
                 done = bool(await owner_catalog.restart_mcp_server(prefix, agent=session.agent))
         except Exception as error:
-            raise HTTPException(500, f"reload failed in session {session_id}: {error}") from error
+            raise RuntimeError(f"reload failed in session {session_id}: {error}") from error
         if done:
             swapped.append(session_id)
     return swapped
@@ -156,24 +196,35 @@ async def _reload_live_sessions(request: Request, user_id: str, tool_name: str, 
 async def activate_repair(tool: str, body: RepairActivate, request: Request) -> dict[str, Any]:
     _require_loopback(request)
     try:
-        active = await tool_repair.activate(body.user_id, tool, body.rev)
+        active = await tool_repair.activate(body.user_id, tool, body.rev, approval_token_=body.approval_token)
     except tool_repair.RevisionConflict as error:
         raise HTTPException(409, str(error)) from error
+    except PermissionError as error:
+        raise HTTPException(403, str(error)) from error
     except FileNotFoundError as error:
         raise HTTPException(404, str(error)) from error
     except ValueError as error:
         raise HTTPException(422, str(error)) from error
-    swapped = await _reload_live_sessions(request, body.user_id, tool, active["revision_file"], active["repair_kind"])
+    try:
+        swapped = await reload_live_sessions(_manager(request), body.user_id, tool, active["revision_file"], active["repair_kind"])
+    except RuntimeError as error:
+        raise HTTPException(500, str(error)) from error
+    service = getattr(request.app.state, "tool_repairs", None)
+    if service is not None:
+        await service.applied(body.user_id, tool, body.rev)
     return {**active, "live_sessions_reloaded": swapped}
 
 
 @router.post("/tools/repairs/{tool}/rollback")
-async def rollback_repair(tool: str, body: RepairRollback, request: Request) -> dict[str, Any]:
+async def rollback_repair(tool: str, body: RepairUser, request: Request) -> dict[str, Any]:
     _require_loopback(request)
     try:
         result = await tool_repair.rollback(body.user_id, tool)
     except ValueError as error:
         raise HTTPException(422, str(error)) from error
     previous = result.get("previous") or {}
-    swapped = await _reload_live_sessions(request, body.user_id, tool, None, str(previous.get("repair_kind", "file")), rollback=True)
+    try:
+        swapped = await reload_live_sessions(_manager(request), body.user_id, tool, None, str(previous.get("repair_kind", "file")), rollback=True)
+    except RuntimeError as error:
+        raise HTTPException(500, str(error)) from error
     return {**result, "live_sessions_reloaded": swapped}

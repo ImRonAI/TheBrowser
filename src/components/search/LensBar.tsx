@@ -1,12 +1,12 @@
 /**
- * The Lens Bar — the search page's tab control. One floating frosted pill; the
- * active lens is marked by a sliding, hue-tinted indicator. Every tab carries a
- * live result count that ticks upward as its source streams in, plus a status pip
- * (pulsing = streaming, solid = done, red = failed) so the whole fan-out is visible
- * at a glance.
+ * The Lens Bar — the search page's tab control. A sticky underline tab row: the
+ * active lens carries a sliding ember underline; every tab shows its live result
+ * count (tabular), a pulsing dot while its source streams and a red dot on failure.
+ * Pending tabs are dimmed. Arrow keys move between tabs (WAI-ARIA tabs pattern).
  */
-import { AnimatePresence, LayoutGroup, motion } from 'framer-motion'
-import { SEARCH_TABS, hueWash, type SearchTab } from './tabs-meta'
+import { useRef, type KeyboardEvent } from 'react'
+import { LayoutGroup, motion, useReducedMotion } from 'framer-motion'
+import { SEARCH_TABS, type SearchTab } from './tabs-meta'
 import { cn } from '@/utils/cn'
 
 export type LensStatus = 'pending' | 'streaming' | 'done' | 'error'
@@ -22,75 +22,74 @@ export interface LensBarProps {
   lenses: Record<SearchTab, LensState>
 }
 
-function Pip({ status, hue }: { status: LensStatus; hue: string }) {
-  if (status === 'pending') {
-    return <span className="h-1.5 w-1.5 rounded-full bg-surface-300 dark:bg-surface-600" />
-  }
-  if (status === 'error') {
-    return <span className="h-1.5 w-1.5 rounded-full bg-danger" />
-  }
-  return (
-    <span className="relative flex h-1.5 w-1.5">
-      {status === 'streaming' && (
-        <motion.span
-          className="absolute inset-0 rounded-full"
-          style={{ backgroundColor: hue }}
-          animate={{ scale: [1, 2.2], opacity: [0.7, 0] }}
-          transition={{ duration: 1.2, repeat: Infinity, ease: 'easeOut' }}
-        />
-      )}
-      <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: hue }} />
-    </span>
-  )
-}
+export const lensPanelId = (tab: SearchTab) => `search-panel-${tab}`
+export const lensTabId = (tab: SearchTab) => `search-tab-${tab}`
 
 export function LensBar({ active, onChange, lenses }: LensBarProps) {
+  const reduced = useReducedMotion()
+  const refs = useRef<Partial<Record<SearchTab, HTMLButtonElement | null>>>({})
+
+  const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    const index = SEARCH_TABS.findIndex((tab) => tab.id === active)
+    let next = index
+    if (event.key === 'ArrowRight') next = (index + 1) % SEARCH_TABS.length
+    else if (event.key === 'ArrowLeft') next = (index - 1 + SEARCH_TABS.length) % SEARCH_TABS.length
+    else if (event.key === 'Home') next = 0
+    else if (event.key === 'End') next = SEARCH_TABS.length - 1
+    else return
+    event.preventDefault()
+    const id = SEARCH_TABS[next].id
+    onChange(id)
+    refs.current[id]?.focus()
+  }
+
   return (
-    <div className="sticky top-3 z-20 mx-auto mt-5 w-fit max-w-[calc(100vw-2rem)]">
+    <div className="sticky top-0 z-20 mt-5 border-b border-surface-200/80 bg-surface-0/85 backdrop-blur-md dark:border-surface-800 dark:bg-surface-900/85">
       <LayoutGroup id="search-lenses">
-        <div className="glass-bold flex items-center gap-0.5 overflow-x-auto rounded-full p-1 scrollbar-none">
+        <div
+          role="tablist"
+          aria-label="Search results"
+          onKeyDown={onKeyDown}
+          className="mx-auto flex max-w-6xl items-stretch gap-5 overflow-x-auto px-6 scrollbar-none sm:px-10"
+        >
           {SEARCH_TABS.map((tab) => {
             const isActive = active === tab.id
             const lens = lenses[tab.id]
             return (
-              <motion.button
+              <button
                 key={tab.id}
-                onClick={() => onChange(tab.id)}
-                whileTap={{ scale: 0.96 }}
+                ref={(node) => { refs.current[tab.id] = node }}
+                type="button"
                 role="tab"
+                id={lensTabId(tab.id)}
                 aria-selected={isActive}
+                aria-controls={lensPanelId(tab.id)}
+                tabIndex={isActive ? 0 : -1}
+                onClick={() => onChange(tab.id)}
                 className={cn(
-                  'relative flex flex-shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-light transition-colors duration-200',
+                  'relative flex h-11 flex-shrink-0 items-center gap-1.5 text-[13.5px] transition-colors duration-150 focus-visible:ring-offset-0',
                   isActive
-                    ? 'text-ink dark:text-ink-inverse'
+                    ? 'font-medium text-ink dark:text-ink-inverse'
                     : 'text-ink-secondary hover:text-ink dark:text-ink-inverse-secondary dark:hover:text-ink-inverse',
+                  !isActive && lens.status === 'pending' && 'opacity-55',
                 )}
               >
+                <span>{tab.label}</span>
+                {lens.count !== null && (
+                  <span className="font-mono text-[10.5px] tabular-nums text-ink-muted dark:text-ink-inverse-muted">{lens.count}</span>
+                )}
+                {lens.status === 'streaming' && (
+                  <span className="h-1.5 w-1.5 rounded-full bg-accent motion-safe:animate-pulse dark:bg-accent-light" aria-label="loading" />
+                )}
+                {lens.status === 'error' && <span className="h-1.5 w-1.5 rounded-full bg-danger" aria-label="failed" />}
                 {isActive && (
                   <motion.span
-                    layoutId="lens-active"
-                    className="absolute inset-0 rounded-full border"
-                    style={{ backgroundColor: hueWash(tab.hue, 0.16), borderColor: hueWash(tab.hue, 0.35) }}
-                    transition={{ type: 'spring', stiffness: 420, damping: 34 }}
+                    layoutId="lens-underline"
+                    className="absolute inset-x-0 -bottom-px h-[1.5px] rounded-full bg-ink dark:bg-ink-inverse"
+                    transition={reduced ? { duration: 0 } : { type: 'spring', stiffness: 520, damping: 40 }}
                   />
                 )}
-                <span className="relative">{tab.label}</span>
-                <AnimatePresence mode="popLayout">
-                  {lens.count !== null && (
-                    <motion.span
-                      key={lens.count}
-                      initial={{ opacity: 0, y: 4 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      className="relative font-mono text-[10px] tabular-nums text-ink-muted dark:text-ink-inverse-muted"
-                    >
-                      {lens.count}
-                    </motion.span>
-                  )}
-                </AnimatePresence>
-                <span className="relative">
-                  <Pip status={lens.status} hue={tab.hue} />
-                </span>
-              </motion.button>
+              </button>
             )
           })}
         </div>

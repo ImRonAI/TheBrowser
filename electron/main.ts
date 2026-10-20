@@ -1,4 +1,4 @@
-import { app, BrowserWindow, clipboard, desktopCapturer, dialog, ipcMain, Menu, NativeImage, shell, WebContentsView } from 'electron'
+import { app, BrowserWindow, clipboard, desktopCapturer, dialog, ipcMain, Menu, NativeImage, WebContentsView } from 'electron'
 import { createServer, type Server } from 'node:http'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -9,6 +9,7 @@ import {
   type AutomationTab,
 } from 'electron-playwright-mcp'
 import { CURSOR_SVG, CURSOR_TIP } from '../src/lib/agent-cursor'
+import { RepairSurface, surfaceEntry, type RepairSurfaceState } from './repair-surface'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = join(__filename, '..')
@@ -20,12 +21,16 @@ const CDP_PORT = 9222
 // their session via session.fromPartition(SESSION_PARTITION), so every WebContentsView tab
 // MUST be created with this same partition or those tools read the wrong store.
 const SESSION_PARTITION = 'persist:default'
-const CHROME_HEIGHT = 108
-const COLLAPSED_DRAWER_HEIGHT = 32
+const CHROME_HEIGHT = 88
+// The navigation drawer was replaced by a left sidebar (2026 redesign). The IPC
+// still exists for older renderers; a renderer that never reports it reserves 0.
+const COLLAPSED_DRAWER_HEIGHT = 0
 let agentPanelWidth = 420
 let drawerHeight = COLLAPSED_DRAWER_HEIGHT
 let chromeHeight = CHROME_HEIGHT
 let interestInset = 0
+// Width (CSS px) of the persistent left sidebar; 0 when it is closed.
+let sidebarWidth = 0
 
 type InterestMenuPayload = {
   interests: Array<{ id: string; label: string; category: string }>
@@ -87,17 +92,73 @@ function calculateWebContentsViewBounds(): { x: number; y: number; width: number
   // view would cover the navigation drawer and the agent panel.
   const zoom = mainWindow.webContents.isDestroyed() ? 1 : mainWindow.webContents.getZoomFactor() || 1
   const rightReserve = Math.ceil(Math.max(isAgentPanelOpen ? agentPanelWidth : 0, interestInset) * zoom)
+  const left = Math.ceil(sidebarWidth * zoom)
   const top = Math.ceil((chromeHeight + drawerHeight) * zoom)
   return {
-    x: 0,
+    x: left,
     y: top,
-    width: Math.max(0, windowWidth - rightReserve),
+    width: Math.max(0, windowWidth - left - rightReserve),
     height: Math.max(0, windowHeight - top),
   }
 }
 
 function updateWebContentsViewBounds(): void {
   tabsManager.updateActiveViewBounds()
+  repairSurface.layout()
+}
+
+/**
+ * Global chrome shortcuts. They must work while a website (a WebContentsView)
+ * has keyboard focus, where the renderer never sees the keydown, so they are
+ * read from `before-input-event` on the shell and on every tab view:
+ *   ⌘/Ctrl+J  Ask Ron (with the page selection when there is one)
+ *   ⌘/Ctrl+K  Search (opens the sidebar and focuses its search field)
+ *   ⌘/Ctrl+\  Toggle the sidebar
+ *   ⌘/Ctrl+L  Focus the address bar
+ */
+type ChromeShortcut = 'ask-ron' | 'search' | 'toggle-sidebar' | 'focus-url'
+
+function chromeShortcutFor(input: Electron.Input): ChromeShortcut | null {
+  if (input.type !== 'keyDown' || input.isAutoRepeat || input.shift || input.alt) return null
+  const mod = process.platform === 'darwin' ? input.meta && !input.control : input.control && !input.meta
+  if (!mod) return null
+  switch (input.key.toLowerCase()) {
+    case 'j': return 'ask-ron'
+    case 'k': return 'search'
+    case '\\': return 'toggle-sidebar'
+    case 'l': return 'focus-url'
+    default: return null
+  }
+}
+
+function sendChromeShortcut(shortcut: ChromeShortcut, page?: WebContentsView): void {
+  if (!mainWindow || mainWindow.isDestroyed()) return
+  const shell = mainWindow.webContents
+  const deliver = (payload: { shortcut: ChromeShortcut; selectionText?: string; sourceUrl?: string }) => {
+    if (shell.isDestroyed()) return
+    // Toggling the sidebar leaves keyboard focus on the page; the others move it into the chrome.
+    if (payload.shortcut !== 'toggle-sidebar') shell.focus()
+    shell.send('chrome:shortcut', payload)
+  }
+  if (shortcut !== 'ask-ron' || !page || page.webContents.isDestroyed()) {
+    deliver({ shortcut })
+    return
+  }
+  const sourceUrl = page.webContents.getURL()
+  void page.webContents.executeJavaScriptInIsolatedWorld(1001, [{
+    code: '(window.getSelection()?.toString() || "").trim().slice(0, 16000)',
+  }]).then((selected: unknown) => {
+    deliver({ shortcut, selectionText: typeof selected === 'string' ? selected : '', sourceUrl })
+  }).catch(() => deliver({ shortcut, sourceUrl }))
+}
+
+function attachChromeShortcuts(contents: Electron.WebContents, page?: WebContentsView): void {
+  contents.on('before-input-event', (event, input) => {
+    const shortcut = chromeShortcutFor(input)
+    if (!shortcut) return
+    event.preventDefault()
+    sendChromeShortcut(shortcut, page)
+  })
 }
 
 /** Electron `webContents` `context-menu` — same actions as the native-page React menu. */
@@ -283,6 +344,8 @@ class TabsManager {
     } else {
       mainWindow.webContents.send('browser:external-mode', false)
     }
+    // Tab views are appended on top; the repair surface must stay above them.
+    repairSurface.raise()
 
     mainWindow.webContents.send('browser:url-changed', tab.url)
     this.focusVisibleSurface(tab)
@@ -451,6 +514,7 @@ class TabsManager {
       this.emitTabsUpdated()
     })
     attachPageContextMenu(tab)
+    attachChromeShortcuts(tab.view.webContents, tab.view)
   }
 
   attachIfActive(tab: TabRecord) {
@@ -458,6 +522,7 @@ class TabsManager {
     const contentView = mainWindow.contentView
     if (!contentView.children.includes(tab.view)) contentView.addChildView(tab.view)
     this.updateViewBounds(tab.view)
+    repairSurface.raise()
     mainWindow.webContents.send('browser:external-mode', true)
     this.focusVisibleSurface(tab)
   }
@@ -513,6 +578,16 @@ class TabsManager {
 }
 
 const tabsManager = new TabsManager()
+
+// Native repair surface (electron/repair-surface.ts): drawn above the tab views, fed by the shell
+// renderer (`repair-surface:update`), its decisions relayed back to the shell (`repair-surface:action`).
+const repairSurface = new RepairSurface({
+  window: () => mainWindow,
+  contentBounds: () => calculateWebContentsViewBounds(),
+  onAction: (action) => mainWindow?.webContents.send('repair-surface:action', action),
+  entry: () => surfaceEntry(process.env['ELECTRON_RENDERER_URL'], __dirname),
+  preload: join(__dirname, 'repair-surface-preload.js'),
+})
 
 // Registered after `tabsManager` is initialized. The supplier is invoked lazily on every
 // automation call, so it always resolves the *current* active tab: all playwright_* tools
@@ -656,6 +731,8 @@ async function createWindow() {
       show: false,
       frame: false, // Frameless UI
       titleBarStyle: 'hidden', // Hidden native title bar
+      // Traffic lights centred in the 44px top chrome row.
+      trafficLightPosition: { x: 16, y: 15 },
       transparent: true,
       backgroundColor: '#00000000',
       vibrancy: 'sidebar', // Glassmorphic blur on macOS
@@ -670,6 +747,7 @@ async function createWindow() {
     creatingMainWindow = false
   }
   mainWindow = win
+  attachChromeShortcuts(win.webContents)
 
   win.webContents.session.setDisplayMediaRequestHandler((request, callback) => {
     if (!request.userGesture || !validateIpcSender(request.frame) || request.frame !== win.webContents.mainFrame) {
@@ -700,6 +778,7 @@ async function createWindow() {
     // Never keep a handle to a destroyed window: every `mainWindow?.` call
     // would otherwise throw "Object has been destroyed".
     if (mainWindow === win) {
+      repairSurface.update({ repair: null })
       mainWindow = null
       tabsManager.reset()
     }
@@ -745,10 +824,12 @@ app.on('activate', () => {
   if (!mainWindow || mainWindow.isDestroyed()) void openMainWindow()
 })
 
-// Supabase OAuth (PKCE) for a desktop app: the provider page opens in the system browser (Google
-// rejects embedded browsers) and Supabase redirects to a one-shot loopback listener (RFC 8252 §7.3).
-// A ron:// deep link cannot reach Ron on macOS unless a packaged Info.plist declares the scheme.
-// The callback URL goes to the renderer, which holds the PKCE verifier and calls exchangeCodeForSession.
+// Supabase OAuth (PKCE): the provider page loads in a Ron tab. Supabase then redirects to this
+// one-shot loopback listener (RFC 8252 §7.3). A ron:// deep link cannot reach Ron on macOS unless
+// a packaged Info.plist declares the scheme. The callback URL goes to the renderer, which holds
+// the PKCE verifier and calls exchangeCodeForSession. Google and GitHub never see this loopback
+// URL; they see https://<project>.supabase.co/auth/v1/callback, which must be registered on
+// those OAuth apps.
 let oauthServer: Server | null = null
 
 ipcMain.handle('auth:oauth-redirect', async (event) => {
@@ -761,7 +842,7 @@ ipcMain.handle('auth:oauth-redirect', async (event) => {
       return
     }
     response.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' })
-      .end('<!doctype html><meta charset="utf-8"><title>Ron</title><p style="font:16px system-ui;margin:3rem">Sign-in finished. You can close this tab and return to Ron.</p>')
+      .end('<!doctype html><meta charset="utf-8"><title>Ron</title><p style="font:16px system-ui;margin:3rem">Sign-in finished. Returning to Ron.</p>')
     server.close()
     if (oauthServer === server) oauthServer = null
     if (mainWindow && !mainWindow.isDestroyed()) {
@@ -779,12 +860,6 @@ ipcMain.handle('auth:oauth-redirect', async (event) => {
   const address = server.address()
   if (!address || typeof address === 'string') throw new Error('OAuth listener has no port')
   return `http://127.0.0.1:${address.port}/auth/callback`
-})
-
-ipcMain.handle('auth:open-external', async (event, url: string) => {
-  if (!validateIpcSender(event.senderFrame)) throw new Error('Untrusted sender')
-  if (new URL(url).protocol !== 'https:') throw new Error('Sign-in pages must use https')
-  await shell.openExternal(url)
 })
 
 // IPC window controls
@@ -822,7 +897,7 @@ ipcMain.handle('set-theme', (event, theme: 'light' | 'dark' | 'glass' | 'system'
     mainWindow.setBackgroundColor('#00000000')
   } else {
     if (process.platform === 'darwin') mainWindow.setVibrancy(null)
-    mainWindow.setBackgroundColor(theme === 'dark' ? '#0A0A0A' : '#FFFFFF')
+    mainWindow.setBackgroundColor(theme === 'dark' ? '#131312' : '#F8F7F4')
   }
   return theme
 })
@@ -926,6 +1001,14 @@ ipcMain.handle('browser:set-chrome-height', (event, height: number) => {
   return { success: true }
 })
 
+// Measured width of the persistent left sidebar in CSS px (0 = closed).
+ipcMain.handle('browser:set-sidebar-width', (event, width: number) => {
+  if (!validateIpcSender(event.senderFrame)) return { success: false }
+  sidebarWidth = Number.isFinite(width) && width > 0 ? width : 0
+  updateWebContentsViewBounds()
+  return { success: true }
+})
+
 ipcMain.handle('interests:set-menu', (event, payload: InterestMenuPayload) => {
   if (!validateIpcSender(event.senderFrame)) return { success: false }
   if (!payload || !Array.isArray(payload.interests)) return { success: false }
@@ -941,6 +1024,14 @@ ipcMain.handle('interests:set-inset', (event, width: number) => {
   if (!validateIpcSender(event.senderFrame)) return { success: false }
   interestInset = Number.isFinite(width) && width > 0 ? width : 0
   updateWebContentsViewBounds()
+  return { success: true }
+})
+
+// Only the shell's main frame may drive the repair surface (never a page or an iframe).
+ipcMain.handle('repair-surface:update', (event, state: RepairSurfaceState) => {
+  if (!validateIpcSender(event.senderFrame) || !mainWindow || event.senderFrame !== mainWindow.webContents.mainFrame) return { success: false }
+  if (!state || typeof state !== 'object' || !('repair' in state)) return { success: false }
+  repairSurface.update(state)
   return { success: true }
 })
 
@@ -1090,8 +1181,9 @@ ipcMain.handle('browser:screenshot', async (event) => {
   if (!mainWindow || mainWindow.isDestroyed()) return ''
   try {
     const [width, height] = mainWindow.getContentSize()
-    const panel = isAgentPanelOpen ? Math.min(agentPanelWidth, Math.max(0, width - 1)) : 0
-    const image = await mainWindow.webContents.capturePage({ x: 0, y: 0, width: Math.max(1, width - panel), height: Math.max(1, height) })
+    const left = Math.min(Math.ceil(sidebarWidth), Math.max(0, width - 1))
+    const panel = isAgentPanelOpen ? Math.min(agentPanelWidth, Math.max(0, width - left - 1)) : 0
+    const image = await mainWindow.webContents.capturePage({ x: left, y: 0, width: Math.max(1, width - left - panel), height: Math.max(1, height) })
     return jpegDataUrl(image)
   } catch {
     return ''

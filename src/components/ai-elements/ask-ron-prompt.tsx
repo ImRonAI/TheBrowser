@@ -10,6 +10,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { cn } from '@/utils/cn'
 import { Loader } from './loader'
 import { RonExtractionInline } from './ron-extraction'
+import { AssistField } from '@/components/shared/TextAssist'
 
 const EASE = [0.16, 1, 0.3, 1] as const
 
@@ -74,6 +75,7 @@ export function AskRonPrompt({
   }, [value, isSubmitting, onSubmit])
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.defaultPrevented) return // consumed by text assist (suggestion pick / dismiss)
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
       handleSubmit()
@@ -245,11 +247,14 @@ export function AskRonPrompt({
             'focus-within:ring-2 focus-within:ring-accent/20 dark:focus-within:ring-accent-light/20',
             'transition-all duration-200'
           )}>
-            <textarea
+            <AssistField value={value} onChange={setValue} suggest count={5} placement="above">
+            {(field) => <textarea
               ref={textareaRef}
               value={value}
               onChange={(e) => setValue(e.target.value)}
-              onKeyDown={handleKeyDown}
+              onKeyDown={(e) => { field.onKeyDown(e); handleKeyDown(e) }}
+              onFocus={field.onFocus}
+              onBlur={field.onBlur}
               placeholder="Tell Ron what you want to do with this text..."
               disabled={isSubmitting}
               rows={3}
@@ -260,7 +265,8 @@ export function AskRonPrompt({
                 'resize-none focus:outline-none',
                 'disabled:opacity-50 disabled:cursor-not-allowed'
               )}
-            />
+            />}
+            </AssistField>
 
             {/* Recording indicator */}
             <AnimatePresence>

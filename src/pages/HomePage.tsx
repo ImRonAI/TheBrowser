@@ -124,27 +124,27 @@ function DiscoverContent() {
   const status = error ? (error.code === 'not_configured' ? 'Live feed off: BRAVE_SEARCH_API_KEY is not set on the backend.'
     : error.code === 'unreachable' ? 'Live feed off: the Ron API is not running.' : `Live feed error: ${error.message}`)
     : loading && !live ? 'Loading your feed…' : live && fetchedAt ? `Updated ${formatRelative(fetchedAt)}` : ''
-  return <main className="mx-auto max-w-7xl px-5 pb-24 pt-8 sm:px-10">
-    <header className="mb-6 border-b border-surface-200 pb-6 dark:border-surface-700">
-      <div className="mb-4 flex items-center justify-between gap-4 text-[10px] font-semibold uppercase tracking-[0.2em] text-ink-muted dark:text-ink-inverse-muted"><span>Ron / Discover</span><span>{live ? 'Live from your interests' : 'Selected for the curious'}</span></div>
+  return <main className="mx-auto max-w-7xl px-6 pb-24 pt-10 sm:px-10">
+    <header className="mb-8 border-b border-surface-200/80 pb-7 dark:border-surface-800">
+      <div className="mb-5 flex items-center justify-between gap-4 text-[11px] font-medium uppercase tracking-[0.14em] text-ink-muted dark:text-ink-inverse-muted"><span>Ron <span aria-hidden className="mx-1 opacity-50">/</span> Discover</span><span className="flex items-center gap-1.5">{live && <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-success" />}{live ? 'Live from your interests' : 'Selected for the curious'}</span></div>
       <div className="flex flex-wrap items-end justify-between gap-5">
-        <div><h1 className="font-display text-4xl tracking-tight sm:text-[2.75rem]">A little more perspective.</h1><p className="mt-3 text-sm text-ink-muted dark:text-ink-inverse-muted">Your interests, worth a closer look. Read something. Make something of it.</p></div>
+        <div><h1 className="font-display text-[2.6rem] font-normal leading-[1.05] tracking-[-0.02em] sm:text-[3.25rem]">A little more <em className="italic">perspective.</em></h1><p className="mt-3 max-w-md text-[14px] leading-relaxed text-ink-secondary dark:text-ink-inverse-secondary">Your interests, worth a closer look. Read something. Make something of it.</p></div>
         <div className="flex items-center gap-2">
-          <button onClick={personalize} aria-label={hasAnswers ? 'Redo the interests interview' : 'Personalize your feed'} className="flex items-center gap-2 rounded-full border border-surface-200 px-4 py-2 text-xs hover:bg-surface-100 dark:border-surface-700 dark:hover:bg-surface-800"><Sparkles size={12} />{hasAnswers ? 'Redo interview' : 'Personalize'}</button>
-          <button onClick={() => void load(profile, { force: true })} disabled={loading} aria-label="Refresh feed" className="flex items-center gap-2 rounded-full border border-surface-200 px-4 py-2 text-xs hover:bg-surface-100 disabled:opacity-50 dark:border-surface-700 dark:hover:bg-surface-800"><RefreshCw size={12} className={loading ? 'animate-spin' : ''} />Refresh</button>
-          <button onClick={() => setPaused((value) => !value)} disabled={Boolean(reducedMotion)} aria-pressed={!paused && !reducedMotion} className="flex items-center gap-2 rounded-full border border-surface-200 px-4 py-2 text-xs hover:bg-surface-100 disabled:opacity-50 dark:border-surface-700 dark:hover:bg-surface-800">{paused || reducedMotion ? <Play size={12} /> : <Pause size={12} />}{paused || reducedMotion ? 'Auto-play off' : 'Pause stories'}</button>
+          <button onClick={personalize} aria-label={hasAnswers ? 'Redo the interests interview' : 'Personalize your feed'} className="flex h-8 items-center gap-1.5 rounded-lg border border-surface-200 px-3 text-[12.5px] font-medium text-ink-secondary transition-colors hover:border-surface-300 hover:bg-surface-50 hover:text-ink disabled:opacity-50 dark:border-surface-800 dark:text-ink-inverse-secondary dark:hover:border-surface-700 dark:hover:bg-surface-850 dark:hover:text-ink-inverse"><Sparkles size={13} strokeWidth={1.75} />{hasAnswers ? 'Redo interview' : 'Personalize'}</button>
+          <button onClick={() => void load(profile, { force: true })} disabled={loading} aria-label="Refresh feed" className="flex h-8 items-center gap-1.5 rounded-lg border border-surface-200 px-3 text-[12.5px] font-medium text-ink-secondary transition-colors hover:border-surface-300 hover:bg-surface-50 hover:text-ink disabled:opacity-50 dark:border-surface-800 dark:text-ink-inverse-secondary dark:hover:border-surface-700 dark:hover:bg-surface-850 dark:hover:text-ink-inverse"><RefreshCw size={13} strokeWidth={1.75} className={loading ? 'animate-spin' : ''} />Refresh</button>
+          <button onClick={() => setPaused((value) => !value)} disabled={Boolean(reducedMotion)} aria-pressed={!paused && !reducedMotion} className="flex h-8 items-center gap-1.5 rounded-lg border border-surface-200 px-3 text-[12.5px] font-medium text-ink-secondary transition-colors hover:border-surface-300 hover:bg-surface-50 hover:text-ink disabled:opacity-50 dark:border-surface-800 dark:text-ink-inverse-secondary dark:hover:border-surface-700 dark:hover:bg-surface-850 dark:hover:text-ink-inverse">{paused || reducedMotion ? <Play size={13} strokeWidth={1.75} /> : <Pause size={13} strokeWidth={1.75} />}{paused || reducedMotion ? 'Auto-play off' : 'Pause stories'}</button>
         </div>
       </div>
       <div className="mt-5 flex flex-wrap items-center gap-2">
-        {topics.map((topic) => <span key={topic} className="rounded-full bg-surface-100 px-3 py-1 text-[11px] text-ink-muted dark:bg-surface-800 dark:text-ink-inverse-muted">{topic}</span>)}
-        {profile.location && <span className="rounded-full bg-surface-100 px-3 py-1 text-[11px] text-ink-muted dark:bg-surface-800 dark:text-ink-inverse-muted">{profile.location}</span>}
+        {topics.map((topic) => <span key={topic} className="rounded-md border border-surface-200 px-2.5 py-1 text-[12px] text-ink-secondary dark:border-surface-800 dark:text-ink-inverse-secondary">{topic}</span>)}
+        {profile.location && <span className="rounded-md border border-surface-200 px-2.5 py-1 text-[12px] text-ink-secondary dark:border-surface-800 dark:text-ink-inverse-secondary">{profile.location}</span>}
         {status && <span role="status" className="ml-auto text-[11px] text-ink-muted dark:text-ink-inverse-muted">{status}</span>}
       </div>
     </header>
     <FavoriteLinks />
     {answers.length > 0 && <section aria-label="At a glance" className="mb-10 flex gap-4 overflow-x-auto pb-2 scrollbar-thin">{answers.map((answer, index) => <RichAnswerCard key={`${answer.subtype}-${index}`} answer={answer} />)}</section>}
     {failed.length > 0 && <p className="mb-6 text-[11px] text-ink-muted dark:text-ink-inverse-muted">Couldn’t load {failed.map((section) => `${section.q || section.kind}${section.error?.code === 'not_in_plan' ? ' (not in plan)' : ''}`).join(', ')}.</p>}
-    <section aria-label="Stories by interest" className="grid grid-cols-1 gap-x-6 gap-y-8 md:grid-cols-2 xl:grid-cols-3" onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)} onFocusCapture={() => setFocused(true)} onBlurCapture={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) setFocused(false) }}>
+    <section aria-label="Stories by interest" className="grid grid-cols-1 gap-x-6 gap-y-10 md:grid-cols-2 xl:grid-cols-3" onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)} onFocusCapture={() => setFocused(true)} onBlurCapture={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) setFocused(false) }}>
       {groups.map((group, slot) => {
         const story = group[at(slot)]
         const featured = slot === 0
@@ -158,11 +158,11 @@ function DiscoverContent() {
               </motion.div>
             </AnimatePresence>
           </div>
-          <div className="mt-3 flex items-center justify-between text-[10px] uppercase tracking-wider text-ink-muted dark:text-ink-inverse-muted">
-            <span><span className="font-semibold tabular-nums">{String(at(slot) + 1).padStart(2, '0')} / {group.length}</span> <span className="opacity-70">in {group[0].topic}</span></span>
+          <div className="mt-3 flex items-center justify-between text-[11px] text-ink-muted dark:text-ink-inverse-muted">
+            <span><span className="font-mono font-medium tabular-nums text-ink-secondary dark:text-ink-inverse-secondary">{String(at(slot) + 1).padStart(2, '0')} / {group.length}</span> <span className="opacity-70">in {group[0].topic}</span></span>
             <div className="flex gap-1">
-              <button aria-label={`Previous ${group[0].topic} story`} onClick={() => swap(slot, -1, slotAnimation(slot))} className="rounded-full border border-surface-200 p-1.5 transition-colors hover:border-indigo-300 hover:text-indigo-600 dark:border-surface-700 dark:hover:border-indigo-600 dark:hover:text-indigo-300"><ChevronLeft size={14} /></button>
-              <button aria-label={`Next ${group[0].topic} story`} onClick={() => swap(slot, 1, slotAnimation(slot))} className="rounded-full border border-surface-200 p-1.5 transition-colors hover:border-indigo-300 hover:text-indigo-600 dark:border-surface-700 dark:hover:border-indigo-600 dark:hover:text-indigo-300"><ChevronRight size={14} /></button>
+              <button aria-label={`Previous ${group[0].topic} story`} onClick={() => swap(slot, -1, slotAnimation(slot))} className="flex h-7 w-7 items-center justify-center rounded-md border border-surface-200 text-ink-secondary transition-colors hover:border-surface-300 hover:bg-surface-50 hover:text-ink dark:border-surface-800 dark:text-ink-inverse-secondary dark:hover:border-surface-700 dark:hover:bg-surface-850 dark:hover:text-ink-inverse"><ChevronLeft size={14} /></button>
+              <button aria-label={`Next ${group[0].topic} story`} onClick={() => swap(slot, 1, slotAnimation(slot))} className="flex h-7 w-7 items-center justify-center rounded-md border border-surface-200 text-ink-secondary transition-colors hover:border-surface-300 hover:bg-surface-50 hover:text-ink dark:border-surface-800 dark:text-ink-inverse-secondary dark:hover:border-surface-700 dark:hover:bg-surface-850 dark:hover:text-ink-inverse"><ChevronRight size={14} /></button>
             </div>
           </div>
         </div>
