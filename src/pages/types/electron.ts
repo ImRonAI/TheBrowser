@@ -12,6 +12,20 @@ import type { InterestAction, InterestMenuPayload } from '@/lib/interest-menu'
 export type ChromeShortcut = 'ask-ron' | 'search' | 'toggle-sidebar' | 'focus-url'
 export interface ChromeShortcutEvent { shortcut: ChromeShortcut; selectionText?: string; sourceUrl?: string }
 
+export interface TakeoverBreadcrumb {
+  url: string
+  title: string
+  at: number
+}
+
+export interface TakeoverStatePayload {
+  success?: boolean
+  active: boolean
+  url: string
+  title: string
+  breadcrumbs: TakeoverBreadcrumb[]
+}
+
 export interface BrowserAPI {
   navigate: (url: string) => Promise<{ success: boolean; url?: string; isExternal?: boolean }>
   search: (query: string, level?: string) => Promise<{ success: boolean; url?: string }>
@@ -23,7 +37,10 @@ export interface BrowserAPI {
   canGoBack: () => Promise<boolean>
   canGoForward: () => Promise<boolean>
   setPanelOpen: (isOpen: boolean) => Promise<{ success: boolean }>
-  setAgentCursor: (point: { x: number; y: number }) => Promise<void>
+  setAgentCursor: (point: { x: number; y: number } | null) => Promise<void>
+  setTakeover: (active: boolean) => Promise<TakeoverStatePayload>
+  getTakeover: () => Promise<TakeoverStatePayload>
+  onTakeoverChanged: (callback: (state: TakeoverStatePayload) => void) => () => void
   setDrawerHeight: (height: number) => Promise<{ success: boolean }>
   setChromeHeight: (height: number) => Promise<{ success: boolean }>
   setSidebarWidth: (width: number) => Promise<{ success: boolean }>
@@ -83,29 +100,6 @@ export interface ElectronWindow {
       oauthRedirect: () => Promise<string>
     }
 
-    // Agent Streaming
-    agent: {
-      startStream: (streamId: string, request: {
-        url: string
-        method: string
-        headers: Record<string, string>
-        body: string
-      }) => Promise<{ success: boolean }>
-      abortStream: (streamId: string) => Promise<{ success: boolean }>
-      abortAllStreams: () => Promise<{ success: boolean }>
-
-      // Event listeners
-      onStreamEvent: (callback: (streamId: string, event: unknown) => void) => () => void
-      onStreamConnected: (callback: (streamId: string) => void) => () => void
-      onStreamComplete: (callback: (streamId: string) => void) => () => void
-      onStreamError: (callback: (streamId: string, error: {
-        code: string
-        message: string
-        status: number
-      }) => void) => () => void
-      onStreamAborted: (callback: (streamId: string) => void) => () => void
-    }
-
     // Browser Navigation
     browser: BrowserAPI
 
@@ -124,7 +118,7 @@ export interface ElectronWindow {
       onUpdated: (callback: (tabs: TabSummary[]) => void) => () => void
     }
 
-    // Navigation (Future)
+    // Navigation
     navigation: {
       navigate: (url: string) => Promise<{ success: boolean }>
       goBack: () => Promise<{ success: boolean }>
@@ -144,3 +138,4 @@ declare global {
     electron: ElectronWindow['electron']
   }
 }
+
