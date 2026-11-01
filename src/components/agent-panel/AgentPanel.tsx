@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback, useMemo, Fragment, type KeyboardEvent } from 'react'
 import { Transition } from '@headlessui/react'
-import { XMarkIcon, PlusIcon, StopIcon, QueueListIcon, LightBulbIcon } from '@heroicons/react/24/outline'
+import { XMarkIcon, PlusIcon, StopIcon, QueueListIcon, LightBulbIcon, HandRaisedIcon } from '@heroicons/react/24/outline'
+import type { TakeoverStatePayload } from '@/pages/types/electron'
 import { ThreadsList } from './ThreadsList'
 import { MemoryPanel } from './MemoryPanel'
 import { useAgentUi } from '@/context/AgentUiContext'
@@ -76,6 +77,10 @@ export function AgentConversation({ destination, embedded = false }: { destinati
   const [memoryOpen, setMemoryOpen] = useState(false)
   const [commandIndex, setCommandIndex] = useState(0)
   const [commandsDismissed, setCommandsDismissed] = useState(false)
+  const [takeoverState, setTakeoverState] = useState<TakeoverStatePayload>({ active: false, url: '', title: '', breadcrumbs: [] })
+  const [giveBackPromptOpen, setGiveBackPromptOpen] = useState(false)
+  const [giveBackFeedback, setGiveBackFeedback] = useState('')
+  const giveBackInputRef = useRef<HTMLTextAreaElement>(null)
   // Chat and Live are two agents over the same native thread (`session_id`): each restores the
   // thread's messages from the SDK snapshot, so no history is bridged between them in the renderer.
   const chat = usePanelChat({ ...selection, destination, attachments: draft.articles,
@@ -114,6 +119,46 @@ export function AgentConversation({ destination, embedded = false }: { destinati
     if (data?.width) setPanelWidth(data.width)
     if (data?.mode) setPanelMode(data.mode)
   }), [setPanelWidth, setPanelMode])
+
+  useEffect(() => {
+    void window.electron?.browser?.getTakeover?.().then((state) => {
+      if (state) setTakeoverState(state)
+    }).catch(() => undefined)
+    return window.electron?.browser?.onTakeoverChanged?.((state) => {
+      if (state) setTakeoverState(state)
+    })
+  }, [])
+
+  const handleToggleTakeover = async () => {
+    if (!takeoverState.active) {
+      if (active) void chat.stop()
+      setGiveBackPromptOpen(false)
+      const next = await window.electron?.browser?.setTakeover?.(true)
+      if (next) setTakeoverState(next)
+      else setTakeoverState((prev) => ({ ...prev, active: true }))
+    } else {
+      const next = await window.electron?.browser?.setTakeover?.(false)
+      if (next) setTakeoverState(next)
+      else setTakeoverState((prev) => ({ ...prev, active: false }))
+      setGiveBackPromptOpen(true)
+      setTimeout(() => giveBackInputRef.current?.focus(), 50)
+    }
+  }
+
+  const handleSendGiveBack = () => {
+    const feedback = giveBackFeedback.trim()
+    const crumbs = takeoverState.breadcrumbs ?? []
+    const breadcrumbSummary = crumbs.length > 0
+      ? `\nVisited pages during takeover:\n${crumbs.map((c) => `- ${c.title || c.url} (${c.url})`).join('\n')}`
+      : takeoverState.url
+        ? `\nCurrent browser page: ${takeoverState.title || takeoverState.url} (${takeoverState.url})`
+        : ''
+    const message = `[User Browser Handback]${breadcrumbSummary}\n\n${feedback || 'Please continue from the current browser state.'}`
+    setGiveBackFeedback('')
+    setGiveBackPromptOpen(false)
+    followOutput.current = true
+    void sendMessage(message)
+  }
 
   useEffect(() => {
     setSelection((current) => current.model === DEFAULT_AGENT_MODEL && !current.provider
@@ -297,6 +342,21 @@ export function AgentConversation({ destination, embedded = false }: { destinati
                       className="shrink-0 rounded-lg border border-amber-300/60 bg-amber-50/80 px-2 py-0.5 text-[11px] font-medium text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">Cloud browser</span>}
                   </div>
                   <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => void handleToggleTakeover()}
+                      aria-pressed={takeoverState.active}
+                      title={takeoverState.active ? 'Give browser control back to Ron and provide feedback' : 'Pause Ron and take over the browser manually'}
+                      className={cn(
+                        'inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg border px-2.5 text-xs font-semibold transition-colors',
+                        takeoverState.active
+                          ? 'border-amber-500/70 bg-amber-500/15 text-amber-800 hover:bg-amber-500/25 dark:border-amber-400/60 dark:bg-amber-400/15 dark:text-amber-200'
+                          : 'border-surface-200 bg-surface-50 text-ink hover:bg-surface-100 dark:border-surface-700 dark:bg-surface-850 dark:text-ink-inverse dark:hover:bg-surface-800'
+                      )}
+                    >
+                      <HandRaisedIcon className="h-3.5 w-3.5" />
+                      <span>{takeoverState.active ? 'Give Back' : 'Take Over'}</span>
+                    </button>
                     <ModeSelector value={interactionMode} onChange={(next) => void switchMode(next)} />
                     {voice && <button onClick={() => setMemoryOpen((open) => !open)} aria-pressed={memoryOpen} className={cn('p-2 rounded-lg hover:bg-surface-100 dark:hover:bg-surface-800', memoryOpen && 'bg-surface-100 dark:bg-surface-800')} title="Memory" aria-label="Memory"><LightBulbIcon className="w-5 h-5" /></button>}
                     <button onClick={() => setThreadsOpen((open) => !open)} aria-pressed={threadsOpen} className={cn('p-2 rounded-lg hover:bg-surface-100 dark:hover:bg-surface-800', threadsOpen && 'bg-surface-100 dark:bg-surface-800')} title="Threads" aria-label="Threads"><QueueListIcon className="w-5 h-5" /></button>
@@ -310,6 +370,65 @@ export function AgentConversation({ destination, embedded = false }: { destinati
               {memoryOpen && <MemoryPanel userId={user} onClose={() => setMemoryOpen(false)} />}
               {threadsOpen && <ThreadsList userId={user} destination={destination} currentId={chat.sessionId} onClose={() => setThreadsOpen(false)}
                 onOpen={(id) => { void handleOpenThread(id) }} />}
+              {takeoverState.active && (
+                <div role="status" className="mx-4 mt-3 rounded-xl border border-amber-300/70 bg-amber-50/80 dark:border-amber-800 dark:bg-amber-950/30 p-3 text-xs text-amber-900 dark:text-amber-200">
+                  <p className="font-semibold">You have taken over the browser</p>
+                  <p className="mt-1 text-amber-800/90 dark:text-amber-300/90">
+                    Ron is paused while you interact with the tab. Click <strong>Give Back</strong> above when you are ready to hand control back.
+                  </p>
+                </div>
+              )}
+              {giveBackPromptOpen && !takeoverState.active && (
+                <form
+                  className="mx-4 mt-3 rounded-xl border border-accent/40 bg-surface-50/95 dark:border-accent-light/40 dark:bg-surface-850/95 p-3 text-xs shadow-sm"
+                  onSubmit={(event) => {
+                    event.preventDefault()
+                    handleSendGiveBack()
+                  }}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="font-semibold text-ink dark:text-ink-inverse">Hand back to Ron</p>
+                    <button
+                      type="button"
+                      onClick={() => setGiveBackPromptOpen(false)}
+                      className="text-ink-muted hover:text-ink dark:text-ink-inverse-muted dark:hover:text-ink-inverse"
+                      aria-label="Dismiss handback prompt"
+                    >
+                      <XMarkIcon className="h-4 w-4" />
+                    </button>
+                  </div>
+                  <p className="mt-1 text-ink-muted dark:text-ink-inverse-muted">
+                    Describe what you did in the browser, share context, or give directions to resume in this session.
+                  </p>
+                  <textarea
+                    ref={giveBackInputRef}
+                    value={giveBackFeedback}
+                    onChange={(event) => setGiveBackFeedback(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
+                        event.preventDefault()
+                        handleSendGiveBack()
+                      }
+                    }}
+                    aria-label="Give back feedback"
+                    placeholder="e.g., I signed in and navigated to the dashboard — please continue from here…"
+                    rows={3}
+                    className={`${compactInput} mt-2`}
+                  />
+                  <div className="mt-2.5 flex items-center justify-end gap-2">
+                    <button type="button" onClick={() => setGiveBackPromptOpen(false)} className={smallButton}>
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={unavailable}
+                      className="rounded-lg bg-ink dark:bg-ink-inverse text-white dark:text-surface-900 px-3 py-1.5 text-xs font-semibold shadow-sm hover:opacity-90 disabled:opacity-40"
+                    >
+                      Send &amp; Resume
+                    </button>
+                  </div>
+                </form>
+              )}
 
               {voice ? <div className="flex min-h-0 flex-1">
                 <VoiceAgent userId={user} agentScope={destination} sessionId={chat.sessionId} owner={`${destination}-panel`}
@@ -533,6 +652,14 @@ function imageSearchFinalItemPresent(parts: PanelPart[]): boolean {
   return parts.some((p) => p.kind === 'native' && p.itemType === 'image_search_results' && (p as NativePart).item)
 }
 
+function webSearchFinalItemPresent(parts: PanelPart[]): boolean {
+  return parts.some((p) => p.kind === 'native' && p.itemType === 'search_results' && (p as NativePart).item)
+}
+
+function xSearchFinalItemPresent(parts: PanelPart[]): boolean {
+  return parts.some((p) => p.kind === 'native' && p.itemType === 'x_search_results' && (p as NativePart).item)
+}
+
 function PartView({ part, allParts, isUser, status, onUiAction, superseded }: { part: PanelPart; allParts: PanelPart[]; isUser: boolean; status: RunStatus; onUiAction: UiActionHandler; superseded: boolean }) {
   const path = part.path.length ? part.path.map(displayValue).join(' / ') : ''
   if (part.kind === 'tool' && part.name === RENDER_UI_TOOL && part.finished) {
@@ -559,6 +686,12 @@ function PartView({ part, allParts, isUser, status, onUiAction, superseded }: { 
     if (!streaming && (part.itemType === 'response.reasoning.image_search_queries' || part.itemType === 'response.reasoning.image_search_results') && imageSearchFinalItemPresent(allParts)) {
       return null
     }
+    if (!streaming && part.itemType === 'response.reasoning.search_web' && webSearchFinalItemPresent(allParts)) {
+      return null
+    }
+    if (!streaming && part.itemType === 'response.reasoning.x_search' && xSearchFinalItemPresent(allParts)) {
+      return null
+    }
     return <NativeToolCard part={part} path={path} streaming={streaming} />
   }
   if (part.kind === 'retry') return <div className="my-3 rounded-lg border border-amber-200 dark:border-amber-900 bg-amber-50/50 dark:bg-amber-950/20 p-2 text-xs"><p className="font-medium">{part.text}</p></div>
@@ -573,12 +706,12 @@ function PartView({ part, allParts, isUser, status, onUiAction, superseded }: { 
 }
 
 const NATIVE_LABELS: Record<string, string> = {
-  search_results: 'Web search', people_search_results: 'People search', finance_results: 'Finance search',
+  search_results: 'Web search', x_search_results: 'X search', people_search_results: 'People search', finance_results: 'Finance search',
   fetch_url_results: 'Fetched page', sandbox_results: 'Sandbox', sandbox_write_file: 'Sandbox · wrote file',
   sandbox_read_file: 'Sandbox · read file', sandbox_edit_file: 'Sandbox · edited file', sandbox_apply_patch: 'Sandbox · patch',
   sandbox_glob: 'Sandbox · glob', sandbox_grep: 'Sandbox · grep', share_file: 'File', mcp_call: 'MCP call',
   mcp_list_tools: 'MCP tools', skill_loaded: 'Skill loaded', advisor_result: 'Advisor',
-  'response.reasoning.search_web': 'Searching the web', 'response.reasoning.fetch_url': 'Fetching pages',
+  'response.reasoning.search_web': 'Searching the web', 'response.reasoning.x_search': 'Searching X', 'response.reasoning.fetch_url': 'Fetching pages',
   'response.reasoning.sandbox': 'Running code', 'response.reasoning.people_search': 'Searching people',
   'response.reasoning.finance_search': 'Searching finance data', 'response.skill.loaded': 'Loading skill',
   image_search_results: 'Image search',
@@ -590,14 +723,20 @@ const str = (value: unknown): string | undefined => (typeof value === 'string' ?
 const list = (value: unknown): Record<string, unknown>[] => (Array.isArray(value) ? value.filter((v): v is Record<string, unknown> => Boolean(v) && typeof v === 'object') : [])
 
 const IMAGE_SEARCH_ITEM_TYPES = new Set(['image_search_results', 'response.reasoning.image_search_queries', 'response.reasoning.image_search_results'])
+const SEARCH_ITEM_TYPES = new Set(['search_results', 'response.reasoning.search_web', 'x_search_results', 'response.reasoning.x_search'])
 
 type ImageSearchHit = { image_url: string; origin_url?: string; title?: string }
+type SearchHit = { url: string; title?: string; snippet?: string; source?: string }
 
 function imageSearchQueries(part: NativePart): string[] {
   const queries: string[] = []
-  if (Array.isArray(part.item?.queries)) queries.push(...part.item.queries.filter((q): q is string => typeof q === 'string'))
+  const push = (val: unknown) => {
+    if (Array.isArray(val)) queries.push(...val.filter((q): q is string => typeof q === 'string' && q.trim().length > 0))
+  }
+  push(part.item?.queries)
   for (const step of part.steps) {
-    if (Array.isArray(step.queries)) queries.push(...step.queries.filter((q): q is string => typeof q === 'string'))
+    push(step.queries)
+    if (step.item && typeof step.item === 'object') push((step.item as Record<string, unknown>).queries)
   }
   return [...new Set(queries)]
 }
@@ -614,23 +753,103 @@ function imageSearchHits(part: NativePart): ImageSearchHit[] {
     }
   }
   if (part.item?.type === 'image_search_results') push(list(part.item.results))
-  for (const step of part.steps) push(list(step.results))
+  for (const step of part.steps) {
+    push(list(step.results))
+    if (step.item && typeof step.item === 'object') push(list((step.item as Record<string, unknown>).results))
+  }
   return hits
 }
 
-function ImageSearchNativeCard({ part, path, streaming }: { part: NativePart; path: string; streaming: boolean }) {
-  const queries = imageSearchQueries(part)
+function searchHitLabel(url: string): string {
+  try {
+    const parsed = new URL(url)
+    const host = parsed.hostname.replace(/^www\./, '')
+    if (host === 'x.com' || host === 'twitter.com') {
+      const m = parsed.pathname.match(/^\/([^/]+)\/status\/(\d+)/)
+      if (m) return m[1].toLowerCase() !== 'i' ? `@${m[1]} · ${m[2]}` : `X post · ${m[2]}`
+    }
+    return host || url
+  } catch {
+    return url
+  }
+}
+
+function searchQueries(part: NativePart): string[] {
+  const queries: string[] = []
+  const push = (val: unknown) => {
+    if (Array.isArray(val)) queries.push(...val.filter((q): q is string => typeof q === 'string' && q.trim().length > 0))
+    else if (typeof val === 'string' && val.trim().length > 0) queries.push(val.trim())
+  }
+  push(part.item?.queries)
+  push(part.item?.query)
+  for (const step of part.steps) {
+    push(step.queries)
+    push(step.query)
+    if (step.item && typeof step.item === 'object') {
+      const stepItem = step.item as Record<string, unknown>
+      push(stepItem.queries)
+      push(stepItem.query)
+    }
+  }
+  return [...new Set(queries)]
+}
+
+function searchHits(part: NativePart): SearchHit[] {
+  const hits: SearchHit[] = []
+  const seen = new Set<string>()
+  const pushRows = (rows: Record<string, unknown>[]) => {
+    for (const row of rows) {
+      const url = str(row.url)
+      if (!url || seen.has(url)) continue
+      seen.add(url)
+      hits.push({ url, title: str(row.title) ?? searchHitLabel(url), snippet: str(row.snippet), source: str(row.source) })
+    }
+  }
+  const pushUrls = (urls: unknown) => {
+    if (!Array.isArray(urls)) return
+    for (const entry of urls) {
+      if (typeof entry !== 'string' || !entry.trim() || seen.has(entry.trim())) continue
+      const url = entry.trim()
+      seen.add(url)
+      hits.push({ url, title: searchHitLabel(url) })
+    }
+  }
+  if (part.item) {
+    pushRows(list(part.item.results))
+    pushUrls(part.item.urls)
+  }
+  for (const step of part.steps) {
+    pushRows(list(step.results))
+    pushUrls(step.urls)
+    if (step.item && typeof step.item === 'object') {
+      const stepItem = step.item as Record<string, unknown>
+      pushRows(list(stepItem.results))
+      pushUrls(stepItem.urls)
+    }
+  }
+  return hits
+}
+
+function SearchNativeCard({ part, path, streaming }: { part: NativePart; path: string; streaming: boolean }) {
+  const isXSearch = part.itemType === 'x_search_results' || part.itemType === 'response.reasoning.x_search' || str(part.item?.type) === 'x_search_results'
+  const queries = searchQueries(part)
+  const hits = searchHits(part)
   const images = imageSearchHits(part)
-  const hasItem = Boolean(part.item)
+  const itemStatus = str(part.item?.status)
+  const isPending = streaming && (!part.item || itemStatus === 'in_progress')
+  const failed = itemStatus === 'failed' || itemStatus === 'timed_out' || Boolean(str(part.item?.error))
+  const headerTitle = isXSearch
+    ? (isPending && hits.length === 0 ? 'Searching X…' : failed ? 'X search · failed' : 'X search')
+    : (isPending && hits.length === 0 ? 'Searching the web…' : failed ? 'Web search · failed' : 'Web search')
   return (
-    <ChainOfThought className="my-3 space-y-2 text-xs" defaultOpen={streaming || images.length > 0}>
+    <ChainOfThought className="my-3 space-y-2 text-xs" defaultOpen={isPending || hits.length > 0 || queries.length > 0 || images.length > 0} isStreaming={isPending}>
       <ChainOfThoughtHeader>
-        {streaming && !hasItem && images.length === 0 ? 'Searching for images…' : 'Image search'}
+        {headerTitle}
         {path ? ` · ${path}` : ''}
       </ChainOfThoughtHeader>
       <ChainOfThoughtContent>
         {queries.length > 0 && (
-          <ChainOfThoughtStep label="Queries" status={streaming && !hasItem ? 'active' : 'complete'}>
+          <ChainOfThoughtStep label={isXSearch ? 'X search queries' : 'Searching for'} status={isPending && hits.length === 0 ? 'active' : 'complete'}>
             <ChainOfThoughtSearchResults>
               {queries.map((query) => (
                 <ChainOfThoughtSearchResult key={query}>{query}</ChainOfThoughtSearchResult>
@@ -638,8 +857,21 @@ function ImageSearchNativeCard({ part, path, streaming }: { part: NativePart; pa
             </ChainOfThoughtSearchResults>
           </ChainOfThoughtStep>
         )}
+        {hits.length > 0 && (
+          <ChainOfThoughtStep label={isXSearch ? `X posts (${hits.length})` : `Sources (${hits.length})`} status={isPending ? 'active' : 'complete'}>
+            <ChainOfThoughtSearchResults>
+              {hits.map((hit) => (
+                <ChainOfThoughtSearchResult key={hit.url} title={hit.snippet ?? hit.title ?? hit.url}>
+                  <a href={hit.url} target="_blank" rel="noreferrer" className="hover:underline">
+                    {hit.title || searchHitLabel(hit.url)}
+                  </a>
+                </ChainOfThoughtSearchResult>
+              ))}
+            </ChainOfThoughtSearchResults>
+          </ChainOfThoughtStep>
+        )}
         {images.length > 0 && (
-          <ChainOfThoughtStep label="Results" status={streaming && !hasItem ? 'active' : 'complete'}>
+          <ChainOfThoughtStep label="Images" status={isPending ? 'active' : 'complete'}>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               {images.map((image) => (
                 <ChainOfThoughtImage key={image.image_url} caption={image.title ?? image.origin_url}>
@@ -655,18 +887,72 @@ function ImageSearchNativeCard({ part, path, streaming }: { part: NativePart; pa
             </div>
           </ChainOfThoughtStep>
         )}
-        {str(part.item?.error) === 'image_search_failed' && (
-          <p className="text-xs text-red-600 dark:text-red-400">Image search failed.</p>
+        {failed && (
+          <p className="text-xs text-red-600 dark:text-red-400">
+            {str(part.item?.error) ?? (isXSearch ? 'X search failed.' : 'Web search failed.')}
+          </p>
         )}
       </ChainOfThoughtContent>
     </ChainOfThought>
   )
 }
 
-/** Perplexity Agent API server-side tool card: search results, fetched pages, sandbox runs, files. */
+function ImageSearchNativeCard({ part, path, streaming }: { part: NativePart; path: string; streaming: boolean }) {
+  const queries = imageSearchQueries(part)
+  const images = imageSearchHits(part)
+  const itemStatus = str(part.item?.status)
+  const isPending = streaming && (!part.item || itemStatus === 'in_progress')
+  const failed = itemStatus === 'failed' || itemStatus === 'timed_out' || str(part.item?.error) === 'image_search_failed' || Boolean(str(part.item?.error))
+  return (
+    <ChainOfThought className="my-3 space-y-2 text-xs" defaultOpen={isPending || images.length > 0 || queries.length > 0} isStreaming={isPending}>
+      <ChainOfThoughtHeader>
+        {isPending && images.length === 0 ? 'Searching for images…' : failed ? 'Image search · failed' : 'Image search'}
+        {path ? ` · ${path}` : ''}
+      </ChainOfThoughtHeader>
+      <ChainOfThoughtContent>
+        {queries.length > 0 && (
+          <ChainOfThoughtStep label="Queries" status={isPending && images.length === 0 ? 'active' : 'complete'}>
+            <ChainOfThoughtSearchResults>
+              {queries.map((query) => (
+                <ChainOfThoughtSearchResult key={query}>{query}</ChainOfThoughtSearchResult>
+              ))}
+            </ChainOfThoughtSearchResults>
+          </ChainOfThoughtStep>
+        )}
+        {images.length > 0 && (
+          <ChainOfThoughtStep label="Results" status={isPending ? 'active' : 'complete'}>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              {images.map((image) => (
+                <ChainOfThoughtImage key={image.image_url} caption={image.title ?? image.origin_url}>
+                  {image.origin_url ? (
+                    <a href={image.origin_url} target="_blank" rel="noreferrer" className="block max-h-full max-w-full">
+                      <img src={image.image_url} alt={image.title ?? 'Search result'} loading="lazy" referrerPolicy="no-referrer" className="max-h-full max-w-full object-contain" />
+                    </a>
+                  ) : (
+                    <img src={image.image_url} alt={image.title ?? 'Search result'} loading="lazy" referrerPolicy="no-referrer" className="max-h-full max-w-full object-contain" />
+                  )}
+                </ChainOfThoughtImage>
+              ))}
+            </div>
+          </ChainOfThoughtStep>
+        )}
+        {failed && (
+          <p className="text-xs text-red-600 dark:text-red-400">
+            {str(part.item?.error) && str(part.item?.error) !== 'image_search_failed' ? str(part.item?.error) : 'Image search failed.'}
+          </p>
+        )}
+      </ChainOfThoughtContent>
+    </ChainOfThought>
+  )
+}
+
+/** Native provider server-side tool card: web/X/image search results, fetched pages, sandbox runs, files. */
 export function NativeToolCard({ part, path, streaming = false }: { part: NativePart; path: string; streaming?: boolean }) {
   if (IMAGE_SEARCH_ITEM_TYPES.has(part.itemType)) {
     return <ImageSearchNativeCard part={part} path={path} streaming={streaming} />
+  }
+  if (SEARCH_ITEM_TYPES.has(part.itemType)) {
+    return <SearchNativeCard part={part} path={path} streaming={streaming} />
   }
   const label = NATIVE_LABELS[part.itemType] ?? part.itemType.replace(/^response\./, '').replace(/[._]/g, ' ')
   const item = part.item

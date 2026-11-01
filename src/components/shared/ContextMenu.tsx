@@ -206,6 +206,7 @@ export function ContextMenu({ x, y, isOpen, onClose, selectedText }: ContextMenu
           {/* Ask Ron UI - Options or Custom Prompt */}
           {showAskRonUI ? (
             <motion.div
+              data-chrome-overlay="true"
               className="fixed z-[9999] w-[320px] max-w-[calc(100vw-20px)] shadow-[0_18px_48px_-18px_rgb(26_25_23/0.28)] rounded-xl"
               style={{
                 left: `${adjustedPosition.x}px`,

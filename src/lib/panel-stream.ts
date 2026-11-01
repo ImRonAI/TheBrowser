@@ -457,7 +457,15 @@ export function reducePanelEvent(state: PanelState, event: PanelEvent): PanelSta
     } else {
       const identity = nativeIdentity(event.run_id, event.node_path, itemType, item, event.sequence)
       const position = parts.findIndex((part) => part.kind === 'native' && part.key === identity)
-      const native: NativePart = { kind: 'native', key: identity, path: event.node_path, itemType, item, steps: [payload] }
+      const existing = position >= 0 ? (parts[position] as NativePart) : undefined
+      const native: NativePart = {
+        kind: 'native',
+        key: identity,
+        path: event.node_path,
+        itemType,
+        item: item ?? existing?.item,
+        steps: existing ? [...existing.steps, payload] : [payload],
+      }
       if (position >= 0) parts[position] = native
       else parts.push(native)
     }

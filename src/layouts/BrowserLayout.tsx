@@ -40,6 +40,10 @@ function BrowserLayoutContent({ children }: BrowserLayoutProps) {
   const sideInset = Math.max(isPanelOpen ? panelWidth : 0, teachingInset)
   const [isExternalMode, setIsExternalMode] = useState(false)
   const chromeRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    void window.electron?.browser?.setPanelOpen?.(sideInset > 0)
+  }, [sideInset])
   const [contextMenu, setContextMenu] = useState<{
     x: number
     y: number
@@ -124,18 +128,41 @@ function BrowserLayoutContent({ children }: BrowserLayoutProps) {
   }, [])
 
   // Keep the native WebContentsView below the real chrome: report the measured
-  // header height on layout changes and on shell zoom (which fires `resize`).
+  // header height on layout changes and on shell zoom (which fires `resize`),
+  // plus any open toolbar/chrome dropdowns or popovers so native WebContentsViews
+  // never occlude menus over external websites.
   useEffect(() => {
     const header = chromeRef.current
     const setChromeHeight = window.electron?.browser?.setChromeHeight
     if (!header || !setChromeHeight) return
-    const report = () => { void setChromeHeight(header.getBoundingClientRect().height) }
+    const report = () => {
+      let bottom = header.getBoundingClientRect().height
+      const overlays = document.querySelectorAll<HTMLElement>(
+        '[role="menu"], [role="listbox"], [data-radix-popper-content-wrapper], [data-chrome-overlay="true"]',
+      )
+      for (const el of overlays) {
+        if (el.closest('section[aria-label]')) continue
+        const rect = el.getBoundingClientRect()
+        if (rect.width > 0 && rect.height > 0 && rect.bottom > bottom) {
+          bottom = Math.min(window.innerHeight, Math.ceil(rect.bottom + 8))
+        }
+      }
+      void setChromeHeight(bottom)
+    }
     report()
     const observer = new ResizeObserver(report)
     observer.observe(header)
+    const mutationObserver = new MutationObserver(() => requestAnimationFrame(report))
+    mutationObserver.observe(document.body, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ['style', 'class', 'data-state', 'data-open', 'hidden'],
+    })
     window.addEventListener('resize', report)
     return () => {
       observer.disconnect()
+      mutationObserver.disconnect()
       window.removeEventListener('resize', report)
     }
   }, [])

@@ -240,7 +240,12 @@ NATIVE_PROVIDER_CAPABILITIES = {
         "hosted_tools_default": ("web_search", "x_search", "code_execution"),
         "env": "XAI_NATIVE_TOOLS_ENABLED, XAI_COLLECTION_IDS",
         "hosted_tool_support": {
-            "all": "xai_tools + include=['inline_citations']; server tool state carried in encrypted reasoningContent",
+            "all": (
+                "xai_tools (web_search with image search/understanding, x_search with image/video understanding, "
+                "code_execution) + include=['inline_citations', 'web_search_call_output', 'x_search_call_output']; "
+                "server tool calls/outputs and image results streamed as native_tool events; "
+                "server tool state carried in encrypted reasoningContent"
+            ),
         },
     },
     "mistral": {
@@ -693,12 +698,16 @@ def build_model(
         if hosted_tools and XAI_NATIVE_TOOLS_ENABLED:
             from xai_sdk.tools import code_execution, collections_search, web_search, x_search
 
-            xai_tools: list[Any] = [web_search(), x_search(), code_execution()]
+            xai_tools: list[Any] = [
+                web_search(enable_image_understanding=True, enable_image_search=True),
+                x_search(enable_image_understanding=True, enable_video_understanding=True),
+                code_execution(),
+            ]
             if XAI_COLLECTION_IDS:
                 xai_tools.append(collections_search(collection_ids=XAI_COLLECTION_IDS))
             kwargs["xai_tools"] = xai_tools
             # https://docs.x.ai/developers/tools/citations ; strands_xai 0.6.1 `include` (L173/L402).
-            kwargs["include"] = ["inline_citations"]
+            kwargs["include"] = ["inline_citations", "web_search_call_output", "x_search_call_output"]
         if reasoning_effort:
             supported = xai_reasoning_efforts(model_id)
             if reasoning_effort not in supported:
@@ -1144,7 +1153,7 @@ def create_panel_agent(
             # Meta/interactive/delegating tools stay foreground: they mutate the
             # registry, pause for the user, or run child agents.
             background["never"] = [*background.get("never", []), "tool_catalog", "mcp_client", "editor",
-                "ask_user", "think", "run_skill", *formation_names]
+                "ask_user", "think", "run_skill", "programmatic_tool_caller", *formation_names]
             kwargs["background_tasks"] = background
         agent = config_to_agent(str(path), **kwargs)
         agent.add_hook(pause_gate, AfterInvocationEvent, order=200)

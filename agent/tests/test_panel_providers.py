@@ -304,8 +304,12 @@ def test_gemini_xai_mistral_hosted_tools(monkeypatch):
     monkeypatch.setenv("GEMINI_HOSTED_TOOLS", "google_search")
     assert len(panel_agent.build_model("gemini", "gemini-flash-latest").config["gemini_tools"]) == 1
     xai = panel_agent.build_model("xai", "grok-4.6")
-    assert xai.config["include"] == ["inline_citations"]
+    assert xai.config["include"] == ["inline_citations", "web_search_call_output", "x_search_call_output"]
     assert len(xai.config["xai_tools"]) == 3
+    assert xai.config["xai_tools"][0].web_search.enable_image_understanding is True
+    assert xai.config["xai_tools"][0].web_search.enable_image_search is True
+    assert xai.config["xai_tools"][1].x_search.enable_image_understanding is True
+    assert xai.config["xai_tools"][1].x_search.enable_video_understanding is True
     # Mistral: web_search/code_interpreter are Conversations/Agents API only, not chat completions.
     mistral = panel_agent.build_model("mistral", "mistral-large-latest")
     assert not any("tool" in key for key in mistral.config)

@@ -675,3 +675,52 @@ test('tool_repair_investigating / approval / ready reduce into one investigation
   const bad = reducePanelEvent(state, event(12, 'tool_repair_ready', { status: 'failed' }))
   assert.equal(bad.repair?.rev, 'r2')
 })
+
+test('reducePanelEvent updates xAI web_search, x_search, and image_search native parts in place', () => {
+  let state = reducePanelEvent(emptyPanelState('session'), event(1, 'run_started', { model_id: 'grok-4.6', provider: 'xai' }))
+  state = reducePanelEvent(state, event(2, 'native_tool', {
+    event: 'response.output_item.added',
+    item_type: 'search_results',
+    payload: {
+      type: 'response.output_item.added',
+      provider: 'xai',
+      item: { type: 'search_results', provider: 'xai', id: 'xai-web-search', call_id: 'xai-web-search', status: 'in_progress', queries: ['SpaceX Starship'], urls: [], results: [] },
+    },
+  }))
+  state = reducePanelEvent(state, event(3, 'native_tool', {
+    event: 'response.output_item.done',
+    item_type: 'search_results',
+    payload: {
+      type: 'response.output_item.done',
+      provider: 'xai',
+      item: { type: 'search_results', provider: 'xai', id: 'xai-web-search', call_id: 'xai-web-search', status: 'completed', queries: ['SpaceX Starship'], urls: ['https://www.spacex.com'], results: [{ url: 'https://www.spacex.com', title: 'spacex.com', source: 'web' }] },
+    },
+  }))
+  state = reducePanelEvent(state, event(4, 'native_tool', {
+    event: 'response.output_item.done',
+    item_type: 'x_search_results',
+    payload: {
+      type: 'response.output_item.done',
+      provider: 'xai',
+      item: { type: 'x_search_results', provider: 'xai', id: 'xai-x-search', call_id: 'xai-x-search', status: 'completed', queries: ['Starship'], urls: ['https://x.com/elonmusk/status/1'], results: [{ url: 'https://x.com/elonmusk/status/1', title: '@elonmusk · 1', source: 'x' }] },
+    },
+  }))
+  state = reducePanelEvent(state, event(5, 'native_tool', {
+    event: 'response.output_item.done',
+    item_type: 'image_search_results',
+    payload: {
+      type: 'response.output_item.done',
+      provider: 'xai',
+      item: { type: 'image_search_results', provider: 'xai', id: 'xai-image-search', call_id: 'xai-image-search', status: 'completed', queries: ['Starship rocket'], results: [{ image_url: 'https://img.example.com/1.jpg', origin_url: 'https://img.example.com/1.jpg', title: 'Starship' }] },
+    },
+  }))
+  const assistant = state.messages.find((m) => m.role === 'assistant')
+  assert.ok(assistant)
+  const nativeParts = assistant.parts.filter(isNativePart) as NativePart[]
+  assert.equal(nativeParts.length, 3)
+  assert.equal(nativeParts[0].itemType, 'search_results')
+  assert.equal(nativeParts[0].item?.status, 'completed')
+  assert.equal(nativeParts[0].steps.length, 2)
+  assert.equal(nativeParts[1].itemType, 'x_search_results')
+  assert.equal(nativeParts[2].itemType, 'image_search_results')
+})

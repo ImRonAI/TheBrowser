@@ -1175,16 +1175,19 @@ def test_per_tool_completion_arrives_before_sibling_and_has_no_callback_duplicat
 
 
 def test_perplexity_native_tool_events_reach_the_sse_stream():
-    """Server-side Agent API tool items ({"perplexity": ...} model chunks) become `native_tool` envelopes."""
+    """Server-side Agent API tool items ({"perplexity": ...} and {"xai": ...} model chunks) become `native_tool` envelopes."""
     sandbox = {"type": "response.output_item.done", "item": {"type": "sandbox_results", "call_id": "sb1", "code": "print(1)",
                "status": "completed", "results": [{"stdout": "1\n", "stderr": "", "exit_code": 0}]}}
     reasoning = {"type": "response.reasoning.search_web", "queries": ["q"]}
+    xai_search = {"type": "response.output_item.done", "provider": "xai", "item": {"type": "x_search_results", "call_id": "xai-x-search",
+                  "status": "completed", "queries": ["Starship"], "results": [{"url": "https://x.com/elonmusk/status/1", "title": "@elonmusk · 1", "source": "x"}]}}
 
     class NativeModel(OfflineModel):
         async def stream(self, messages, tool_specs=None, system_prompt=None, **kwargs):
             yield {"messageStart": {"role": "assistant"}}
             yield {"perplexity": reasoning}
             yield {"perplexity": sandbox}
+            yield {"xai": xai_search}
             yield {"contentBlockDelta": {"contentBlockIndex": 0, "delta": {"text": "done"}}}
             yield {"contentBlockStop": {"contentBlockIndex": 0}}
             yield {"messageStop": {"stopReason": "end_turn"}}
@@ -1195,13 +1198,16 @@ def test_perplexity_native_tool_events_reach_the_sse_stream():
         events = await finished(session)
         assert session.status == "completed", events
         native = [e for e in events if e["type"] == "native_tool"]
-        assert [n["event"] for n in native] == ["response.reasoning.search_web", "response.output_item.done"]
+        assert [n["event"] for n in native] == ["response.reasoning.search_web", "response.output_item.done", "response.output_item.done"]
         assert native[0]["item_type"] is None and native[0]["payload"] == reasoning
         assert native[1]["item_type"] == "sandbox_results"
         assert native[1]["payload"]["item"]["results"][0]["stdout"] == "1\n"
+        assert native[2]["item_type"] == "x_search_results"
+        assert native[2]["payload"]["item"]["results"][0]["url"] == "https://x.com/elonmusk/status/1"
         assert all(n["node_path"] == [] for n in native)
         # Never persisted into the agent's message history.
         assert "sandbox_results" not in json.dumps(session.messages)
+        assert "x_search_results" not in json.dumps(session.messages)
         await manager.shutdown()
 
     asyncio.run(scenario())

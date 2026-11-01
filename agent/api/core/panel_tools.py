@@ -67,7 +67,7 @@ CORE_TOOL_NAMES = (
     "mcp_client", "editor", "shell", "environment", "http_request", "perplexity_search",
     "brave_answer", "brave_web_search", "brave_news_search", "brave_image_search",
     "brave_video_search", "brave_local_search", "brave_rich_answer",
-    "render_ui", "tool_catalog",
+    "render_ui", "programmatic_tool_caller", "tool_catalog",
 )
 
 #: Synthetic import package for agent/tools/strands_tools. The directory is never
@@ -923,6 +923,10 @@ def build_core_tools(project_tools_dir: Path) -> list[AgentTool]:
     from agent.api.core.render_ui_tool import render_ui_tools
 
     tools.extend(render_ui_tools())
+    # Native strands_harness Monty Rust-VM sandboxed Python tool orchestrator.
+    from strands_harness.tools.programmatic_tool_caller import make_programmatic_tool_caller
+
+    tools.append(make_programmatic_tool_caller())
     return tools
 
 
@@ -1062,7 +1066,7 @@ def create_skill_tool(
 
 #: Tools the think child never inherits: itself (no recursion), user interrupts
 #: (the parent owns the conversation), and catalog loading (parent registry only).
-THINK_EXCLUDED_TOOLS = frozenset({"think", "ask_user", "tool_catalog", "create_harness"})
+THINK_EXCLUDED_TOOLS = frozenset({"think", "ask_user", "tool_catalog", "create_harness", "programmatic_tool_caller"})
 
 #: Non-browser ways of reading the web. Withheld from the think child when the user's current
 #: request says "browser only", because browser tools themselves are parent-only.

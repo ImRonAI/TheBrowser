@@ -602,12 +602,12 @@ class SessionRun:
             if path:
                 await self._emit("interrupt", node_path=path, interrupts=interrupt["interrupts"],
                                  id=interrupt["tool_use"]["toolUseId"])
-        # Perplexity Agent API server-side tool events (PerplexityResponsesModel taps the
-        # raw SSE body and yields them as {"perplexity": payload} chunks; Strands wraps
+        # Native provider server-side tool events (PerplexityResponsesModel yields
+        # {"perplexity": payload} and RonXAIModel yields {"xai": payload} chunks; Strands wraps
         # every raw chunk as {"event": chunk}). Forwarded verbatim for the panel's tool
         # cards; never part of the durable message history.
         raw = event.get("event")
-        if isinstance(raw, Mapping) and isinstance(native := raw.get("perplexity"), Mapping):
+        if isinstance(raw, Mapping) and isinstance(native := (raw.get("perplexity") or raw.get("xai")), Mapping):
             item = native.get("item") if isinstance(native.get("item"), Mapping) else None
             await self._emit("native_tool", node_path=path, event=str(native.get("type", "")),
                              item_type=item.get("type") if item else None, payload=native)

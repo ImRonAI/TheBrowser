@@ -366,19 +366,31 @@ class TabsManager {
     if (!mainWindow || !tab) return false
 
     const contentView = mainWindow.contentView
-    const current = this.activeTab
-    if (current?.view && contentView.children.includes(current.view)) {
-      contentView.removeChildView(current.view)
+    for (const existing of this.tabs.values()) {
+      if (existing.view && existing.id !== id) {
+        if (!existing.view.webContents.isDestroyed()) {
+          existing.view.webContents.setBackgroundThrottling(true)
+        }
+        if (contentView.children.includes(existing.view)) {
+          contentView.removeChildView(existing.view)
+        }
+      }
     }
 
     this._activeTabId = id
 
     if (tab.isExternal) {
       this.ensureView(tab)
+      if (!tab.view!.webContents.isDestroyed()) {
+        tab.view!.webContents.setBackgroundThrottling(false)
+      }
       this.updateViewBounds(tab.view!)
       if (!contentView.children.includes(tab.view!)) contentView.addChildView(tab.view!)
       mainWindow.webContents.send('browser:external-mode', true)
     } else {
+      if (tab.view && contentView.children.includes(tab.view)) {
+        contentView.removeChildView(tab.view)
+      }
       mainWindow.webContents.send('browser:external-mode', false)
     }
     // Tab views are appended on top; the repair surface must stay above them.
@@ -545,6 +557,15 @@ class TabsManager {
         })
       }
     })
+    tab.view.webContents.on('render-process-gone', (_event, details) => {
+      if (details.reason !== 'clean-exit' && this._activeTabId === tab.id) {
+        mainWindow?.webContents.send('browser:navigation-error', {
+          errorCode: details.exitCode || -1,
+          errorDescription: `Tab renderer exited (${details.reason})`,
+          url: tab.url,
+        })
+      }
+    })
 
     // window.open / target=_blank from page or automation: open as a real app
     // tab (chrome-managed), never a detached BrowserWindow.
@@ -589,6 +610,9 @@ class TabsManager {
     const tab = this.tabs.get(id)
     if (!tab) return undefined
     this.ensureView(tab)
+    if (tab.view && !tab.view.webContents.isDestroyed()) {
+      tab.view.webContents.setBackgroundThrottling(false)
+    }
     // A never-loaded WebContentsView has no renderer or DevTools target; CDP calls against it hang. Give automation a real about:blank document to attach to.
     if (tab.view && tab.view.webContents.getURL() === '') { void tab.view.webContents.loadURL('about:blank') }
     return tab.view
@@ -861,6 +885,13 @@ async function createWindow() {
   // Lock down permissions on the untrusted web tab partition (`persist:ron-browser`)
   // so external sites cannot auto-grant camera, microphone, geolocation, MIDI, HID, or USB.
   const tabSession = session.fromPartition(SESSION_PARTITION)
+  const cleanUa = tabSession.getUserAgent()
+    .replace(/\s+Electron\/[^\s]+/g, '')
+    .replace(/\s+ronbrowser-rebuilt\/[^\s]+/gi, '')
+  tabSession.setUserAgent(cleanUa)
+  try {
+    tabSession.setCodeCachePath(join(app.getPath('userData'), 'code-cache'))
+  } catch {}
   const allowedTabPermissions = new Set(['fullscreen', 'clipboard-sanitized-write'])
   tabSession.setPermissionCheckHandler((_webContents, permission) => {
     return allowedTabPermissions.has(permission)
@@ -1327,7 +1358,7 @@ ipcMain.handle('browser:screenshot', async (event) => {
   const activeTab = tabsManager.activeTab
   if (activeTab?.view && !activeTab.view.webContents.isDestroyed()) {
     try {
-      const page = jpegDataUrl(await activeTab.view.webContents.capturePage())
+      const page = jpegDataUrl(await activeTab.view.webContents.capturePage(undefined, { stayHidden: true }))
       if (page) return page
     } catch {}
   }
