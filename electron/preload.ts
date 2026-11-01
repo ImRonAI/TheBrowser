@@ -1,16 +1,17 @@
 import { contextBridge, ipcRenderer } from 'electron'
 
-interface StreamRequest {
+export interface TakeoverBreadcrumb {
   url: string
-  method: string
-  headers: Record<string, string>
-  body: string
+  title: string
+  at: number
 }
 
-interface ApiError {
-  code: string
-  message: string
-  status: number
+export interface TakeoverStatePayload {
+  success?: boolean
+  active: boolean
+  url: string
+  title: string
+  breadcrumbs: TakeoverBreadcrumb[]
 }
 
 const electronAPI = {
@@ -19,7 +20,7 @@ const electronAPI = {
   closeWindow: () => ipcRenderer.send('window-close'),
 
   getTheme: () => ipcRenderer.invoke('get-theme'),
-  setTheme: (theme: 'light' | 'dark' | 'glass' | 'system') => 
+  setTheme: (theme: 'light' | 'dark' | 'glass' | 'system') =>
     ipcRenderer.invoke('set-theme', theme),
 
   onDeepLink: (callback: (url: string) => void) => {
@@ -40,47 +41,6 @@ const electronAPI = {
       ipcRenderer.invoke('media:open-settings', kind),
   },
 
-  agent: {
-    startStream: (streamId: string, request: StreamRequest) =>
-      ipcRenderer.invoke('agent:start-stream', streamId, request),
-    
-    abortStream: (streamId: string) =>
-      ipcRenderer.invoke('agent:abort-stream', streamId),
-    
-    abortAllStreams: () =>
-      ipcRenderer.invoke('agent:abort-all-streams'),
-    
-    onStreamEvent: (callback: (streamId: string, event: unknown) => void) => {
-      const handler = (_: unknown, streamId: string, event: unknown) => callback(streamId, event)
-      ipcRenderer.on('agent:stream-event', handler)
-      return () => ipcRenderer.removeListener('agent:stream-event', handler)
-    },
-    
-    onStreamConnected: (callback: (streamId: string) => void) => {
-      const handler = (_: unknown, streamId: string) => callback(streamId)
-      ipcRenderer.on('agent:stream-connected', handler)
-      return () => ipcRenderer.removeListener('agent:stream-connected', handler)
-    },
-    
-    onStreamComplete: (callback: (streamId: string) => void) => {
-      const handler = (_: unknown, streamId: string) => callback(streamId)
-      ipcRenderer.on('agent:stream-complete', handler)
-      return () => ipcRenderer.removeListener('agent:stream-complete', handler)
-    },
-    
-    onStreamError: (callback: (streamId: string, error: ApiError) => void) => {
-      const handler = (_: unknown, streamId: string, error: ApiError) => callback(streamId, error)
-      ipcRenderer.on('agent:stream-error', handler)
-      return () => ipcRenderer.removeListener('agent:stream-error', handler)
-    },
-    
-    onStreamAborted: (callback: (streamId: string) => void) => {
-      const handler = (_: unknown, streamId: string) => callback(streamId)
-      ipcRenderer.on('agent:stream-aborted', handler)
-      return () => ipcRenderer.removeListener('agent:stream-aborted', handler)
-    },
-  },
-
   browser: {
     navigate: (url: string) => ipcRenderer.invoke('browser:navigate', url),
     search: (query: string, level?: string) => ipcRenderer.invoke('browser:search', query, level),
@@ -92,7 +52,16 @@ const electronAPI = {
     canGoBack: () => ipcRenderer.invoke('browser:can-go-back'),
     canGoForward: () => ipcRenderer.invoke('browser:can-go-forward'),
     setPanelOpen: (isOpen: boolean) => ipcRenderer.invoke('browser:set-panel-open', isOpen),
-    setAgentCursor: (point: { x: number; y: number }) => ipcRenderer.invoke('browser:set-agent-cursor', point),
+    setAgentCursor: (point: { x: number; y: number } | null) => ipcRenderer.invoke('browser:set-agent-cursor', point),
+    setTakeover: (active: boolean): Promise<TakeoverStatePayload> =>
+      ipcRenderer.invoke('browser:set-takeover', active),
+    getTakeover: (): Promise<TakeoverStatePayload> =>
+      ipcRenderer.invoke('browser:get-takeover'),
+    onTakeoverChanged: (callback: (state: TakeoverStatePayload) => void) => {
+      const handler = (_: unknown, state: TakeoverStatePayload) => callback(state)
+      ipcRenderer.on('browser:takeover-changed', handler)
+      return () => ipcRenderer.removeListener('browser:takeover-changed', handler)
+    },
     setDrawerHeight: (height: number) => ipcRenderer.invoke('browser:set-drawer-height', height),
     setChromeHeight: (height: number) => ipcRenderer.invoke('browser:set-chrome-height', height),
     setSidebarWidth: (width: number) => ipcRenderer.invoke('browser:set-sidebar-width', width),
@@ -122,13 +91,13 @@ const electronAPI = {
       ipcRenderer.on('browser:url-changed', handler)
       return () => ipcRenderer.removeListener('browser:url-changed', handler)
     },
-    
+
     onNavigationComplete: (callback: (url: string) => void) => {
       const handler = (_: unknown, url: string) => callback(url)
       ipcRenderer.on('browser:navigation-complete', handler)
       return () => ipcRenderer.removeListener('browser:navigation-complete', handler)
     },
-    
+
     onNavigationError: (callback: (error: { errorCode: number; errorDescription: string; url: string }) => void) => {
       const handler = (_: unknown, error: { errorCode: number; errorDescription: string; url: string }) => callback(error)
       ipcRenderer.on('browser:navigation-error', handler)
@@ -149,10 +118,26 @@ const electronAPI = {
     getPanelContext: () => ipcRenderer.invoke('browser:get-panel-context'),
     setPanelMode: (mode: 'narrow' | 'wide' | 'fullscreen') => ipcRenderer.invoke('browser:set-panel-mode', mode),
     onPanelModeChanged: (callback: (data: { mode: 'narrow' | 'wide' | 'fullscreen'; width: number }) => void) => {
-      const handler = (_: unknown, data: any) => callback(data)
+      const handler = (_: unknown, data: { mode: 'narrow' | 'wide' | 'fullscreen'; width: number }) => callback(data)
       ipcRenderer.on('browser:panel-mode-changed', handler)
       return () => ipcRenderer.removeListener('browser:panel-mode-changed', handler)
     },
+  },
+
+  onUrlChanged: (callback: (url: string) => void) => {
+    const handler = (_: unknown, url: string) => callback(url)
+    ipcRenderer.on('browser:url-changed', handler)
+    return () => ipcRenderer.removeListener('browser:url-changed', handler)
+  },
+  onNavigationComplete: (callback: (url: string) => void) => {
+    const handler = (_: unknown, url: string) => callback(url)
+    ipcRenderer.on('browser:navigation-complete', handler)
+    return () => ipcRenderer.removeListener('browser:navigation-complete', handler)
+  },
+  onNavigationError: (callback: (error: { errorCode: number; errorDescription: string; url: string }) => void) => {
+    const handler = (_: unknown, error: { errorCode: number; errorDescription: string; url: string }) => callback(error)
+    ipcRenderer.on('browser:navigation-error', handler)
+    return () => ipcRenderer.removeListener('browser:navigation-error', handler)
   },
 
   tabs: {
@@ -160,48 +145,19 @@ const electronAPI = {
     close: (tabId: string) => ipcRenderer.invoke('close-tab', tabId),
     switch: (tabId: string) => ipcRenderer.invoke('switch-tab', tabId),
     list: () => ipcRenderer.invoke('tabs:list'),
-    getContext: (tabId: string) => ipcRenderer.invoke('tabs:get-context', tabId) as Promise<{ success: boolean; context?: any; error?: string }>,
-    onUpdated: (callback: (tabs: any[]) => void) => {
-      const handler = (_: unknown, tabs: any[]) => callback(tabs)
+    getContext: (tabId: string) => ipcRenderer.invoke('tabs:get-context', tabId) as Promise<{ success: boolean; context?: unknown; error?: string }>,
+    onUpdated: (callback: (tabs: unknown[]) => void) => {
+      const handler = (_: unknown, tabs: unknown[]) => callback(tabs)
       ipcRenderer.on('tabs:updated', handler)
       return () => ipcRenderer.removeListener('tabs:updated', handler)
     },
   },
 
   navigation: {
-    navigate: (url: string) => ipcRenderer.invoke('navigate', url),
-    goBack: () => ipcRenderer.invoke('go-back'),
-    goForward: () => ipcRenderer.invoke('go-forward'),
-    reload: () => ipcRenderer.invoke('reload'),
-  },
-
-  tools: {
-    discover: () => ipcRenderer.invoke('tools:discover'),
-    refresh: () => ipcRenderer.invoke('tools:refresh'),
-    list: () => ipcRenderer.invoke('tools:list'),
-    execute: (toolName: string, args: Record<string, unknown> = {}) => 
-      ipcRenderer.invoke('tools:execute', toolName, args),
-    onInventoryUpdated: (callback: (tools: any[]) => void) => {
-      const handler = (_: unknown, tools: any[]) => callback(tools)
-      ipcRenderer.on('tools:inventory-updated', handler)
-      return () => ipcRenderer.removeListener('tools:inventory-updated', handler)
-    },
-    getManifest: () => ipcRenderer.invoke('tools:getManifest'),
-    getCustomToolsDir: () => ipcRenderer.invoke('tools:getCustomToolsDir'),
-    saveCustomTool: (name: string, code: string) => 
-      ipcRenderer.invoke('tools:saveCustomTool', name, code),
-  },
-
-  sandbox: {
-    getRoot: () => ipcRenderer.invoke('sandbox:get-root'),
-    shell: (command: string, args: string[] = [], options?: any) =>
-      ipcRenderer.invoke('sandbox:shell', command, args, options),
-    listFiles: (relativePath?: string) =>
-      ipcRenderer.invoke('sandbox:list-files', relativePath),
-    readFile: (filePath: string) =>
-      ipcRenderer.invoke('sandbox:read-file', filePath),
-    writeFile: (filePath: string, content: string) =>
-      ipcRenderer.invoke('sandbox:write-file', filePath, content),
+    navigate: (url: string) => ipcRenderer.invoke('browser:navigate', url),
+    goBack: () => ipcRenderer.invoke('browser:go-back'),
+    goForward: () => ipcRenderer.invoke('browser:go-forward'),
+    reload: () => ipcRenderer.invoke('browser:reload'),
   },
 }
 
@@ -217,3 +173,4 @@ if (process.contextIsolated) {
 }
 
 export type ElectronAPI = typeof electronAPI
+

@@ -27,11 +27,11 @@ export function levelLabel(level: string): string {
   return LEVEL_INFO.find((info) => info.id === level)?.label ?? level
 }
 
-import { API_BASE_URL } from './api-base'
-import { normalizeApiBaseUrl } from './api-origin'
+import { API_BASE_URL } from './api-base.ts'
+import { normalizeApiBaseUrl } from './api-origin.ts'
 
 /** Defaults to the main API; `electron:dev` sets this to local :8766 when the VPS tunnel lacks `/search/*`. */
-export const SEARCH_API = normalizeApiBaseUrl(import.meta.env.VITE_SEARCH_API_URL, API_BASE_URL)
+export const SEARCH_API = normalizeApiBaseUrl(import.meta.env?.VITE_SEARCH_API_URL, API_BASE_URL)
 
 export interface SearchRequestBody {
   q: string

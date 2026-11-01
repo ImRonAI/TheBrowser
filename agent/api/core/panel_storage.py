@@ -13,7 +13,6 @@ import asyncio
 import builtins
 import hashlib
 import os
-import re
 import threading
 from collections import OrderedDict
 from collections.abc import Callable
@@ -22,25 +21,27 @@ from tempfile import TemporaryDirectory
 from typing import Any, TypeVar
 
 from strands.session import SnapshotSessionManager
-from strands.storage import InMemoryStorage, Storage
+from strands.storage import InMemoryStorage, LocalFileStorage, Storage
 from strands.storage.search import KeywordSearchStrategy, SearchStrategy
-from strands.storage.storage import StorageSearchResult
+from strands.storage.search.bm25 import Bm25SearchStrategy
+from strands.storage.storage import (
+    StorageSearchResult,
+    _NamespacedStorage,
+    _normalize_key,
+    _normalize_prefix,
+)
 from strands.types.exceptions import StorageError
 
 T = TypeVar("T")
 
 
 def _path(value: str, *, prefix: bool = False) -> str:
-    """Use slash-separated keys without allowing namespace traversal."""
-    if not isinstance(value, str) or "\\" in value or "\x00" in value:
+    """Delegate to the native SDK key/prefix normalizers, also rejecting NUL and '.' segments."""
+    if not isinstance(value, str) or "\x00" in value:
         raise StorageError("Storage keys must be strings without backslashes or NUL")
-    normalized = re.sub(r"/+", "/", value).lstrip("/")
-    if not prefix:
-        normalized = normalized.rstrip("/")
-    if any(part in (".", "..") for part in normalized.split("/")):
+    normalized = _normalize_prefix(value) if prefix else _normalize_key(value)
+    if "." in normalized.split("/"):
         raise StorageError("Relative path segments are not allowed in storage keys")
-    if not prefix and not normalized:
-        raise StorageError("Storage key must not be empty")
     return normalized
 
 
@@ -180,7 +181,6 @@ class HuggingFaceBucketStorage:
             ))
         except Exception as error:
             raise StorageError(f"HF Bucket write failed for {key!r}") from error
-        self._forget(key)
         await self._search_strategy.index(self, key, payload)
 
     async def read(self, key: str) -> bytes | None:
@@ -237,7 +237,6 @@ class HuggingFaceBucketStorage:
             pass
         except Exception as error:
             raise StorageError(f"HF Bucket delete failed for {key!r}") from error
-        self._forget(key)
 
     async def list(self, query: str = "") -> builtins.list[str]:
         from huggingface_hub import BucketFile
@@ -266,17 +265,21 @@ class HuggingFaceBucketStorage:
         return _ScopedStorage(self, prefix)
 
 
-class _ScopedStorage:
+class _ScopedStorage(_NamespacedStorage):
     """Search only scoped bytes, rather than searching all users then filtering.
 
-    This is an ordinary native Storage implementation, not an SDK-marked view;
-    FileMemoryStore and SnapshotSessionManager still add their own namespaces.
+    Subclasses the native SDK ``_NamespacedStorage`` while leaving ``_namespaced``
+    unset so ``FileMemoryStore``, ``SnapshotSessionManager``, and ``ContextOffloader``
+    still add their own namespaces. When backed by a host-indexed strategy (such as
+    ``Bm25SearchStrategy`` on ``LocalFileStorage``), delegates to the indexed parent
+    search; otherwise reuses a single ``KeywordSearchStrategy`` over the scoped prefix.
     """
 
+    _namespaced = None
+    _keyword_strategy = KeywordSearchStrategy()
+
     def __init__(self, storage: Storage, prefix: str) -> None:
-        self._storage = storage
-        normalized = _path(prefix, prefix=True).rstrip("/")
-        self._prefix = f"{normalized}/" if normalized else ""
+        super().__init__(storage, _path(prefix, prefix=True))
 
     async def write(self, key: str, data: bytes) -> None:
         await self._storage.write(self._prefix + _path(key), data)
@@ -293,7 +296,10 @@ class _ScopedStorage:
                       if key.startswith(prefix))
 
     async def search(self, query: str) -> builtins.list[StorageSearchResult]:
-        return await KeywordSearchStrategy().search(self, query)
+        strategy = getattr(self._storage, "_search_strategy", None)
+        if strategy is not None and getattr(strategy, "requires_host_fs", False):
+            return await super().search(query)
+        return await self._keyword_strategy.search(self, query)
 
     def namespace(self, prefix: str) -> _ScopedStorage:
         return _ScopedStorage(self._storage, self._prefix + _path(prefix, prefix=True))
@@ -308,8 +314,9 @@ def get_panel_storage() -> Storage:
 
     ``PANEL_STORAGE=huggingface`` is the production authority: it requires ``HF_TOKEN``
     and ``HF_BUCKET_ID`` and ensures the bucket exists (blocking HF call on first use;
-    ``main.py`` warms it in the lifespan so misconfiguration fails at boot). It never
-    falls back to in-memory storage.
+    ``main.py`` warms it in the lifespan so misconfiguration fails at boot).
+    ``PANEL_STORAGE=local`` (or ``file``) uses native ``LocalFileStorage`` with SQLite
+    FTS5 ``Bm25SearchStrategy``.
 
     Raises:
         ValueError: On an unknown mode, a malformed bucket id or a missing token.
@@ -321,6 +328,9 @@ def get_panel_storage() -> Storage:
             mode = os.environ.get("PANEL_STORAGE", "memory").strip().lower()
             if mode == "memory":
                 _storage = InMemoryStorage()
+            elif mode in ("local", "file"):
+                base_dir = os.environ.get("PANEL_STORAGE_DIR", "").strip() or str(Path.home() / ".ron" / "storage")
+                _storage = LocalFileStorage(base_dir, search_strategy=Bm25SearchStrategy())
             elif mode == "huggingface":
                 token = os.environ.get("HF_TOKEN", "").strip()
                 if not token:
@@ -329,7 +339,7 @@ def get_panel_storage() -> Storage:
                 hf_storage.ensure_bucket()
                 _storage = hf_storage
             else:
-                raise ValueError("PANEL_STORAGE must be 'memory' or 'huggingface'")
+                raise ValueError("PANEL_STORAGE must be 'memory', 'local', or 'huggingface'")
         return _storage
 
 

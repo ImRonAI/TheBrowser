@@ -258,14 +258,27 @@ def load_tool(path: str, name: str, agent=None) -> Dict[str, Any]:
         # Load the tool using the agent's tool registry
         current_agent.tool_registry.load_tool_from_filepath(tool_name=name, tool_path=persistent_path_str)
 
+        tool_obj = None
+        if current_agent and hasattr(current_agent, "tool_registry"):
+            registry = getattr(current_agent.tool_registry, "registry", None)
+            if isinstance(registry, dict):
+                tool_obj = registry.get(name)
+
+        # Synchronize with PanelToolCatalog when bound to this agent so AfterToolsEvent
+        # ownership checks and tool_catalog(action="list"/"unload") stay consistent.
+        if current_agent is not None and tool_obj is not None:
+            try:
+                from agent.api.core.panel_tools import PanelToolCatalog
+
+                panel_catalog = PanelToolCatalog.for_agent(current_agent)
+                if panel_catalog is not None:
+                    panel_catalog.stage_tool(tool_obj, replace=True)
+            except Exception as exc:
+                logger.debug("PanelToolCatalog sync skipped for load_tool: %s", exc)
+
         # Update tool catalog after successful load
         try:
             catalog = get_tool_catalog_manager()
-            tool_obj = None
-            if current_agent and hasattr(current_agent, "tool_registry"):
-                registry = getattr(current_agent.tool_registry, "registry", None)
-                if isinstance(registry, dict):
-                    tool_obj = registry.get(name)
             if tool_obj is not None:
                 load_pathway = f"load_tool(path='{persistent_path_str}', name='{name}')"
                 catalog.register_tool(

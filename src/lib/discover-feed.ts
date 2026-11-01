@@ -39,7 +39,7 @@ export interface FeedSection {
 }
 export interface FeedResponse { sections: FeedSection[] }
 
-import { API_BASE_URL } from './api-base'
+import { API_BASE_URL } from './api-base.ts'
 
 export const DISCOVER_API = API_BASE_URL
 /** Re-fetch when the cached feed is older than this. */

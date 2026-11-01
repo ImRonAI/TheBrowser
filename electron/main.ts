@@ -1,4 +1,4 @@
-import { app, BrowserWindow, clipboard, desktopCapturer, dialog, ipcMain, Menu, NativeImage, nativeTheme, shell, systemPreferences, WebContentsView } from 'electron'
+import { app, BrowserWindow, clipboard, desktopCapturer, dialog, ipcMain, Menu, NativeImage, nativeTheme, session, shell, systemPreferences, WebContentsView } from 'electron'
 import { createServer, type Server } from 'node:http'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -6,6 +6,7 @@ import {
   registerElectronPlaywrightMcp,
   setActiveWebContentsSupplier,
   setTabController,
+  setUserTakeover,
   type AutomationTab,
 } from 'electron-playwright-mcp'
 import { CURSOR_SVG, CURSOR_TIP } from '../src/lib/agent-cursor'
@@ -32,6 +33,19 @@ let chromeHeight = CHROME_HEIGHT
 let interestInset = 0
 // Width (CSS px) of the persistent left sidebar; 0 when it is closed.
 let sidebarWidth = 0
+let userTakeoverActive = false
+let takeoverBreadcrumbs: Array<{ url: string; title: string }> = []
+
+function recordTakeoverBreadcrumb(url: string, title: string) {
+  if (!userTakeoverActive || !url || url === 'about:blank') return
+  const last = takeoverBreadcrumbs[takeoverBreadcrumbs.length - 1]
+  if (last && last.url === url) {
+    last.title = title || last.title
+    return
+  }
+  takeoverBreadcrumbs.push({ url, title: title || url })
+  if (takeoverBreadcrumbs.length > 20) takeoverBreadcrumbs.shift()
+}
 
 type InterestMenuPayload = {
   interests: Array<{ id: string; label: string; category: string }>
@@ -314,6 +328,18 @@ class TabsManager {
     })
   }
 
+  isVisible(id: string): boolean {
+    const t = this.tabs.get(id)
+    if (!t || id !== this._activeTabId) return false
+    if (!t.isExternal) return true
+    return Boolean(t.view && mainWindow && !mainWindow.isDestroyed() && mainWindow.contentView.children.includes(t.view))
+  }
+
+  focusActiveSurface(): void {
+    const tab = this.activeTab
+    if (tab) this.focusVisibleSurface(tab)
+  }
+
   create(clientTabId?: string, url = 'ron://home'): TabRecord {
     const id = clientTabId || `tab-${Date.now()}`
     const record: TabRecord = {
@@ -496,12 +522,28 @@ class TabsManager {
         tab.title = 'New Tab'
         this.attachIfActive(tab)
       }
+      recordTakeoverBreadcrumb(url, tab.title)
       this.emitTabsUpdated()
       if (this._activeTabId === tab.id) mainWindow?.webContents.send('browser:url-changed', url)
     }
     tab.view.webContents.on('did-navigate', (_, url) => syncNavigation(url))
     tab.view.webContents.on('did-navigate-in-page', (_, url, isMainFrame) => {
       if (isMainFrame) syncNavigation(url)
+    })
+    tab.view.webContents.on('did-finish-load', () => {
+      if (this._activeTabId === tab.id) {
+        mainWindow?.webContents.send('browser:navigation-complete', tab.url)
+      }
+    })
+    tab.view.webContents.on('did-fail-load', (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
+      // Ignore ERR_ABORTED (-3) triggered by rapid navigation redirects.
+      if (isMainFrame && errorCode !== -3 && this._activeTabId === tab.id) {
+        mainWindow?.webContents.send('browser:navigation-error', {
+          errorCode,
+          errorDescription,
+          url: validatedURL || tab.url,
+        })
+      }
     })
 
     // window.open / target=_blank from page or automation: open as a real app
@@ -518,6 +560,7 @@ class TabsManager {
     })
     tab.view.webContents.on('page-title-updated', (_, title) => {
       tab.title = title
+      recordTakeoverBreadcrumb(tab.url, title)
       this.emitTabsUpdated()
     })
     tab.view.webContents.on('page-favicon-updated', (_, favs) => {
@@ -632,6 +675,7 @@ function automationTabs(): AutomationTab[] {
     url: tab.url,
     title: tab.title,
     active: tab.isActive,
+    visible: tabsManager.isVisible(tab.id),
   }))
 }
 
@@ -727,8 +771,8 @@ app.on('browser-window-created', (_event, win) => {
 })
 
 async function createWindow() {
-  // Await the MCP server initialization
-  await mcpPromise;
+  // Start MCP servers without blocking initial window creation & first paint.
+  void mcpPromise?.catch((err) => console.error('MCP server startup error:', err))
 
   let win: BrowserWindow
   creatingMainWindow = true
@@ -814,6 +858,17 @@ async function createWindow() {
     callback(true)
   })
 
+  // Lock down permissions on the untrusted web tab partition (`persist:ron-browser`)
+  // so external sites cannot auto-grant camera, microphone, geolocation, MIDI, HID, or USB.
+  const tabSession = session.fromPartition(SESSION_PARTITION)
+  const allowedTabPermissions = new Set(['fullscreen', 'clipboard-sanitized-write'])
+  tabSession.setPermissionCheckHandler((_webContents, permission) => {
+    return allowedTabPermissions.has(permission)
+  })
+  tabSession.setPermissionRequestHandler((_webContents, permission, callback) => {
+    callback(allowedTabPermissions.has(permission))
+  })
+
   win.webContents.session.setDisplayMediaRequestHandler((request, callback) => {
     if (!request.userGesture || !validateIpcSender(request.frame) || request.frame !== win.webContents.mainFrame) {
       callback({})
@@ -837,7 +892,7 @@ async function createWindow() {
         callback({})
       }
     })()
-  }, { useSystemPicker: true })
+  })
 
   win.on('closed', () => {
     // Never keep a handle to a destroyed window: every `mainWindow?.` call
@@ -864,9 +919,8 @@ async function createWindow() {
   }
 }
 
-// createWindow is async (it awaits the MCP server). It must be awaited before any tab
-// work: TabsManager.attachIfActive/updateViewBounds/emitTabsUpdated all no-op when
-// mainWindow is still null, which would leave the initial tab detached and invisible.
+// createWindow must complete before any tab work: TabsManager.attachIfActive/updateViewBounds/emitTabsUpdated
+// all no-op when mainWindow is still null, which would leave the initial tab detached and invisible.
 let openingMainWindow: Promise<void> | null = null
 function openMainWindow(): Promise<void> {
   if (!openingMainWindow) {
@@ -1019,8 +1073,8 @@ ipcMain.handle('browser:set-agent-cursor', (event, point: { x?: number; y?: numb
   if (!validateIpcSender(event.senderFrame)) return
   const view = tabsManager.activeTab?.view
   if (!view || view.webContents.isDestroyed()) return
-  const x = typeof point?.x === 'number' && Number.isFinite(point.x) ? point.x : null
-  const y = typeof point?.y === 'number' && Number.isFinite(point.y) ? point.y : null
+  const x = !userTakeoverActive && typeof point?.x === 'number' && Number.isFinite(point.x) ? point.x : null
+  const y = !userTakeoverActive && typeof point?.y === 'number' && Number.isFinite(point.y) ? point.y : null
   const script = `(() => {
     const existing = document.getElementById('ron-agent-cursor');
     if (${x == null || y == null}) { existing?.remove(); return; }
@@ -1046,6 +1100,44 @@ ipcMain.handle('browser:set-agent-cursor', (event, point: { x?: number; y?: numb
     node.style.transform = ${JSON.stringify(x != null && y != null ? `translate(${x - CURSOR_TIP}px, ${y - CURSOR_TIP}px)` : '')};
   })()`
   void view.webContents.executeJavaScript(script).catch(() => undefined)
+})
+
+ipcMain.handle('browser:set-takeover', (event, active: boolean) => {
+  if (!validateIpcSender(event.senderFrame)) return { success: false, active: userTakeoverActive }
+  userTakeoverActive = Boolean(active)
+  setUserTakeover(userTakeoverActive)
+  const activeTab = tabsManager.activeTab
+  if (userTakeoverActive) {
+    takeoverBreadcrumbs = []
+    if (activeTab?.url) {
+      recordTakeoverBreadcrumb(activeTab.url, activeTab.title)
+    }
+    if (activeTab?.view && !activeTab.view.webContents.isDestroyed()) {
+      void activeTab.view.webContents
+        .executeJavaScript('document.getElementById("ron-agent-cursor")?.remove()')
+        .catch(() => undefined)
+    }
+    tabsManager.focusActiveSurface()
+  }
+  const payload = {
+    active: userTakeoverActive,
+    url: activeTab?.url ?? '',
+    title: activeTab?.title ?? '',
+    breadcrumbs: [...takeoverBreadcrumbs],
+  }
+  mainWindow?.webContents.send('browser:takeover-changed', payload)
+  return { success: true, ...payload }
+})
+
+ipcMain.handle('browser:get-takeover', (event) => {
+  if (!validateIpcSender(event.senderFrame)) return { active: false, url: '', title: '', breadcrumbs: [] }
+  const activeTab = tabsManager.activeTab
+  return {
+    active: userTakeoverActive,
+    url: activeTab?.url ?? '',
+    title: activeTab?.title ?? '',
+    breadcrumbs: [...takeoverBreadcrumbs],
+  }
 })
 
 ipcMain.handle('browser:set-drawer-height', (event, height: number) => {

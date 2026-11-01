@@ -345,3 +345,28 @@ def test_hf_cache_is_bounded_lru(hf):
         assert "big" not in storage._cache
 
     asyncio.run(run())
+
+
+def test_local_file_storage_with_bm25_and_user_isolation(monkeypatch, tmp_path):
+    """PANEL_STORAGE=local uses native LocalFileStorage + Bm25SearchStrategy and isolates user scopes."""
+    monkeypatch.setenv("PANEL_STORAGE", "local")
+    monkeypatch.setenv("PANEL_STORAGE_DIR", str(tmp_path / "ron-storage"))
+    root = panel.get_panel_storage()
+    assert isinstance(root, panel.LocalFileStorage)
+    assert isinstance(root._search_strategy, panel.Bm25SearchStrategy)
+
+    alice = panel.get_user_session_storage("alice")
+    bob = panel.get_user_session_storage("bob")
+
+    async def run():
+        await alice.write("memory/facts/prefs.md", b"Alice prefers dark roast espresso")
+        await bob.write("memory/facts/prefs.md", b"Bob prefers green matcha tea")
+        alice_hits = await alice.search("espresso")
+        assert [r.key for r in alice_hits] == ["memory/facts/prefs.md"]
+        assert await alice.search("matcha") == []
+        bob_hits = await bob.search("matcha")
+        assert [r.key for r in bob_hits] == ["memory/facts/prefs.md"]
+        assert await bob.search("espresso") == []
+
+    asyncio.run(run())
+

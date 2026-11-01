@@ -29,23 +29,21 @@ Run the focused tests against the installed, unmodified SDK:
 
 ```python
 from strands import Agent
-from strands.session import SnapshotSessionManager
+from agent.api.core.memory import create_memory_config
 from agent.api.core.panel_storage import (
-    create_memory_config,
     get_panel_storage,
     get_user_session_storage,
+    thread_agent_id,
+    thread_session_manager,
 )
 
 storage = get_panel_storage()  # Process singleton, native Storage protocol.
-session_manager = SnapshotSessionManager(
-    session_id,
-    storage=get_user_session_storage(user_id),
-)
+session_manager = thread_session_manager(user_id, session_id)
 agent = Agent(
     model=model,  # An explicit configured provider instance.
-    agent_id="panel",
+    agent_id=thread_agent_id(user_id),
     session_manager=session_manager,
-    memory_manager=create_memory_config(user_id),
+    memory_manager=create_memory_config(user_id, model=model),
     callback_handler=None,
 )
 async for event in agent.stream_async(message):
@@ -55,31 +53,22 @@ async for event in agent.stream_async(message):
 `session_manager` and `memory_manager` can also be passed as constructor
 overrides to `config_to_agent`; they are not agent-config JSON fields.
 
-`create_memory_config(user_id)` is synchronous, returns native
-`MemoryManagerConfig`, and constructs **two** fresh `SerializedFileMemoryStore`s
-(a small subclass of native `FileMemoryStore`) with explicit `storage=`:
+`create_memory_config(user_id, model=..., project_id=..., issue_id=..., extraction=True)`
+in `agent/api/core/memory.py` is synchronous, returns native `MemoryManagerConfig`,
+and constructs native `FileMemoryStore`s (`strands.vended_memory_stores.file_memory_store.FileMemoryStore`)
+over `get_user_session_storage(user_id)`:
 
-* `panel-memory` — long-term memory. Its `extraction` is the dreaming pass
-  (`agent/api/core/dreaming.py`): a native `ExtractionConfig` whose
-  `DreamExtractor` renders journal `add_memory` calls into the transcript
-  (`MemoryMessageFilter(exclude=[])`), lists the existing `# Topic | Subject`
-  headings and delegates to the SDK `ModelExtractor` on `agent.aux_model`
-  (default trigger every 5 turns; `memory_manager.flush()` at close/shutdown).
-  Entries headed `# Topic | Subject` go through native `add`, which slug-merges
-  them into one subject file with the newest block last.
-* `journal` (`entry_files=True`) — the only `add_memory` target
-  (`MemoryAddToolConfig(stores=["journal"], wait_for_writes=True)`). A
-  `<start_entry>` is server-stamped (UTC `<created_at>`, replacing the model's
-  value) and written as its own object `<topic>/<stamp>-<subject>.md`. The
-  store implements `MemoryStore.get_tools()` and publishes `search_memories`
-  (nested filters `order/since/until/tags/topic/subject` over journal and
-  long-term memory), which the `MemoryManager` registers beside `search_memory`.
+* `facts` — durable profile facts, preferences, and standing context (`ExtractionConfig` on `every_n_turns=5` when `extraction=True`).
+* `remember` — explicit user notes and saved reminders (`add_memory` / `search_memory`).
+* `feedback` — corrections, style rules, and taught-skill ratings (`ExtractionConfig` on `every_n_turns=5` when `extraction=True`).
+* `tasks` — ongoing multi-session work and handoffs (`ExtractionConfig` on `every_n_turns=5` when `extraction=True`).
+* `project-<project_id>` / `issue-<issue_id>` — optional project- and issue-scoped `FileMemoryStore`s when `project_id` / `issue_id` are supplied.
 
-`MemoryInjectionConfig(trigger="everyTurn")` injects from both stores before every
+`MemoryInjectionConfig(trigger="everyTurn")` injects relevant context before every
 model call. `extraction=False` builds the same stores for a consumer without a
-flush owner (Live, `recall`). SDK code retains ownership of markdown topic slugs,
-append formatting, extraction scheduling, retrieval, tools, injection, and
-session snapshots.
+flush owner (Live `BidiAgent`). SDK code retains ownership of markdown topic slugs,
+append formatting (`INDEX.md` + `<topic>.md`), extraction scheduling, retrieval,
+tools (`add_memory`, `search_memory`), injection, and session snapshots.
 
 User identities are exact UTF-8 strings hashed with SHA-256 for path safety.
 They must be nonblank. A trusted parent must supply the authenticated user's ID.
@@ -88,8 +77,8 @@ Different slash-containing or Unicode IDs are not merged by slug sanitization.
 Storage layout:
 
 ```text
-panel/users/<sha256(user_id)>/memory/panel-memory/<topic>-<subject>.md      (dreamed, merged)
-panel/users/<sha256(user_id)>/memory/journal/<topic>/<stamp>-<subject>.md   (one per add_memory entry)
+panel/users/<sha256(user_id)>/memory/<store_name>/INDEX.md
+panel/users/<sha256(user_id)>/memory/<store_name>/<topic>.md
 panel/users/<sha256(user_id)>/session/<session_id>/scopes/agent/<agent_id>/snapshots/...
 ```
 
@@ -97,12 +86,17 @@ Memory survives new agent and session instances for the same user. Sessions are
 scoped separately by user, session ID and agent ID. Deleting a native session
 does not delete memory. Use `get_user_session_storage(user_id)` rather than raw
 `get_panel_storage()` when constructing a session manager. Scoped memory search
-lists and reads only its namespace; it does not scan other users and then filter.
+uses the native `_NamespacedStorage` subclass (`_ScopedStorage`), delegating to
+SQLite FTS5 `Bm25SearchStrategy` on `LocalFileStorage` or scoped `KeywordSearchStrategy`
+on `HuggingFaceBucketStorage` / `InMemoryStorage`.
 
 ## Configuration and lifecycle
 
 * `PANEL_STORAGE=memory` (default): native `InMemoryStorage`, shared by the whole
   process, ephemeral across process restarts.
+* `PANEL_STORAGE=local` (or `file`): native `LocalFileStorage` rooted at
+  `PANEL_STORAGE_DIR` (default `~/.ron/storage`) with SQLite FTS5
+  `Bm25SearchStrategy` for zero-cost local persistence and full-text ranking.
 * `PANEL_STORAGE=huggingface` (production authority): `HF_BUCKET_ID=namespace/bucket-name`
   and `HF_TOKEN` are **required** (`ValueError` otherwise; never a memory fallback).
   The factory calls `ensure_bucket()` — `HfApi.create_bucket(private=True, exist_ok=True)`
