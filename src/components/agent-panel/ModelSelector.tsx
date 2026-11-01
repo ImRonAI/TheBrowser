@@ -245,7 +245,7 @@ export function ModelSelector({ value, provider = '', effort = '', includeEffort
         <ChevronDownIcon aria-hidden="true" className="h-4 w-4 shrink-0" />
       </button>
     </PopoverTrigger>
-    <PopoverContent align="end" sideOffset={8} collisionPadding={12} aria-labelledby={titleId}
+    <PopoverContent align="start" sideOffset={8} collisionPadding={12} aria-labelledby={titleId}
       onOpenAutoFocus={(event) => { event.preventDefault(); heading.current?.focus() }}
       className="z-[100] flex w-[360px] max-w-[calc(100vw-24px)] flex-col overflow-hidden rounded-xl border-surface-200 bg-white p-0 text-ink shadow-xl dark:border-surface-700 dark:bg-surface-900 dark:text-ink-inverse motion-reduce:animate-none"
       style={{ maxHeight: 'min(520px, var(--radix-popover-content-available-height))' }}>

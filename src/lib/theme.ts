@@ -7,9 +7,11 @@
  * - system → `.dark` when the OS prefers dark
  * - glass  → `.glass` (+ `.dark` when the OS prefers dark, so the ink always
  *   contrasts with the native material, which follows the system appearance)
- *   and `.glass-native` when the shell sits on real macOS vibrancy. Without it
- *   (plain browser, Linux, Windows) glass falls back to a painted backdrop so
- *   translucent panes never show a raw desktop behind text.
+ *   and `.glass-native` when the shell sits on a real macOS material (Liquid
+ *   Glass via electron-liquid-glass on macOS 26+, vibrancy before that; see
+ *   electron/window-material.ts). Without it (plain browser, Linux, Windows)
+ *   glass falls back to a painted backdrop so translucent panes never show a
+ *   raw desktop behind text. The CSS lives under "GLASS THEME" in index.css.
  */
 export type ThemeName = 'light' | 'dark' | 'glass' | 'system'
 

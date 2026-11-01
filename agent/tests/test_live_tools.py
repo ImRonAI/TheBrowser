@@ -21,7 +21,9 @@ def test_live_tools_are_native_and_exclude_tools_bidi_cannot_run():
     names = {value.tool_name for value in tools}
     for name in (
         "editor", "shell", "environment", "http_request", "perplexity_search",
-        "search_memories", "list_learned_skills", "use_skill", "search_memory", "add_memory",
+        "brave_answer", "brave_web_search", "brave_news_search", "brave_image_search",
+        "brave_video_search", "brave_local_search", "brave_rich_answer",
+        "list_learned_skills", "use_skill", "search_memory", "add_memory",
     ):
         assert name in names, name
     # think is text-only; ask_user interrupts (unsupported in bidi); tool_catalog and mcp_client

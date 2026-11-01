@@ -1,7 +1,8 @@
 import { useState, useRef, useEffect, useCallback, useMemo, Fragment, type KeyboardEvent } from 'react'
 import { Transition } from '@headlessui/react'
-import { XMarkIcon, PlusIcon, StopIcon, QueueListIcon } from '@heroicons/react/24/outline'
+import { XMarkIcon, PlusIcon, StopIcon, QueueListIcon, LightBulbIcon } from '@heroicons/react/24/outline'
 import { ThreadsList } from './ThreadsList'
+import { MemoryPanel } from './MemoryPanel'
 import { useAgentUi } from '@/context/AgentUiContext'
 import { usePanelAgentStore } from '@/stores/panelAgentStore'
 import { cn } from '@/utils/cn'
@@ -23,11 +24,10 @@ import { ArticleAttachmentCard } from '@/components/interests/ArticleAttachmentC
 import { VoiceAgent } from './VoiceAgent'
 import { Checkpoint, CheckpointIcon, CheckpointTrigger } from '@/components/ai-elements/checkpoint'
 import { PANEL_COMMANDS, parsePanelCommand } from '@/lib/panel-commands'
-import { OubliStage } from './OubliStage'
-import { flashAsking, useMascotStore } from '@/stores/mascotStore'
 import { RepairPanel } from './RepairPanel'
 import { useTextAssist } from '@/hooks/useTextAssist'
 import { TextAssist, handleAssistKey } from '@/components/shared/TextAssist'
+import { RonLogo } from '@/components/shared/RonLogo'
 
 const compactInput = 'w-full rounded-lg border border-surface-200 bg-surface-0 px-2 py-1.5 text-xs dark:border-surface-700 dark:bg-surface-850 focus:outline-none focus:ring-2 focus:ring-indigo-500/30'
 const smallButton = 'rounded-lg border border-surface-200 px-3 py-1.5 text-xs font-medium hover:bg-surface-100 disabled:opacity-50 dark:border-surface-700 dark:hover:bg-surface-800'
@@ -73,6 +73,7 @@ export function AgentConversation({ destination, embedded = false }: { destinati
   const clearSentContexts = useCallback(() => { setSelectedContexts([]) }, [])
   const [commandFeedback, setCommandFeedback] = useState('')
   const [threadsOpen, setThreadsOpen] = useState(false)
+  const [memoryOpen, setMemoryOpen] = useState(false)
   const [commandIndex, setCommandIndex] = useState(0)
   const [commandsDismissed, setCommandsDismissed] = useState(false)
   // Chat and Live are two agents over the same native thread (`session_id`): each restores the
@@ -129,27 +130,7 @@ export function AgentConversation({ destination, embedded = false }: { destinati
     if (followOutput.current) messagesEndRef.current?.scrollIntoView({ behavior: 'instant' })
   }, [messages])
 
-  // Oubli reacts to the text agent: running = processing, an unfinished tool = working, and the
-  // newest reasoning text streams into his thought bubble (deltas only; a new part resets it).
-  const reasoningSeen = useRef<{ key: string; length: number } | null>(null)
-  useEffect(() => {
-    if (destination !== 'panel' || voice) return
-    const mascot = useMascotStore.getState()
-    const last = messages[messages.length - 1]
-    const working = active && (last?.parts.some((part) => part.kind === 'tool' && !part.finished) ?? false)
-    mascot.set({ processing: active, working })
-    const reasoning = last?.role === 'assistant' ? [...last.parts].reverse().find((part) => part.kind === 'reasoning' && !part.discarded) : undefined
-    if (reasoning && reasoning.kind === 'reasoning' && active) {
-      const seen = reasoningSeen.current
-      if (!seen || seen.key !== reasoning.key) { mascot.thought({ kind: 'clear' }); mascot.thought({ kind: 'delta', text: reasoning.text }) }
-      else if (reasoning.text.length > seen.length) mascot.thought({ kind: 'delta', text: reasoning.text.slice(seen.length) })
-      reasoningSeen.current = { key: reasoning.key, length: reasoning.text.length }
-    } else if (!active && reasoningSeen.current) { mascot.thought({ kind: 'settle' }); reasoningSeen.current = null }
-  }, [messages, active, destination, voice])
-  useEffect(() => () => { if (destination === 'panel') useMascotStore.getState().set({ processing: false, working: false }) }, [destination])
-
   const dispatchExternal = useCallback((text: string) => {
-    flashAsking()
     // Native steering applies immediately; no second /chat invocation while running.
     const id = sessionRef.current
     void sendMessage(text).then((sent) => { if (!sent && sessionRef.current === id) setInput((current) => current || text) })
@@ -263,7 +244,6 @@ export function AgentConversation({ destination, embedded = false }: { destinati
     if (unavailable || (active && draft.articles.length > 0)) return
     setCommandFeedback('')
     followOutput.current = true
-    flashAsking()
     void sendMessage(text, 'message', undefined, () => {
       useArticleDraftStore.getState().clearSent(draftKey, input, draft.articles.map((article) => article.id))
     })
@@ -299,13 +279,13 @@ export function AgentConversation({ destination, embedded = false }: { destinati
           enter="transform transition ease-smooth duration-400" enterFrom="translate-x-full" enterTo="translate-x-0"
           leave="transform transition ease-smooth duration-400" leaveFrom="translate-x-0" leaveTo="translate-x-full">
           <section aria-label={AGENT_LABELS[destination]} className="relative ml-auto h-full max-w-full pointer-events-auto transition-all duration-300 ease-in-out" style={{ width: embedded ? '100%' : panelWidth }}>
-            <div className="h-full flex flex-col bg-surface-0 dark:bg-surface-900 text-ink dark:text-ink-inverse border-l border-surface-200 dark:border-surface-800 shadow-[-24px_0_48px_-32px_rgb(26_25_23/0.25)]">
-              <header className="flex-shrink-0 px-4 py-3.5 border-b border-surface-200/80 dark:border-surface-800 bg-surface-0 dark:bg-surface-900">
+            <div className="ron-glass-panel h-full flex flex-col bg-surface-0 dark:bg-surface-900 text-ink dark:text-ink-inverse border-l border-surface-200 dark:border-surface-800 shadow-[-24px_0_48px_-32px_rgb(26_25_23/0.25)]">
+              <header className="flex-shrink-0 px-4 py-3 border-b border-surface-200/80 dark:border-surface-800 bg-surface-0 dark:bg-surface-900">
                 <div className="flex items-center justify-between gap-2">
-                  <div className="flex min-w-0 items-center gap-3">
-                    <div className="w-8 h-8 rounded-lg bg-ink dark:bg-ink-inverse flex items-center justify-center text-surface-0 dark:text-surface-900 font-display text-[17px] italic" aria-hidden>R</div>
-                    <div className="min-w-0"><h2 className="font-sans text-[15px] font-semibold tracking-normal">{AGENT_LABELS[destination]}</h2>
-                      <p role="status" className="text-[11px] text-ink-muted dark:text-ink-inverse-muted">
+                  <div className="flex min-w-0 items-center gap-2.5">
+                    <div className="min-w-0">
+                      <h2 className="whitespace-nowrap font-sans text-[15px] font-semibold tracking-normal">{AGENT_LABELS[destination]}</h2>
+                      <p role="status" className="truncate text-[11px] text-ink-muted dark:text-ink-inverse-muted">
                         {chat.connection === 'loading' ? 'Restoring session…' : chat.connection === 'reconnecting' ? 'Reconnecting to run…' :
                           chat.connection === 'detached' ? 'Disconnected · run may still be active' :
                           active ? runtimeOptions.background ? 'Working · background enabled' : 'Working' :
@@ -313,27 +293,21 @@ export function AgentConversation({ destination, embedded = false }: { destinati
                           status === 'cancelled' ? 'Stopped' : status === 'error' ? 'Run failed' : status === 'completed' ? 'Completed' : 'Ready'}
                       </p>
                     </div>
+                    {chat.browser === 'cloud' && <span role="status" title="This thread's work moved to the cloud browser when the app disconnected; it is not driving this window."
+                      className="shrink-0 rounded-lg border border-amber-300/60 bg-amber-50/80 px-2 py-0.5 text-[11px] font-medium text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">Cloud browser</span>}
                   </div>
                   <div className="flex items-center gap-1">
                     <ModeSelector value={interactionMode} onChange={(next) => void switchMode(next)} />
-
-                    {active && <button onClick={() => void chat.stop()} disabled={chat.controlBusy} className={smallButton} aria-label="Stop agent run"><StopIcon className="inline w-3 h-3 mr-1" />Stop</button>}
+                    {voice && <button onClick={() => setMemoryOpen((open) => !open)} aria-pressed={memoryOpen} className={cn('p-2 rounded-lg hover:bg-surface-100 dark:hover:bg-surface-800', memoryOpen && 'bg-surface-100 dark:bg-surface-800')} title="Memory" aria-label="Memory"><LightBulbIcon className="w-5 h-5" /></button>}
                     <button onClick={() => setThreadsOpen((open) => !open)} aria-pressed={threadsOpen} className={cn('p-2 rounded-lg hover:bg-surface-100 dark:hover:bg-surface-800', threadsOpen && 'bg-surface-100 dark:bg-surface-800')} title="Threads" aria-label="Threads"><QueueListIcon className="w-5 h-5" /></button>
                     <button onClick={() => void handleNewChat()} className="p-2 rounded-lg hover:bg-surface-100 dark:hover:bg-surface-800" title="New chat" aria-label="New chat"><PlusIcon className="w-5 h-5" /></button>
                     {!embedded && <button onClick={closePanel} className="p-2 rounded-lg hover:bg-surface-100 dark:hover:bg-surface-800" title="Close" aria-label="Close agent panel"><XMarkIcon className="w-5 h-5" /></button>}
                   </div>
                 </div>
-                <div className="mt-3 flex min-w-0 items-center gap-1.5">
-                  {voice
-                    ? <p className="min-w-0 flex-1 truncate text-[11px] text-ink-muted dark:text-ink-inverse-muted">Live model, voice and effort are chosen below · Chat model unchanged</p>
-                    : <ModelSelector value={model} provider={provider} effort={effort} includeEffort {...modelCatalogue} disabled={configurationLocked}
-                        onChange={(model, provider, effort) => setSelection({ model, provider, effort })}
-                        onOpen={refreshModels} className="min-w-0 flex-1" />}
-                  {chat.browser === 'cloud' && <span role="status" title="This thread's work moved to the cloud browser when the app disconnected; it is not driving this window."
-                    className="shrink-0 rounded-lg border border-amber-300/60 bg-amber-50/80 px-2 py-1 text-[11px] font-medium text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">Cloud browser</span>}
-                </div>
+                {voice && <p className="mt-2 truncate text-[11px] text-ink-muted dark:text-ink-inverse-muted">Live model, voice and effort are chosen below · Chat model unchanged</p>}
                 {modeNotice && <p role="status" className="mt-2 text-xs text-amber-700 dark:text-amber-300">{modeNotice}</p>}
               </header>
+              {memoryOpen && <MemoryPanel userId={user} onClose={() => setMemoryOpen(false)} />}
               {threadsOpen && <ThreadsList userId={user} destination={destination} currentId={chat.sessionId} onClose={() => setThreadsOpen(false)}
                 onOpen={(id) => { void handleOpenThread(id) }} />}
 
@@ -346,21 +320,21 @@ export function AgentConversation({ destination, embedded = false }: { destinati
                 const element = scrollRef.current
                 if (element) followOutput.current = element.scrollHeight - element.scrollTop - element.clientHeight < 100
               }}>
-                {!messages.length && !active && <div className="h-full min-h-40 flex flex-col items-center justify-center px-6">
-                  <OubliStage pinned className="mb-4" />
-                  <h3 className="text-display-sm font-display font-light text-center mb-2">How can I help?</h3>
-                  <p className="text-body-sm text-ink-muted dark:text-ink-inverse-muted text-center">Browse, search, analyze, and accomplish.</p>
+                {!messages.length && !active && <div className="flex h-full min-h-40 flex-col justify-center px-3">
+                  <div className="mb-3 flex items-center" aria-hidden>
+                    <RonLogo className="-my-8 -ml-1.5 h-auto w-52" alt="" />
+                  </div>
+                  <h3 className="mb-1.5 font-display text-[36px] font-normal leading-tight">How can I help?</h3>
+                  <p className="text-[14px] text-ink-muted dark:text-ink-inverse-muted">Ask about this page, search, or work on a project.</p>
                 </div>}
                 {messages.map((message) => <MessageBubble key={message.id} message={message} status={message.runId === chat.runId ? status : 'completed'} onUiAction={onUiAction} superseded={supersededViews} />)}
                 {(ideState.files.length > 0 || ideState.output) && <details className="rounded-xl border border-surface-200 dark:border-surface-700 p-3">
                   <summary className="cursor-pointer text-xs font-medium">Workspace · files and terminal</summary>
                   <IDE className="mt-3 max-h-[420px]" files={ideState.files} output={ideState.output} isStreaming={active} previewUrl={ideState.previewUrl} title="Workspace" />
                 </details>}
-                {active && <div role="status" className="flex items-center gap-2 text-xs text-ink-muted dark:text-ink-inverse-muted"><span className="h-2 w-2 rounded-full bg-indigo-500 animate-pulse" />Run in progress · send a message to steer</div>}
+                {active && <div role="status" className="flex items-center gap-2 text-xs text-ink-muted dark:text-ink-inverse-muted"><span className="h-2 w-2 rounded-full bg-emerald-500" />Run in progress · send a message to steer</div>}
                 <div ref={messagesEndRef} />
               </div>
-              {/* Oubli peeks out from the panel edge whenever Ron is asked something or is working. */}
-              {(messages.length > 0 || active) && destination === 'panel' && <OubliStage className="-mb-1 shrink-0" />}
 
               {chat.historyIncomplete && <div role="status" className="mx-4 mb-3 rounded-xl border border-amber-200 dark:border-amber-900 bg-amber-50/60 dark:bg-amber-950/20 p-3 text-xs">
                 {active || chat.followPending
@@ -386,11 +360,11 @@ export function AgentConversation({ destination, embedded = false }: { destinati
                 onRollback={() => void chat.repairAction('rollback', chat.repair!.tool)}
                 onDismiss={() => void chat.repairAction('dismiss', chat.repair!.tool)} />}
 
-              <footer className="flex-shrink-0 p-3 border-t border-surface-200/80 dark:border-surface-800 bg-surface-0 dark:bg-surface-900">
+              <footer className="flex-shrink-0 px-4 pb-4 pt-3 border-t border-surface-200/80 dark:border-surface-800 bg-surface-0 dark:bg-surface-900">
                 <div className="max-h-48 overflow-auto">{draft.articles.map((article) => <ArticleAttachmentCard key={article.id} article={article}
                   onRemove={() => useArticleDraftStore.getState().remove(draftKey, article.id)} />)}</div>
                 {active && draft.articles.length > 0 && <p className="mb-2 text-xs text-ink-muted">Your attachments are saved for the next message. Wait for this run to finish or stop it.</p>}
-                <div className={cn('relative rounded-xl border transition-[border-color,box-shadow] bg-surface-0 dark:bg-surface-850 focus-within:border-accent/40 focus-within:shadow-[0_0_0_3px_rgb(169_83_46/0.08)] dark:focus-within:border-accent-light/40', input ? 'border-accent/40 dark:border-accent-light/40 shadow-[0_0_0_3px_rgb(169_83_46/0.08)]' : 'border-surface-200 dark:border-surface-700 shadow-[0_1px_2px_rgb(26_25_23/0.04)]')}>
+                <div className={cn('relative rounded-2xl border px-4 pt-3.5 pb-3 transition-all duration-200 bg-surface-0 dark:bg-surface-850/90 focus-within:border-accent/50 focus-within:shadow-[0_0_0_3px_rgb(169_83_46/0.12),0_8px_24px_-6px_rgb(26_25_23/0.12)] dark:focus-within:border-accent-light/50', input ? 'border-accent/50 dark:border-accent-light/50 shadow-[0_0_0_3px_rgb(169_83_46/0.12),0_8px_24px_-6px_rgb(26_25_23/0.12)]' : 'border-surface-200 dark:border-surface-700/80 shadow-[0_4px_20px_-4px_rgb(26_25_23/0.06)] dark:shadow-[0_8px_24px_-6px_rgb(0_0_0/0.35)]')}>
                   {!commandSuggestions.length && <TextAssist assist={assist} placement="above"
                     onPick={(text) => { setInput(text); assist.dismiss(); focusComposer(inputRef.current) }}
                     onCorrect={(text) => { setInput(text); assist.dismiss(); focusComposer(inputRef.current) }} />}
@@ -402,18 +376,29 @@ export function AgentConversation({ destination, embedded = false }: { destinati
                       <span className="font-semibold">{command.usage}</span><span className="mt-1 block text-ink-muted dark:text-ink-inverse-muted">{command.description}</span>
                     </button>)}
                   </div>}
-                  <SelectedContexts contexts={selectedContexts} onRemove={(id) => setSelectedContexts((previous) => previous.filter((item) => item.id !== id))} className="px-3 pt-3" />
-                  <div className="flex items-center gap-2 px-3 py-2">
-                    {!active && <ContextPicker selectedContexts={selectedContexts} onContextsChange={setSelectedContexts} />}
-                    <textarea ref={inputRef} value={input} onChange={(event) => { setInput(event.target.value); setCommandIndex(0); setCommandsDismissed(false); setCommandFeedback('') }} onKeyDown={handleKeyDown}
-                      aria-label={active ? 'Steer the active run' : 'Message Ron'} placeholder={paused ? 'Resume the run above…' : active ? 'Guide the active run…' : 'Ask anything… / for commands'}
-                      disabled={paused || chat.recoveryRequired} rows={1} className="flex-1 min-w-0 resize-none py-1.5 bg-transparent text-body-md placeholder:text-ink-muted/60 outline-none focus-visible:ring-0 focus-visible:ring-offset-0 min-h-[32px] max-h-32" />
-                    <button onClick={handleSend} disabled={!input.trim() || unavailable || (active && draft.articles.length > 0)} aria-label={active ? 'Send steering' : 'Send message'}
-                      className="shrink-0 rounded-lg bg-ink dark:bg-ink-inverse text-white dark:text-surface-900 px-3 h-8 text-xs font-semibold disabled:opacity-30">{active ? 'Steer' : 'Send'}</button>
+                  <SelectedContexts contexts={selectedContexts} onRemove={(id) => setSelectedContexts((previous) => previous.filter((item) => item.id !== id))} className="pb-2.5" />
+                  <textarea ref={inputRef} value={input} onChange={(event) => { setInput(event.target.value); setCommandIndex(0); setCommandsDismissed(false); setCommandFeedback('') }} onKeyDown={handleKeyDown}
+                    aria-label={active ? 'Steer the active run' : 'Message Ron'} placeholder={paused ? 'Resume the run above…' : active ? 'Guide the active run…' : 'Ask anything… / for commands'}
+                    disabled={paused || chat.recoveryRequired} rows={2} className="w-full min-w-0 resize-none bg-transparent py-1 text-[14px] leading-relaxed placeholder:text-ink-muted/60 outline-none focus-visible:ring-0 focus-visible:ring-offset-0 min-h-[52px] max-h-40" />
+                  <div className="mt-2.5 flex items-center justify-between gap-2 pt-2 border-t border-surface-200/60 dark:border-surface-700/60">
+                    <div className="flex min-w-0 flex-1 items-center gap-1.5">
+                      {!active && <ContextPicker selectedContexts={selectedContexts} onContextsChange={setSelectedContexts} />}
+                      <button type="button" onClick={() => setMemoryOpen((open) => !open)} aria-pressed={memoryOpen}
+                        className={cn('inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-ink-muted transition-colors hover:bg-surface-100 hover:text-ink dark:text-ink-inverse-muted dark:hover:bg-surface-800 dark:hover:text-ink-inverse', memoryOpen && 'bg-surface-100 text-ink dark:bg-surface-800 dark:text-ink-inverse')}
+                        title="Memory" aria-label="Memory"><LightBulbIcon className="w-4 h-4" /></button>
+                      <ModelSelector value={model} provider={provider} effort={effort} includeEffort {...modelCatalogue} disabled={configurationLocked}
+                        onChange={(model, provider, effort) => setSelection({ model, provider, effort })}
+                        onOpen={refreshModels} className="h-8 min-w-0 max-w-[220px] rounded-lg border-surface-200/70 bg-surface-50/80 px-2.5 text-[11px] dark:border-surface-700/70 dark:bg-surface-800/70" />
+                    </div>
+                    <div className="flex shrink-0 items-center gap-1.5">
+                      {active && <button type="button" onClick={() => void chat.stop()} disabled={chat.controlBusy} className={smallButton} aria-label="Stop agent run"><StopIcon className="inline w-3 h-3 mr-1" />Stop</button>}
+                      <button type="button" onClick={handleSend} disabled={!input.trim() || unavailable || (active && draft.articles.length > 0)} aria-label={active ? 'Send steering' : 'Send message'}
+                        className="shrink-0 rounded-xl bg-ink dark:bg-ink-inverse text-white dark:text-surface-900 px-3.5 h-8 text-xs font-semibold shadow-sm transition-all hover:opacity-90 disabled:opacity-30">{active ? 'Steer' : 'Send'}</button>
+                    </div>
                   </div>
                 </div>
                 {commandFeedback && <p role="status" className="mt-2 text-xs text-ink-muted dark:text-ink-inverse-muted">{commandFeedback}</p>}
-                <p className="text-center text-[10px] text-ink-muted dark:text-ink-inverse-muted mt-2">{active ? 'Steering updates the current run' : '↵ to send · Shift + ↵ for a new line'}</p>
+                <p className="text-center text-[10px] text-ink-muted dark:text-ink-inverse-muted mt-2.5">{active ? 'Steering updates the current run' : '↵ to send · Shift + ↵ for a new line'}</p>
               </footer>
               </>}
             </div>
@@ -496,8 +481,8 @@ export function InterruptForm({ interrupts, onSubmit }: {
 type UiActionHandler = (viewId: string, action: unknown, payload: unknown) => void
 
 function MessageBubble({ message, status, onUiAction, superseded }: { message: PanelMessage; status: RunStatus; onUiAction: UiActionHandler; superseded: ReadonlySet<string> }) {
-  // Provider-neutral: nested output of a chain tool (`think` for Perplexity, the `recall`
-  // memory subagent everywhere) renders as a chain-of-thought block; every other part renders flat.
+  // Nested output of a chain tool (`think` for Perplexity, the tool fixer's `repair`) renders as a
+  // chain-of-thought block; every other part renders flat.
   const items = useMemo(() => groupThinkParts(message.parts, status === 'running'), [message.parts, status])
   return <Message from={message.role}>
     <MessageContent variant={message.role === 'assistant' ? 'flat' : 'contained'} className={cn('min-w-0 w-full', message.role === 'user' && 'group-[.is-user]:bg-surface-100 group-[.is-user]:text-ink dark:group-[.is-user]:bg-surface-800 dark:group-[.is-user]:text-ink-inverse')}>
@@ -508,19 +493,18 @@ function MessageBubble({ message, status, onUiAction, superseded }: { message: P
   </Message>
 }
 
-/** Chain-tool labels: the `think` child reasons over a thought; the `recall` memory subagent searches memory for a task. */
+/** Chain-tool labels: the `think` child reasons over a thought; `repair` is the tool fixer's run. */
 const CHAIN_LABELS: Record<string, { streaming: string; title: string; input: string; output: string }> = {
   think: { streaming: 'Thinking…', title: 'Chain of Thought', input: 'Thought', output: 'Conclusion' },
-  recall: { streaming: 'Recalling…', title: 'Memory', input: 'Task', output: 'Recalled' },
   repair: { streaming: 'Repairing…', title: 'Repair', input: 'Tool', output: 'Result' },
 }
 
-/** Interleaved reasoning + tool use from a chain tool's child agent (`think`, `recall`), as AI Elements chain of thought. */
+/** Interleaved reasoning + tool use from a chain tool's child agent (`think`, `repair`), as AI Elements chain of thought. */
 function ThinkChain({ tool, steps, running }: { tool: ToolPart; steps: ThinkStep[]; running: boolean }) {
   const labels = CHAIN_LABELS[tool.name] ?? CHAIN_LABELS.think
   const streaming = running && !tool.finished
-  const input = tool.input as { thought?: unknown; task?: unknown; tool?: unknown } | undefined
-  const thought = displayValue(tool.name === 'recall' ? input?.task : tool.name === 'repair' ? input?.tool : input?.thought)
+  const input = tool.input as { thought?: unknown; tool?: unknown } | undefined
+  const thought = displayValue(tool.name === 'repair' ? input?.tool : input?.thought)
   const conclusion = tool.finished ? displayValue(Array.isArray(tool.output) ? (tool.output as { text?: unknown }[]).map((b) => b.text ?? '').join('') : tool.output) : ''
   const failed = tool.status === 'error' || tool.status === 'failed'
   return <ChainOfThought className="my-3 space-y-2 text-xs" defaultOpen={streaming} isStreaming={streaming}>

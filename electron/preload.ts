@@ -33,6 +33,13 @@ const electronAPI = {
     oauthRedirect: (): Promise<string> => ipcRenderer.invoke('auth:oauth-redirect'),
   },
 
+  media: {
+    ensureAccess: (kind: 'microphone' | 'camera'): Promise<{ status: string; granted: boolean }> =>
+      ipcRenderer.invoke('media:ensure-access', kind),
+    openSettings: (kind: 'microphone' | 'camera'): Promise<boolean> =>
+      ipcRenderer.invoke('media:open-settings', kind),
+  },
+
   agent: {
     startStream: (streamId: string, request: StreamRequest) =>
       ipcRenderer.invoke('agent:start-stream', streamId, request),

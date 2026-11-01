@@ -659,8 +659,8 @@ guests cannot save. `/music/*` is loopback-only, signed-in only, and binds the p
 `agent_id` to the caller's `user_id` (Projects identity): `control`
 (deck Play/Pause/Stop/Reset through the same `playback_control`), `take`, `take/discard`,
 `save`, `songs`, `DELETE songs/{id}`. The renderer plays the stream in `useMusicPlayback`
-(48 kHz stereo `AudioContext`, 2 s lead, analyser tap for the mascot) and renders
-`MusicDeck` under Oubli with AI Elements `Button`/`ButtonGroup` transport and the
+(48 kHz stereo `AudioContext`, 2 s lead, analyser tap) and renders
+`MusicDeck` with AI Elements `Button`/`ButtonGroup` transport and the
 `AudioPlayer` composition for saved songs. Saved songs can be grouped into **playlists or albums**
 (`013_playlists.sql`; `/music/playlists*`; agent tools `music_library`, `music_playlists`,
 `music_playlist_create|add|remove|reorder|delete`) and played continuously in order or shuffled with

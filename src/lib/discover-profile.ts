@@ -29,6 +29,8 @@ export interface FeedRequestBody {
 
 /** Server-side `FeedRequest.sections` max_length. */
 export const MAX_FEED_SECTIONS = 12
+/** Teams carried to the feed: one sports card each, four across the "At a glance" row on desktop. */
+export const MAX_TEAMS = 4
 export const DEFAULT_TOPICS = ['Technology', 'AI', 'Design']
 export const DEFAULT_PROFILE: DiscoverProfile = {
   topics: DEFAULT_TOPICS, location: null, country: 'US', teams: [], stocks: [], crypto: [], currencies: [],
@@ -132,7 +134,7 @@ export function buildProfile(answer: AnswerLookup): DiscoverProfile {
   return {
     topics: topics.length ? topics : DEFAULT_TOPICS,
     ...parseHome(answer('home')),
-    teams: parseList(answer('teams'), 3),
+    teams: parseList(answer('teams'), MAX_TEAMS),
     ...parseMarkets(answer('markets')),
     media: parseMedia(answer('media')),
   }

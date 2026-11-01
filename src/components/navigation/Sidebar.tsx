@@ -275,7 +275,7 @@ export function Sidebar() {
       initial={false}
       animate={{ width: isSidebarOpen ? SIDEBAR_WIDTH : 0 }}
       transition={{ duration: reduced ? 0 : 0.28, ease: EASE }}
-      className="relative z-[95] h-full flex-shrink-0 overflow-hidden ron-chrome"
+      className="ron-sidebar relative z-[95] h-full flex-shrink-0 overflow-hidden ron-chrome"
     >
       <div
         className="flex h-full flex-col border-r border-surface-200/80 dark:border-surface-800"

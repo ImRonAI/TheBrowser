@@ -265,8 +265,9 @@ class IssueAgentRuntime:
                     lambda _: self.model_factory(agent_record["provider"], agent_record["model_id"], hosted_tools=False),
                     additional_tools=assigned)
                 from agent.api.core.a2a_tools import a2a_tools
+                from agent.api.core.brave_tools import brave_tools
                 agent = config_to_agent({"name": "Task Ron", "model": agent_record["model_id"], "prompt": prompt, "tools": []},
-                    model=model, tools=[*assigned, *learned, *a2a_tools()], description="Private canonical issue assistant",
+                    model=model, tools=[*assigned, *brave_tools(), *learned, *a2a_tools()], description="Private canonical issue assistant",
                     memory_manager={"stores": [get_teaching_service().get_memory_store(service.identity.user_id, agent_scope)],
                                     "search_tool_config": True, "injection": True},
                     agent_id=agent_record["id"], session_manager=session, callback_handler=None,

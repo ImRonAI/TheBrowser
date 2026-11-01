@@ -37,6 +37,7 @@ from agent.api.core.config import (
     RON_SEARCH_DEFAULT_LEVEL,
     RON_SEARCH_SHOPPING_DOMAINS,
     RON_SEARCH_SHOPPING_MODEL,
+    perplexity_agent_api_enabled,
 )
 from agent.api.core.search_agent import (
     SEARCH_LEVELS,
@@ -67,10 +68,14 @@ def _frame(event: str, data: dict[str, Any]) -> str:
     return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
 
 
+def _perplexity_configured() -> bool:
+    return bool(PERPLEXITY_API_KEY and perplexity_agent_api_enabled())
+
+
 @router.get("/search/status")
 async def search_status(request: Request):
     return {
-        "configured": {"brave": get_brave_client(request).configured, "perplexity": bool(PERPLEXITY_API_KEY)},
+        "configured": {"brave": get_brave_client(request).configured, "perplexity": _perplexity_configured()},
         "levels": list(SEARCH_LEVELS),
         "default_level": RON_SEARCH_DEFAULT_LEVEL,
         "models": {"agent": RON_SEARCH_AGENT_MODEL, "shopping": RON_SEARCH_SHOPPING_MODEL},
@@ -85,7 +90,7 @@ async def search_stream(body: SearchRequest, request: Request) -> StreamingRespo
         raise HTTPException(422, {"code": "invalid_level", "message": f"Unknown search level: {level}",
                                   "levels": list(SEARCH_LEVELS)})
     client = get_brave_client(request)
-    if not client.configured and not PERPLEXITY_API_KEY:
+    if not client.configured and not _perplexity_configured():
         raise HTTPException(503, {"code": "not_configured",
                                   "message": "Neither BRAVE_SEARCH_API_KEY nor PERPLEXITY_API_KEY is set"})
 
@@ -116,11 +121,20 @@ async def search_stream(body: SearchRequest, request: Request) -> StreamingRespo
             await queue.put(("source_error", {"source": prefix, "code": error.code,
                                               "message": str(error), "status": error.status}))
 
+    async def emit_disabled(prefix: str) -> None:
+        await queue.put(("source_error", {"source": prefix, "code": "disabled",
+                                          "message": "Perplexity Agent API is temporarily disabled", "status": None}))
+
     async def run_all() -> None:
-        tasks = [asyncio.create_task(run_brave()),
-                 asyncio.create_task(run_agent("agent", build_agent_request(body.q, level)))]
-        if body.shopping:
-            tasks.append(asyncio.create_task(run_agent("shopping", build_shopping_request(body.q))))
+        tasks = [asyncio.create_task(run_brave())]
+        if perplexity_agent_api_enabled():
+            tasks.append(asyncio.create_task(run_agent("agent", build_agent_request(body.q, level))))
+            if body.shopping:
+                tasks.append(asyncio.create_task(run_agent("shopping", build_shopping_request(body.q))))
+        else:
+            tasks.append(asyncio.create_task(emit_disabled("agent")))
+            if body.shopping:
+                tasks.append(asyncio.create_task(emit_disabled("shopping")))
         # return_exceptions: an unexpected failure in one producer must still let the
         # terminal None reach the queue so the stream always closes with `done`.
         results = await asyncio.gather(*tasks, return_exceptions=True)

@@ -727,9 +727,166 @@
    RON 2026 — Chrome primitives
    ============================================ */
 
-/* The browser frame: one warm surface shared by toolbar, tab strip and sidebar. */
+/* The browser frame: one warm surface shared by toolbar, tab strip and sidebar.
+   Opaque in Light/Dark/System; the Glass theme lowers --ron-chrome-alpha. */
 .ron-chrome {
-  background-color: hsl(var(--ron-chrome));
+  background-color: hsl(var(--ron-chrome) / var(--ron-chrome-alpha, 1));
+}
+
+/* ============================================
+   GLASS THEME — a translucent shell over a real material
+   --------------------------------------------
+   html.glass         Glass is selected (ink follows the OS: + .dark when dark)
+   html.glass-native  the Electron shell on macOS mounted a native material behind
+                      the window (Liquid Glass via electron-liquid-glass on macOS 26+,
+                      vibrancy before that) — see electron/window-material.ts.
+
+   Rules (Apple HIG, Materials / Liquid Glass):
+   - The material lives on the navigation/control layer (toolbar, tab strip,
+     sidebar, floating panels and menus). Content stays legible: Ron's pages get
+     a tinted, see-through content layer; websites (native WebContentsViews)
+     stay opaque.
+   - The shell itself never uses CSS backdrop-filter: Chromium can only blur
+     pixels inside this renderer, never the desktop — the native view does that.
+     backdrop-filter is used only on surfaces that float over renderer content
+     (menus, agent panel), and on a ::before so it never becomes a containing
+     block for position:fixed descendants.
+   - Reduce Transparency and Increase Contrast make everything (near) opaque.
+   ============================================ */
+html.glass {
+  --ron-glass-tint: 255 254 252;
+  --ron-glass-chrome-alpha: 0.16;   /* toolbar, tab strip, sidebar */
+  --ron-glass-control-alpha: 0.5;   /* opaque controls inside the chrome */
+  --ron-glass-content-alpha: 0.52;  /* Ron's own pages */
+  --ron-glass-panel-alpha: 0.62;    /* agent panel (floats over content) */
+  --ron-glass-popover-alpha: 0.6;   /* menus, popovers, selects */
+  --ron-glass-blur: 30px;
+  --ron-glass-hairline: rgb(255 255 255 / 0.55);
+  --ron-glass-edge: inset 0 1px 0 0 rgb(255 255 255 / 0.7), inset 0 0 0 1px rgb(255 255 255 / 0.28);
+  --ron-glass-shadow: 0 18px 48px -18px rgb(26 25 23 / 0.32);
+  --ron-chrome-alpha: var(--ron-glass-chrome-alpha);
+}
+
+html.glass.dark {
+  --ron-glass-tint: 19 19 18;
+  --ron-glass-chrome-alpha: 0.22;
+  --ron-glass-control-alpha: 0.45;
+  --ron-glass-content-alpha: 0.5;
+  --ron-glass-panel-alpha: 0.6;
+  --ron-glass-popover-alpha: 0.62;
+  --ron-glass-hairline: rgb(255 255 255 / 0.1);
+  --ron-glass-edge: inset 0 1px 0 0 rgb(255 255 255 / 0.14), inset 0 0 0 1px rgb(255 255 255 / 0.07);
+  --ron-glass-shadow: 0 18px 48px -18px rgb(0 0 0 / 0.6);
+}
+
+/* Native material: let the window show through the document. */
+html.glass-native,
+html.glass-native body {
+  background: transparent;
+}
+
+/* No native material (plain browser preview, Linux, Windows): paint a soft,
+   already-blurred backdrop so translucent panes never sit on a raw desktop. */
+html.glass:not(.glass-native) body {
+  background:
+    radial-gradient(1100px 760px at 10% 6%, rgb(214 130 90 / 0.38), transparent 62%),
+    radial-gradient(1000px 720px at 92% 94%, rgb(74 111 165 / 0.32), transparent 60%),
+    linear-gradient(160deg, #ECE6DE 0%, #D8DDE5 100%);
+}
+
+html.glass.dark:not(.glass-native) body {
+  background:
+    radial-gradient(1100px 760px at 10% 6%, rgb(169 83 46 / 0.32), transparent 62%),
+    radial-gradient(1000px 720px at 92% 94%, rgb(74 111 165 / 0.26), transparent 60%),
+    linear-gradient(160deg, #1D1C1A 0%, #12151A 100%);
+}
+
+/* Chrome hairlines: light refraction edges instead of opaque rules. */
+html.glass .ron-toolbar,
+html.glass .ron-sidebar > * {
+  border-color: var(--ron-glass-hairline);
+}
+
+/* Opaque controls in the chrome (Ask Ron button, active tab, focused search)
+   become glass capsules. */
+html.glass:not(.dark) :is(.ron-toolbar, .ron-sidebar) [class~="bg-surface-0"],
+html.glass.dark :is(.ron-toolbar, .ron-sidebar) :is([class~="dark:bg-surface-800"], [class~="dark:bg-surface-850"]) {
+  background-color: rgb(var(--ron-glass-tint) / var(--ron-glass-control-alpha));
+}
+
+/* Content layer: Ron's pages tint the material instead of hiding it. Nested
+   surfaces stack (page + card ≈ 0.77), which keeps text-heavy cards legible.
+   :where() keeps these at (0,3,1) so the panel rule below can win on order. */
+html.glass .ron-content {
+  background-color: transparent;
+}
+
+html.glass:not(.dark) .ron-content :where([class~="bg-surface-0"]),
+html.glass.dark .ron-content :where([class~="dark:bg-surface-900"]) {
+  background-color: rgb(var(--ron-glass-tint) / var(--ron-glass-content-alpha));
+}
+
+/* Floating panel (agent panel): frosted material over whatever is behind it.
+   Surfaces inside it (header, inputs) keep the content tint on top. */
+html.glass .ron-content .ron-glass-panel,
+html.glass .ron-glass-panel {
+  position: relative;
+  isolation: isolate;
+  background-color: transparent;
+  border-color: var(--ron-glass-hairline);
+}
+
+html.glass .ron-glass-panel::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-color: rgb(var(--ron-glass-tint) / var(--ron-glass-panel-alpha));
+  box-shadow: var(--ron-glass-edge);
+  -webkit-backdrop-filter: blur(var(--ron-glass-blur)) saturate(180%);
+  backdrop-filter: blur(var(--ron-glass-blur)) saturate(180%);
+}
+
+/* Menus, popovers, selects, hover cards (shadcn `bg-popover`) and Ron popovers. */
+html.glass [class~="bg-popover"],
+html.glass .ron-popover {
+  background-color: rgb(var(--ron-glass-tint) / var(--ron-glass-popover-alpha));
+  border-color: var(--ron-glass-hairline);
+  box-shadow: var(--ron-glass-edge), var(--ron-glass-shadow);
+  -webkit-backdrop-filter: blur(var(--ron-glass-blur)) saturate(180%);
+  backdrop-filter: blur(var(--ron-glass-blur)) saturate(180%);
+}
+
+/* Accessibility: System Settings › Accessibility › Display. */
+@media (prefers-contrast: more) {
+  html.glass {
+    --ron-glass-chrome-alpha: 0.7;
+    --ron-glass-control-alpha: 0.85;
+    --ron-glass-content-alpha: 0.88;
+    --ron-glass-panel-alpha: 0.9;
+    --ron-glass-popover-alpha: 0.92;
+    --ron-glass-hairline: rgb(26 25 23 / 0.35);
+  }
+  html.glass.dark {
+    --ron-glass-hairline: rgb(243 241 237 / 0.35);
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  html.glass {
+    --ron-glass-chrome-alpha: 1;
+    --ron-glass-control-alpha: 1;
+    --ron-glass-content-alpha: 1;
+    --ron-glass-panel-alpha: 1;
+    --ron-glass-popover-alpha: 1;
+  }
+  html.glass .ron-glass-panel::before,
+  html.glass [class~="bg-popover"],
+  html.glass .ron-popover {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
 }
 
 /* Keyboard hint chips (⌘K, ⌘J) */

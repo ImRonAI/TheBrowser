@@ -8,7 +8,7 @@ import { useInterestsStore } from '@/stores/interestsStore'
 import { useTabStore } from '@/stores/tabStore'
 import { failedSections, formatRelative, richAnswers, sectionsToStoryGroups } from '@/lib/discover-feed'
 import { RichAnswerCard } from '@/components/home/RichAnswerCard'
-import { StoryCard } from '@/components/home/StoryCard'
+import { StoryCard, STORY_CARD_HEIGHT, type StoryCardSize } from '@/components/home/StoryCard'
 import { FavoriteLinks } from '@/components/home/FavoriteLinks'
 import { useNavigationStore } from '@/stores/navigationStore'
 import { KanbanBoard, CalendarView } from '@/components/board'
@@ -142,19 +142,22 @@ function DiscoverContent() {
       </div>
     </header>
     <FavoriteLinks />
-    {answers.length > 0 && <section aria-label="At a glance" className="mb-10 flex gap-4 overflow-x-auto pb-2 scrollbar-thin">{answers.map((answer, index) => <RichAnswerCard key={`${answer.subtype}-${index}`} answer={answer} />)}</section>}
+    {/* At-a-glance cards fill the full content width: four across on desktop, every card stretched to the row's height. */}
+    {answers.length > 0 && <section aria-label="At a glance" className="mb-10 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">{answers.map((answer, index) => <RichAnswerCard key={`${answer.subtype}-${index}`} answer={answer} />)}</section>}
     {failed.length > 0 && <p className="mb-6 text-[11px] text-ink-muted dark:text-ink-inverse-muted">Couldn’t load {failed.map((section) => `${section.q || section.kind}${section.error?.code === 'not_in_plan' ? ' (not in plan)' : ''}`).join(', ')}.</p>}
     <section aria-label="Stories by interest" className="grid grid-cols-1 gap-x-6 gap-y-10 md:grid-cols-2 xl:grid-cols-3" onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)} onFocusCapture={() => setFocused(true)} onBlurCapture={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) setFocused(false) }}>
       {groups.map((group, slot) => {
         const story = group[at(slot)]
         const featured = slot === 0
+        // At xl the hero spans columns 1–2, so slot 1 shares its row: give it the hero's height instead of leaving a half-empty cell.
+        const size: StoryCardSize = featured ? 'featured' : slot === 1 ? 'companion' : 'compact'
         const custom: SwapCustom = { name: swaps[slot]?.name ?? 'fall', direction: swaps[slot]?.direction ?? 1, reducedMotion: Boolean(reducedMotion) }
         return <div key={group[0].topic} className={cn('[perspective:1200px]', featured && 'md:col-span-2 xl:col-span-2')}>
-          <div className={cn('relative', featured ? 'h-[268px]' : 'h-[136px]')}>
+          <div className={cn('relative', STORY_CARD_HEIGHT[size])}>
             <AnimatePresence mode="wait" initial={false} custom={custom}>
               <motion.div key={story.url} custom={custom} variants={swapVariants} initial="initial" animate="animate" exit="exit"
                 style={{ transformStyle: 'preserve-3d' }} data-swap-animation={custom.name} data-swap-direction={custom.direction} className="h-full will-change-transform">
-                <StoryCard story={story} featured={featured} tilt={cardTilt(story.url)} hue={stickerHue(group[0].topic)} onRead={() => open(story)} />
+                <StoryCard story={story} featured={featured} size={size} tilt={cardTilt(story.url)} hue={stickerHue(group[0].topic)} onRead={() => open(story)} />
               </motion.div>
             </AnimatePresence>
           </div>

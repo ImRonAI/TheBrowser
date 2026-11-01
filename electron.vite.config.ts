@@ -8,7 +8,8 @@ export default defineConfig({
     build: {
       outDir: 'dist/electron',
       rollupOptions: {
-        external: ['electron', 'electron-playwright-mcp'],
+        // electron-liquid-glass is a native (N-API) optional dependency: never bundle it.
+        external: ['electron', 'electron-playwright-mcp', 'electron-liquid-glass'],
         input: {
           index: resolve(__dirname, 'electron/main.ts')
         }

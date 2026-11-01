@@ -184,8 +184,9 @@ def test_native_a2a_durable_restart_task_and_user_isolation(monkeypatch):
         assert any('snapshot_latest' in key for _, key in db.blobs)
         assert any(key.startswith('a2a/') for _, key in db.blobs)
         from agent.api.core.a2a_tools import A2A_TOOL_NAMES
-        # Every Ron agent also carries the native A2A client tools.
-        assert {t['name'] for t in models[0].calls[0]['tools']} == ISSUE_AGENT_TOOLS | set(A2A_TOOL_NAMES)
+        from agent.api.core.brave_tools import BRAVE_TOOL_NAMES
+        # Every Ron agent also carries the native Brave research tools and A2A client tools.
+        assert {t['name'] for t in models[0].calls[0]['tools']} == ISSUE_AGENT_TOOLS | set(BRAVE_TOOL_NAMES) | set(A2A_TOOL_NAMES)
         await runtime.shutdown()
 
         restarted = IssueAgentRuntime(model_factory)

@@ -18,9 +18,25 @@ const KICKER_SWATCH: Record<StickerHue, string> = {
   violet: 'bg-[#86768F]',
 }
 
+/**
+ * `featured`: the wide hero (image left, big headline). `compact`: the standard 136px row card.
+ * `companion`: the slot that shares the hero's grid row at `xl` — compact below `xl`, and a
+ * 268px portrait card (image on top) from `xl` up so the two cards finish on the same line.
+ */
+export type StoryCardSize = 'featured' | 'companion' | 'compact'
+
+/** Slot-wrapper heights; StoryCard mirrors them so the swap animation and the card agree. */
+export const STORY_CARD_HEIGHT: Record<StoryCardSize, string> = {
+  featured: 'h-[268px]',
+  companion: 'h-[136px] xl:h-[268px]',
+  compact: 'h-[136px]',
+}
+
 export interface StoryCardProps {
   story: Story
   featured: boolean
+  /** Defaults to `featured ? 'featured' : 'compact'`. */
+  size?: StoryCardSize
   onRead: () => void
   /** Deterministic resting tilt in degrees; the caller derives it via `cardTilt(story.url)`. Kept as data; cards rest level. */
   tilt: number
@@ -28,12 +44,13 @@ export interface StoryCardProps {
   hue: StickerHue
 }
 
-export function StoryCard({ story, featured, onRead, tilt, hue }: StoryCardProps) {
+export function StoryCard({ story, featured, size = featured ? 'featured' : 'compact', onRead, tilt, hue }: StoryCardProps) {
   const reduced = useReducedMotion() ?? false
   const [imageBroken, setImageBroken] = useState(false)
   const [faviconBroken, setFaviconBroken] = useState(false)
   const showImage = Boolean(story.thumbnail) && !imageBroken
   const showFavicon = Boolean(story.favicon) && !faviconBroken
+  const companion = size === 'companion'
 
   return (
     <motion.div
@@ -50,13 +67,15 @@ export function StoryCard({ story, featured, onRead, tilt, hue }: StoryCardProps
           'group relative flex w-full items-stretch gap-4 rounded-xl border p-3 text-left transition-[border-color,box-shadow] duration-300',
           'border-surface-200/80 bg-surface-0 hover:border-surface-300 hover:shadow-[0_10px_28px_-14px_rgb(26_25_23/0.22)]',
           'dark:border-surface-800 dark:bg-surface-900 dark:hover:border-surface-700 dark:hover:shadow-[0_10px_28px_-14px_rgb(0_0_0/0.6)]',
-          featured ? 'h-[268px]' : 'h-[136px]',
+          STORY_CARD_HEIGHT[size],
+          companion && 'xl:flex-col xl:gap-3',
         )}
       >
         <div
           className={cn(
             'relative shrink-0 overflow-hidden rounded-lg bg-surface-100 dark:bg-surface-800',
             featured ? 'w-[46%]' : 'w-[112px]',
+            companion && 'xl:h-[108px] xl:w-full',
           )}
         >
           {showImage ? (
@@ -88,6 +107,7 @@ export function StoryCard({ story, featured, onRead, tilt, hue }: StoryCardProps
             className={cn(
               'mt-1.5 font-display font-normal leading-[1.14] tracking-[-0.01em] text-ink dark:text-ink-inverse',
               featured ? 'line-clamp-3 text-[1.75rem] lg:text-[1.95rem]' : 'line-clamp-2 text-[16.5px]',
+              companion && 'xl:text-[17.5px]',
             )}
           >
             {story.title}
@@ -97,6 +117,7 @@ export function StoryCard({ story, featured, onRead, tilt, hue }: StoryCardProps
               className={cn(
                 'mt-1.5 text-[12.5px] leading-relaxed text-ink-muted dark:text-ink-inverse-muted',
                 featured ? 'line-clamp-3' : 'line-clamp-1',
+                companion && 'xl:line-clamp-1',
               )}
             >
               {story.description}

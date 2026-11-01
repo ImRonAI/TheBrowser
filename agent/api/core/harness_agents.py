@@ -80,6 +80,7 @@ def build_specialist(config: dict[str, Any], owner_id: str, *, connect_mcp: bool
     """``create_harness`` from a stored portable config (see the module docstring for what Ron adds)."""
     from agent.api.core import config as app_config
     from agent.api.core.a2a_tools import a2a_tools
+    from agent.api.core.brave_tools import brave_tools
     from agent.api.core.panel_agent import PROJECT_TOOLS_DIR, PROVIDERS, build_model
     from agent.api.core.panel_browser import BROWSERS, browser_client_factory, server_name
 
@@ -94,7 +95,10 @@ def build_specialist(config: dict[str, Any], owner_id: str, *, connect_mcp: bool
     if provider in PROVIDERS and model_id and not config.get("modelModule"):
         kwargs["model"] = build_model(provider, model_id)  # type: ignore[arg-type]
     clients = [browser_client_factory(browsers[name])() for name in servers if name in browsers] if connect_mcp else []
-    kwargs["tools"] = [*kwargs.get("tools", []), *clients, *a2a_tools()]
+    existing = list(kwargs.get("tools", []))
+    seen_names = {getattr(t, "tool_name", None) for t in existing if getattr(t, "tool_name", None)}
+    extra_brave = [t for t in brave_tools() if t.tool_name not in seen_names]
+    kwargs["tools"] = [*existing, *clients, *extra_brave, *a2a_tools()]
     return harness_factory(callback_handler=None, **kwargs)
 
 

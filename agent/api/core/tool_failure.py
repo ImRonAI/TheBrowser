@@ -22,8 +22,9 @@ logger = logging.getLogger(__name__)
 
 FAILURE_STATE_KEY = "panel.tool_failure"
 
-#: Guidance phases written by :func:`observe_tool` / :func:`note_repair`.
-PHASES = ("retry", "investigating", "approval", "confirm", "done", "failed", "blocked", "declined")
+#: Guidance phases written by :func:`observe_tool` / :func:`note_repair`. ``rejected``: the call
+#: never reached the tool body (input schema failure) — the agent corrects its call; no repair.
+PHASES = ("retry", "investigating", "approval", "confirm", "done", "failed", "blocked", "declined", "rejected")
 
 
 def _input_visible(tool_use: dict[str, Any]) -> bool:
@@ -37,18 +38,31 @@ def _guidance(agent: Any) -> dict[str, Any]:
 
 
 def observe_tool(event: AfterToolCallEvent, outcome: dict[str, Any], *, count: int | None,
-                 escalate: bool = False, side_effecting: bool = False) -> None:
+                 escalate: bool = False, side_effecting: bool = False, rejected: str | None = None) -> None:
     """Record the native hook outcome the context injector reads.
 
-    ``count is None`` means the call did not fail: a success of the tool under repair after an
-    applied revision closes the loop (``confirm`` -> ``done``). A failure records the error and
-    the phase: ``retry`` when the agent may safely call the tool once more with reviewed
-    parameters (idempotent tool, parameters visible, below the threshold), else
-    ``investigating`` — the trigger has started the background fixer.
+    ``count is None`` means the call did not count as a tool failure: a success of the tool under
+    repair after an applied revision closes the loop (``confirm`` -> ``done``), and a call the
+    tool's input schema ``rejected`` before the body ran records a ``rejected`` guidance (the
+    agent must correct its arguments; nothing is repaired). A failure records the error and the
+    phase: ``retry`` when the agent may safely call the tool once more with reviewed parameters
+    (idempotent tool, parameters visible, below the threshold), else ``investigating`` — the
+    trigger has started the background fixer.
     """
     name = str(outcome.get("tool_name") or "")
     guide = _guidance(event.agent)
     if count is None:
+        if rejected is not None:
+            # Do not disturb an in-flight repair of this tool: that guidance refers to a revision.
+            if guide.get("tool_name") == name and guide.get("phase") in ("investigating", "approval", "confirm"):
+                return
+            event.agent.state.set(FAILURE_STATE_KEY, {
+                "tool_name": name, "phase": "rejected", "count": 0,
+                "input_visible": _input_visible(dict(event.tool_use)), "side_effecting": side_effecting,
+                "errors": [rejected[:500]], "input": event.tool_use.get("input"),
+                "failing_tool_use_id": outcome.get("toolUseId"),
+            })
+            return
         if outcome.get("status") == "success" and guide.get("phase") == "confirm" and guide.get("tool_name") == name:
             guide["phase"] = "done"
             event.agent.state.set(FAILURE_STATE_KEY, guide)
@@ -105,6 +119,13 @@ def failure_guidance(context: InjectionContext) -> str | None:
     name = record.get("tool_name") or "the tool"
     revision = record.get("revision") or ""
     rev = f" (revision {revision})" if revision else ""
+    if phase == "rejected":
+        return (
+            f"Your last call to {name} was rejected before it ran: {record.get('errors', [''])[-1]}. "
+            f"The tool itself is not broken and no repair was started. Arguments received: "
+            f"{json.dumps(record.get('input'), ensure_ascii=False)}. Call it again with every required "
+            "parameter from its specification filled in from the user's request; do not invent values you do not have."
+        )
     if phase == "retry":
         return (
             f"The tool {name} failed ({record.get('errors', [''])[-1]}). "

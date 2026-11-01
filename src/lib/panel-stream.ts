@@ -510,7 +510,7 @@ export function hydratePanelSession(sessionId: string, value: unknown): PanelSta
   state.historyIncomplete = snapshot.history_incomplete === true || snapshot.replay_status === 'gap'
   state.followPending = snapshot.active === true && state.status !== 'running' && !snapshot.recovery_required
   state.needsReplay = Boolean(state.runId) && (state.status === 'running' || state.sequence < state.latestSequence)
-  state.configurationLocked = true
+  state.configurationLocked = snapshot.configuration_locked !== false
   const selection = record(snapshot.selection)
   state.model = typeof selection.model_id === 'string' ? selection.model_id : undefined
   state.provider = typeof selection.provider === 'string' ? selection.provider : undefined
@@ -686,11 +686,11 @@ export type ThinkStep =
 
 /**
  * Root tools whose child agent events render as a chain of thought: the Perplexity
- * `think` child, the `recall` memory subagent (a strands_harness subagent whose
- * native ToolStreamEvents arrive under node_path=[<its toolUseId>]) and the per-user
- * tool fixer (`repair`, a synthetic root tool `repair:<rev>` fed by the repair service).
+ * `think` child and the per-user tool fixer (`repair`, a synthetic root tool
+ * `repair:<rev>` fed by the repair service), whose events arrive under
+ * node_path=[<its toolUseId>].
  */
-export const CHAIN_TOOLS: ReadonlySet<string> = new Set(['recall', 'think', 'repair'])
+export const CHAIN_TOOLS: ReadonlySet<string> = new Set(['think', 'repair'])
 
 export function isChainTool(part: PanelPart): part is ToolPart {
   return part.kind === 'tool' && part.path.length === 0 && CHAIN_TOOLS.has(part.name)

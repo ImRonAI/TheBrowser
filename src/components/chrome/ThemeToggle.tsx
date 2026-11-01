@@ -31,7 +31,7 @@ const HINTS: Record<ThemeName, string> = {
 /**
  * Appearance menu in the toolbar: Light, Dark, Glass and System. Glass makes the
  * browser shell (sidebar, toolbar, tab strip, panels, Ron's own pages) translucent
- * over a native macOS vibrancy material; websites themselves stay opaque.
+ * over native macOS Liquid Glass (vibrancy before macOS 26); websites stay opaque.
  */
 export function ThemeToggle() {
   const { theme, setTheme } = useTheme()

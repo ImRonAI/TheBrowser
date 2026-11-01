@@ -7,7 +7,7 @@ Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: {
   setItem: (key: string, value: string) => { storage.set(key, value) },
   removeItem: (key: string) => { storage.delete(key) },
 } })
-const { buildFeedRequest, buildProfile, DEFAULT_TOPICS, interestSeeds, MAX_FEED_SECTIONS, parseHome, parseList, parseMarkets, parseMedia } =
+const { buildFeedRequest, buildProfile, DEFAULT_TOPICS, interestSeeds, MAX_FEED_SECTIONS, MAX_TEAMS, parseHome, parseList, parseMarkets, parseMedia } =
   await import('./discover-profile.ts')
 const { INTERVIEW, answerFor, useOnboardingStore } = await import('../stores/onboardingStore.ts')
 const { getDiscoverProfile, resolveDiscoverProfile, useDiscoverProfileStore } = await import('../stores/discoverProfileStore.ts')
@@ -94,6 +94,15 @@ test('buildFeedRequest never exceeds the server section cap and skips the home c
   })
   assert.equal(body.sections.length, MAX_FEED_SECTIONS)
   assert.ok(!body.sections.some((section) => section.q === '1 EUR to EUR'))
+})
+
+test('buildProfile keeps four teams so the glance row can show four sports cards', () => {
+  const answers = answered({ teams: 'Arsenal, Lakers, Yankees, Red Wings, Celtics' })
+  const profile = buildProfile((id) => answerFor(answers, id))
+  assert.equal(MAX_TEAMS, 4)
+  assert.deepEqual(profile.teams, ['Arsenal', 'Lakers', 'Yankees', 'Red Wings'])
+  const sports = buildFeedRequest(profile).sections.filter((section) => section.kind === 'rich' && section.q.endsWith(' game'))
+  assert.equal(sports.length, 4)
 })
 
 test('interestSeeds ranks topics above teams, markets and the home city without duplicates', () => {

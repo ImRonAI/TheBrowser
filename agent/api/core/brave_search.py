@@ -34,6 +34,7 @@ from urllib.parse import urlsplit
 import httpx
 from pydantic import BaseModel, Field
 
+from agent.api.core import config as app_config
 from agent.api.core.config import (
     BRAVE_ANSWERS_API_KEY, BRAVE_ANSWERS_MODEL, BRAVE_ANSWERS_RPS, BRAVE_ANSWERS_TIMEOUT, BRAVE_ASSIST_RPS,
     BRAVE_SEARCH_API_KEY, BRAVE_SEARCH_BASE_URL, BRAVE_SEARCH_RPS, BRAVE_SPELLCHECK_API_KEY, BRAVE_SUGGEST_API_KEY,
@@ -330,29 +331,36 @@ def normalize_rich(result: dict[str, Any], vertical: str) -> RichAnswer:
 
 
 
+_UNSET: Any = object()
+
+
 class BraveClient:
     def __init__(
         self,
-        api_key: str | None = BRAVE_SEARCH_API_KEY,
+        api_key: str | None = _UNSET,
         *,
         base_url: str = BRAVE_SEARCH_BASE_URL,
         limiter: RateLimiter | None = None,
         transport: httpx.AsyncBaseTransport | None = None,
         timeout: float = 15.0,
-        suggest_api_key: str | None = None,
-        spellcheck_api_key: str | None = None,
+        suggest_api_key: str | None = _UNSET,
+        spellcheck_api_key: str | None = _UNSET,
         assist_limiter: RateLimiter | None = None,
     ):
-        self.api_key = api_key
+        self.api_key = app_config.BRAVE_SEARCH_API_KEY if api_key is _UNSET else api_key
         self.base_url = base_url.rstrip("/")
-        self.limiter = limiter or RateLimiter(BRAVE_SEARCH_RPS)
+        self.limiter = limiter or RateLimiter(app_config.BRAVE_SEARCH_RPS)
         self._transport = transport
         self._timeout = timeout
         # Suggest / Spellcheck are separate Brave plans with their own tokens and a 100 req/s policy;
         # they share one bucket because both back the same keystroke-driven text assist.
-        self.suggest_api_key = suggest_api_key if suggest_api_key is not None else BRAVE_SUGGEST_API_KEY
-        self.spellcheck_api_key = spellcheck_api_key if spellcheck_api_key is not None else BRAVE_SPELLCHECK_API_KEY
-        self.assist_limiter = assist_limiter or RateLimiter(BRAVE_ASSIST_RPS)
+        self.suggest_api_key = (
+            app_config.BRAVE_SUGGEST_API_KEY if suggest_api_key is _UNSET else suggest_api_key
+        )
+        self.spellcheck_api_key = (
+            app_config.BRAVE_SPELLCHECK_API_KEY if spellcheck_api_key is _UNSET else spellcheck_api_key
+        )
+        self.assist_limiter = assist_limiter or RateLimiter(app_config.BRAVE_ASSIST_RPS)
 
     @property
     def configured(self) -> bool:
@@ -363,10 +371,11 @@ class BraveClient:
         return {"suggest": bool(self.suggest_api_key), "spellcheck": bool(self.spellcheck_api_key)}
 
     async def get(self, path: str, params: dict[str, Any], *, headers: dict[str, str] | None = None,
-                  api_key: str | None = None, limiter: RateLimiter | None = None) -> dict[str, Any]:
-        key = api_key if api_key is not None else self.api_key
+                  api_key: str | None = _UNSET, key_name: str = "BRAVE_SEARCH_API_KEY",
+                  limiter: RateLimiter | None = None) -> dict[str, Any]:
+        key = self.api_key if api_key is _UNSET else api_key
         if not key:
-            raise BraveSearchError("not_configured", "BRAVE_SEARCH_API_KEY is not set", status=503)
+            raise BraveSearchError("not_configured", f"{key_name} is not set", status=503)
         clean = {k: (str(v).lower() if isinstance(v, bool) else v) for k, v in params.items() if v is not None}
         headers = {"Accept": "application/json", "Accept-Encoding": "gzip", "X-Subscription-Token": key, **(headers or {})}
         await (limiter or self.limiter).acquire()
@@ -413,11 +422,11 @@ class BraveClient:
         return [normalize_image(r) for r in body.get("results", [])]
 
     async def web(self, q: str, *, count: int = 10, freshness: Freshness | None = None, country: str = "US",
-                  safesearch: SafeSearch = "moderate") -> list[DiscoverItem]:
+                  safesearch: SafeSearch = "moderate", extra_snippets: bool = False) -> list[DiscoverItem]:
         """Web + discussions in one call; buckets are flattened web-first."""
         body = await self.get("/web/search", {"q": q, "count": count, "freshness": freshness, "country": country,
                                               "safesearch": safesearch, "result_filter": "web,discussions",
-                                              "extra_snippets": False, "spellcheck": False})
+                                              "extra_snippets": extra_snippets, "spellcheck": False})
         items = [normalize_web(r) for r in (body.get("web") or {}).get("results", [])]
         items += [normalize_discussion(r) for r in (body.get("discussions") or {}).get("results", [])]
         return items
@@ -479,7 +488,7 @@ class BraveClient:
         if not 1 <= count <= SUGGEST_MAX_COUNT:
             raise BraveSearchError("invalid_request", f"count must be between 1 and {SUGGEST_MAX_COUNT}", status=422)
         body = await self.get("/suggest/search", {"q": assist_query(q), "lang": lang, "country": country, "count": count, "rich": rich},
-                              api_key=self.suggest_api_key, limiter=self.assist_limiter)
+                              api_key=self.suggest_api_key, key_name="BRAVE_SUGGEST_API_KEY", limiter=self.assist_limiter)
         return body.get("results", [])
 
     async def spellcheck(self, q: str, *, country: str = "US", lang: str = "en") -> str | None:
@@ -487,7 +496,7 @@ class BraveClient:
         <=50 words), ``lang`` (default en), ``country`` (default US). Returns ``results[0].query``,
         the corrected phrase, or ``None`` when Brave offers no correction."""
         body = await self.get("/spellcheck/search", {"q": assist_query(q), "lang": lang, "country": country},
-                              api_key=self.spellcheck_api_key, limiter=self.assist_limiter)
+                              api_key=self.spellcheck_api_key, key_name="BRAVE_SPELLCHECK_API_KEY", limiter=self.assist_limiter)
         results = body.get("results") or []
         return results[0].get("query") if results else None
 

@@ -6,8 +6,7 @@ import { ChunkSchedule, type MusicPosition } from '@/lib/music-position'
  * Scheduled playback for Lyria RealTime `music_audio_delta` frames (48 kHz stereo
  * PCM16, 2 s per chunk, generated roughly in real time). Separate from the voice
  * sink (`useLivePlayback`, 24 kHz mono) so barge-in never cuts the music and the
- * music has its own gain, lead buffer and analyser (the mascot dances to this
- * tap and lip-syncs to the voice tap, never the other way round).
+ * music has its own gain, lead buffer and analyser.
  *
  * `LEAD_SECONDS` of audio is queued before the first chunk starts so network and
  * generation jitter do not produce gaps; a backlog over `MAX_BACKLOG_SECONDS` is

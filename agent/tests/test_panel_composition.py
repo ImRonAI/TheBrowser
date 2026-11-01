@@ -65,35 +65,34 @@ class OfflineModel(Model):
 
 
 class MemoryChainModel(OfflineModel):
-    """The recall subagent's fast-model chain (built only when ``recall`` is called), kept
-    offline and out of ``models``."""
+    """The panel Agent's aux_model (memory extraction), kept offline and out of ``models``."""
 
 
 @pytest.fixture
 def offline(monkeypatch, tmp_path):
     for key in ("PANEL_SKILLS_DIR", "PANEL_SKILLS_DIRS", "PANEL_SKILL_TOOLS", "PANEL_FORMATIONS_FILE",
                 "PANEL_RETRY_MAX_ATTEMPTS", "PANEL_RETRY_INITIAL_DELAY", "PANEL_RETRY_MAX_DELAY",
-                "RON_MEMORY_AGENT"):
+                "RON_MEMORY_MODEL"):
         monkeypatch.delenv(key, raising=False)
     models, catalogs, constructed = [], [], []
     storage = InMemoryStorage()
     monkeypatch.setattr(composition, "PROJECT_ROOT", tmp_path)
     monkeypatch.setattr(composition, "get_user_session_storage", lambda user: storage)
     # Retain real native memory configuration, using isolated offline storage.
-    from agent.api.core import memory_agent, panel_storage, teaching
+    from agent.api.core import panel_storage, teaching
     monkeypatch.setattr(panel_storage, "get_panel_storage", lambda: storage)
     # The learned-skill TeachingService is a process-wide singleton (defaults to the repo's
     # .sessions/teaching): reset per test and pointed at this test's storage.
     monkeypatch.setenv("TEACHING_STORAGE_DIR", str(tmp_path / "teaching"))
     monkeypatch.setattr(teaching, "_service", None)
-    monkeypatch.setenv("RON_MEMORY_AGENT_MODELS", "offline/memory")
+    monkeypatch.setenv("RON_MEMORY_MODEL", "offline/memory")
 
     memory_models = []
 
     def model(*args, hosted_tools=True):
         if not hosted_tools:
-            # memory_agent.build_model(provider, model_id, None, hosted_tools=False): the
-            # recall/dream router candidates, never the panel/think/judge/child models.
+            # build_model("perplexity", RON_MEMORY_MODEL, None, hosted_tools=False): the panel
+            # Agent's aux_model (memory extraction), never the panel/think/judge/child models.
             assert args[:2] == ("perplexity", "offline/memory")
             value = MemoryChainModel()
             memory_models.append(value)
@@ -103,9 +102,6 @@ def offline(monkeypatch, tmp_path):
         return value
 
     monkeypatch.setattr(composition, "build_model", model)
-    # memory_agent imports build_model by name; patching only panel_agent.build_model would
-    # leave a called recall subagent building a real Perplexity client. Patch the bound name too.
-    monkeypatch.setattr(memory_agent, "build_model", model)
     from agent.api.core import config as app_config
     monkeypatch.setattr(app_config, "PERPLEXITY_API_KEY", "offline-not-a-credential")
     native_catalog = composition._OwnedPanelCatalog
@@ -168,12 +164,13 @@ def test_real_constructor_defaults_stream_and_complete_cleanup(offline):
     assert len(models) == 1
     result = asyncio.run(agent.invoke_async("hello"))
     assert result.stop_reason == "end_turn"
-    # Memory is the SDK's: the native aux_model (the first fast memory model) runs extraction,
-    # everyTurn injection found nothing so the panel model saw only the user's message, and
-    # recall is a harness subagent the model may call (its chain is built only when called).
-    assert {"recall", "search_memories", "list_learned_skills", "use_skill"} <= names
+    # Memory is the SDK's (core/memory.py): native search_memory/add_memory, the aux_model runs
+    # facts extraction, and userTurn injection found nothing so the model saw only the message.
+    assert {"search_memory", "add_memory", "list_learned_skills", "use_skill"} <= names
+    assert "recall" not in names and "search_memories" not in names
     assert "journal" not in names
     assert len(build.memory_models) == 1 and agent.aux_model is build.memory_models[0]
+    assert [s.name for s in agent.memory_manager._stores] == ["facts", "remember", "feedback", "tasks", "learned-skills"]
     assert agent.memory_manager._stores[0].extraction
     assert [b["text"] for m in models[0].calls[-1] for b in m["content"] if "text" in b] == ["hello"]
     agent.cleanup()
@@ -246,7 +243,7 @@ def test_sync_extra_adapted_and_think_child_inherits_parent_tools(offline, monke
                    if "Thought to process:\nreason offline" in json.dumps(messages[0]["content"]).replace("\\n", "\n")]
     assert child_calls
     child_tool_names = {spec["name"] for spec in child_calls[0]}
-    assert {"blocking", "shell", "editor", "perplexity_search", "mcp_client", "recall"} <= child_tool_names
+    assert {"blocking", "shell", "editor", "perplexity_search", "mcp_client"} <= child_tool_names
     assert not child_tool_names & {"think", "ask_user", "tool_catalog"}
     assert not any(name.startswith("strands_") for name in child_tool_names)
 

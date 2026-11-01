@@ -92,6 +92,13 @@ input when a required decision or permission is genuinely missing.
 - environment: read and manage environment variables.
 - http_request: make HTTP requests (any method, auth, JSON).
 - perplexity_search: search the live web via Perplexity Search.
+- brave_answer: AI-generated web-grounded answer with citations via Brave Answers.
+- brave_web_search: search live web pages and discussions via Brave Search.
+- brave_news_search: search current news articles via Brave Search.
+- brave_image_search: search images via Brave Search.
+- brave_video_search: search videos via Brave Search.
+- brave_local_search: search local places and POIs (with AI descriptions) via Brave Search.
+- brave_rich_answer: fetch structured instant answers (weather, stocks, crypto, currency, calculator, sports, definitions) via Brave Search.
 - tool_catalog: discover and load additional tools from the project library ({PROJECT_TOOLS_DIR}).
 - ask_user: pause and ask the user a question when you genuinely need their input.
 
@@ -190,7 +197,14 @@ Write the ledger there at meaningful checkpoints and read it back when resuming.
 
 
 def _compose(browser: str) -> str:
-    return AGENT_SYSTEM_PROMPT_BASE + browser_prompt_section(browser) + WORKSPACE_ADDENDUM
+    base = (
+        AGENT_SYSTEM_PROMPT_BASE
+        if app_config.perplexity_search_enabled()
+        else AGENT_SYSTEM_PROMPT_BASE.replace(
+            "\n- perplexity_search: search the live web via Perplexity Search.", ""
+        )
+    )
+    return base + browser_prompt_section(browser) + WORKSPACE_ADDENDUM
 
 
 #: Live (BidiAgent) deltas from the text agent: the browser server is pre-loaded and declared, and the
@@ -203,8 +217,8 @@ You are speaking with the user over a live voice connection; the rest of these i
 apply. Your tool set is fixed when the call starts and is already declared, so there is nothing to
 connect or load: the browser server ({server}) is already loaded and its {server}_playwright_* tools
 are in your registry now. Do not call tool_catalog or mcp_client (you do not have them). You also
-have no think, recall, ask_user or {server}_playwright_browser_take_screenshot: use scoped snapshots
-instead of screenshots, search_memories/search_memory instead of recall, decide and act instead of
+have no think, ask_user or {server}_playwright_browser_take_screenshot: use scoped snapshots
+instead of screenshots, search_memory for memory, decide and act instead of
 reasoning aloud, and ask the user directly in speech only when a required decision or permission is
 genuinely missing. Carry multi-step work through to
 completion in one turn; narrate progress in one short sentence at a time. When a tool returns an
@@ -218,18 +232,19 @@ def live_system_prompt(browser: str) -> str:
     The skills/specialists and journal directives that ``create_panel_agent`` appends for the text
     agent are appended here too, so both agents are composed from the same sources.
     """
-    from agent.api.core.panel_agent import MEMORY_JOURNAL_DIRECTIVE, SKILLS_AND_SPECIALISTS_DIRECTIVE
+    from agent.api.core.memory import MEMORY_DIRECTIVE
+    from agent.api.core.panel_agent import SKILLS_AND_SPECIALISTS_DIRECTIVE
 
     return (
         _compose(browser)
         + SKILLS_AND_SPECIALISTS_DIRECTIVE
-        + MEMORY_JOURNAL_DIRECTIVE
+        + MEMORY_DIRECTIVE
         + LIVE_ADDENDUM.format(server=server_name(browser))
     )
 
 
 #: Backwards-compatible default prompt (default browser, no think addendum) for main.py's A2A card.
-AGENT_SYSTEM_PROMPT = _compose(default_browser())
+AGENT_SYSTEM_PROMPT = AGENT_SYSTEM_PROMPT_BASE + browser_prompt_section(default_browser()) + WORKSPACE_ADDENDUM
 
 #: Perplexity Agent API configuration: reasoning is delegated to the `think`
 #: agent-tool, which runs a child agent with this same prompt, model and tools.
@@ -558,12 +573,64 @@ async def get_thread(session_id: Identifier, request: Request, user_id: Identifi
     return thread
 
 
+async def _native_thread_snapshot(user_id: str, session_id: str) -> dict[str, Any] | None:
+    """Restore a Live-authored thread when no Chat journal exists yet (`snapshot_latest.json` only)."""
+    from agent.api.core.panel_storage import get_user_session_storage, thread_agent_id
+    from agent.api.core.panel_tools import serializable_event
+
+    key = f"session/{session_id}/scopes/agent/{thread_agent_id(user_id)}/snapshots/snapshot_latest.json"
+    try:
+        raw = await get_user_session_storage(user_id).read(key)
+    except Exception:
+        return None
+    if not raw:
+        return None
+    try:
+        payload = json.loads(raw)
+    except Exception:
+        return None
+    data = payload.get("data") if isinstance(payload, dict) else None
+    messages = data.get("messages") if isinstance(data, dict) and isinstance(data.get("messages"), list) else []
+    return {
+        "version": 1,
+        "session_id": session_id,
+        "user_id": user_id,
+        "run_id": None,
+        "status": "completed",
+        "active": False,
+        "sequence": 0,
+        "replay_after": 0,
+        "replay_earliest": None,
+        "replay_latest": None,
+        "replay_status": "empty",
+        "history_incomplete": False,
+        "configuration_locked": False,
+        "selection": {},
+        "options": {},
+        "messages": serializable_event(messages),
+        "input": None,
+        "checkpoint": None,
+        "interrupts": [],
+        "pending_interrupts": [],
+        "result": None,
+        "snapshot_id": None,
+        "steering": [],
+        "recovery_required": False,
+        "error": None,
+    }
+
+
 @router.get("/sessions/{session_id}")
 async def get_session(session_id: Identifier, request: Request, user_id: Identifier = "default"):
     try:
         snapshot = await _manager(request).snapshot(user_id, session_id)
         return {**snapshot, "status": _status(snapshot["status"])}
-    except (RuntimeConflict, ReplayOverflow, KeyError, ValueError) as error:
+    except KeyError as error:
+        native = await _native_thread_snapshot(user_id, session_id)
+        if native is not None:
+            return native
+        raise _runtime_error(error) from error
+    except (RuntimeConflict, ReplayOverflow, ValueError) as error:
         raise _runtime_error(error) from error
 
 

@@ -7,8 +7,8 @@ import { decodePcm16 } from '@/lib/voice-events'
  * same barge-in semantics (`stop()` flushes everything scheduled).
  *
  * Every buffer is routed through an `AnalyserNode` before the destination, so
- * `frequencyData()` describes exactly what the listener hears (the mascot's lip
- * sync reads it; there is no second audio graph and no clock drift).
+ * `frequencyData()` describes exactly what the listener hears (there is no second
+ * audio graph and no clock drift).
  */
 export function useLivePlayback(onPlaying: (playing: boolean) => void) {
   const context = useRef<AudioContext | null>(null)

@@ -1,0 +1,13 @@
+{
+  "$schema": "https://app.kilo.ai/config.json",
+  "mcp": {
+    "servers": {
+      "auth": {
+        "type": "local",
+        "command": [
+          "linear"
+        ]
+      }
+    }
+  }
+}

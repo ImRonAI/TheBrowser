@@ -240,6 +240,7 @@ def test_perplexity_keeps_argument_recovery_adapter(monkeypatch):
         # Every static member of the Agent API Tool union, always (docs.perplexity.ai/docs/agent-api/tools/overview).
         "tools": [
             {"type": "web_search", "search_context_size": "medium"},
+            {"type": "image_search"},
             {"type": "fetch_url"},
             {"type": "people_search"},
             {"type": "finance_search"},

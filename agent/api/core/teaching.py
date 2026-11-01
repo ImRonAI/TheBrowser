@@ -30,7 +30,6 @@ from strands_agents_sops.utils import load_external_sops
 from agent.api.core import config
 from agent.api.core.articles import public_address
 from agent.api.core.native_sop import learning_sop_injector, native_sop_prompt
-from agent.api.core.panel_storage import SerializedFileMemoryStore
 from agent.api.core.process_document import ProcessDocument, render_process_document
 
 logger = logging.getLogger(__name__)
@@ -83,7 +82,7 @@ def teaching_model() -> Any:
     from agent.api.core.panel_agent import build_model
 
     candidates = [build_model("gemini", config.GEMINI_DEFAULT_MODEL, hosted_tools=False)]
-    if config.PERPLEXITY_API_KEY:
+    if config.PERPLEXITY_API_KEY and config.perplexity_agent_api_enabled():
         raw = os.getenv("RON_TEACHING_FALLBACK_MODELS", "")
         names = [name.strip() for name in raw.split(",") if name.strip()] or list(DEFAULT_TEACHING_FALLBACK_MODELS)
         candidates += [build_model("perplexity", name, None, hosted_tools=False) for name in names]
@@ -275,7 +274,8 @@ class TeachingService:
     def get_memory_store(self, user_id: str, agent_id: str) -> FileMemoryStore:
         scope = _scope(user_id, agent_id)
         if scope not in self._memory:
-            self._memory[scope] = SerializedFileMemoryStore(name="learned-skills", lock_key=f"teaching:{scope}",
+            self._memory[scope] = FileMemoryStore(name="learned-skills", writable=False,
+                description="Skills this agent was taught; run one with use_skill.",
                 storage=LocalFileStorage(str(self.root / scope)))
         return self._memory[scope]
 

@@ -473,30 +473,29 @@ test('think tool nested events group into a chain-of-thought block; other nested
   assert.ok(live && live.kind === 'think' && live.steps[live.steps.length - 1].active)
 })
 
-test('recall subagent nested events group into a Memory chain; non-chain tools stay flat', () => {
-  assert.ok(CHAIN_TOOLS.has('recall') && CHAIN_TOOLS.has('think') && !CHAIN_TOOLS.has('research_review'))
+test('think child nested events group into a chain; non-chain tools stay flat', () => {
+  assert.ok(CHAIN_TOOLS.has('think') && CHAIN_TOOLS.has('repair') && !CHAIN_TOOLS.has('recall') && !CHAIN_TOOLS.has('research_review'))
   let state = emptyPanelState('session')
   const feed = (...events: PanelEvent[]) => { for (const e of events) state = reducePanelEvent(state, e) }
   feed(
-    event(1, 'run_started', { model_id: 'm', provider: 'xai' }),
-    event(2, 'tool_input', { id: 'recall-1', name: 'recall', input: { task: 'what food does the user like' } }),
-    // The harness child's native ToolStreamEvents arrive under node_path=[recall-1].
-    { ...event(3, 'tool_input', { id: 's-1', name: 'search_memories', input: { query: 'food', order: ['topic'] } }), node_path: ['recall-1'] },
-    { ...event(4, 'tool_result', { id: 's-1', status: 'success', content: [{ json: [{ subject: 'Prefers Thai food' }] }] }), node_path: ['recall-1'] },
-    { ...event(5, 'text_delta', { data: '- Prefers Thai food' }), node_path: ['recall-1'] },
-    event(6, 'tool_result', { id: 'recall-1', status: 'success', content: [{ text: '- Prefers Thai food' }] }),
+    event(1, 'run_started', { model_id: 'm', provider: 'perplexity' }),
+    event(2, 'tool_input', { id: 'think-1', name: 'think', input: { thought: 'what food does the user like' } }),
+    { ...event(3, 'tool_input', { id: 's-1', name: 'search_memory', input: { query: 'food' } }), node_path: ['think-1'] },
+    { ...event(4, 'tool_result', { id: 's-1', status: 'success', content: [{ json: [{ content: 'Prefers Thai food' }] }] }), node_path: ['think-1'] },
+    { ...event(5, 'text_delta', { data: '- Prefers Thai food' }), node_path: ['think-1'] },
+    event(6, 'tool_result', { id: 'think-1', status: 'success', content: [{ text: '- Prefers Thai food' }] }),
     event(7, 'tool_input', { id: 'shell-1', name: 'shell', input: { command: 'ls' } }),
     { ...event(8, 'text_delta', { data: 'progress' }), node_path: ['shell-1'] },
     event(9, 'text_delta', { data: 'Thai it is.' }),
   )
   const items = groupThinkParts(state.messages[0].parts, true)
-  const recall = items.find((i) => i.kind === 'think')
-  assert.ok(recall && recall.kind === 'think')
-  assert.equal(recall.tool.name, 'recall')
-  assert.deepEqual(recall.steps.map((s) => s.kind), ['tool', 'text'])
-  assert.equal((recall.steps[0] as { tool: { name: string } }).tool.name, 'search_memories')
+  const chain = items.find((i) => i.kind === 'think')
+  assert.ok(chain && chain.kind === 'think')
+  assert.equal(chain.tool.name, 'think')
+  assert.deepEqual(chain.steps.map((s) => s.kind), ['tool', 'text'])
+  assert.equal((chain.steps[0] as { tool: { name: string } }).tool.name, 'search_memory')
   const flat = items.filter((i) => i.kind === 'part').map((i) => (i as { part: PanelPart }).part)
-  assert.ok(flat.every((p) => !(p.path.length && String(p.path[0]) === 'recall-1')))
+  assert.ok(flat.every((p) => !(p.path.length && String(p.path[0]) === 'think-1')))
   // `shell` is not a chain tool: its nested text stays a flat, nested-labelled part.
   assert.ok(flat.some((p) => p.kind === 'text' && p.path.length === 1 && p.path[0] === 'shell-1'))
   assert.equal(items.filter((i) => i.kind === 'think').length, 1)
@@ -522,7 +521,7 @@ test('resolveBrowserSelection accepts only the two browser targets and rejects e
 })
 
 test('isBrowserUnavailable detects the availability-hook interrupt by reason.browser, never by id', () => {
-  const reason = { browser: 'user', tool: 'user_browser_playwright_List_tabs', url: 'http://127.0.0.1:13000/electron', question: 'Your browser is offline.' }
+  const reason = { browser: 'user', tool: 'user_browser_playwright_List_tabs', url: 'http://127.0.0.1:3000/electron', question: 'Your browser is offline.' }
   assert.equal(isBrowserUnavailable(reason), true)
   assert.equal(isBrowserUnavailable({ ...reason, browser: 'cloud' }), true)
   for (const other of [{ question: 'Pick one' }, { browser: 'laptop', question: 'x' }, { browser: 'user' }, 'browser_unavailable:1', null, undefined, 42, [], {}]) {

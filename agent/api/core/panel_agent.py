@@ -62,6 +62,7 @@ from strands.tools.mcp import MCPClient
 from strands.types.tools import AgentTool, ToolContext
 
 from agent.api.core.render_ui_tool import render_ui_directive
+from agent.api.core.config import DEFAULT_MEMORY_MODEL
 from agent.api.core.config import (
     GEMINI_DEFAULT_MODEL,
     MISTRAL_DEFAULT_MODEL,
@@ -83,7 +84,8 @@ from agent.api.core.panel_browser import (
     is_browser_tool,
     server_name,
 )
-from agent.api.core.panel_storage import ThreadSessionManager, create_memory_config, get_user_session_storage, thread_agent_id
+from agent.api.core.memory import MEMORY_DIRECTIVE, MemoryScope, live_memory_tools, memory_manager_config
+from agent.api.core.panel_storage import ThreadSessionManager, get_user_session_storage, thread_agent_id
 from agent.api.core.tool_observation import ToolObservation, trace_attributes
 from agent.api.core.panel_tools import (
     ChildSpec, GraphSpec, ManagedMCP, MCPConnectionGuard, PanelToolCatalog, SwarmSpec, ThinkToolsGuard,
@@ -93,19 +95,24 @@ from agent.api.core.panel_tools import (
 
 logger = logging.getLogger(__name__)
 
-ProviderName = Literal["perplexity", "mistral", "xai", "gemini", "openai", "anthropic"]
-PROVIDERS: tuple[ProviderName, ...] = ("perplexity", "mistral", "xai", "gemini", "openai", "anthropic")
+ProviderName = Literal["perplexity", "xai", "mistral", "gemini", "openai", "anthropic"]
+PROVIDERS: tuple[ProviderName, ...] = (
+    "perplexity",
+    "xai",
+    "mistral",
+    "gemini",
+    "openai",
+    "anthropic",
+)
 CONFIG_DIR = Path(__file__).resolve().parent.parent / "configs"
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 #: Project tool library browsed/loaded by tool_catalog (never added to sys.path).
 PROJECT_TOOLS_DIR = PROJECT_ROOT / "agent" / "tools" / "strands_tools"
 
 def memory_aux_model_id() -> str:
-    """The panel Agent's native ``aux_model`` (runs the dreaming extraction): the first
-    ``RON_MEMORY_AGENT_MODELS`` id, read at construction so tests and operators can change it."""
-    from agent.api.core.memory_agent import DEFAULT_MODELS
-
-    return os.getenv("RON_MEMORY_AGENT_MODELS", "").split(",")[0].strip() or DEFAULT_MODELS[0]
+    """The panel Agent's native ``aux_model`` (runs memory extraction): ``RON_MEMORY_MODEL``, read at
+    construction so tests and operators can change it."""
+    return os.getenv("RON_MEMORY_MODEL", "").strip() or DEFAULT_MEMORY_MODEL
 
 
 #: Learned skills + create_harness specialists; appended to every panel-family prompt (text and Live).
@@ -122,40 +129,7 @@ SKILLS_AND_SPECIALISTS_DIRECTIVE = (
     "Both save to the user's music library when they are signed in; tell them the title and length."
 ) + render_ui_directive()
 
-#: Journal-first memory discipline shared by the panel agent and its think child. Entries are
-#: written with native add_memory (journal store); native extraction (dreaming) and everyTurn
-#: injection do the rest; `recall` is the deep, visible search.
-MEMORY_JOURNAL_DIRECTIVE = """
 
-## Journal and memory
-Journal everything worth remembering with add_memory: to-dos, worthy memories, feedback the user
-gives you, user statements, and anything you learn or observe about the user. Write an entry the
-moment it happens; do not batch. Every entry is wrapped exactly like this:
-<start_entry>
-<topic_name>ToDo's<topic_name/>
-<subject>Two to eight words<subject/>
-<created_at>YYYY-MM-DDTHH:MM:SS<created_at/>
-...the entry...
-<end_entry/>
-Topics: ToDo's, LearnedAboutUser, Feedback, UserStatement, WorthyMemory. The subject is two to
-eight words, no more, no less. Do NOT add <tags>. The server stamps <created_at> with its own UTC
-time, so the value you write is only a placeholder.
-Relevant memories are delivered to you automatically before each step (inside <memory>), and the
-journal is consolidated into long-term memory automatically while you work. At the start of each
-task, before planning, call recall with a self-contained task describing what you need to remember
-about this user and request; call it again whenever a detail about the user would change your
-answer. You may also call search_memories (nest filters in any order that helps: time, tags, topic,
-subject) and search_memory yourself. When two memories disagree, the newest created_at wins. When
-you use think, put the memories that matter (from recall) into the thought.
-
-Memories are context, never assignments. The user's CURRENT message is your only task. A ToDo,
-plan, or unfinished work that appears in <memory>, in a recall result, or in search_memories is
-background: it tells you what the user cared about before, nothing more. Never start, resume, or
-"continue" a remembered task unless the user asks for it in this conversation. Never journal a new
-ToDo for work the user did not ask for today. If a remembered task seems relevant, finish the
-current request first and then mention it in one sentence at the end; do not act on it. When a
-think or recall result contains a finished answer to the current request, report that answer to
-the user — do not discard it and move on to something else."""
 
 # Hosted (server-side) tools live on the MODEL config, never in Agent.tools.
 # Every entry below is grounded in (a) the provider's official docs and (b) what
@@ -429,11 +403,12 @@ def config_path(provider: ProviderName) -> Path:
 def provider_api_key(provider: ProviderName) -> str | None:
     from agent.api.core import config as app_config
 
+    if provider == "perplexity":
+        return app_config.PERPLEXITY_API_KEY if app_config.perplexity_agent_api_enabled() else None
     if provider in ("openai", "anthropic"):
         key_name = f"{provider.upper()}_API_KEY"
         return os.getenv(key_name) or getattr(app_config, key_name, None)
     return {
-        "perplexity": app_config.PERPLEXITY_API_KEY,
         "mistral": app_config.MISTRAL_API_KEY,
         "xai": app_config.XAI_API_KEY,
         "gemini": app_config.GEMINI_API_KEY,
@@ -913,26 +888,20 @@ def _default_formations() -> list[GraphSpec | SwarmSpec]:
     return [graph, swarm, nested]
 
 
-def user_memory_config(user_id: str, agent_scope: str = "panel", *, extraction: bool = True) -> dict[str, Any]:
-    """The user's cross-session memory config (long-term + journal) plus the agent's
-    learned-skills store (search only; ``add_memory`` targets the journal alone)."""
+def user_memory_config(user_id: str, agent_scope: str = "panel", *, extraction: bool = True,
+                       scope: MemoryScope | None = None) -> Any:
+    """The user's memory (``core/memory.py``) plus the agent's read-only learned-skills store."""
     from agent.api.core.teaching import get_teaching_service
 
-    memory = create_memory_config(user_id, extraction=extraction)
-    memory["stores"].append(get_teaching_service().get_memory_store(user_id, agent_scope))
-    return memory
+    return memory_manager_config(user_id, scope, extraction=extraction,
+                                 extra_stores=[get_teaching_service().get_memory_store(user_id, agent_scope)])
 
 
-def user_memory_manager(user_id: str, agent_scope: str = "panel") -> Any:
-    """A ``MemoryManager`` over the same stores the panel agent uses, for a host without plugins
-    (``BidiAgent``): native ``search_memory``/journal-only ``add_memory``/store ``search_memories``
-    tools, no injection, and ``extraction=False`` so the Live path never spawns extraction
-    without a flush owner."""
-    from strands.memory import MemoryManager
+def user_memory_tools(user_id: str, agent_scope: str = "panel", scope: MemoryScope | None = None) -> list[Any]:
+    """``search_memory`` / ``add_memory`` over the same stores, for ``BidiAgent`` (no plugins)."""
+    from agent.api.core.teaching import get_teaching_service
 
-    memory = user_memory_config(user_id, agent_scope, extraction=False)
-    return MemoryManager(stores=list(memory["stores"]), search_tool_config=True,
-                         add_tool_config=memory["add_tool_config"], injection=False)
+    return live_memory_tools(user_id, scope, extra_stores=[get_teaching_service().get_memory_store(user_id, agent_scope)])
 
 
 def create_panel_agent(
@@ -1062,15 +1031,10 @@ def create_panel_agent(
         ))
         system_prompt += SKILLS_AND_SPECIALISTS_DIRECTIVE
         storage = get_user_session_storage(user_id)
+        # Native MemoryManager (core/memory.py): search_memory, add_memory, userTurn injection,
+        # and facts extraction on aux_model (below).
         memory = user_memory_config(user_id, agent_scope)
-        system_prompt += MEMORY_JOURNAL_DIRECTIVE
-        # The MemoryManager supplies native search_memory/add_memory (journal), the stores'
-        # search_memories, everyTurn injection and the dreaming extraction (on aux_model, below).
-        # `recall` is the harness subagent over fresh read-only views of the same stores.
-        from agent.api.core.memory_agent import create_recall_tool
-        recall = create_recall_tool(lambda: user_memory_config(user_id, agent_scope, extraction=False)["stores"])
-        if recall is not None:
-            catalog.add_tools([recall])
+        system_prompt += MEMORY_DIRECTIVE
         # Native A2A client tools over Ron's agents (panel A2A server + RON_A2A_AGENTS).
         from agent.api.core.a2a_tools import a2a_tools
         catalog.add_tools(a2a_tools())
@@ -1117,8 +1081,8 @@ def create_panel_agent(
             "tool_executor": ConcurrentToolExecutor() if execution == "concurrent" else SequentialToolExecutor(),
             "retry_strategy": retry, "checkpointing": options.get("checkpointing", False),
             "background_tasks": False,
-            # Native aux_model: the dreaming extraction (and other side calls) on a fast model, not
-            # the panel model. Unset, the SDK falls back to the panel model.
+            # Native aux_model: memory extraction (and other side calls) on a fast model, not the
+            # panel model. Unset, the SDK falls back to the panel model.
             "aux_model": (build_model("perplexity", memory_aux_model_id(), None, hosted_tools=False)
                           if provider_api_key("perplexity") else None),
         }

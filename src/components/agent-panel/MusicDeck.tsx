@@ -21,7 +21,7 @@ import { usePlaylistPlayer } from './usePlaylistPlayer'
 import { cn } from '@/utils/cn'
 
 /**
- * The Live Music deck under Oubli in the panel's Live view. Transport (Play / Pause /
+ * The Live Music deck in the panel's Live view. Transport (Play / Pause /
  * Stop / Reset context) calls the backend's playback controls for THIS Live session
  * (`POST /music/control`, the same code path as the agent's `music_playback_control`
  * tool), so the deck and the agent never disagree about state. Volume is local to the

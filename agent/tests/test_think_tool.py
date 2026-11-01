@@ -68,10 +68,10 @@ def _named(name):
     return probe
 
 
-PARENT_TOOLS = ["shell", "recall", "search_memories", "ask_user", "tool_catalog",
+PARENT_TOOLS = ["shell", "search_memory", "ask_user", "tool_catalog",
                 "user_browser_playwright_click", "strands_manage_background_task",
                 "http_request", "perplexity_search"]
-ALLOWED = ["http_request", "perplexity_search", "recall", "search_memories", "shell"]
+ALLOWED = ["http_request", "perplexity_search", "search_memory", "shell"]
 
 
 def _run(think_input, prompt="think hard"):
@@ -102,7 +102,7 @@ def test_guard_withholds_research_tools_when_the_user_said_browser_only():
     """2026-10-15: a 'browser only' flight search was answered by the think child over fetch/search."""
     prompt = "Find the cheapest flight from Palm Springs to Buffalo. Use the browser only."
     model, _, _ = _run({"thought": "plan", "cycle_count": 1, "system_prompt": CHILD_PROMPT}, prompt=prompt)
-    assert model.child_tools == [["recall", "search_memories", "shell"]]
+    assert model.child_tools == [["search_memory", "shell"]]
     model, _, _ = _run({"thought": "plan", "cycle_count": 1, "system_prompt": CHILD_PROMPT,
                         "tools": ["http_request", "shell"]}, prompt="Browser-only please: book it.")
     assert model.child_tools == [["shell"]]

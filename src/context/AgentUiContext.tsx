@@ -1,6 +1,5 @@
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react'
 import { useArticleDraftStore } from '@/stores/articleDraftStore'
-import { flashAsking } from '@/stores/mascotStore'
 
 export interface AskRonOption {
   id: string
@@ -123,7 +122,6 @@ export function AgentUiProvider({ children }: { children: ReactNode }) {
   // Opening the menu is a pure UI step: nothing is sent until the user picks
   // an option, and the choice is then dispatched to whichever mode is visible.
   const startAskRon = useCallback(async (selectedText: string, sourceUrl: string) => {
-    flashAsking()  // Oubli peeks out the moment Ron is being asked something
     useArticleDraftStore.getState().setDestination('panel')
     setAskRonSelectedText(selectedText)
     setAskRonSourceUrl(sourceUrl)
@@ -163,7 +161,6 @@ export function AgentUiProvider({ children }: { children: ReactNode }) {
   const sendToAgentPanel = useCallback((prompt: string) => {
     const normalized = prompt.trim()
     if (!normalized) return
-    flashAsking()
     useArticleDraftStore.getState().setDestination('panel')
     setAgentPanelQueuedPrompts((prev) => [...prev, normalized])
     openPanel()

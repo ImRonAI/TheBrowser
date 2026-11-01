@@ -68,13 +68,14 @@ async def lifespan(app: FastAPI):
             previous = list(app.routes)
             try:
                 # /a2a/fixer is mounted before /a2a so the longer prefix wins.
-                try:
-                    fixer = await asyncio.to_thread(create_panel_a2a_server, agent_factory=repairs.agent_for,
-                                                    http_url=repairs.fixer_url)
-                    app.state.fixer_a2a = fixer
-                    mount_panel_a2a(app, fixer, enabled=True, path="/a2a/fixer")
-                except Exception:
-                    logging.getLogger(__name__).exception("A2A: the tool fixer server could not start")
+                if repairs.config.enabled:
+                    try:
+                        fixer = await asyncio.to_thread(create_panel_a2a_server, agent_factory=repairs.agent_for,
+                                                        http_url=repairs.fixer_url)
+                        app.state.fixer_a2a = fixer
+                        mount_panel_a2a(app, fixer, enabled=True, path="/a2a/fixer")
+                    except Exception:
+                        logging.getLogger(__name__).exception("A2A: the tool fixer server could not start")
                 if selection is None:
                     logging.getLogger(__name__).warning("A2A: no provider configured; the panel A2A server is unavailable")
                 else:

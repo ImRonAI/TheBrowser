@@ -1,6 +1,7 @@
 import { ReactNode, useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { ContextMenu } from '@/components/shared/ContextMenu'
+import { RonLogo } from '@/components/shared/RonLogo'
 import { AgentUiProvider } from '@/context/AgentUiContext'
 
 interface AuthPageLayoutProps {
@@ -119,14 +120,14 @@ function AuthPageLayoutInner({ children }: AuthPageLayoutProps) {
               transition={{ duration: 0.7, delay: 0.4, ease: EASE }}
             />
             
-            {/* "Ron" - Hero Typography */}
+            {/* Ron logo — black artwork in light mode, silver emblem in dark mode */}
             <motion.div
-              className="text-[10rem] xl:text-[12rem] leading-[0.85] font-display font-bold text-ink dark:text-ink-inverse tracking-tight"
+              className="w-[22rem] xl:w-[28rem]"
               initial={{ opacity: 0, y: 40 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 1, delay: 0.1, ease: EASE }}
             >
-              Ron
+              <RonLogo className="w-full h-auto" alt="Ron" />
             </motion.div>
             
             {/* White accent line - bottom right, diagonal from purple */}
@@ -170,8 +171,8 @@ function AuthPageLayoutInner({ children }: AuthPageLayoutProps) {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6, ease: EASE }}
           >
-            <h1 className="text-display-md font-display text-accent dark:text-accent-light">
-              Ron
+            <h1 className="flex justify-center">
+              <RonLogo className="h-24 w-auto" alt="Ron" />
             </h1>
           </motion.div>
 

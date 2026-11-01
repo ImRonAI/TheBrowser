@@ -249,6 +249,60 @@ def failure_guidance_text(agent) -> str:
     return failure_guidance(InjectionContext(messages=agent.messages, state=agent.state, agent=agent)) or ""
 
 
+def test_input_validation_failure_is_a_call_defect_not_a_tool_defect(library):
+    """A call whose arguments fail the tool's own input schema is rejected by the native decorator
+    before the body runs (``Validation failed for input parameters``). That is what a lost
+    required argument (``{}``) looks like: it must never count toward a repair or start a fixer —
+    even for a side-effecting tool such as shell — and the agent is told to correct its call."""
+    started: list = []
+    bodies: list = []
+
+    @tool
+    def shell(command: str, work_dir: str | None = None) -> str:
+        """Side-effecting stand-in with a required parameter."""
+        bodies.append(command)
+        return "ran"
+
+    uses = [("shell", {}), ("shell", {"work_dir": "/tmp"}), ("shell", {"command": 42, "bogus": True})]
+    agent = Agent(model=ScriptedModel(uses), tools=[shell],
+                  hooks=[ToolObservation(), ToolRepairTrigger(RepairConfig(threshold=2, models=("m",)), start=started.append, browser="user")],
+                  callback_handler=None, trace_attributes=trace_attributes(session_id="s1", user_id="alice"))
+    asyncio.run(agent.invoke_async("list the directory"))
+    results = [b["toolResult"] for m in agent.messages for b in m["content"] if "toolResult" in b]
+    assert [r["status"] for r in results] == ["error", "error", "error"]
+    assert bodies == [], "the tool body must not have executed"
+    assert started == [] and pending_proposal(agent) is None
+    assert agent.state.get(tool_repair.REPAIR_COUNTS_STATE_KEY) in (None, {})
+    guide = agent.state.get("panel.tool_failure")
+    assert guide["phase"] == "rejected" and guide["tool_name"] == "shell" and guide["count"] == 0
+    text = failure_guidance_text(agent)
+    assert "rejected before it ran" in text and "no repair was started" in text and "required" in text
+
+    # The same tool failing *inside* its body with valid arguments is a real tool failure and
+    # investigates at once (side-effecting), exactly as before.
+    @tool(name="shell")
+    def shell_body_fails(command: str) -> str:
+        """Body raises."""
+        raise RuntimeError("pty failed")
+
+    live = Agent(model=ScriptedModel([("shell", {"command": "ls"})]), tools=[shell_body_fails],
+                 hooks=[ToolObservation(), ToolRepairTrigger(RepairConfig(threshold=2, models=("m",)), start=started.append, browser="user")],
+                 callback_handler=None, trace_attributes=trace_attributes(session_id="s1", user_id="alice"))
+    asyncio.run(live.invoke_async("go"))
+    assert [e.tool_name for e in started] == ["shell"] and started[0].side_effecting is True
+
+
+def test_input_validation_failure_helper_covers_mcp_style_errors():
+    """Tools without a native Pydantic input model (MCP) are recognized by the server's documented
+    error prefix; ordinary runtime errors are not misclassified."""
+    from agent.api.core.tool_repair import input_validation_failure
+
+    opaque = SimpleNamespace(tool_name="user_browser_browser_click")
+    assert input_validation_failure(opaque, {"input": {}}, "Error: Input validation error: 'selector' is a required property")
+    assert input_validation_failure(opaque, {"input": {"selector": "#a"}}, "Error: RuntimeError - no element") is None
+    assert input_validation_failure(opaque, {"input": {}}, None) is None
+
+
 def test_trigger_ignores_cancelled_calls_fixer_tools_and_every_kind_counts(library):
     """Cancelled tool calls (BeforeToolCall cancel) and the fixer's own / Ron's control tools never
     start an investigation; every repairable kind does (core here)."""
@@ -620,7 +674,12 @@ def test_restart_recovery_rematerializes_active_revisions(library):
 def test_fixer_repairs_a_core_tool_with_a_user_scoped_adapter(library):
     """A non-library failure is repaired too: the fixer writes an adapter module that wraps the
     registered tool for THIS user; activation applies it via ToolRegistry.replace (next invocation)
-    and to new sessions via the catalog adapter."""
+    and to new sessions via the catalog adapter.
+
+    The failing calls pass the tool's input schema (``record`` is a dict) and fail *inside* the
+    body (``KeyError: 'label'``): a genuine tool failure. A call missing a required parameter is a
+    schema rejection before the body and never starts a fixer (see
+    ``test_input_validation_failure_is_a_call_defect_not_a_tool_defect``)."""
     @tool
     async def host_tool(record: dict) -> str:
         """Needs record.label."""
@@ -630,7 +689,7 @@ def test_fixer_repairs_a_core_tool_with_a_user_scoped_adapter(library):
     service = _service(script)
 
     async def scenario():
-        agent = Agent(model=ScriptedModel([("host_tool", {"value": "a"}), ("host_tool", {"value": "b"})]), tools=[host_tool],
+        agent = Agent(model=ScriptedModel([("host_tool", {"record": {"value": "a"}}), ("host_tool", {"record": {"value": "b"}})]), tools=[host_tool],
                       hooks=[ToolObservation(), service.trigger(browser="user")], callback_handler=None,
                       trace_attributes=trace_attributes(session_id="s1", user_id="alice"))
         await agent.invoke_async("go")
@@ -907,8 +966,9 @@ def test_http_repair_loop_end_to_end(library, monkeypatch):
 
 ADAPTER_SOURCE = """
 def transform_input(input):
-    # The model keeps sending `value`; the tool requires a dict `record` with a label.
-    value = input.get("value", "")
+    # The model keeps sending `value` (bare or under `record`); the tool reads `record.label`.
+    record = input.get("record") if isinstance(input.get("record"), dict) else {}
+    value = input.get("value") or record.get("value") or ""
     return {"record": {"label": value or "<unlabelled>"}}
 
 

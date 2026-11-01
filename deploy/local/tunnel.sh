@@ -14,6 +14,25 @@ RON_SSH_KEY="${RON_SSH_KEY:-$HOME/.ssh/ronbrowser_upcloud_ed25519}"
 RON_VPS_USER="${RON_VPS_USER:-ron}"
 SSH_OPTS=(-i "$RON_SSH_KEY" -o ConnectTimeout=15 -o StrictHostKeyChecking=accept-new)
 
+# Mac-side pre-flight: 8765 is this tunnel's port by policy. If a local Ron dev API grabbed it while the tunnel was
+# down (2026-10-21: `npm run dev` during a network blip), `-L 8765` would fail on 127.0.0.1 and ssh would bind only
+# [::1], splitting localhost:8765 across two backends. Evict our own dev API (agent/api/main.py from this repo);
+# refuse to start over anything else so we never kill a stranger's process.
+REPO_DIR="$(cd "$(dirname "$0")/../.." && pwd -P)"  # -P: lsof reports the physical cwd (e.g. /private/tmp, not /tmp)
+for pid in $(lsof -nP -tiTCP:8765 -sTCP:LISTEN 2>/dev/null | sort -u); do
+  cmd="$(ps -o command= -p "$pid" 2>/dev/null || true)"
+  cwd="$(lsof -a -p "$pid" -d cwd -Fn 2>/dev/null | sed -n 's/^n//p' | head -n1)"
+  case "$cmd" in
+    ssh\ *) continue ;;  # a previous tunnel instance; launchd restarts us after it exits
+  esac
+  if [[ "$cmd" == *agent/api/main.py* && "$cwd" == "$REPO_DIR" ]]; then
+    kill "$pid" 2>/dev/null && echo "[tunnel] evicted local Ron dev API $pid from 8765 (use npm run electron:dev; it picks 8766)" >&2
+  else
+    echo "[tunnel] 8765 is held by pid $pid ($cmd); not touching it. Free the port and the tunnel will retry." >&2
+    exit 1
+  fi
+done
+
 # When this Mac's side of a previous tunnel dies without a FIN (sleep, Wi-Fi change, kill -9), the VPS
 # sshd keeps that session -- and its -R listeners on 13000/18931/19222 -- alive until ClientAlive gives
 # up (~6 min). With ExitOnForwardFailure the new tunnel then fails on "remote port forwarding failed",

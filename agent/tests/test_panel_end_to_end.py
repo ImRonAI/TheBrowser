@@ -92,7 +92,7 @@ class PanelModel(Model):
 
 
 class MemoryChainModel(Model):
-    """A recall subagent candidate: answers every recall with "n/a"."""
+    """The aux_model (memory extraction): never extracts anything ("[]")."""
 
     def get_config(self):
         return {"model_id": "offline-memory", "stateful": False}
@@ -106,7 +106,7 @@ class MemoryChainModel(Model):
 
     async def stream(self, messages, tool_specs=None, system_prompt=None, **kwargs):
         yield {"messageStart": {"role": "assistant"}}
-        yield {"contentBlockDelta": {"contentBlockIndex": 0, "delta": {"text": "n/a"}}}
+        yield {"contentBlockDelta": {"contentBlockIndex": 0, "delta": {"text": "[]"}}}
         yield {"contentBlockStop": {"contentBlockIndex": 0}}
         yield {"messageStop": {"stopReason": "end_turn"}}
 
@@ -139,7 +139,7 @@ def offline(monkeypatch, tmp_path):
     def build_model(*args, hosted_tools=True):
         assert args[0] in ("openai", "perplexity")
         if args[1:] != ("offline-panel", None):
-            # The recall subagent's fast-model chain (memory_agent.build_model).
+            # The panel Agent's aux_model (memory extraction, RON_MEMORY_MODEL).
             return MemoryChainModel()
         model = PanelModel(script)
         script.models.append(model)
@@ -160,10 +160,6 @@ def offline(monkeypatch, tmp_path):
         return offline_shell
 
     monkeypatch.setattr(panel_agent, "build_model", build_model)
-    # memory_agent binds build_model by name at import; without this a called recall
-    # subagent would be built with a real Perplexity client.
-    from agent.api.core import memory_agent
-    monkeypatch.setattr(memory_agent, "build_model", build_model)
     # Real create_panel_agent (core tools, tool_catalog, think for perplexity...)
     # plus the injected offline tool the scripted model calls. No subprocesses.
     native_create = chat.create_panel_agent
@@ -402,13 +398,11 @@ def test_simultaneous_http_requests_reserve_one_real_agent(offline):
     asyncio.run(scenario())
 
 
-def test_root_retry_scope_retains_previous_cycle_and_child_output(offline):
-    """`recall` is a native harness subagent: its streamed child events arrive under
-    node_path=[<recall toolUseId>] with no root retry/cycle scoping, while the root
-    retry is scoped to the root only."""
+def test_root_retry_scope_retains_previous_cycle(offline):
+    """The root retry is scoped to the root: the retained first cycle survives, the throttled
+    draft is discarded, and the replacement answer streams under the retry's cycle."""
     script, connect = offline
     script.throttle = True
-    script.uses.append(("recall", {"task": "reason offline"}))
 
     async def scenario():
         async with connect() as (client, manager):
@@ -422,9 +416,7 @@ def test_root_retry_scope_retains_previous_cycle_and_child_output(offline):
             assert first["cycle"] != discarded["cycle"]
             assert discarded["cycle"] == replacement["cycle"] == retry["cycle"]
             assert discarded["model_attempt"] == 1 and replacement["model_attempt"] == 2
-            child = [e for e in of_type(events, "text_delta") if e["node_path"]]
-            assert child and all(e["node_path"] == ["use-2"] for e in child)
-            assert all("model_attempt" not in e and "cycle" not in e for e in child)
+            assert not [e for e in of_type(events, "text_delta") if e["node_path"]]
             reasoning = [e for e in of_type(events, "reasoning_delta") if not e["node_path"]]
             assert reasoning and reasoning[0]["cycle"] == retry["cycle"]
             assert reasoning[0]["model_attempt"] == 2

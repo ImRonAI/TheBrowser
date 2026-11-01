@@ -63,7 +63,12 @@ __all__ = [
 
 #: Always-registered tool names (user-mandated). `tool_catalog` is appended by
 #: create_tool_catalog; `ask_user` (native interrupt) is composed separately.
-CORE_TOOL_NAMES = ("mcp_client", "editor", "shell", "environment", "http_request", "perplexity_search", "brave_answer", "render_ui", "tool_catalog")
+CORE_TOOL_NAMES = (
+    "mcp_client", "editor", "shell", "environment", "http_request", "perplexity_search",
+    "brave_answer", "brave_web_search", "brave_news_search", "brave_image_search",
+    "brave_video_search", "brave_local_search", "brave_rich_answer",
+    "render_ui", "tool_catalog",
+)
 
 #: Synthetic import package for agent/tools/strands_tools. The directory is never
 #: added to sys.path (AGENTS.md); modules are bound under this alias so their
@@ -747,12 +752,17 @@ def load_library_tool(root: Path, path: Path, name: str, revision_file: Path | N
 
 def scan_vendored_tools(root: Path, *, exclude: Sequence[str] = ()) -> list[dict[str, Any]]:
     """AST-scan the vendored tree for @tool functions and TOOL_SPEC dicts (no imports)."""
+    from agent.api.core import config as app_config
+
     root = root.resolve()
     excluded = set(exclude)
+    perplexity_enabled = app_config.perplexity_search_enabled()
     found: list[dict[str, Any]] = []
     for path in sorted(root.rglob("*.py")):
         rel = path.relative_to(root)
         if path.name.startswith("_") or "utils" in rel.parts or "__pycache__" in rel.parts:
+            continue
+        if not perplexity_enabled and path.stem.lower().startswith("perplexity"):
             continue
         try:
             tree = ast.parse(path.read_text(encoding="utf-8"))
@@ -778,7 +788,7 @@ def scan_vendored_tools(root: Path, *, exclude: Sequence[str] = ()) -> list[dict
                     name, description = str(spec["name"]), str(spec.get("description", "")).strip()
                 except (ValueError, TypeError, KeyError):
                     continue
-            if name and name not in excluded:
+            if name and name not in excluded and (perplexity_enabled or not name.lower().startswith("perplexity_")):
                 found.append({
                     "name": name, "category": rel.parts[0] if len(rel.parts) > 1 else "",
                     "path": str(rel), "description": description or "",
@@ -886,6 +896,7 @@ def build_core_tools(project_tools_dir: Path) -> list[AgentTool]:
     under the user-facing name with ``@tool(name=...)`` over its ``__wrapped__`` function.
     """
     from strands_tools import editor, environment, http_request, mcp_client, shell
+    from agent.api.core import config as app_config
 
     _install_mcp_client_elicitation()
     tools: list[AgentTool] = []
@@ -897,17 +908,17 @@ def build_core_tools(project_tools_dir: Path) -> list[AgentTool]:
         if not loaded:
             raise RuntimeError(f"strands_tools.{short} did not export a tool named {short!r}")
         tools.append(loaded[0])
-    root = project_tools_dir.expanduser().resolve()
-    search_path = root / "research" / "perplexity_search_api.py"
-    search = import_vendored_module(root, search_path).perplexity_search_api
-    renamed = tool(name="perplexity_search")(search.__wrapped__)
-    stamp_source(renamed, search_path)
-    tools.append(renamed)
-    # Brave Answers (POST /chat/completions) for every Ron agent: a native async @tool over
-    # BraveAnswersClient; the SDK runs async tool bodies directly.
-    from agent.api.core.brave_answers_tool import brave_answer
+    if app_config.perplexity_search_enabled():
+        root = project_tools_dir.expanduser().resolve()
+        search_path = root / "research" / "perplexity_search_api.py"
+        search = import_vendored_module(root, search_path).perplexity_search_api
+        renamed = tool(name="perplexity_search")(search.__wrapped__)
+        stamp_source(renamed, search_path)
+        tools.append(renamed)
+    # Brave Answers + Brave Search vertical tools for every Ron agent.
+    from agent.api.core.brave_tools import brave_tools
 
-    tools.append(brave_answer)
+    tools.extend(brave_tools())
     # render_ui: the agent builds HTML/JSX views the panel renders (iframe sandbox / component kit).
     from agent.api.core.render_ui_tool import render_ui_tools
 
@@ -1056,8 +1067,9 @@ THINK_EXCLUDED_TOOLS = frozenset({"think", "ask_user", "tool_catalog", "create_h
 #: Non-browser ways of reading the web. Withheld from the think child when the user's current
 #: request says "browser only", because browser tools themselves are parent-only.
 RESEARCH_TOOL_NAMES = frozenset({
-    "http_request", "perplexity_search", "brave_answer", "fetch_url", "web_search",
-    "retrieve_context", "retrieve_offloaded_content",
+    "http_request", "perplexity_search", "brave_answer", "brave_web_search", "brave_news_search",
+    "brave_image_search", "brave_video_search", "brave_local_search", "brave_rich_answer",
+    "fetch_url", "web_search", "retrieve_context", "retrieve_offloaded_content",
 })
 
 _BROWSER_ONLY_PATTERN = re.compile(
@@ -1067,11 +1079,25 @@ _BROWSER_ONLY_PATTERN = re.compile(
 )
 
 
+def current_request_text(messages: Any) -> str | None:
+    """Text of the user's current request: the newest user message that is not a tool-result or
+    ``[ui_action ...]`` turn. Used as repair evidence (``tool_repair.RepairEvidence``)."""
+    for message in reversed(messages or []):
+        if message.get("role") != "user":
+            continue
+        blocks = message.get("content") or []
+        if any("toolResult" in block for block in blocks):
+            continue
+        text = "\n".join(block["text"] for block in blocks if isinstance(block, dict) and "text" in block).strip()
+        if text and not text.startswith("[ui_action "):
+            return text
+    return None
+
+
 def browser_only_requested(messages: Any) -> bool:
     """True when the user's current request restricts the work to the browser.
 
-    Reads the newest user message that is not a tool-result turn (the same anchor as
-    memory injection), so a restriction holds for the whole run and lifts when the user
+    Reads the newest user message that is not a tool-result turn, so a restriction holds for the whole run and lifts when the user
     sends a new request without it.
     """
     for message in reversed(messages or []):

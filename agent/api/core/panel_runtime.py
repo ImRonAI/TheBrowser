@@ -583,7 +583,7 @@ class SessionRun:
                 "tool_result", "tool_interrupt_event",
             )) or str(data.get("type", "")).startswith("multiagent_")):
                 # panel_tools wraps formation/skill streams in {formation/skill, event}; native
-                # ToolStreamEvents (e.g. the `recall` harness subagent) carry the child's SDK event
+                # ToolStreamEvents (e.g. a harness subagent) carry the child's SDK event
                 # directly. Child events are re-emitted under node_path=[<tool use id>[, <formation name>]].
                 if ("formation" in data or "skill" in data) and isinstance(data.get("event"), Mapping):
                     await self._translate(data["event"], (*child_path, str(data.get("formation", data.get("skill")))))

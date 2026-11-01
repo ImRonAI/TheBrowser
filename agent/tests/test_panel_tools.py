@@ -799,3 +799,36 @@ def test_tool_catalog_loads_configured_mcp_servers_by_name(tmp_path):
         agent.cleanup()
 
     asyncio.run(scenario())
+
+
+def test_tool_catalog_hides_perplexity_tools_when_perplexity_search_disabled(tmp_path, monkeypatch):
+    """When RON_PERPLEXITY_SEARCH=0, vendored perplexity_* tools are hidden from list/search/describe/load."""
+    library = tmp_path / "lib"
+    (library / "research").mkdir(parents=True)
+    (library / "research" / "perplexity_search_api.py").write_text(
+        'from strands import tool\n@tool\nasync def perplexity_search_api(query: str) -> dict:\n    """Search."""\n    return {}\n')
+    (library / "research" / "perplexity_deep_research.py").write_text(
+        'from strands import tool\n@tool\ndef perplexity_deep_research(topic: str) -> dict:\n    """Deep research."""\n    return {}\n')
+    (library / "research" / "exa.py").write_text(
+        'from strands import tool\n@tool\ndef exa_search(query: str) -> dict:\n    """Exa search."""\n    return {}\n')
+    monkeypatch.setenv("RON_PERPLEXITY_SEARCH", "0")
+
+    async def scenario():
+        catalog = PanelToolCatalog()
+        catalog.add_tools([*build_core_tools(library), create_tool_catalog(catalog, library)])
+        agent = Agent(model=OfflineModel(), tools=[catalog], callback_handler=None)
+        catalog.bind(agent)
+        assert "perplexity_search" not in agent.tool_registry.registry
+        tc = agent.tool_registry.registry["tool_catalog"]
+        _, listing = await call_tool(tc, {"action": "list"}, agent=agent)
+        payload = json.loads(listing["content"][0]["text"])
+        names = {n for v in payload["categories"].values() for n in v}
+        assert "exa_search" in names
+        assert not any(n.startswith("perplexity") for n in names)
+        _, searched = await call_tool(tc, {"action": "search", "query": "perplexity"}, agent=agent)
+        assert json.loads(searched["content"][0]["text"])["matches"] == []
+        _, failed = await call_tool(tc, {"action": "load", "name": "perplexity_deep_research"}, agent=agent)
+        assert failed["status"] == "error" and "Unknown library tool" in json.dumps(failed)
+        agent.cleanup()
+
+    asyncio.run(scenario())

@@ -256,3 +256,37 @@ def test_search_status(monkeypatch):
     assert body["levels"] == list(sa.SEARCH_LEVELS)
     assert body["models"] == {"agent": sa.RON_SEARCH_AGENT_MODEL, "shopping": sa.RON_SEARCH_SHOPPING_MODEL}
     assert "amazon.com" in body["shopping_domains"] and len(body["shopping_domains"]) <= 20
+
+
+def test_perplexity_agent_api_disabled(monkeypatch):
+    recorded: list[dict] = []
+    monkeypatch.setattr(search_ep, "PERPLEXITY_API_KEY", "pplx-test")
+    monkeypatch.setenv("RON_PERPLEXITY_AGENT_API", "0")
+    monkeypatch.setattr(search_ep, "stream_agent", fake_stream_agent(recorded))
+
+    async def scenario():
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app_with(brave_client())),
+                                     base_url="http://test") as http:
+            status_resp = await http.get("/search/status")
+            assert status_resp.status_code == 200
+            status_body = status_resp.json()
+            stream_resp = await http.post("/search/stream", json={"q": "electric bikes", "level": "medium"})
+            assert stream_resp.status_code == 200
+            return status_body, parse_sse(stream_resp.text)
+
+    status_body, events = asyncio.run(scenario())
+    assert status_body["configured"] == {"brave": True, "perplexity": False}
+    assert recorded == []
+
+    by_name: dict[str, list[dict]] = {}
+    for name, data in events:
+        by_name.setdefault(name, []).append(data)
+
+    sections = {s["kind"]: s for s in by_name["section"]}
+    assert set(sections) == {"web", "news", "videos", "images", "places"}
+    assert all(s["status"] == "ok" for s in sections.values())
+    errors = {e["source"]: e for e in by_name.get("source_error", [])}
+    assert set(errors) == {"agent", "shopping"}
+    assert errors["agent"]["code"] == "disabled"
+    assert errors["shopping"]["code"] == "disabled"
+    assert by_name["done"][0]["duration_ms"] >= 0

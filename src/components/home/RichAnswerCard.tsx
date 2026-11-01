@@ -9,7 +9,8 @@ export function RichAnswerCard({ answer }: { answer: RichAnswer }) {
   const body = renderBody(answer)
   if (!body) return null
   const provider = answer.provider?.name || answer.provider?.long_name
-  return <article className="flex min-w-[220px] max-w-[280px] shrink-0 flex-col justify-between rounded-xl border border-surface-200/80 bg-surface-0 p-4 text-sm dark:border-surface-800 dark:bg-surface-900">
+  // Width and height come from the grid cell (HomePage "At a glance"), so every card in a row fills it edge to edge.
+  return <article className="flex h-full min-w-0 flex-col justify-between rounded-xl border border-surface-200/80 bg-surface-0 p-4 text-sm dark:border-surface-800 dark:bg-surface-900">
     {body}
     {provider && <p className="mt-3 text-[10.5px] text-ink-muted dark:text-ink-inverse-muted">via {provider}</p>}
   </article>
@@ -54,17 +55,30 @@ function Weather({ card }: { card: Card }) {
   </div>
 }
 
+function TeamLogo({ src }: { src: unknown }) {
+  const url = str(src)
+  return url ? <img src={url} alt="" loading="lazy" className="h-4 w-4 shrink-0 object-contain" /> : <span aria-hidden className="h-4 w-4 shrink-0 rounded-full bg-surface-200 dark:bg-surface-800" />
+}
+
+/** One team's scoreboard: the last two results and the next two fixtures (the backend ships ≤3 of each). */
 function Sports({ card }: { card: Card }) {
   const team = rec(card.team), league = rec(card.league)
-  const games = [...list(card.recent).slice(-1), ...list(card.upcoming).slice(0, 1)]
+  const recent = list(card.recent).slice(-2), upcoming = list(card.upcoming).slice(0, 2)
+  const games = [...recent, ...upcoming]
+  const renderGame = (game: Card, index: number) => {
+    const home = rec(game.home), away = rec(game.away), start = num(game.start_ts)
+    const played = index < recent.length && (num(away.score) !== null || num(home.score) !== null)
+    const when = start ? new Date(start * 1000).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : str(game.status)
+    return <li key={index} className="grid grid-cols-[1fr_auto] items-center gap-x-3 gap-y-0.5 text-xs">
+      <span className="flex min-w-0 items-center gap-1.5"><TeamLogo src={away.logo} /><span className="truncate">{str(away.name)}</span></span>
+      <span className="text-right font-mono font-medium tabular-nums">{played ? num(away.score) ?? '–' : ''}</span>
+      <span className="flex min-w-0 items-center gap-1.5"><TeamLogo src={home.logo} /><span className="truncate">{str(home.name)}</span></span>
+      <span className="text-right font-mono font-medium tabular-nums">{played ? num(home.score) ?? '–' : <span className={`font-sans font-normal ${muted}`}>{when}</span>}</span>
+    </li>
+  }
   return <div>
     <Heading kicker={str(league.name) || str(card.sport) || 'Sports'} title={str(team.name) || 'Scores'} />
-    {games.length === 0 ? <p className={`mt-2 text-xs ${muted}`}>No games scheduled.</p> : <ul className="mt-2 space-y-1.5 text-xs">{games.map((game, index) => {
-      const home = rec(game.home), away = rec(game.away), start = num(game.start_ts)
-      const played = num(away.score) !== null || num(home.score) !== null
-      const label = played ? `${num(away.score) ?? '–'}–${num(home.score) ?? '–'}` : start ? new Date(start * 1000).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : str(game.status)
-      return <li key={index} className="flex items-center justify-between gap-2"><span className="truncate">{str(away.name)} @ {str(home.name)}</span><span className="shrink-0 font-medium">{label}</span></li>
-    })}</ul>}
+    {games.length === 0 ? <p className={`mt-2 text-xs ${muted}`}>No games scheduled.</p> : <ul className="mt-3 divide-y divide-surface-200/70 dark:divide-surface-800 [&>li]:py-1.5 [&>li:first-child]:pt-0 [&>li:last-child]:pb-0">{games.map(renderGame)}</ul>}
   </div>
 }
 

@@ -93,13 +93,14 @@ def live_host_tools(tools_dir: Path) -> list[AgentTool]:
         if not loaded:
             raise RuntimeError(f"strands_tools.{name} did not export a tool named {name!r}")
         tools.append(loaded[0])
-    root = tools_dir.expanduser().resolve()
-    search = import_vendored_module(root, root / "research" / "perplexity_search_api.py").perplexity_search_api
-    tools.append(tool(name="perplexity_search")(search.__wrapped__))
-    # Brave Answers, the same native async tool the text agent carries (BidiAgent awaits async tools).
-    from agent.api.core.brave_answers_tool import brave_answer
+    if config.perplexity_search_enabled():
+        root = tools_dir.expanduser().resolve()
+        search = import_vendored_module(root, root / "research" / "perplexity_search_api.py").perplexity_search_api
+        tools.append(tool(name="perplexity_search")(search.__wrapped__))
+    # Brave Answers + Brave Search vertical tools, the same native async tools the text agent carries.
+    from agent.api.core.brave_tools import brave_tools
 
-    tools.append(brave_answer)
+    tools.extend(brave_tools())
     from agent.api.core.render_ui_tool import render_ui_tools
 
     tools.extend(render_ui_tools())
@@ -113,7 +114,7 @@ def build_live_tools(
     resolve_agent: Callable[[], Any] | None = None,
 ) -> list[AgentTool]:
     """Host, learned-skill and memory tools; the browser ``MCPClient`` is added by ``create_live_agent``."""
-    from agent.api.core.panel_agent import user_memory_manager
+    from agent.api.core.panel_agent import user_memory_tools
     from agent.api.core.teaching import create_learned_skill_tools
 
     host = live_host_tools(PROJECT_TOOLS_DIR)
@@ -131,13 +132,13 @@ def build_live_tools(
     learned = create_learned_skill_tools(
         user_id, agent_scope, child_model, additional_tools=skill_tools(), tool_supplier=skill_tools,
     )
-    # BidiAgent takes no plugins: the manager's tools (search_memory, journal-only add_memory and
-    # the stores' search_memories via get_tools) are registered directly, with no injection.
+    # BidiAgent takes no plugins: the native manager's search_memory/add_memory over the same stores
+    # as Chat are registered directly (no injection, no extraction on Live).
     from agent.api.core.a2a_tools import a2a_tools
     from agent.api.core.harness_agents import create_harness_tools
     from agent.api.core.music_generation import music_generation_tools
 
-    return [*host, *learned, *user_memory_manager(user_id, agent_scope).tools, *a2a_tools(),
+    return [*host, *learned, *user_memory_tools(user_id, agent_scope), *a2a_tools(),
             *create_harness_tools(user_id), *music_generation_tools(user_id)]
 
 

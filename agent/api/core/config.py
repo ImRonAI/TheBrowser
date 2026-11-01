@@ -31,12 +31,12 @@ BRAVE_SEARCH_BASE_URL = "https://api.search.brave.com/res/v1"
 # 50 req/s with no monthly cap (x-ratelimit-policy "50;w=1, 0;w=2592000").
 BRAVE_SEARCH_RPS = float(os.getenv("BRAVE_SEARCH_RPS", "10"))
 # Brave sells Suggest, Spellcheck and Answers as separate plans, each with its own subscription
-# token (the Search plan returns 400 OPTION_NOT_IN_PLAN for them). Each falls back to the Search
-# key so a single-plan account still works. Verified policies 2026-10-07: suggest/spellcheck
-# "100;w=1" (100 req/s), answers "2;w=1" (2 req/s); all with no monthly cap.
-BRAVE_SUGGEST_API_KEY = os.getenv("BRAVE_SUGGEST_API_KEY") or BRAVE_SEARCH_API_KEY
-BRAVE_SPELLCHECK_API_KEY = os.getenv("BRAVE_SPELLCHECK_API_KEY") or BRAVE_SEARCH_API_KEY
-BRAVE_ANSWERS_API_KEY = os.getenv("BRAVE_ANSWERS_API_KEY") or BRAVE_SEARCH_API_KEY
+# token (the Search plan returns 400 OPTION_NOT_IN_PLAN for them, so do not fall back to
+# BRAVE_SEARCH_API_KEY). Verified policies 2026-10-07: suggest/spellcheck "100;w=1" (100 req/s),
+# answers "2;w=1" (2 req/s); all with no monthly cap.
+BRAVE_SUGGEST_API_KEY = os.getenv("BRAVE_SUGGEST_API_KEY")
+BRAVE_SPELLCHECK_API_KEY = os.getenv("BRAVE_SPELLCHECK_API_KEY")
+BRAVE_ANSWERS_API_KEY = os.getenv("BRAVE_ANSWERS_API_KEY")
 BRAVE_ASSIST_RPS = float(os.getenv("BRAVE_ASSIST_RPS", "20"))
 BRAVE_ANSWERS_RPS = float(os.getenv("BRAVE_ANSWERS_RPS", "2"))
 # Answers plan defaults (POST /chat/completions). `brave` is the documented quick model; the API's
@@ -65,6 +65,16 @@ PERPLEXITY_MAX_OUTPUT_TOKENS = int(os.getenv("PERPLEXITY_MAX_OUTPUT_TOKENS", "12
 # Default catalogue model for the Agent Panel picker. Must be a full
 # provider/model id from GET /v1/models.
 PERPLEXITY_DEFAULT_MODEL = os.getenv("PERPLEXITY_MODEL") or "xai/grok-4.5"
+
+
+def perplexity_agent_api_enabled() -> bool:
+    """True unless RON_PERPLEXITY_AGENT_API is set to '0'."""
+    return os.getenv("RON_PERPLEXITY_AGENT_API", "1") != "0"
+
+
+def perplexity_search_enabled() -> bool:
+    """True unless RON_PERPLEXITY_SEARCH is set to '0'."""
+    return os.getenv("RON_PERPLEXITY_SEARCH", "1") != "0"
 
 # xAI native provider (strands-xai). Distinct from Perplexity catalogue ids
 # such as "xai/grok-4.5", which still route through the Agent API.
@@ -160,13 +170,10 @@ AWS_REGION = os.getenv("AWS_REGION", "us-east-1")
 AGENT_SANDBOX_ROOT = Path(os.getenv("RON_AGENT_SANDBOX_ROOT", str(Path.home() / ".ronbrowser" / "sandbox")))
 AGENT_SANDBOX_ROOT.mkdir(parents=True, exist_ok=True)
 
-# --- Memory: journal (add_memory) + dreaming (native extraction) + everyTurn injection + recall ---
-#: Perplexity Agent API model chain of the `recall` subagent (ModelRouter/FallbackStrategy); the
-#: first id is also the panel Agent's native aux_model, which runs the dreaming extraction.
-RON_MEMORY_AGENT_MODELS = os.getenv("RON_MEMORY_AGENT_MODELS",
-    "google/gemini-3.5-flash-lite,openai/gpt-5.4-nano,perplexity/sonar,perplexity/nemotron-3-ultra-550b-a55b")
-#: RON_MEMORY_AGENT=0 drops the `recall` tool (memory_agent.RecallConfig.from_env).
-RON_MEMORY_AGENT = os.getenv("RON_MEMORY_AGENT", "1") != "0"
+# --- Memory (core/memory.py): native FileMemoryStores, search_memory/add_memory, userTurn injection ---
+#: Perplexity Agent API model for the panel Agent's native aux_model, which runs the `facts`
+#: store's ModelExtractor (verified in GET /v1/models 2026-10-26).
+DEFAULT_MEMORY_MODEL = "google/gemini-3.5-flash-lite"
 
 # --- Tool repair (CAT-50/51): per-user fixer over sandboxed verification ---
 #: RON_TOOL_REPAIR=0 disables the repair trigger, endpoints stay inert (tool_repair.RepairConfig).

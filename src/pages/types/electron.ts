@@ -131,6 +131,11 @@ export interface ElectronWindow {
       goForward: () => Promise<{ success: boolean }>
       reload: () => Promise<{ success: boolean }>
     }
+
+    media?: {
+      ensureAccess: (kind: 'microphone' | 'camera') => Promise<{ status: string; granted: boolean }>
+      openSettings: (kind: 'microphone' | 'camera') => Promise<boolean>
+    }
   }
 }
 

@@ -107,5 +107,8 @@
     "tailwindcss": "^3.4.17",
     "typescript": "^5.9.3",
     "vite": "^7.2.7"
+  },
+  "optionalDependencies": {
+    "electron-liquid-glass": "1.1.1"
   }
 }

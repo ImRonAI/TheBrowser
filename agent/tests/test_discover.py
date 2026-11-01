@@ -172,12 +172,25 @@ def test_places_browse_requires_anchor_and_poi_details_merge_descriptions():
         asyncio.run(brave.poi_details([]))
 
 
-def test_error_mapping_and_plan_entitlements():
-    # Without a Suggest plan key the Search key falls back in and Brave answers OPTION_NOT_IN_PLAN.
+def test_error_mapping_and_plan_entitlements(monkeypatch):
+    # Passing the Search key to Suggest returns 400 OPTION_NOT_IN_PLAN from Brave.
     brave = client(suggest_api_key="test-key", spellcheck_api_key="test-key")
     with pytest.raises(bs.BraveSearchError) as info:
         asyncio.run(brave.suggest("golden gate", rich=True))
     assert info.value.code == "not_in_plan" and info.value.status == 400
+    # Suggest and Spellcheck keys do not fall back to the Search key when unset.
+    monkeypatch.setattr(bs.app_config, "BRAVE_SEARCH_API_KEY", "test-key")
+    monkeypatch.setattr(bs.app_config, "BRAVE_SUGGEST_API_KEY", None)
+    monkeypatch.setattr(bs.app_config, "BRAVE_SPELLCHECK_API_KEY", None)
+    no_assist = bs.BraveClient(limiter=bs.RateLimiter(1000), assist_limiter=bs.RateLimiter(1000))
+    assert no_assist.configured is True
+    assert no_assist.assist_configured == {"suggest": False, "spellcheck": False}
+    with pytest.raises(bs.BraveSearchError) as info:
+        asyncio.run(no_assist.suggest("golden gate"))
+    assert info.value.code == "not_configured" and info.value.status == 503 and "BRAVE_SUGGEST_API_KEY is not set" in str(info.value)
+    with pytest.raises(bs.BraveSearchError) as info:
+        asyncio.run(no_assist.spellcheck("golden gate"))
+    assert info.value.code == "not_configured" and info.value.status == 503 and "BRAVE_SPELLCHECK_API_KEY is not set" in str(info.value)
     revoked = client(fail={"/news/search": httpx.Response(422, json={"error": {"detail": "The provided API key is invalid.", "code": "SUBSCRIPTION_TOKEN_INVALID"}})})
     with pytest.raises(bs.BraveSearchError) as info:
         asyncio.run(revoked.news("x"))
@@ -189,7 +202,7 @@ def test_error_mapping_and_plan_entitlements():
     missing = bs.BraveClient(None, limiter=bs.RateLimiter(1000))
     with pytest.raises(bs.BraveSearchError) as info:
         asyncio.run(missing.news("x"))
-    assert info.value.code == "not_configured" and info.value.status == 503
+    assert info.value.code == "not_configured" and info.value.status == 503 and "BRAVE_SEARCH_API_KEY is not set" in str(info.value)
 
 
 def test_rate_limiter_spaces_bursts(monkeypatch):
@@ -305,4 +318,53 @@ def test_rich_in_feed_and_answer_endpoint():
             assert item["rich"]["card"]["temp_c"] == 20.52
             assert sections[1]["items"] == [] and sections[3]["error"]["code"] == "invalid_request"
     asyncio.run(scenario())
+
+
+def test_brave_tools_verticals_and_error_handling():
+    from agent.api.core import brave_tools as bt
+    from agent.api.endpoints import discover as discover_ep
+
+    seen: list[httpx.Request] = []
+    bt.set_search_client(client(seen))
+    try:
+        assert [t.tool_name for t in bt.brave_tools()] == list(bt.BRAVE_TOOL_NAMES)
+
+        web_res = asyncio.run(bt.brave_web_search("ebike", count=25, extra_snippets=True))
+        assert web_res["query"] == "ebike"
+        assert [r["kind"] for r in web_res["results"]] == ["web", "discussion"]
+        assert seen[-1].url.params["count"] == "20" and seen[-1].url.params["extra_snippets"] == "true"
+
+        news_res = asyncio.run(bt.brave_news_search("honda", count=100, freshness="pd"))
+        assert news_res["results"][0]["kind"] == "article" and seen[-1].url.params["count"] == "50"
+
+        img_res = asyncio.run(bt.brave_image_search("ebike", count=0))
+        assert img_res["results"][0]["kind"] == "image" and seen[-1].url.params["count"] == "1"
+
+        vid_res = asyncio.run(bt.brave_video_search("ebike review"))
+        assert vid_res["results"][0]["kind"] == "video"
+
+        local_res = asyncio.run(bt.brave_local_search("bike shop", location="San Francisco, CA"))
+        assert local_res["results"][0]["ai_description"] == "A premier destination"
+
+        rich_res = asyncio.run(bt.brave_rich_answer("AAPL stock"))
+        assert rich_res["answers"][0]["card"]["symbol"] == "AAPL"
+
+        # Fallback when poi_details fails on local search
+        bt.set_search_client(client(fail={"/local/pois": httpx.Response(500, json={"error": {"detail": "poi down"}})}))
+        fallback_local = asyncio.run(bt.brave_local_search("bike shop", location="San Francisco, CA"))
+        assert fallback_local["results"][0]["kind"] == "place" and "ai_description" not in fallback_local["results"][0]
+
+        # Error formatting when unconfigured
+        bt.set_search_client(bs.BraveClient(None, limiter=bs.RateLimiter(1000)))
+        err = asyncio.run(bt.brave_web_search("ebike"))
+        assert err["status"] == "error" and "brave_web_search not_configured:" in err["content"][0]["text"]
+
+        # Shared default client with discover_ep
+        bt.set_search_client(None)
+        discover_ep._default_client = None
+        shared = bt.search_client()
+        assert shared is discover_ep._default_client
+    finally:
+        bt.set_search_client(None)
+
 

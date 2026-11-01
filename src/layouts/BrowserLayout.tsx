@@ -16,7 +16,6 @@ import { AgentUiProvider, useAgentUi } from '@/context/AgentUiContext'
 import { usePanelAgentStore } from '@/stores/panelAgentStore'
 import { useNavigationStore } from '@/stores/navigationStore'
 import { useTabStore } from '@/stores/tabStore'
-import { flashAsking } from '@/stores/mascotStore'
 import { shortcutFor, type ChromeShortcut } from '@/lib/shortcuts'
 import { cn } from '@/utils/cn'
 
@@ -100,7 +99,6 @@ function BrowserLayoutContent({ children }: BrowserLayoutProps) {
       })
       return
     }
-    flashAsking()
     openPanel()
     // Already open: the panel's own open-effect will not run again, so focus directly.
     window.setTimeout(() => {
@@ -191,13 +189,13 @@ function BrowserLayoutContent({ children }: BrowserLayoutProps) {
 
       <div className="flex min-w-0 flex-1 flex-col">
         {/* Browser chrome: toolbar, plus the tab strip while the sidebar is closed */}
-        <div ref={chromeRef} className="relative z-[100] flex-shrink-0 border-b border-surface-200/80 dark:border-surface-800">
+        <div ref={chromeRef} className="ron-toolbar relative z-[100] flex-shrink-0 border-b border-surface-200/80 dark:border-surface-800">
           <ChromeToolbar />
           {!isSidebarOpen && <TabBar />}
         </div>
 
-        {/* Main Content Area */}
-        <div className="relative flex-1 overflow-hidden bg-surface-0 dark:bg-surface-900">
+        {/* Main Content Area (`ron-content`: the Glass theme's see-through content layer) */}
+        <div className="ron-content relative flex-1 overflow-hidden bg-surface-0 dark:bg-surface-900">
           {/* React content - hidden when WebContentsView is showing external websites */}
           {!isExternalMode && (
             <motion.div

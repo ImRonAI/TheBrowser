@@ -1,4 +1,4 @@
-import { app, BrowserWindow, clipboard, desktopCapturer, dialog, ipcMain, Menu, NativeImage, WebContentsView } from 'electron'
+import { app, BrowserWindow, clipboard, desktopCapturer, dialog, ipcMain, Menu, NativeImage, nativeTheme, shell, systemPreferences, WebContentsView } from 'electron'
 import { createServer, type Server } from 'node:http'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -10,6 +10,7 @@ import {
 } from 'electron-playwright-mcp'
 import { CURSOR_SVG, CURSOR_TIP } from '../src/lib/agent-cursor'
 import { RepairSurface, surfaceEntry, type RepairSurfaceState } from './repair-surface'
+import { applyWindowMaterial } from './window-material'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = join(__filename, '..')
@@ -82,6 +83,16 @@ function validateIpcSender(frame: Electron.WebFrameMain | null): boolean {
   if (!frame) return false
   const url = new URL(frame.url)
   return url.protocol === 'file:' || url.origin === process.env.ELECTRON_RENDERER_URL
+}
+
+async function ensureMacMediaAccess(kind: 'microphone' | 'camera'): Promise<{ status: string; granted: boolean }> {
+  if (process.platform !== 'darwin') return { status: 'granted', granted: true }
+  let status = systemPreferences.getMediaAccessStatus(kind)
+  if (status === 'not-determined') {
+    const granted = await systemPreferences.askForMediaAccess(kind)
+    status = granted ? 'granted' : systemPreferences.getMediaAccessStatus(kind)
+  }
+  return { status, granted: status === 'granted' }
 }
 
 function calculateWebContentsViewBounds(): { x: number; y: number; width: number; height: number } {
@@ -735,7 +746,10 @@ async function createWindow() {
       trafficLightPosition: { x: 16, y: 15 },
       transparent: true,
       backgroundColor: '#00000000',
-      vibrancy: 'sidebar', // Glassmorphic blur on macOS
+      // No `vibrancy` here: the Glass theme mounts native Liquid Glass via
+      // electron-liquid-glass, and vibrancy on top of it renders blurry
+      // (see electron/window-material.ts). The renderer's `set-theme` call
+      // picks the material once the page has loaded.
       webPreferences: {
         preload: join(__dirname, 'preload.js'),
         nodeIntegration: false,
@@ -748,6 +762,57 @@ async function createWindow() {
   }
   mainWindow = win
   attachChromeShortcuts(win.webContents)
+
+  const allowedPermissions = new Set([
+    'media',
+    'audioCapture',
+    'videoCapture',
+    'display-capture',
+    'mediaKeySystem',
+    'clipboard-read',
+    'clipboard-sanitized-write',
+    'fullscreen',
+  ])
+
+  win.webContents.session.setPermissionCheckHandler((webContents, permission, requestingOrigin) => {
+    if (!webContents || webContents.id !== win.webContents.id) return false
+    try {
+      const url = new URL(requestingOrigin)
+      if (url.protocol !== 'file:' && url.origin !== process.env.ELECTRON_RENDERER_URL) return false
+    } catch {
+      return false
+    }
+    return allowedPermissions.has(permission)
+  })
+
+  win.webContents.session.setPermissionRequestHandler((webContents, permission, callback, details) => {
+    if (webContents.id !== win.webContents.id || !allowedPermissions.has(permission)) {
+      callback(false)
+      return
+    }
+    if (details.requestingUrl) {
+      try {
+        const url = new URL(details.requestingUrl)
+        if (url.protocol !== 'file:' && url.origin !== process.env.ELECTRON_RENDERER_URL) {
+          callback(false)
+          return
+        }
+      } catch {
+        callback(false)
+        return
+      }
+    }
+    if (permission === 'media' && process.platform === 'darwin') {
+      const mediaTypes = 'mediaTypes' in details && Array.isArray(details.mediaTypes) ? details.mediaTypes : ['audio', 'video']
+      void (async () => {
+        if (mediaTypes.includes('audio')) await ensureMacMediaAccess('microphone')
+        if (mediaTypes.includes('video')) await ensureMacMediaAccess('camera')
+        callback(true)
+      })()
+      return
+    }
+    callback(true)
+  })
 
   win.webContents.session.setDisplayMediaRequestHandler((request, callback) => {
     if (!request.userGesture || !validateIpcSender(request.frame) || request.frame !== win.webContents.mainFrame) {
@@ -890,15 +955,13 @@ ipcMain.handle('set-theme', (event, theme: 'light' | 'dark' | 'glass' | 'system'
   currentTheme = theme
   if (!mainWindow) return theme
 
-  if (theme === 'glass') {
-    if (process.platform === 'darwin') {
-      mainWindow.setVibrancy('sidebar')
-    }
-    mainWindow.setBackgroundColor('#00000000')
-  } else {
-    if (process.platform === 'darwin') mainWindow.setVibrancy(null)
-    mainWindow.setBackgroundColor(theme === 'dark' ? '#131312' : '#F8F7F4')
-  }
+  // Glass: native Liquid Glass (macOS 26+) or vibrancy behind a transparent window.
+  // Others: opaque window background matching the resolved appearance. Applied
+  // asynchronously (the glass view waits for the page to finish loading).
+  const dark = theme === 'dark' || (theme === 'system' && nativeTheme.shouldUseDarkColors)
+  void applyWindowMaterial(mainWindow, theme, dark).catch((error) => {
+    console.warn('[glass] could not apply window material:', error)
+  })
   return theme
 })
 
@@ -1205,4 +1268,21 @@ ipcMain.handle('browser:set-panel-mode', (event, mode: 'narrow' | 'wide' | 'full
 
   updateWebContentsViewBounds()
   mainWindow.webContents.send('browser:panel-mode-changed', { mode, width: agentPanelWidth })
+})
+
+ipcMain.handle('media:ensure-access', async (event, kind: 'microphone' | 'camera') => {
+  if (!validateIpcSender(event.senderFrame) || (kind !== 'microphone' && kind !== 'camera')) {
+    return { status: 'denied', granted: false }
+  }
+  return ensureMacMediaAccess(kind)
+})
+
+ipcMain.handle('media:open-settings', async (event, kind: 'microphone' | 'camera') => {
+  if (!validateIpcSender(event.senderFrame)) return false
+  if (process.platform === 'darwin') {
+    const pane = kind === 'camera' ? 'Privacy_Camera' : 'Privacy_Microphone'
+    await shell.openExternal(`x-apple.systempreferences:com.apple.preference.security?${pane}`)
+    return true
+  }
+  return false
 })

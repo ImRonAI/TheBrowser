@@ -9,7 +9,7 @@ One place decides which A2A endpoints Ron's agents can reach and hands each agen
 - any extra agents in ``RON_A2A_AGENTS`` (comma list of absolute HTTP(S) URLs).
 
 Call sites: the panel text agent (``panel_agent``), the Live ``BidiAgent`` (``live_tools``), the
-``recall`` child (``memory_agent``), the tool fixer (``tool_repair``), issue agents
+tool fixer (``tool_repair``), issue agents
 (``issue_agents``) and the teaching skill children (``teaching``). Each call builds a fresh provider
 so one agent's discovered-agent cache is never shared with another's.
 """

@@ -40,3 +40,8 @@ slack_events/
 
 # Agent journal (vendored strands_tools journal tool; consolidated into memory by dreaming)
 journal/
+
+# research scratch
+.firecrawl/
+venv-next/
+agent/api/core/harness-sdk-next/

@@ -61,7 +61,7 @@ from strands_harness.memory import resolve_memory
 
 from agent.api.core import config
 from agent.api.core.native_sop import native_sop_prompt
-from agent.api.core.panel_storage import SerializedFileMemoryStore, _ScopedStorage, _user_scope, get_panel_storage
+from agent.api.core.panel_storage import _ScopedStorage, _user_scope, get_panel_storage
 from agent.api.core.tool_observation import (
     OBSERVATION_HOOK_ORDER, file_sha256, is_library_tool, redact_outcome, tool_outcome, tool_source,
 )
@@ -177,7 +177,8 @@ class RepairConfig:
         models = tuple(m.strip() for m in raw.split(",") if m.strip()) or DEFAULT_FIXER_MODELS
         effort = (os.getenv("RON_TOOL_REPAIR_EFFORT", config.RON_TOOL_REPAIR_EFFORT) or "").strip() or None
         threshold = int(os.getenv("RON_TOOL_REPAIR_THRESHOLD", str(config.RON_TOOL_REPAIR_THRESHOLD)))
-        return cls(enabled=os.getenv("RON_TOOL_REPAIR", "1") != "0", threshold=max(1, threshold), models=models,
+        return cls(enabled=os.getenv("RON_TOOL_REPAIR", "1") != "0" and config.perplexity_agent_api_enabled(),
+                   threshold=max(1, threshold), models=models,
                    effort=effort, timeout_s=int(os.getenv("RON_TOOL_REPAIR_TIMEOUT_S", str(config.RON_TOOL_REPAIR_TIMEOUT_S))),
                    max_concurrent=max(1, int(os.getenv("RON_TOOL_REPAIR_MAX_CONCURRENT", "2"))))
 
@@ -278,6 +279,45 @@ def _error_text(event: AfterToolCallEvent, outcome: dict[str, Any]) -> str | Non
     return "\n".join(parts)[:2000] or None
 
 
+#: Prefixes the native layers put on an input-validation failure *before* the tool body runs:
+#: ``strands.tools.decorator.FunctionToolMetadata.validate_input`` and the MCP server
+#: (``mcp/server/lowlevel/server.py``: ``Input validation error: ...``).
+_PRE_EXECUTION_ERROR_PREFIXES = ("Validation failed for input parameters", "Input validation error:")
+
+
+def input_validation_failure(tool: Any, tool_use: dict[str, Any], error: str | None) -> str | None:
+    """Why this call never reached the tool body, or ``None`` if it (probably) did.
+
+    A tool call whose arguments do not satisfy the tool's own input schema is rejected by the
+    native decorator (``decorator.py``: ``validate_input`` raises ``ValueError`` and the body is
+    skipped) or by the MCP server. That is a defect of the *call* — the model/stream delivered
+    missing or malformed arguments — not of the tool, so it must not start a fixer. For a native
+    decorated tool the decision is made by re-running its Pydantic input model on the exact
+    arguments (authoritative, no string matching); the documented error prefixes are the fallback
+    for MCP and module tools whose validation happens elsewhere.
+    """
+    from agent.api.core.tool_observation import wrapped_chain
+
+    raw_input = tool_use.get("input")
+    for candidate in wrapped_chain(tool):
+        metadata = getattr(candidate, "_metadata", None)
+        model = getattr(metadata, "input_model", None)
+        if model is None or not hasattr(model, "model_validate"):
+            continue
+        try:
+            model(**(raw_input if isinstance(raw_input, dict) else {}))
+        except Exception as exc:  # pydantic ValidationError / TypeError on non-dict input
+            return f"input rejected by the tool's schema before execution: {exc}"[:500]
+        return None
+    text = (error or "").strip()
+    if text.startswith("Error: "):
+        text = text[len("Error: "):]
+    for prefix in _PRE_EXECUTION_ERROR_PREFIXES:
+        if text.startswith(prefix):
+            return f"input rejected before execution: {text}"[:500]
+    return None
+
+
 class ToolRepairTrigger(HookProvider):
     """Start one investigation when a tool keeps failing (or fails once with side effects).
 
@@ -309,12 +349,20 @@ class ToolRepairTrigger(HookProvider):
         name = outcome["tool_name"]
         if name in NON_REPAIRABLE_TOOLS:
             return
+        tool_use = dict(event.tool_use)
+        rejected = input_validation_failure(event.selected_tool, tool_use, _error_text(event, outcome))
+        if rejected is not None:
+            # The body never ran: missing/malformed arguments are a call (model/stream) defect, not a
+            # tool defect. Record it for the agent and the observation span; never count it toward a
+            # repair or start a fixer (a shell fixer for ``shell(command missing)`` repairs nothing).
+            observe_tool(event, outcome, count=None, rejected=rejected)
+            logger.warning("tool_name=<%s> | %s; no repair investigation", name, rejected)
+            return
         kind = target_kind(event.selected_tool)
         key = f"{name}|{_exception_class(outcome)}"
         counts = dict(event.agent.state.get(REPAIR_COUNTS_STATE_KEY) or {})
         counts[key] = int(counts.get(key, 0)) + 1
         event.agent.state.set(REPAIR_COUNTS_STATE_KEY, counts)
-        tool_use = dict(event.tool_use)
         visible = isinstance(tool_use.get("input"), dict) and bool(tool_use.get("input"))
         side_effecting = is_side_effecting(name, tool_use.get("input"))
         # One more call is only ever suggested for an idempotent tool with visible parameters below
@@ -327,7 +375,7 @@ class ToolRepairTrigger(HookProvider):
         observe_tool(event, outcome, count=counts[key], escalate=True, side_effecting=side_effecting)
         if existing.get("tool_name") == name and existing.get("status") in ("investigating", "approval"):
             return  # one investigation per tool at a time; the result updates the guidance
-        from agent.api.core.panel_storage import current_request_text
+        from agent.api.core.panel_tools import current_request_text
 
         spec = getattr(event.selected_tool, "tool_spec", None)
         # BidiAgent has no trace_attributes; the Live trigger carries the identity explicitly.
@@ -973,9 +1021,7 @@ def _memory_search_tools(user_id: str) -> list[AgentTool]:
     from agent.api.core.panel_agent import user_memory_config
 
     stores = user_memory_config(user_id, "panel", extraction=False)["stores"]
-    memory = resolve_memory(stores=list(stores), writable=False)
-    tools: list[AgentTool] = [t for s in stores if isinstance(s, SerializedFileMemoryStore) for t in s.get_tools()]
-    return [*tools, *memory.tools]
+    return list(resolve_memory(stores=list(stores), writable=False).tools)
 
 
 def _with_hosted_tools(model: Any, hosted: list[dict[str, Any]]) -> Any:
@@ -1295,7 +1341,7 @@ class RepairService:
             request = {}
         recorded = ((agent.state.get(REPAIR_CONTEXT_STATE_KEY) or {}).get(tool_name) or [{}])[0]
         failing_use = {"toolUseId": recorded.get("toolUseId", ""), "name": tool_name, "input": recorded.get("input", {})}
-        from agent.api.core.panel_storage import current_request_text
+        from agent.api.core.panel_tools import current_request_text
 
         spec = getattr(registered, "tool_spec", None)
         evidence = RepairEvidence(

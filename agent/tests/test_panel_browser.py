@@ -41,9 +41,9 @@ def test_user_server_config_defaults(clean_env):
             "command": str(REPO_ROOT / "venv" / "bin" / "electron-playwright-mcp"),
             "args": [],
             "env": {
-                "ELECTRON_PLAYWRIGHT_MCP_ELECTRON_URL": "http://127.0.0.1:13000/electron",
-                "ELECTRON_PLAYWRIGHT_MCP_PLAYWRIGHT_URL": "http://127.0.0.1:18931/mcp",
-                "ELECTRON_PLAYWRIGHT_MCP_CDP_URL": "http://127.0.0.1:19222",
+                "ELECTRON_PLAYWRIGHT_MCP_ELECTRON_URL": "http://127.0.0.1:3000/electron",
+                "ELECTRON_PLAYWRIGHT_MCP_PLAYWRIGHT_URL": "http://127.0.0.1:8931/mcp",
+                "ELECTRON_PLAYWRIGHT_MCP_CDP_URL": "http://127.0.0.1:9222",
             },
         }
     }
@@ -76,7 +76,7 @@ def test_env_overrides_are_honoured(clean_env, monkeypatch):
 
 def test_browser_electron_url(clean_env, monkeypatch):
     assert browser_electron_url("cloud") == "http://127.0.0.1:3000/electron"
-    assert browser_electron_url("user") == "http://127.0.0.1:13000/electron"
+    assert browser_electron_url("user") == "http://127.0.0.1:3000/electron"
     monkeypatch.setenv("RON_CLOUD_BROWSER_ELECTRON_URL", "http://127.0.0.1:4000/electron")
     assert browser_electron_url("cloud") == "http://127.0.0.1:4000/electron"
 
@@ -176,7 +176,7 @@ def test_hook_a_reachable_browser_lets_tool_proceed(clean_env):
     event = _event(agent)
     _run(hook.before_tool_call(event))
     assert event.cancel_tool is False
-    assert probe.seen == ["http://127.0.0.1:13000/electron"]
+    assert probe.seen == ["http://127.0.0.1:3000/electron"]
 
 
 def test_hook_b_unreachable_browser_interrupts_with_reason(clean_env):
@@ -190,7 +190,7 @@ def test_hook_b_unreachable_browser_interrupts_with_reason(clean_env):
     assert interrupt.reason == {
         "browser": "user",
         "tool": "user_browser_playwright_List_tabs",
-        "url": "http://127.0.0.1:13000/electron",
+        "url": "http://127.0.0.1:3000/electron",
         "question": "Your browser is offline. Reconnect the tunnel and reply 'continue', or reply 'cancel'.",
     }
     assert interrupt.id.startswith("v1:before_tool_call:t1:")
@@ -281,7 +281,7 @@ def test_hook_f_default_probe_maps_http_outcomes(clean_env, monkeypatch, behavio
         raise httpx.ReadTimeout("timeout", request=request)
 
     monkeypatch.setattr(panel_browser, "_transport_factory", lambda: httpx.MockTransport(handler))
-    assert _run(panel_browser.default_probe("http://127.0.0.1:13000/electron")) is expected
+    assert _run(panel_browser.default_probe("http://127.0.0.1:3000/electron")) is expected
 
 
 def test_hook_default_probe_is_async_only():

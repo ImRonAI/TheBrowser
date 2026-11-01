@@ -2,9 +2,9 @@
 
 A chat picks exactly one browser up front:
 
-* ``user``  – the user's own Ron window, reached from the server through the SSH
-  reverse tunnel (Mac 3000/8931/9222 appear on the VPS loopback as 13000/18931/19222).
-* ``cloud`` – the Ron instance running next to the API on the server (3000/8931/9222).
+* ``user``  – the user's own Ron window on this machine (3000/8931/9222).
+* ``cloud`` – a separate Ron instance; it defaults to the same local ports because the VPS is
+  retired, so point ``RON_CLOUD_BROWSER_*_URL`` elsewhere to keep the two apart.
 
 Both are served by the same ``electron-playwright-mcp`` stdio server; only the
 ``ELECTRON_PLAYWRIGHT_MCP_*_URL`` environment differs. This module owns those
@@ -44,9 +44,9 @@ _SURFACES: Final[tuple[tuple[str, str], ...]] = (
 
 _DEFAULT_URLS: Final[dict[str, dict[str, str]]] = {
     "user": {
-        "ELECTRON": "http://127.0.0.1:13000/electron",
-        "PLAYWRIGHT": "http://127.0.0.1:18931/mcp",
-        "CDP": "http://127.0.0.1:19222",
+        "ELECTRON": "http://127.0.0.1:3000/electron",
+        "PLAYWRIGHT": "http://127.0.0.1:8931/mcp",
+        "CDP": "http://127.0.0.1:9222",
     },
     "cloud": {
         "ELECTRON": "http://127.0.0.1:3000/electron",

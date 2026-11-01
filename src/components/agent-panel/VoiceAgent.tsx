@@ -25,9 +25,6 @@ import { getAccessToken } from '@/api/supabase'
 import { useLivePlayback } from './useLivePlayback'
 import { useMusicPlayback } from './useMusicPlayback'
 import { useLiveMusicStore } from '@/stores/liveMusicStore'
-import { useMascotStore } from '@/stores/mascotStore'
-import { genreFromPrompts } from '@/lib/mascot'
-import { COMPACT_SCALE, OubliStage, PINNED_SCALE } from './OubliStage'
 import { LIVE_API_BASE_URL } from '@/pages/types/api'
 import { checkLiveApi, liveSocketUrl } from '@/lib/live-api'
 import { projectEndpoint } from '@/lib/project-endpoint'
@@ -66,6 +63,7 @@ export function VoiceAgent({ userId = 'default', agentScope = 'panel', sessionId
   const [source, setSource] = useState<'screen' | 'camera' | null>(null)
   const [mic, setMic] = useState(false)
   const [error, setError] = useState('')
+  const [permissionDeniedKind, setPermissionDeniedKind] = useState<'microphone' | 'camera' | null>(null)
   const [stopping, setStopping] = useState(false)
   const socket = useRef<WebSocket | null>(null)
   const capture = useRef<Capture | null>(null)
@@ -91,20 +89,6 @@ export function VoiceAgent({ userId = 'default', agentScope = 'panel', sessionId
     if (agentScope !== 'panel') return
     musicStore.getState().publish({ liveStatus: live.status, available: Boolean(live.musicAvailable), music: live.music, agentId: live.agentId, userId })
   }, [agentScope, live.status, live.musicAvailable, live.music, live.agentId, userId, musicStore])
-  // Oubli: the analyser taps (voice = mouth, music = body), Live flags, costume and beat clock.
-  useEffect(() => {
-    if (agentScope !== 'panel') return
-    useMascotStore.getState().attachTaps({ voice: sink.frequencyData, music: musicSink.frequencyData })
-    return () => { useMascotStore.getState().attachTaps({ voice: null, music: null }); useMascotStore.getState().set({ liveOpen: false, thinking: false, working: false, musicOn: false, genre: null, bpm: 0 }) }
-  }, [agentScope, sink.frequencyData, musicSink.frequencyData])
-  useEffect(() => {
-    if (agentScope !== 'panel') return
-    const bpm = typeof live.music.config.bpm === 'number' ? live.music.config.bpm : 0
-    useMascotStore.getState().set({
-      liveOpen: live.status === 'ready', thinking: live.processing, working: live.turns.some((turn) => turn.kind === 'tool' && !turn.final),
-      musicOn: live.music.connected && live.music.playback === 'playing', genre: genreFromPrompts(live.music.prompts), bpm,
-    })
-  }, [agentScope, live.status, live.processing, live.turns, live.music])
 
   function stopVideo() {
     const current = capture.current
@@ -290,13 +274,6 @@ export function VoiceAgent({ userId = 'default', agentScope = 'panel', sessionId
       const { state: next, effects } = reduceLiveEvent(state.current, data)
       recordFinalTurns(state.current, next)
       commit(next)
-      if (agentScope === 'panel') {
-        const mascot = useMascotStore.getState()
-        if (frame?.type === 'bidi_reasoning_delta') mascot.thought({ kind: 'delta', text: String((data as { delta?: unknown }).delta ?? '') })
-        else if (frame?.type === 'bidi_reasoning_block') { mascot.thought({ kind: 'clear' }); mascot.thought({ kind: 'delta', text: String((data as { text?: unknown }).text ?? '') }) }
-        else if (frame?.type === 'bidi_response_stop' || frame?.type === 'bidi_barge_in') mascot.thought({ kind: 'settle' })
-        else if (frame?.type === 'bidi_response_start') mascot.thought({ kind: 'clear' })
-      }
       if (frame?.type === 'ready') clearTimeout(timeout)
       if (frame?.type === 'error') { clearTimeout(timeout); setError(next.error ?? 'Live session failed.') }
       for (const effect of effects) {
@@ -342,6 +319,15 @@ export function VoiceAgent({ userId = 'default', agentScope = 'panel', sessionId
     let stream: MediaStream | null = null
     try {
       setError('')
+      setPermissionDeniedKind(null)
+      if (kind === 'camera') {
+        const access = await window.electron?.media?.ensureAccess('camera')
+        if (access && !access.granted) {
+          setPermissionDeniedKind('camera')
+          setError('macOS blocked camera access for this app. Enable Camera permission in System Settings → Privacy & Security → Camera.')
+          return
+        }
+      }
       stream = kind === 'screen'
         ? await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: 15 }, audio: false })
         : await navigator.mediaDevices.getUserMedia({ video: { width: 1280, height: 720, frameRate: 15 }, audio: false })
@@ -373,13 +359,27 @@ export function VoiceAgent({ userId = 'default', agentScope = 'panel', sessionId
     } catch (cause) {
       stream?.getTracks().forEach(track => track.stop())
       stopVideo()
-      setError(cause instanceof Error ? cause.message : 'Capture permission was denied.')
+      const msg = cause instanceof Error ? cause.message : 'Capture permission was denied.'
+      if (kind === 'camera' && (cause instanceof DOMException && (cause.name === 'NotAllowedError' || cause.name === 'PermissionDeniedError') || /permission denied/i.test(msg))) {
+        setPermissionDeniedKind('camera')
+        setError('macOS blocked camera access for this app. Enable Camera permission in System Settings → Privacy & Security → Camera.')
+      } else {
+        setError(msg)
+      }
     } finally { capturePending.current = false }
   }
 
   async function startMic() {
     const epoch = generation.current
     try {
+      setError('')
+      setPermissionDeniedKind(null)
+      const access = await window.electron?.media?.ensureAccess('microphone')
+      if (access && !access.granted) {
+        setPermissionDeniedKind('microphone')
+        setError('macOS blocked microphone access for this app (or the terminal/IDE that launched it). Enable Microphone permission in System Settings → Privacy & Security → Microphone.')
+        return
+      }
       const stream = await navigator.mediaDevices.getUserMedia(micConstraints(useVoiceSettingsStore.getState().micDeviceId))
       if (epoch !== generation.current || microphone.current) { stream.getTracks().forEach(track => track.stop()); return }
       microphone.current = stream
@@ -408,10 +408,14 @@ export function VoiceAgent({ userId = 'default', agentScope = 'panel', sessionId
       setMic(true)
     } catch (cause) {
       stopMic()
+      const msg = cause instanceof Error ? cause.message : 'Microphone unavailable.'
       if (isMicUnavailableError(cause)) {
         useVoiceSettingsStore.getState().setMicDeviceId(undefined)
         setError('The selected microphone is unavailable. Choose another microphone.')
-      } else setError(cause instanceof Error ? cause.message : 'Microphone unavailable.')
+      } else if (cause instanceof DOMException && (cause.name === 'NotAllowedError' || cause.name === 'PermissionDeniedError') || /permission denied/i.test(msg)) {
+        setPermissionDeniedKind('microphone')
+        setError('macOS blocked microphone access for this app (or the terminal/IDE that launched it). Enable Microphone permission in System Settings → Privacy & Security → Microphone.')
+      } else setError(msg)
     }
   }
 
@@ -453,19 +457,18 @@ export function VoiceAgent({ userId = 'default', agentScope = 'panel', sessionId
 
   const iconButton = 'size-9'
   return <div className="relative flex h-full min-h-0 w-full flex-1 flex-col">
-      {active && <div aria-hidden className="pointer-events-none absolute inset-2 z-0 rounded-2xl border-2 border-indigo-500/60 shadow-glow-accent motion-safe:animate-pulse-subtle" />}
-      <div className="relative z-[1] flex min-h-0 flex-1 basis-0 flex-col gap-3 overflow-y-auto overscroll-contain scrollbar-thin px-4 pb-4 pt-4">
-        {foreignOwner && <div role="alert" className="rounded-xl border border-amber-300/60 bg-amber-50/80 p-3 text-xs dark:border-amber-900 dark:bg-amber-950/30">
+      <div className="relative flex min-h-0 flex-1 basis-0 flex-col gap-3 overflow-y-auto overscroll-contain scrollbar-thin px-4 pb-4 pt-4">
+        {foreignOwner && <div role="alert" className="rounded-md border border-amber-300/60 bg-amber-50/80 p-3 text-xs dark:border-amber-900 dark:bg-amber-950/30">
           A Live session for this conversation is already open in another view ({holder}). Stop it there before connecting here.
         </div>}
-        <section aria-label="Agent presence" className="mb-4 flex w-full shrink-0 flex-col items-center gap-1 [&>.oubli-frame]:w-full">
-          {agentScope === 'panel'
-            ? <OubliStage pinned scale={compact ? COMPACT_SCALE : PINNED_SCALE} />
-            : <div aria-hidden className={cn('rounded-full bg-gradient-to-br from-indigo-500 via-indigo-600 to-violet-700 shadow-lg shadow-indigo-600/30', presence === 'speaking' && 'motion-safe:animate-pulse')} style={{ width: compact ? 48 : 72, height: compact ? 48 : 72 }} />}
-          <p role="status" className="flex items-center gap-2 text-xs font-medium text-ink-muted dark:text-ink-inverse-muted">
-            <span aria-hidden className={cn('h-2 w-2 rounded-full', status === 'ready' ? 'bg-indigo-500' : status === 'connecting' ? 'bg-amber-400 motion-safe:animate-pulse' : 'bg-surface-300 dark:bg-surface-600')} />
+        <section aria-label="Live status" className={cn('flex w-full shrink-0 items-center justify-between gap-2 border-b border-surface-200 pb-3 dark:border-surface-800', compact && 'pb-2')}>
+          <p role="status" className="flex items-center gap-2 text-[13px] font-medium text-ink dark:text-ink-inverse">
+            <span aria-hidden className={cn('h-2 w-2 rounded-full', status === 'ready' ? 'bg-emerald-500' : status === 'connecting' ? 'bg-amber-400' : 'bg-surface-300 dark:bg-surface-600')} />
             {stopping ? 'Finishing pending work…' : caption}{status === 'ready' && live.processing && !live.playing ? ' · working' : ''}
           </p>
+          {active && <span className="rounded border border-surface-300 px-1.5 py-0.5 text-[12px] text-ink-muted dark:border-surface-700 dark:text-ink-inverse-muted">
+            {source === 'screen' ? 'Sharing screen' : source === 'camera' ? 'Sharing camera' : mic ? 'Microphone on' : presence === 'speaking' ? 'Speaking' : 'Active'}
+          </span>}
         </section>
         <div className="flex shrink-0 items-center justify-center gap-2">
           <Button type="button" size="icon" variant="outline" className={iconButton} disabled={status !== 'ready' || stopping} aria-pressed={mic} aria-label={mic ? 'Mute microphone' : 'Enable microphone'} onClick={() => mic ? stopMic() : void startMic()}>
@@ -511,7 +514,15 @@ export function VoiceAgent({ userId = 'default', agentScope = 'panel', sessionId
           <p className="font-semibold">Live is not available for this {isIssueScope(agentScope) ? 'issue' : 'agent'}</p>
           <p className="mt-1 whitespace-pre-wrap break-words">{blocker}</p>
         </div>}
-        {error && !blocker && <div role="alert" className="rounded-xl border border-red-300/60 bg-red-50/80 p-3 text-xs text-red-800 dark:bg-red-950/30 dark:text-red-200"><p className="whitespace-pre-wrap break-words">{error}</p></div>}
+        {error && !blocker && <div role="alert" className="rounded-xl border border-red-300/60 bg-red-50/80 p-3 text-xs text-red-800 dark:bg-red-950/30 dark:text-red-200">
+          <p className="whitespace-pre-wrap break-words">{error}</p>
+          {permissionDeniedKind && window.electron?.media?.openSettings && (
+            <Button type="button" size="sm" variant="outline" className="mt-2 h-7 text-xs"
+              onClick={() => void window.electron?.media?.openSettings(permissionDeniedKind)}>
+              Open {permissionDeniedKind === 'camera' ? 'Camera' : 'Microphone'} Settings
+            </Button>
+          )}
+        </div>}
         {pending.length > 0 && <p role="status" className="text-[11px] text-ink-muted dark:text-ink-inverse-muted">{pending.length} tool call{pending.length === 1 ? '' : 's'} running · switching to Chat waits for them</p>}
         {live.journalHtml && <details className="rounded-xl border border-surface-200 p-3 dark:border-surface-700">
           <summary className="cursor-pointer text-xs font-medium">Session journal · {live.journalSaved ? 'saved to configured storage' : 'save failed'}</summary>
