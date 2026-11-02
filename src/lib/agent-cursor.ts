@@ -16,7 +16,7 @@ export interface SnapshotElement {
 /** Tip of the pointer path, in the SVG viewBox. */
 export const CURSOR_TIP = 4
 
-export const CURSOR_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 28 28" aria-hidden="true"><defs><filter id="ron-cursor-glow" x="-80%" y="-80%" width="260%" height="260%"><feDropShadow dx="0" dy="0" stdDeviation="2.2" flood-color="#4C1D95" flood-opacity="0.45"/><feDropShadow dx="0" dy="0" stdDeviation="1" flood-color="#312E81" flood-opacity="0.95"/></filter></defs><path filter="url(#ron-cursor-glow)" d="M4 4 L4 22 L10.2 16.4 L14.6 24 L18.2 22.4 L13.8 15 L22 15 Z" fill="#1E1B4B" stroke="#312E81" stroke-width="1.25" stroke-linejoin="round"/></svg>`
+export const CURSOR_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 28 28" aria-hidden="true"><defs><filter id="ron-cursor-glow" x="-80%" y="-80%" width="260%" height="260%"><feDropShadow dx="0" dy="0" stdDeviation="2.2" flood-color="#6B3420" flood-opacity="0.45"/><feDropShadow dx="0" dy="0" stdDeviation="1" flood-color="#4E271A" flood-opacity="0.95"/></filter></defs><path filter="url(#ron-cursor-glow)" d="M4 4 L4 22 L10.2 16.4 L14.6 24 L18.2 22.4 L13.8 15 L22 15 Z" fill="#2C150D" stroke="#4E271A" stroke-width="1.25" stroke-linejoin="round"/></svg>`
 
 const number = (value: unknown): number | null =>
   typeof value === 'number' && Number.isFinite(value) ? value : null

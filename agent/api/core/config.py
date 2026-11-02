@@ -30,6 +30,19 @@ BRAVE_SEARCH_BASE_URL = "https://api.search.brave.com/res/v1"
 # Client-side ceiling for the shared token bucket. Verified plan policy is
 # 50 req/s with no monthly cap (x-ratelimit-policy "50;w=1, 0;w=2592000").
 BRAVE_SEARCH_RPS = float(os.getenv("BRAVE_SEARCH_RPS", "10"))
+# Brave sells Suggest, Spellcheck and Answers as separate plans, each with its own subscription
+# token (the Search plan returns 400 OPTION_NOT_IN_PLAN for them). Each falls back to the Search
+# key so a single-plan account still works. Verified policies 2026-10-07: suggest/spellcheck
+# "100;w=1" (100 req/s), answers "2;w=1" (2 req/s); all with no monthly cap.
+BRAVE_SUGGEST_API_KEY = os.getenv("BRAVE_SUGGEST_API_KEY") or BRAVE_SEARCH_API_KEY
+BRAVE_SPELLCHECK_API_KEY = os.getenv("BRAVE_SPELLCHECK_API_KEY") or BRAVE_SEARCH_API_KEY
+BRAVE_ANSWERS_API_KEY = os.getenv("BRAVE_ANSWERS_API_KEY") or BRAVE_SEARCH_API_KEY
+BRAVE_ASSIST_RPS = float(os.getenv("BRAVE_ASSIST_RPS", "20"))
+BRAVE_ANSWERS_RPS = float(os.getenv("BRAVE_ANSWERS_RPS", "2"))
+# Answers plan defaults (POST /chat/completions). `brave` is the documented quick model; the API's
+# own default is `brave-pro`. Research mode can run for minutes, so it is opt-in per call.
+BRAVE_ANSWERS_MODEL = os.getenv("BRAVE_ANSWERS_MODEL", "brave")
+BRAVE_ANSWERS_TIMEOUT = float(os.getenv("BRAVE_ANSWERS_TIMEOUT", "120"))
 
 # Perplexity Agent API. GET /v1/models is the model catalogue that backs the
 # picker; POST /v1/responses runs a turn (OpenAI Responses wire format).
@@ -70,6 +83,16 @@ LIVE_MUSIC_MODEL = os.getenv("RON_LIVE_MUSIC_MODEL", "models/lyria-realtime-exp"
 LIVE_MUSIC_API_VERSION = os.getenv("RON_LIVE_MUSIC_API_VERSION", "v1beta")
 #: RON_LIVE_MUSIC=0 removes the music_* tools and the Lyria skill from the Live agent.
 LIVE_MUSIC_ENABLED = os.getenv("RON_LIVE_MUSIC", "1") != "0"
+#: gemini-3.8-live-extended-thinking announces a tool call, never emits the toolCall frame, and either
+#: says "a system error occurred" or stalls IN_PROGRESS (googleapis/python-genai#3015, reproduced on the
+#: raw WebSocket with Google's own sample). The community workaround is one text nudge once the model is
+#: idle; RON_LIVE_TOOL_NUDGE=0 disables it, the others bound how long IN_PROGRESS may stall and how often.
+LIVE_TOOL_NUDGE_ENABLED = os.getenv("RON_LIVE_TOOL_NUDGE", "1") != "0"
+#: When a Live thread ends with work pending (app closed, signed out, tunnel down, Live failure) the Chat agent
+#: takes the same native session over on the cloud browser. RON_LIVE_TAKEOVER=0 disables the hand-off.
+LIVE_TAKEOVER_ENABLED = os.getenv("RON_LIVE_TAKEOVER", "1") != "0"
+LIVE_TOOL_NUDGE_STALL_SECONDS = float(os.getenv("RON_LIVE_TOOL_NUDGE_STALL_SECONDS", "12"))
+LIVE_TOOL_NUDGE_MAX_PER_TURN = int(os.getenv("RON_LIVE_TOOL_NUDGE_MAX_PER_TURN", "2"))
 #: Rolling take kept in memory per Live session for ``music_save`` (48 kHz stereo PCM16 = 192 KB/s;
 #: 240 s = 46 MB, under Supabase Storage's default 50 MB per-file limit). Oldest audio is dropped when full.
 LIVE_MUSIC_RECORD_SECONDS = float(os.getenv("RON_LIVE_MUSIC_RECORD_SECONDS", "240"))

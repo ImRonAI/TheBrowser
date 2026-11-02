@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback, useMemo, Fragment, type KeyboardEvent } from 'react'
 import { Transition } from '@headlessui/react'
-import { XMarkIcon, PlusIcon, StopIcon } from '@heroicons/react/24/outline'
+import { XMarkIcon, PlusIcon, StopIcon, QueueListIcon } from '@heroicons/react/24/outline'
+import { ThreadsList } from './ThreadsList'
 import { useAgentUi } from '@/context/AgentUiContext'
 import { usePanelAgentStore } from '@/stores/panelAgentStore'
 import { cn } from '@/utils/cn'
@@ -10,7 +11,8 @@ import { MessageResponse } from '@/components/ai-elements/response'
 import { Tool, ToolHeader, ToolContent, ToolInput, ToolOutput } from '@/components/ai-elements/tool'
 import { ChainOfThought, ChainOfThoughtContent, ChainOfThoughtHeader, ChainOfThoughtImage, ChainOfThoughtSearchResult, ChainOfThoughtSearchResults, ChainOfThoughtStep } from '@/components/ai-elements/chain-of-thought'
 import { detectPreviewUrl, fileFromToolCall, filesFromListDir, getToolView, toolOutputText } from '@/components/ai-elements/ide-tool-mapping'
-import { displayValue, groupThinkParts, isBrowserUnavailable, type BrowserSelection, type NativePart, type PanelInterrupt, type PanelMessage, type PanelPart, type RunStatus, type RuntimeOptions, type ThinkStep, type ToolPart } from '@/lib/panel-stream'
+import { displayValue, groupThinkParts, repairToolTitle, isBrowserUnavailable, isHitlApproval, RENDER_UI_TOOL, supersededUiParts, uiActionText, uiViewFromOutput, type NativePart, type PanelInterrupt, type PanelMessage, type PanelPart, type RunStatus, type RuntimeOptions, type ThinkStep, type ToolPart } from '@/lib/panel-stream'
+import { UiView } from './UiView'
 import { ContextPicker, SelectedContexts, type ContextItem } from './ContextPicker'
 import { DEFAULT_AGENT_MODEL, ModelSelector, useAgentModels, type AgentModelSelection } from './ModelSelector'
 import { usePanelChat } from './usePanelChat'
@@ -21,16 +23,14 @@ import { ArticleAttachmentCard } from '@/components/interests/ArticleAttachmentC
 import { VoiceAgent } from './VoiceAgent'
 import { Checkpoint, CheckpointIcon, CheckpointTrigger } from '@/components/ai-elements/checkpoint'
 import { PANEL_COMMANDS, parsePanelCommand } from '@/lib/panel-commands'
-import { historyFromMessages } from '@/lib/voice-events'
 import { OubliStage } from './OubliStage'
 import { flashAsking, useMascotStore } from '@/stores/mascotStore'
-import { liveKey, liveTurnsFor, unsharedLiveTurns, useLiveSessionStore } from '@/stores/liveSessionStore'
-import { Alert, AlertActions, AlertBody, AlertDescription, AlertTitle } from '@catalyst/alert'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@catalyst/table'
-import type { RepairProposal, RepairReady } from '@/lib/panel-stream'
+import { RepairPanel } from './RepairPanel'
+import { useTextAssist } from '@/hooks/useTextAssist'
+import { TextAssist, handleAssistKey } from '@/components/shared/TextAssist'
 
-const compactInput = 'w-full rounded-lg border border-surface-200 bg-white/70 px-2 py-1.5 text-xs dark:border-surface-700 dark:bg-surface-850 focus:outline-none focus:ring-2 focus:ring-indigo-500/30'
-const smallButton = 'rounded-lg border border-surface-200 px-3 py-1.5 text-xs font-medium hover:bg-indigo-50 disabled:opacity-50 dark:border-surface-700 dark:hover:bg-surface-800'
+const compactInput = 'w-full rounded-lg border border-surface-200 bg-surface-0 px-2 py-1.5 text-xs dark:border-surface-700 dark:bg-surface-850 focus:outline-none focus:ring-2 focus:ring-indigo-500/30'
+const smallButton = 'rounded-lg border border-surface-200 px-3 py-1.5 text-xs font-medium hover:bg-surface-100 disabled:opacity-50 dark:border-surface-700 dark:hover:bg-surface-800'
 /** JSON-mode text for a sibling interrupt during a quick reply; malformed text is sent as-is so the server reports it. */
 const safeJson = (text: string | undefined): unknown => { try { return JSON.parse(text ?? '') as unknown } catch { return text ?? '' } }
 const focusComposer = (element: HTMLTextAreaElement | null) => {
@@ -70,36 +70,35 @@ export function AgentConversation({ destination, embedded = false }: { destinati
   const [options, setOptions] = useState<RuntimeOptions>({
     checkpointing: false, tool_execution: 'concurrent', context: 'auto', goal: '', background: false,
   })
-  // Live ↔ Chat shared history lives in liveSessionStore, keyed per user/scope/conversation.
-  // Chat shows the final Live turns read-only; only not-yet-shared turns go out as context.
-  // The key is read through a ref so usePanelChat's selection sees the current session id.
-  const liveKeyRef = useRef('')
-  const liveUnsharedRef = useRef<ReturnType<typeof unsharedLiveTurns>>([])
-  const clearSentContexts = useCallback(() => {
-    setSelectedContexts([])
-    const store = useLiveSessionStore.getState()
-    store.markShared(liveKeyRef.current, liveTurnsFor(store, liveKeyRef.current).length)
-  }, [])
+  const clearSentContexts = useCallback(() => { setSelectedContexts([]) }, [])
   const [commandFeedback, setCommandFeedback] = useState('')
+  const [threadsOpen, setThreadsOpen] = useState(false)
   const [commandIndex, setCommandIndex] = useState(0)
   const [commandsDismissed, setCommandsDismissed] = useState(false)
+  // Chat and Live are two agents over the same native thread (`session_id`): each restores the
+  // thread's messages from the SDK snapshot, so no history is bridged between them in the renderer.
   const chat = usePanelChat({ ...selection, destination, attachments: draft.articles,
-    contexts: selectedContexts, liveHistory: liveUnsharedRef.current, options, onSent: clearSentContexts })
-  const liveHistoryKey = liveKey(user, destination, chat.sessionId)
-  liveKeyRef.current = liveHistoryKey
-  const liveTurns = useLiveSessionStore((s) => liveTurnsFor(s, liveHistoryKey))
-  const liveUnshared = useMemo(() => unsharedLiveTurns(useLiveSessionStore.getState(), liveHistoryKey), [liveHistoryKey, liveTurns])
-  liveUnsharedRef.current = liveUnshared
+    contexts: selectedContexts, options, onSent: clearSentContexts })
   const model = chat.configuration?.model ?? selection.model
   const provider = chat.configuration?.provider ?? selection.provider
   const effort = chat.configuration?.effort ?? selection.effort
   const runtimeOptions = { ...options, ...chat.configuration?.options }
   const configurationLocked = Boolean(chat.configurationLocked) || chat.connection === 'loading'
   const { messages, status, sendMessage } = chat
+  // render_ui: a later render with the same view_id replaces the earlier one; an interaction inside
+  // a view becomes a user turn (or steering while a run is active) so the agent can react to it.
+  const supersededViews = useMemo(() => supersededUiParts(messages), [messages])
+  const onUiAction = useCallback((viewId: string, action: unknown, payload: unknown) => {
+    void sendMessage(uiActionText(viewId, action, payload))
+  }, [sendMessage])
   const active = status === 'running'
   const paused = status === 'checkpointed' || status === 'interrupted'
   const unavailable = chat.connection !== 'connected' || chat.controlBusy || paused || chat.recoveryRequired
   const input = draft.text
+  // Brave Suggest + Spellcheck for the composer. Slash commands have their own list; assist is off
+  // while the text starts with "/" or a command list is showing.
+  const skipAssist = useCallback((value: string) => value.trimStart().startsWith('/'), [])
+  const assist = useTextAssist(input, { skip: skipAssist, count: 5 })
   const commandSuggestions = !commandsDismissed && /^\/\S*$/.test(input)
     ? PANEL_COMMANDS.filter((command) => command.name.startsWith(input)) : []
   const selectedCommand = Math.min(commandIndex, Math.max(0, commandSuggestions.length - 1))
@@ -174,7 +173,6 @@ export function AgentConversation({ destination, embedded = false }: { destinati
     if (consumeAskRonPendingPrompt()) { closeAskRon(); return }
     consumeAgentPanelPrompt()
   }, [consumeAskRonPendingPrompt, consumeAgentPanelPrompt, closeAskRon])
-  const sharedHistory = useMemo(() => historyFromMessages(messages), [messages])
   const switchMode = async (next: 'voice' | 'text') => {
     if (next === interactionMode) return
     setModeNotice('')
@@ -214,6 +212,22 @@ export function AgentConversation({ destination, embedded = false }: { destinati
     }
     return { files: Array.from(files.values()), output, previewUrl }
   }, [messages])
+
+  // Open an existing thread in the current view. Chat restores it from the server snapshot; Live
+  // (VoiceAgent keyed by sessionId) reconnects and its BidiAgent restores the same native session.
+  const handleOpenThread = async (id: string) => {
+    if (id === chat.sessionId) { setThreadsOpen(false); return }
+    if (liveHandOff.current) {
+      const done = await liveHandOff.current()
+      if (!done) { setModeNotice('Live is still working. Wait for pending tools or press Stop in Live before opening another thread.'); return }
+    }
+    setModeNotice('')
+    sessionRef.current = ''
+    chat.openThread(id)
+    setSelectedContexts([])
+    setCommandFeedback('')
+    setThreadsOpen(false)
+  }
 
   const handleNewChat = async () => {
     // A new conversation must not tear down a Live session through the
@@ -261,6 +275,7 @@ export function AgentConversation({ destination, embedded = false }: { destinati
   }
   const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.nativeEvent.isComposing) return
+    if (!commandSuggestions.length && handleAssistKey(event, assist, (text) => { setInput(text); assist.dismiss() })) return
     if (commandSuggestions.length) {
       if (event.key === 'Escape') { event.preventDefault(); setCommandsDismissed(true); return }
       if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
@@ -273,7 +288,7 @@ export function AgentConversation({ destination, embedded = false }: { destinati
       }
     }
     if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
-      event.preventDefault(); handleSend()
+      event.preventDefault(); assist.dismiss(); handleSend()
     }
   }
 
@@ -284,12 +299,12 @@ export function AgentConversation({ destination, embedded = false }: { destinati
           enter="transform transition ease-smooth duration-400" enterFrom="translate-x-full" enterTo="translate-x-0"
           leave="transform transition ease-smooth duration-400" leaveFrom="translate-x-0" leaveTo="translate-x-full">
           <section aria-label={AGENT_LABELS[destination]} className="relative ml-auto h-full max-w-full pointer-events-auto transition-all duration-300 ease-in-out" style={{ width: embedded ? '100%' : panelWidth }}>
-            <div className="h-full flex flex-col bg-white/95 dark:bg-surface-900/95 text-ink dark:text-ink-inverse backdrop-blur-xl border-l border-indigo-200/50 dark:border-indigo-900/50 shadow-2xl">
-              <header className="flex-shrink-0 px-4 py-4 border-b border-indigo-100/50 dark:border-surface-800 bg-gradient-to-r from-white/50 via-indigo-50/30 to-white/50 dark:from-surface-900/50 dark:via-indigo-950/20 dark:to-surface-900/50">
+            <div className="glass-pane h-full flex flex-col bg-surface-0 dark:bg-surface-900 text-ink dark:text-ink-inverse border-l border-surface-200 dark:border-surface-800 shadow-[-24px_0_48px_-32px_rgb(26_25_23/0.25)]">
+              <header className="flex-shrink-0 px-4 py-3.5 border-b border-surface-200/80 dark:border-surface-800">
                 <div className="flex items-center justify-between gap-2">
                   <div className="flex min-w-0 items-center gap-3">
-                    <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500 via-indigo-600 to-violet-700 flex items-center justify-center shadow-lg shadow-indigo-600/30 text-white font-display">R</div>
-                    <div className="min-w-0"><h2 className="text-lg font-semibold">{AGENT_LABELS[destination]}</h2>
+                    <div className="w-8 h-8 rounded-lg bg-ink dark:bg-ink-inverse flex items-center justify-center text-surface-0 dark:text-surface-900 font-display text-[17px] italic" aria-hidden>R</div>
+                    <div className="min-w-0"><h2 className="font-sans text-[15px] font-semibold tracking-normal">{AGENT_LABELS[destination]}</h2>
                       <p role="status" className="text-[11px] text-ink-muted dark:text-ink-inverse-muted">
                         {chat.connection === 'loading' ? 'Restoring session…' : chat.connection === 'reconnecting' ? 'Reconnecting to run…' :
                           chat.connection === 'detached' ? 'Disconnected · run may still be active' :
@@ -303,6 +318,7 @@ export function AgentConversation({ destination, embedded = false }: { destinati
                     <ModeSelector value={interactionMode} onChange={(next) => void switchMode(next)} />
 
                     {active && <button onClick={() => void chat.stop()} disabled={chat.controlBusy} className={smallButton} aria-label="Stop agent run"><StopIcon className="inline w-3 h-3 mr-1" />Stop</button>}
+                    <button onClick={() => setThreadsOpen((open) => !open)} aria-pressed={threadsOpen} className={cn('p-2 rounded-lg hover:bg-surface-100 dark:hover:bg-surface-800', threadsOpen && 'bg-surface-100 dark:bg-surface-800')} title="Threads" aria-label="Threads"><QueueListIcon className="w-5 h-5" /></button>
                     <button onClick={() => void handleNewChat()} className="p-2 rounded-lg hover:bg-surface-100 dark:hover:bg-surface-800" title="New chat" aria-label="New chat"><PlusIcon className="w-5 h-5" /></button>
                     {!embedded && <button onClick={closePanel} className="p-2 rounded-lg hover:bg-surface-100 dark:hover:bg-surface-800" title="Close" aria-label="Close agent panel"><XMarkIcon className="w-5 h-5" /></button>}
                   </div>
@@ -313,14 +329,17 @@ export function AgentConversation({ destination, embedded = false }: { destinati
                     : <ModelSelector value={model} provider={provider} effort={effort} includeEffort {...modelCatalogue} disabled={configurationLocked}
                         onChange={(model, provider, effort) => setSelection({ model, provider, effort })}
                         onOpen={refreshModels} className="min-w-0 flex-1" />}
-                  <BrowserTargetSelector value={chat.browser} onChange={chat.setBrowser} locked={chat.browserLocked || chat.connection === 'loading' || voice} />
+                  {chat.browser === 'cloud' && <span role="status" title="This thread's work moved to the cloud browser when the app disconnected; it is not driving this window."
+                    className="shrink-0 rounded-lg border border-amber-300/60 bg-amber-50/80 px-2 py-1 text-[11px] font-medium text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">Cloud browser</span>}
                 </div>
                 {modeNotice && <p role="status" className="mt-2 text-xs text-amber-700 dark:text-amber-300">{modeNotice}</p>}
               </header>
+              {threadsOpen && <ThreadsList userId={user} destination={destination} currentId={chat.sessionId} onClose={() => setThreadsOpen(false)}
+                onOpen={(id) => { void handleOpenThread(id) }} />}
 
               {voice ? <div className="flex min-h-0 flex-1">
-                <VoiceAgent userId={user} agentScope={destination} browser={chat.browser} conversationId={chat.sessionId} owner={`${destination}-panel`}
-                  sharedHistory={sharedHistory} registerHandOff={registerHandOff}
+                <VoiceAgent userId={user} agentScope={destination} sessionId={chat.sessionId} owner={`${destination}-panel`}
+                  registerHandOff={registerHandOff}
                   externalPrompt={liveExternalPrompt} onExternalPromptConsumed={consumeLiveExternal} />
               </div> : <>
               <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto scrollbar-thin px-4 py-4 space-y-4" onScroll={() => {
@@ -332,8 +351,7 @@ export function AgentConversation({ destination, embedded = false }: { destinati
                   <h3 className="text-display-sm font-display font-light text-center mb-2">How can I help?</h3>
                   <p className="text-body-sm text-ink-muted dark:text-ink-inverse-muted text-center">Browse, search, analyze, and accomplish.</p>
                 </div>}
-                {messages.map((message) => <MessageBubble key={message.id} message={message} status={message.runId === chat.runId ? status : 'completed'} />)}
-                {liveTurns.length > 0 && <LiveTurnsReadOnly turns={liveTurns} unshared={liveUnshared.length} />}
+                {messages.map((message) => <MessageBubble key={message.id} message={message} status={message.runId === chat.runId ? status : 'completed'} onUiAction={onUiAction} superseded={supersededViews} />)}
                 {(ideState.files.length > 0 || ideState.output) && <details className="rounded-xl border border-surface-200 dark:border-surface-700 p-3">
                   <summary className="cursor-pointer text-xs font-medium">Workspace · files and terminal</summary>
                   <IDE className="mt-3 max-h-[420px]" files={ideState.files} output={ideState.output} isStreaming={active} previewUrl={ideState.previewUrl} title="Workspace" />
@@ -361,23 +379,26 @@ export function AgentConversation({ destination, embedded = false }: { destinati
               </Checkpoint>}
               {status === 'interrupted' && <InterruptForm key={`${chat.sessionId}-${chat.runId}`} interrupts={chat.interrupts}
                 onSubmit={(responses) => sendMessage('', 'interrupt_response', responses)} />}
-              {chat.repairProposal && <RepairProposalAlert proposal={chat.repairProposal} busy={chat.controlBusy || active}
-                onRepair={() => void chat.repairAction('repair', chat.repairProposal!.tool)}
-                onDismiss={() => void chat.repairAction('dismiss', chat.repairProposal!.tool)} />}
-              {chat.repairReady && <RepairReadyAlert ready={chat.repairReady} busy={chat.controlBusy}
-                onActivate={() => void chat.repairAction('activate', chat.repairReady!.tool, chat.repairReady!.rev)}
-                onDiscard={() => void chat.repairAction('dismiss', chat.repairReady!.tool)} />}
+              {chat.repair && <RepairPanel repair={chat.repair} busy={chat.controlBusy}
+                onApprove={() => void chat.repairAction('approve', chat.repair!.tool, chat.repair!.rev, chat.repair!.approvalToken)}
+                onDecline={() => void chat.repairAction('decline', chat.repair!.tool, chat.repair!.rev)}
+                onCancel={() => void chat.repairAction('cancel', chat.repair!.tool)}
+                onRollback={() => void chat.repairAction('rollback', chat.repair!.tool)}
+                onDismiss={() => void chat.repairAction('dismiss', chat.repair!.tool)} />}
 
-              <footer className="flex-shrink-0 p-4 border-t border-indigo-100/50 dark:border-surface-800/80 bg-white/60 dark:bg-surface-900/60">
+              <footer className="flex-shrink-0 p-3 border-t border-surface-200/80 dark:border-surface-800">
                 <div className="max-h-48 overflow-auto">{draft.articles.map((article) => <ArticleAttachmentCard key={article.id} article={article}
                   onRemove={() => useArticleDraftStore.getState().remove(draftKey, article.id)} />)}</div>
                 {active && draft.articles.length > 0 && <p className="mb-2 text-xs text-ink-muted">Your attachments are saved for the next message. Wait for this run to finish or stop it.</p>}
-                <div className={cn('relative rounded-2xl border transition-all bg-white dark:bg-surface-850', input ? 'border-indigo-300 dark:border-indigo-700 shadow-md shadow-indigo-500/10 ring-2 ring-indigo-500/10' : 'border-surface-200/80 dark:border-surface-700 shadow-sm')}>
-                  {commandSuggestions.length > 0 && <div className="absolute bottom-full left-0 right-0 mb-2 rounded-xl border border-surface-200 bg-white p-1 shadow-lg dark:border-surface-700 dark:bg-surface-900" aria-label="Prompt commands">
+                <div className={cn('relative rounded-xl border transition-[border-color,box-shadow] bg-surface-0 dark:bg-surface-850 focus-within:border-accent/40 focus-within:shadow-[0_0_0_3px_rgb(169_83_46/0.08)] dark:focus-within:border-accent-light/40', input ? 'border-accent/40 dark:border-accent-light/40 shadow-[0_0_0_3px_rgb(169_83_46/0.08)]' : 'border-surface-200 dark:border-surface-700 shadow-[0_1px_2px_rgb(26_25_23/0.04)]')}>
+                  {!commandSuggestions.length && <TextAssist assist={assist} placement="above"
+                    onPick={(text) => { setInput(text); assist.dismiss(); focusComposer(inputRef.current) }}
+                    onCorrect={(text) => { setInput(text); assist.dismiss(); focusComposer(inputRef.current) }} />}
+                  {commandSuggestions.length > 0 && <div className="absolute bottom-full left-0 right-0 mb-2 rounded-xl border border-surface-200 bg-surface-0 p-1 shadow-[0_18px_48px_-18px_rgb(26_25_23/0.28)] dark:border-surface-700 dark:bg-surface-850" aria-label="Prompt commands">
                     {commandSuggestions.map((command, index) => <button key={command.name} type="button"
                       aria-current={selectedCommand === index ? 'true' : undefined}
                       onMouseDown={(event) => event.preventDefault()} onClick={() => chooseCommand(command.name)}
-                      className={cn('block w-full rounded-lg px-3 py-2 text-left text-xs', selectedCommand === index && 'bg-indigo-50 dark:bg-surface-800')}>
+                      className={cn('block w-full rounded-lg px-3 py-2 text-left text-xs', selectedCommand === index && 'bg-surface-100 dark:bg-surface-800')}>
                       <span className="font-semibold">{command.usage}</span><span className="mt-1 block text-ink-muted dark:text-ink-inverse-muted">{command.description}</span>
                     </button>)}
                   </div>}
@@ -386,7 +407,7 @@ export function AgentConversation({ destination, embedded = false }: { destinati
                     {!active && <ContextPicker selectedContexts={selectedContexts} onContextsChange={setSelectedContexts} />}
                     <textarea ref={inputRef} value={input} onChange={(event) => { setInput(event.target.value); setCommandIndex(0); setCommandsDismissed(false); setCommandFeedback('') }} onKeyDown={handleKeyDown}
                       aria-label={active ? 'Steer the active run' : 'Message Ron'} placeholder={paused ? 'Resume the run above…' : active ? 'Guide the active run…' : 'Ask anything… / for commands'}
-                      disabled={paused || chat.recoveryRequired} rows={1} className="flex-1 min-w-0 resize-none py-1.5 bg-transparent text-body-md placeholder:text-ink-muted/60 outline-none min-h-[32px] max-h-32" />
+                      disabled={paused || chat.recoveryRequired} rows={1} className="flex-1 min-w-0 resize-none py-1.5 bg-transparent text-body-md placeholder:text-ink-muted/60 outline-none focus-visible:ring-0 focus-visible:ring-offset-0 min-h-[32px] max-h-32" />
                     <button onClick={handleSend} disabled={!input.trim() || unavailable || (active && draft.articles.length > 0)} aria-label={active ? 'Send steering' : 'Send message'}
                       className="shrink-0 rounded-lg bg-ink dark:bg-ink-inverse text-white dark:text-surface-900 px-3 h-8 text-xs font-semibold disabled:opacity-30">{active ? 'Steer' : 'Send'}</button>
                   </div>
@@ -403,60 +424,22 @@ export function AgentConversation({ destination, embedded = false }: { destinati
   )
 }
 
-const BROWSER_TARGETS: readonly { id: BrowserSelection; label: string }[] = [
-  { id: 'user', label: 'Your browser' },
-  { id: 'cloud', label: 'Cloud browser' },
-]
-const BROWSER_LOCKED_TITLE = 'Locked for this chat — start a new chat to switch'
 const MODES: readonly { id: 'text' | 'voice'; label: string; title: string }[] = [
   { id: 'text', label: 'Chat', title: 'Text chat with the panel agent' },
   { id: 'voice', label: 'Live', title: 'Gemini Live voice session sharing this conversation' },
 ]
 
-/** Final Live turns for this conversation, viewable in Chat. Not SDK messages: never sent as history, only as bounded context. */
-function LiveTurnsReadOnly({ turns, unshared }: { turns: { id: string; role: 'user' | 'assistant'; text: string; kind: 'transcript' | 'text' }[]; unshared: number }) {
-  return <section aria-label="Live turns (read-only)" className="rounded-xl border border-indigo-200/60 bg-indigo-50/30 p-3 text-xs dark:border-indigo-900 dark:bg-indigo-950/10">
-    <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-ink-muted dark:text-ink-inverse-muted">
-      Live · {turns.length} turn{turns.length === 1 ? '' : 's'}{unshared ? ` · ${unshared} will be shared as context with your next message` : ' · shared with Chat'}
-    </p>
-    <ul className="space-y-2">{turns.map((turn) => <li key={turn.id} className="flex gap-2">
-      <span className="shrink-0 font-semibold">{turn.role === 'user' ? 'You' : 'Ron'}</span>
-      <span className="min-w-0 whitespace-pre-wrap break-words">{turn.text}</span>
-      <span className="ml-auto shrink-0 text-[10px] uppercase opacity-60">{turn.kind === 'transcript' ? 'speech' : 'text'}</span>
-    </li>)}</ul>
-  </section>
-}
-
 /** Chat / Live segmented control. The parent gates the switch on in-flight work. */
 export function ModeSelector({ value, onChange }: { value: 'text' | 'voice'; onChange: (value: 'text' | 'voice') => void }) {
   return <div role="group" aria-label="Interaction mode"
-    className="inline-flex h-8 shrink-0 items-center gap-0.5 rounded-xl border border-surface-200/80 bg-white/70 p-0.5 text-xs shadow-sm dark:border-surface-700 dark:bg-surface-850/80">
+    className="inline-flex h-8 shrink-0 items-center gap-0.5 rounded-lg border border-surface-200 bg-surface-50 p-0.5 text-xs dark:border-surface-700 dark:bg-surface-850">
     {MODES.map((mode) => {
       const selected = mode.id === value
       return <button key={mode.id} type="button" aria-pressed={selected} title={mode.title} onClick={() => onChange(mode.id)}
         className={cn('h-full rounded-[10px] px-2.5 font-semibold transition-colors',
           'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-1 dark:focus-visible:ring-offset-surface-900',
-          selected ? 'bg-indigo-600 text-white shadow-sm dark:bg-indigo-500' : 'text-ink-muted hover:bg-indigo-50 hover:text-ink dark:text-ink-inverse-muted dark:hover:bg-surface-800 dark:hover:text-ink-inverse')}>
+          selected ? 'bg-ink text-surface-0 shadow-sm dark:bg-ink-inverse dark:text-surface-900' : 'text-ink-muted hover:bg-surface-100 hover:text-ink dark:text-ink-inverse-muted dark:hover:bg-surface-800 dark:hover:text-ink-inverse')}>
         {mode.label}
-      </button>
-    })}
-  </div>
-}
-
-/** Two-option segmented control; the server pins the choice once a run is reserved. */
-export function BrowserTargetSelector({ value, onChange, locked }: {
-  value: BrowserSelection; onChange: (value: BrowserSelection) => void; locked: boolean
-}) {
-  return <div role="group" aria-label="Browser target" title={locked ? BROWSER_LOCKED_TITLE : 'Which browser the agent drives for this chat'}
-    className={cn('inline-flex h-9 shrink-0 items-center gap-0.5 rounded-xl border border-surface-200/80 bg-white/70 p-0.5 text-xs shadow-sm dark:border-surface-700 dark:bg-surface-850/80', locked && 'opacity-60')}>
-    {BROWSER_TARGETS.map((target) => {
-      const selected = target.id === value
-      return <button key={target.id} type="button" disabled={locked} aria-pressed={selected} onClick={() => onChange(target.id)}
-        title={locked ? BROWSER_LOCKED_TITLE : undefined}
-        className={cn('h-full rounded-[10px] px-2.5 font-semibold transition-colors disabled:cursor-not-allowed',
-          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-1 dark:focus-visible:ring-offset-surface-900',
-          selected ? 'bg-indigo-600 text-white shadow-sm dark:bg-indigo-500' : 'text-ink-muted hover:bg-indigo-50 hover:text-ink dark:text-ink-inverse-muted dark:hover:bg-surface-800 dark:hover:text-ink-inverse')}>
-        {target.label}
       </button>
     })}
   </div>
@@ -475,7 +458,7 @@ export function InterruptForm({ interrupts, onSubmit }: {
   }
   // browser_unavailable (BrowserAvailabilityHook): one-click continue / cancel for that interrupt,
   // any others in the same batch keep their typed answers.
-  const quickReply = (target: PanelInterrupt, response: 'continue' | 'cancel') => submit(interrupts.map((interrupt) => ({
+  const quickReply = (target: PanelInterrupt, response: string) => submit(interrupts.map((interrupt) => ({
     interruptId: interrupt.id,
     response: interrupt.id === target.id ? response : (jsonMode[interrupt.id] ? safeJson(values[interrupt.id]) : values[interrupt.id] ?? ''),
   })))
@@ -495,25 +478,32 @@ export function InterruptForm({ interrupts, onSubmit }: {
         <button type="button" className={smallButton} disabled={busy} onClick={() => quickReply(interrupt, 'continue')}>Continue</button>
         <button type="button" className={smallButton} disabled={busy} onClick={() => quickReply(interrupt, 'cancel')}>Cancel action</button>
       </div>}
-      <label className="block"><span className="block whitespace-pre-wrap break-words mb-2">{displayValue(interrupt.reason) || interrupt.id}</span>
+      {isHitlApproval(interrupt.reason) && <div className="flex flex-wrap items-center gap-2" data-hitl-approval>
+        <span className="whitespace-pre-wrap break-words font-semibold">{interrupt.reason as string}</span>
+        <button type="button" className={smallButton} disabled={busy} onClick={() => quickReply(interrupt, 'yes')}>Approve</button>
+        <button type="button" className={smallButton} disabled={busy} onClick={() => quickReply(interrupt, 'no')}>Deny</button>
+      </div>}
+      {!isHitlApproval(interrupt.reason) && <label className="block"><span className="block whitespace-pre-wrap break-words mb-2">{displayValue(interrupt.reason) || interrupt.id}</span>
         <textarea aria-label={`Response to ${interrupt.id}`} rows={2} className={compactInput} value={values[interrupt.id] ?? ''} onChange={(event) => setValues({ ...values, [interrupt.id]: event.target.value })} />
-      </label>
-      <label className="flex items-center gap-2"><input type="checkbox" checked={jsonMode[interrupt.id] ?? false} onChange={(event) => setJsonMode({ ...jsonMode, [interrupt.id]: event.target.checked })} />JSON response (object, list, number, boolean, or null)</label>
+      </label>}
+      {!isHitlApproval(interrupt.reason) && <label className="flex items-center gap-2"><input type="checkbox" checked={jsonMode[interrupt.id] ?? false} onChange={(event) => setJsonMode({ ...jsonMode, [interrupt.id]: event.target.checked })} />JSON response (object, list, number, boolean, or null)</label>}
     </div>)}
     {error && <p role="alert" className="mt-2 text-red-600">{error}</p>}
     <button className={`${smallButton} mt-3`} disabled={busy || !interrupts.length} type="submit">{busy ? 'Resuming…' : 'Submit and resume'}</button>
   </form>
 }
 
-function MessageBubble({ message, status }: { message: PanelMessage; status: RunStatus }) {
+type UiActionHandler = (viewId: string, action: unknown, payload: unknown) => void
+
+function MessageBubble({ message, status, onUiAction, superseded }: { message: PanelMessage; status: RunStatus; onUiAction: UiActionHandler; superseded: ReadonlySet<string> }) {
   // Provider-neutral: nested output of a chain tool (`think` for Perplexity, the `recall`
   // memory subagent everywhere) renders as a chain-of-thought block; every other part renders flat.
   const items = useMemo(() => groupThinkParts(message.parts, status === 'running'), [message.parts, status])
   return <Message from={message.role}>
-    <MessageContent variant={message.role === 'assistant' ? 'flat' : 'contained'} className={cn('min-w-0 w-full', message.role === 'user' && 'group-[.is-user]:bg-gradient-to-br group-[.is-user]:from-indigo-600 group-[.is-user]:to-indigo-800 group-[.is-user]:text-white')}>
+    <MessageContent variant={message.role === 'assistant' ? 'flat' : 'contained'} className={cn('min-w-0 w-full', message.role === 'user' && 'group-[.is-user]:bg-surface-100 group-[.is-user]:text-ink dark:group-[.is-user]:bg-surface-800 dark:group-[.is-user]:text-ink-inverse')}>
       {items.map((item) => item.kind === 'think'
         ? <ThinkChain key={item.tool.key} tool={item.tool} steps={item.steps} running={status === 'running'} />
-        : <PartView key={item.part.key} part={item.part} allParts={message.parts} isUser={message.role === 'user'} status={status} />)}
+        : <PartView key={item.part.key} part={item.part} allParts={message.parts} isUser={message.role === 'user'} status={status} onUiAction={onUiAction} superseded={superseded.has(item.part.key)} />)}
     </MessageContent>
   </Message>
 }
@@ -559,13 +549,18 @@ function imageSearchFinalItemPresent(parts: PanelPart[]): boolean {
   return parts.some((p) => p.kind === 'native' && p.itemType === 'image_search_results' && (p as NativePart).item)
 }
 
-function PartView({ part, allParts, isUser, status }: { part: PanelPart; allParts: PanelPart[]; isUser: boolean; status: RunStatus }) {
+function PartView({ part, allParts, isUser, status, onUiAction, superseded }: { part: PanelPart; allParts: PanelPart[]; isUser: boolean; status: RunStatus; onUiAction: UiActionHandler; superseded: boolean }) {
   const path = part.path.length ? part.path.map(displayValue).join(' / ') : ''
+  if (part.kind === 'tool' && part.name === RENDER_UI_TOOL && part.finished) {
+    // The agent built a view: render it (sandboxed iframe or the component kit) instead of its JSON result.
+    const view = uiViewFromOutput(part.output)
+    if (view) return <UiView view={view} superseded={superseded} onAction={(action, payload) => onUiAction(view.viewId, action, payload)} />
+  }
   if (part.kind === 'tool') {
     const failed = part.status === 'error' || part.status === 'failed'
     const toolState = part.finished ? failed ? 'output-error' : 'output-available' : status === 'running' ? 'input-available' : 'input-streaming'
     return <Tool className="my-3 overflow-hidden border-surface-200 dark:border-surface-700">
-      <ToolHeader type="dynamic-tool" toolName={part.name} title={part.name} state={toolState} />
+      <ToolHeader type="dynamic-tool" toolName={part.name} title={repairToolTitle(part) ?? part.name} state={toolState} />
       {!part.finished && status !== 'running' && <p className="px-3 pb-2 text-xs text-ink-muted dark:text-ink-inverse-muted">{status === 'interrupted' || status === 'checkpointed' ? 'Paused' : 'No result received'} </p>}
       {path && <p className="px-3 pb-2 text-[10px] text-ink-muted dark:text-ink-inverse-muted break-words">Node · {path}</p>}
       <ToolContent>
@@ -750,65 +745,4 @@ function ReasoningChain({ text, path, streaming }: { text: string; path: string;
       </ChainOfThoughtStep>)}
     </ChainOfThoughtContent>
   </ChainOfThought>
-}
-
-
-/** `tool_repair_proposed`: a library tool kept failing in this session. Nothing runs until Repair is clicked. */
-export function RepairProposalAlert({ proposal, busy, onRepair, onDismiss }: {
-  proposal: RepairProposal; busy: boolean; onRepair: () => void; onDismiss: () => void
-}) {
-  return <Alert open onClose={onDismiss} size="md" data-tool-repair-proposed>
-    <AlertTitle>{`${proposal.tool} keeps failing — let Ron repair it?`}</AlertTitle>
-    <AlertDescription>
-      {`${proposal.count ?? 'Several'} failures (${proposal.exceptionClass || 'error'}) this session. Ron's fixer runs for your account only, inside a sandbox, and shows the verified result before anything changes.`}
-      {proposal.kind === 'mcp' && ' Browser/MCP tool: the fix is a repaired copy of the browser server for your account, or an adapter on the call boundary.'}
-      {(proposal.kind === 'core' || proposal.kind === 'other') && ' Core tool: the fix is an adapter wrapping the tool for your account; shared code is not edited.'}
-      {!proposal.observation && ' Span observation is off: diagnosis uses the recorded outcomes only.'}
-    </AlertDescription>
-    <AlertActions>
-      <button type="button" className={smallButton} onClick={onDismiss}>Not now</button>
-      <button type="button" className={`${smallButton} bg-indigo-600 text-white hover:bg-indigo-500`} disabled={busy} onClick={onRepair}>Repair</button>
-    </AlertActions>
-  </Alert>
-}
-
-/** `tool_repair_ready`: the user-scoped revision with its five demonstrations. Activate is user-gated. */
-export function RepairReadyAlert({ ready, busy, onActivate, onDiscard }: {
-  ready: RepairReady; busy: boolean; onActivate: () => void; onDiscard: () => void
-}) {
-  const activatable = ready.status === 'verified'
-  const headline = ready.status === 'verified' ? `${ready.tool} repaired (revision ${ready.rev})`
-    : ready.status === 'needs_maintainer' ? `${ready.tool}: the defect is in Ron, not the tool`
-    : ready.status === 'not_reproducible' ? `${ready.tool}: the failure did not reproduce`
-    : ready.status === 'unverified' ? `${ready.tool}: repaired but not verified in isolation`
-    : `${ready.tool}: repair ${ready.status}`
-  return <Alert open onClose={onDiscard} size="2xl" data-tool-repair-ready data-status={ready.status}>
-    <AlertTitle>{headline}</AlertTitle>
-    <AlertDescription>{ready.summary || 'No summary was produced.'}
-      {ready.sandbox && ` Sandbox: ${ready.sandbox}.`}
-      {ready.repairKind === 'adapter' && ' Repair kind: adapter (wraps the tool for your account; shared code untouched).'}
-      {ready.repairKind === 'server' && ' Repair kind: browser server (your browser server is restarted on the repaired copy when you activate).'}
-      {ready.status === 'needs_maintainer' && ' The proposed patch and test are stored in the revision manifest; it is never applied automatically.'}
-      {ready.status === 'unverified' && ' Activation is disabled because no isolated sandbox (Docker or the hosted sandbox) was available.'}
-    </AlertDescription>
-    <AlertBody>
-      <Table dense className="text-xs">
-        <TableHead><TableRow><TableHeader>Kind</TableHeader><TableHeader>Input</TableHeader><TableHeader>Status</TableHeader><TableHeader>Dry run</TableHeader><TableHeader>Source</TableHeader></TableRow></TableHead>
-        <TableBody>
-          {ready.demonstrations.map((demo, index) => <TableRow key={index}>
-            <TableCell>{demo.kind}</TableCell>
-            <TableCell className="max-w-xs truncate" title={displayValue(demo.input)}>{displayValue(demo.input).slice(0, 80)}</TableCell>
-            <TableCell className={demo.status === 'passed' ? 'text-emerald-700 dark:text-emerald-300' : 'text-red-700 dark:text-red-300'}>{demo.status}</TableCell>
-            <TableCell>{demo.dry_run ? 'yes' : 'no'}</TableCell>
-            <TableCell>{demo.source ?? ''}</TableCell>
-          </TableRow>)}
-          {!ready.demonstrations.length && <TableRow><TableCell colSpan={5} className="text-ink-muted">No demonstrations were recorded.</TableCell></TableRow>}
-        </TableBody>
-      </Table>
-    </AlertBody>
-    <AlertActions>
-      <button type="button" className={smallButton} onClick={onDiscard}>Discard</button>
-      <button type="button" className={`${smallButton} bg-indigo-600 text-white hover:bg-indigo-500`} disabled={busy || !activatable} onClick={onActivate}>Activate</button>
-    </AlertActions>
-  </Alert>
 }

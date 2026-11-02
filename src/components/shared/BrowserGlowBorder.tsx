@@ -1,5 +1,5 @@
 /**
- * Blurred royal frame shown while Electron browser automation or screen capture is active.
+ * Blurred ember frame shown while Electron browser automation or screen capture is active.
  */
 
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
@@ -27,10 +27,10 @@ export function BrowserGlowBorder() {
             animate={prefersReducedMotion ? { opacity: 0.55 } : { opacity: [0.35, 0.7, 0.35] }}
             transition={prefersReducedMotion ? { duration: 0 } : { duration: 5.5, repeat: Infinity, ease: 'easeInOut' }}
           >
-            <div className="absolute inset-x-0 top-0 h-16" style={{ ...EDGE, background: 'linear-gradient(to bottom, rgba(49, 46, 129, 0.9), rgba(45, 59, 135, 0.45), transparent)' }} />
-            <div className="absolute inset-y-0 right-0 w-16" style={{ ...EDGE, background: 'linear-gradient(to left, rgba(76, 29, 149, 0.85), rgba(74, 59, 135, 0.4), transparent)' }} />
-            <div className="absolute inset-x-0 bottom-0 h-16" style={{ ...EDGE, background: 'linear-gradient(to top, rgba(49, 46, 129, 0.9), rgba(45, 59, 135, 0.45), transparent)' }} />
-            <div className="absolute inset-y-0 left-0 w-16" style={{ ...EDGE, background: 'linear-gradient(to right, rgba(76, 29, 149, 0.85), rgba(74, 59, 135, 0.4), transparent)' }} />
+            <div className="absolute inset-x-0 top-0 h-16" style={{ ...EDGE, background: 'linear-gradient(to bottom, rgba(194, 106, 65, 0.75), rgba(214, 130, 90, 0.35), transparent)' }} />
+            <div className="absolute inset-y-0 right-0 w-16" style={{ ...EDGE, background: 'linear-gradient(to left, rgba(169, 83, 46, 0.7), rgba(214, 130, 90, 0.3), transparent)' }} />
+            <div className="absolute inset-x-0 bottom-0 h-16" style={{ ...EDGE, background: 'linear-gradient(to top, rgba(194, 106, 65, 0.75), rgba(214, 130, 90, 0.35), transparent)' }} />
+            <div className="absolute inset-y-0 left-0 w-16" style={{ ...EDGE, background: 'linear-gradient(to right, rgba(169, 83, 46, 0.7), rgba(214, 130, 90, 0.3), transparent)' }} />
           </motion.div>
         </motion.div>
       )}

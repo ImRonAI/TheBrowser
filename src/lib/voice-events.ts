@@ -31,6 +31,8 @@ export function liveQuery(params: LiveConnectionParams): URLSearchParams {
     browser: params.browser,
     model: params.model,
     voice: params.voice,
+    // The native thread the BidiAgent opens (restores + writes via its SnapshotSessionManager).
+    session_id: params.conversationId,
     conversation_id: params.conversationId,
   })
   if (!isIssueScope(params.agentScope)) query.set('user_id', params.userId)

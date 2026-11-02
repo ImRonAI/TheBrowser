@@ -387,7 +387,9 @@ def test_opt_in_a2a_native_factory_mount_and_cleanup(monkeypatch):
                 assert card.status_code == 200
                 assert card.json()["name"] == "Ron"
                 assert (await client.get("/config")).json()["features"]["a2a"] is True
-                assert len(models) == 1 and tools == []  # Metadata construction never spawns shell.
+                # Metadata construction never spawns shell. Two models: the panel card and the
+                # fixer card (`tool_failure.fixer_agent_for`, mounted at /a2a/fixer).
+                assert len(models) == 2 and tools == []
                 for context_id in ("first-context", "second-context"):
                     response = await client.post("/a2a/", json={
                         "jsonrpc": "2.0", "id": context_id, "method": "message/send",
@@ -396,8 +398,8 @@ def test_opt_in_a2a_native_factory_mount_and_cleanup(monkeypatch):
                     })
                     assert response.status_code == 200
                     assert "error" not in response.json(), response.text
-                assert len(models) == 3 and len(tools) == 2
-                assert models[1] is not models[2] and tools[0] is not tools[1]
+                assert len(models) == 4 and len(tools) == 2
+                assert models[2] is not models[3] and tools[0] is not tools[1]
         assert integrations[0]._closed
         assert not any(getattr(route, "path", None) == "/a2a" for route in app.routes)
     asyncio.run(scenario())

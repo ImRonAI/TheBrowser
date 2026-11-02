@@ -48,12 +48,12 @@ export function ArticleReaderPage({ href }: { href: string }) {
   }, [story?.url, attempt])
 
   if (!story || !article) {
-    return <main className="h-full overflow-auto bg-surface-0 px-6 py-16 text-ink dark:bg-surface-900 dark:text-ink-inverse">
+    return <main className="glass-page h-full overflow-auto bg-surface-0 px-6 py-16 text-ink dark:bg-surface-900 dark:text-ink-inverse">
       <p role="alert" className="mx-auto max-w-[40rem] text-sm text-ink-muted dark:text-ink-inverse-muted">{notice}</p>
     </main>
   }
 
-  return <main ref={mainRef} onScroll={onScroll} className="h-full overflow-auto bg-surface-0 font-normal text-ink dark:bg-surface-900 dark:text-ink-inverse">
+  return <main ref={mainRef} onScroll={onScroll} className="glass-page h-full overflow-auto bg-surface-0 font-normal text-ink dark:bg-surface-900 dark:text-ink-inverse">
     <header className="relative sticky top-0 z-10 border-b border-surface-200/80 bg-surface-0/90 backdrop-blur-md dark:border-surface-700/80 dark:bg-surface-900/90">
       <div className="mx-auto flex h-12 max-w-[68ch] items-center gap-2 px-4 sm:px-0">
         <button type="button" onClick={goHome}

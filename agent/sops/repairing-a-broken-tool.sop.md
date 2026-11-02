@@ -12,7 +12,10 @@ Repair one tool that keeps failing for one user, producing a user-scoped, sandbo
 - **failing_request** (required): The exact recorded tool input that failed. It belongs to this user and MUST stay inside this run.
 - **context_examples** (required): Up to four other inputs of the same tool from this user's session, most recent first. Fewer than four means the remainder MUST be synthesized from `tool_spec`.
 - **tool_spec** (required): The tool's registered name and input schema.
-- **sandbox** (required): `docker` when your `shell`, `read`, `write` and `edit` run in an isolated container, or `local` when no isolation is available.
+- **sandbox** (required): `docker`: your `shell`, `read`, `write` and `edit` run in an isolated container (a replica of Ron's runtime when the replica image is configured). There is no local fallback; an investigation without a container never reaches this SOP.
+- **error_text** (optional): The exception text or tool error content as the originating agent saw it.
+- **user_request_at_failure** (optional): What the user had asked for when the tool failed; it tells you which behaviour matters.
+- **browser_target_at_failure** (optional): `user` or `cloud`. The container cannot reach either; a live-browser demonstration is a dry run.
 - **source_path** (optional): The file under repair, relative to `/sources/tools` (library) or `/sources/strands_tools` (core).
 - **base_sha256** (optional): The sha256 of that file when the repair started; activation refuses a revision whose base file has changed.
 - **diagnosis** (optional): The strands_evals `DiagnosisResult` (failures, root causes, `fix_type`) when observation spans were retained.
@@ -104,8 +107,17 @@ Call `submit_repair` exactly once with the complete result.
 - You MUST pass `status`, `fix_type`, `repair_kind`, a one-paragraph `summary` the user will read, `reflection`, `wrapper_audit`, `diff` and `test_file`.
 - `verified` MUST only be used when the failing demonstration and all four context demonstrations passed, pytest is green and `sandbox` is `docker`.
 - You MUST state uncertainty plainly in `summary`.
-- You MUST NOT activate anything because activation is the user's decision.
 - You MUST NOT touch another user's data, memories or sessions because repairs are tenant-scoped.
+
+### 8. Ask the user to apply
+
+When `submit_repair` returned `status="verified"`, call `apply_repair(revision, summary)` exactly once. The call pauses until the user approves or declines it in Ron's panel; when approved, the revision becomes active for this user from the next invocation of their live sessions and the originating agent calls the tool again before saying it is fixed.
+
+**Constraints:**
+- You MUST call `apply_repair` only after a `verified` submission because the user approves exactly the artifact that was verified.
+- You MUST call it at most once because the user's decision is final for this investigation.
+- When the call is cancelled (declined) you MUST stop and report that nothing was applied; you MUST NOT retry, resubmit or apply anything another way.
+- You MUST NOT activate anything yourself because activation is the user's decision.
 
 ## Examples
 

@@ -7,25 +7,37 @@ the vendored library file. There is no global activation and no maintainer promo
 Pipeline (each piece is a public surface that already exists in this repo):
 
 1. ``ToolRepairTrigger`` (``AfterToolCallEvent``, order 310, after ``ToolObservation``) counts
-   repeated ``(tool_name, exception class)`` failures of **library** tools in one live session and,
-   at ``RON_TOOL_REPAIR_THRESHOLD``, records a ``repair_request`` in ``agent.state`` so the runtime
-   can emit ``tool_repair_proposed``. Nothing runs without the user's click.
-2. ``start_repair`` (``POST /tools/repairs``) runs one **fixer** per user: a fresh ``create_harness``
-   child (same pattern as ``recall``) on a ``ModelRouter(FallbackStrategy)`` over the Perplexity
-   chain, whose tools are the harness built-ins ``shell``/``read``/``write``/``edit`` routed through
-   the SDK ``Agent(sandbox=)`` seam (a per-run ``DockerSandbox``: the library at ``/sources/tools``,
-   ``agent/api/core`` at ``/sources/core`` for the wrapper audit, the repair workspace at
-   ``/workspace``; the ``NotASandboxLocalEnvironment`` fallback is flagged), read-only memory
-   search, and two application ``@tool``s: ``record_demonstration`` and ``submit_repair``.
+   ``(tool_name, exception class)`` failures of **every** tool in one live session. At
+   ``RON_TOOL_REPAIR_THRESHOLD`` — or at once for a side-effecting tool or a call whose parameters
+   are not visible — it captures the evidence (tool spec, exact arguments, error, the user's
+   current request, the surrounding messages, browser target) and **starts one bounded
+   investigation** through :class:`RepairService` without awaiting it. Active investigations are
+   deduplicated per ``(user, tool)``; cancelled calls, hook retries and the fixer's own tools never
+   trigger. No approval is needed to investigate; nothing is applied without approval.
+2. The investigation is the **fixer**: the real ``create_harness`` agent on a
+   ``ModelRouter(FallbackStrategy)`` over the Perplexity chain, whose tools are the harness
+   built-ins ``shell``/``read``/``write``/``edit`` routed through the SDK ``Agent(sandbox=)`` seam
+   (a per-run ``DockerSandbox``: the library at ``/sources/tools``, ``agent/api/core`` at
+   ``/sources/core`` for the wrapper audit, the repair workspace at ``/workspace``), ``todos``,
+   read-only memory search, and the application ``@tool``s ``record_demonstration``,
+   ``submit_repair`` and ``apply_repair``. A working sandbox is **required**: without Docker the
+   investigation ends ``blocked`` and cannot be applied. The fixer is served over Ron's native
+   ``A2AServer`` at ``<panel A2A>/fixer``; Ron drives it with the official ``a2a-sdk`` client
+   (:class:`FixerClient`): one A2A context per investigation, the result as typed artifacts and
+   the approval as a native ``input_required`` interrupt (``HumanInTheLoop`` on ``apply_repair``)
+   that the panel resolves with the SDK's ``interruptResponse`` DataPart.
 3. Diagnosis = ``strands_evals.detectors.diagnose_session`` over the in-memory exporter spans
    (``RON_TOOL_OBSERVATION=1``) or, without it, the ``agent.state`` outcomes — redacted by
    ``tool_observation.redact_outcome`` before anything leaves the session. The **wrapper audit**
    and the reflection checklist are SOP steps (``agent/sops/repairing-a-broken-tool.sop.md``,
    retrieved through the pinned ``strands_agents_sops`` server by ``native_sop_prompt``).
-4. Activate re-checks ``base_sha256`` (409 on drift), writes ``active.json`` and swaps the tool in
-   every live session of that user via ``PanelToolCatalog.reload_tool`` (native
+4. Approval binds the owner, the base ``sha256``, the artifact digest and the passing evidence
+   (``approval_token``); ``activate`` re-checks all of them, writes ``active.json`` and swaps the
+   tool in every live session of that user via ``PanelToolCatalog.reload_tool`` (native
    ``ToolRegistry.replace``: effective at the SDK's next invocation). New sessions consult
-   ``active.json`` through ``revision_resolver`` before importing a vendored file.
+   ``active.json`` through ``revision_resolver`` before importing a vendored file. Approvals that
+   survive a restart are stale by construction: the A2A context is gone, so the artifact needs a
+   fresh verification run.
 """
 
 from __future__ import annotations
@@ -39,7 +51,7 @@ import re
 import shutil
 import subprocess
 import uuid
-from collections.abc import Callable, Sequence
+from collections.abc import AsyncGenerator, Callable, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -47,6 +59,7 @@ from typing import Any
 
 from strands import Agent, tool
 from strands.hooks import AfterToolCallEvent, HookProvider, HookRegistry
+from strands.models.model import Model
 from strands.models.routing import FallbackStrategy, ModelRouter
 from strands.types.tools import AgentTool
 from strands.vended_plugins.context_injector import ContextInjector, InjectionContext
@@ -79,8 +92,9 @@ MAX_CONTEXT_RECORDED = 12
 SIDE_EFFECT_TOOLS = frozenset({"shell", "editor", "environment", "mcp_client", "http_request", "use_skill"})
 #: Native evals fix types plus Ron's own classification layered on top.
 FIX_TYPES = ("SYSTEM_PROMPT_FIX", "TOOL_DESCRIPTION_FIX", "OTHERS", "WRAPPER_FIX")
-REVISION_STATUSES = ("proposed", "verified", "failed", "unverified", "not_reproducible", "needs_maintainer",
-                     "active", "rolled_back")
+#: ``submit_repair`` statuses plus the lifecycle statuses the service/activation write.
+REVISION_STATUSES = ("proposed", "investigating", "verified", "failed", "unverified", "not_reproducible", "needs_maintainer",
+                     "blocked", "cancelled", "declined", "active", "rolled_back")
 _REV = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")
 _TOOL = re.compile(r"^[A-Za-z0-9_]{1,80}$")
 
@@ -133,18 +147,23 @@ def fixer_hosted_tools(names: Sequence[str] | None = None) -> list[dict[str, Any
 
 def fixer_a2a_provider(urls: Sequence[str] | None = None) -> Any | None:
     """The installed ``strands_tools`` ``A2AClientToolProvider`` (``a2a_discover_agent``,
-    ``a2a_list_discovered_agents``, ``a2a_send_message``) over Ron's native A2A endpoints
-    (``a2a_tools.a2a_agent_urls``: the panel A2A server plus ``RON_A2A_AGENTS``; ``urls`` /
-    ``RON_TOOL_REPAIR_A2A_AGENTS`` add fixer-specific peers). ``None`` when A2A is disabled."""
-    from agent.api.core.a2a_tools import a2a_agent_urls
+    ``a2a_list_discovered_agents``, ``a2a_send_message``) over the fixer's **own** peers only:
+    ``urls`` / ``RON_TOOL_REPAIR_A2A_AGENTS``. The panel A2A server (``/a2a``, Ron's agent with host
+    shell tools) is deliberately not a fixer peer: the fixer is isolated, and a peer that executes
+    host tools on its behalf would defeat that. ``None`` when A2A is disabled or no peer is listed."""
+    from agent.api.core.a2a_tools import _valid, a2a_enabled, a2a_provider
 
-    extra = list(urls) if urls is not None else [u.strip() for u in config.RON_TOOL_REPAIR_A2A_AGENTS.split(",") if u.strip()]
-    known = a2a_agent_urls(extra)
+    if not a2a_enabled():
+        return None
+    raw = list(urls) if urls is not None else [u.strip() for u in config.RON_TOOL_REPAIR_A2A_AGENTS.split(",") if u.strip()]
+    known: list[str] = []
+    for url in raw:
+        cleaned = url.strip().rstrip("/")
+        if cleaned and _valid(cleaned) and cleaned not in known:
+            known.append(cleaned)
     if not known:
         return None
-    from strands_tools.a2a_client import A2AClientToolProvider
-
-    return A2AClientToolProvider(known_agent_urls=known)
+    return a2a_provider(known)
 
 
 @dataclass(frozen=True)
@@ -155,7 +174,9 @@ class RepairConfig:
     effort: str | None = DEFAULT_FIXER_EFFORT
     timeout_s: int = 900
     hosted_tools: tuple[str, ...] | None = None   # None -> RON_TOOL_REPAIR_HOSTED_TOOLS
-    a2a_agents: tuple[str, ...] | None = None     # None -> RON_TOOL_REPAIR_A2A_AGENTS / PANEL_A2A_URL
+    a2a_agents: tuple[str, ...] | None = None     # None -> RON_TOOL_REPAIR_A2A_AGENTS (fixer-only peers)
+    #: Concurrent isolated investigations per API process (each one is a container).
+    max_concurrent: int = 2
 
     @classmethod
     def from_env(cls) -> RepairConfig:
@@ -164,7 +185,8 @@ class RepairConfig:
         effort = (os.getenv("RON_TOOL_REPAIR_EFFORT", config.RON_TOOL_REPAIR_EFFORT) or "").strip() or None
         threshold = int(os.getenv("RON_TOOL_REPAIR_THRESHOLD", str(config.RON_TOOL_REPAIR_THRESHOLD)))
         return cls(enabled=os.getenv("RON_TOOL_REPAIR", "1") != "0", threshold=max(1, threshold), models=models,
-                   effort=effort, timeout_s=int(os.getenv("RON_TOOL_REPAIR_TIMEOUT_S", str(config.RON_TOOL_REPAIR_TIMEOUT_S))))
+                   effort=effort, timeout_s=int(os.getenv("RON_TOOL_REPAIR_TIMEOUT_S", str(config.RON_TOOL_REPAIR_TIMEOUT_S))),
+                   max_concurrent=max(1, int(os.getenv("RON_TOOL_REPAIR_MAX_CONCURRENT", "2"))))
 
 
 # --- Trigger ----------------------------------------------------------------------------------
@@ -217,11 +239,65 @@ def _record_context(agent: Agent, tool_use: dict[str, Any], outcome: dict[str, A
     agent.state.set(REPAIR_CONTEXT_STATE_KEY, recorded)
 
 
-class ToolRepairTrigger(HookProvider):
-    """Propose a repair after ``threshold`` identical failures of a library tool in one session."""
+#: Tools of the fixer itself, Ron's control tools and the fixer's harness built-ins: a failure of one
+#: of these never starts an investigation (it would be fixer recursion or a Ron defect).
+NON_REPAIRABLE_TOOLS = frozenset({
+    "record_demonstration", "submit_repair", "apply_repair", "todo_write", "read", "write", "edit",
+    "tool_catalog", "ask_user", "retrieve_offloaded_content", "strands_manage_background_task",
+    "a2a_discover_agent", "a2a_list_discovered_agents", "a2a_send_message",
+})
 
-    def __init__(self, config_: RepairConfig | None = None) -> None:
+#: Where investigation starts are delivered. The hook is synchronous and must not await the
+#: investigation; it hands the captured evidence to this callable, which the service wires to
+#: ``asyncio.create_task`` on the API loop.
+StartInvestigation = Callable[["RepairEvidence"], Any]
+
+
+@dataclass
+class RepairEvidence:
+    """What the trigger captured at the failure: everything the fixer needs, owner-scoped."""
+
+    user_id: str
+    session_id: str
+    tool_name: str
+    kind: str
+    exception_class: str
+    count: int
+    failing_tool_use_id: str
+    tool_use: dict[str, Any]              # the exact failing call (stays inside the owner's fixer)
+    outcome: dict[str, Any]               # redacted (``redact_outcome``)
+    error: str | None                     # exception text or tool error content
+    tool_spec: dict[str, Any] | None
+    current_request: str | None           # ``current_request_text(agent.messages)``
+    messages: Sequence[Any]               # the session messages at the failure
+    browser: str | None
+    agent: Any                            # the originating agent (hooks/state); never run concurrently
+    observation: bool
+    side_effecting: bool
+    captured_at: str = field(default_factory=_now)
+
+
+def _error_text(event: AfterToolCallEvent, outcome: dict[str, Any]) -> str | None:
+    if outcome.get("exception"):
+        return str(outcome["exception"])
+    result = event.result if isinstance(event.result, dict) else {}
+    parts = [str(block.get("text")) for block in result.get("content", []) if isinstance(block, dict) and block.get("text")]
+    return "\n".join(parts)[:2000] or None
+
+
+class ToolRepairTrigger(HookProvider):
+    """Start one investigation when a tool keeps failing (or fails once with side effects).
+
+    ``start`` is the service's non-blocking entry point (``RepairService.investigate``); without it
+    the trigger only records guidance (tests, Live agents without a runtime).
+    """
+
+    def __init__(self, config_: RepairConfig | None = None, *, start: StartInvestigation | None = None,
+                 browser: str | None = None, user_id: str | None = None, session_id: str | None = None) -> None:
         self.config = config_ or RepairConfig.from_env()
+        self.start = start
+        self.browser = browser
+        self.user_id, self.session_id = user_id, session_id
 
     def register_hooks(self, registry: HookRegistry, **kwargs: Any) -> None:
         registry.add_callback(AfterToolCallEvent, self.after_tool_call, order=REPAIR_HOOK_ORDER)
@@ -231,36 +307,66 @@ class ToolRepairTrigger(HookProvider):
             return
         outcome = tool_outcome(event)
         _record_context(event.agent, dict(event.tool_use), outcome)
+        from agent.api.core.tool_failure import observe_tool
+
         failed = outcome["status"] != "success" or outcome["exception"] is not None
         if not failed or outcome["cancelled"] or outcome["retry"]:
+            observe_tool(event, outcome, count=None)
             return
-        # Every tool failure counts. The KIND decides what the fixer can deliver: a user-scoped
-        # revision (library) or a diagnosed proposal for the maintainer (mcp/core/other).
+        name = outcome["tool_name"]
+        if name in NON_REPAIRABLE_TOOLS:
+            return
         kind = target_kind(event.selected_tool)
-        key = f"{outcome['tool_name']}|{_exception_class(outcome)}"
+        key = f"{name}|{_exception_class(outcome)}"
         counts = dict(event.agent.state.get(REPAIR_COUNTS_STATE_KEY) or {})
         counts[key] = int(counts.get(key, 0)) + 1
         event.agent.state.set(REPAIR_COUNTS_STATE_KEY, counts)
-        if counts[key] < self.config.threshold:
+        tool_use = dict(event.tool_use)
+        visible = isinstance(tool_use.get("input"), dict) and bool(tool_use.get("input"))
+        side_effecting = is_side_effecting(name, tool_use.get("input"))
+        # One more call is only ever suggested for an idempotent tool with visible parameters below
+        # the threshold; a side-effecting tool (browser, shell, non-GET request) is never repeated
+        # on the live environment: the investigation starts at the first failure.
+        if counts[key] < self.config.threshold and visible and not side_effecting:
+            observe_tool(event, outcome, count=counts[key], escalate=False)
             return
         existing = event.agent.state.get(REPAIR_REQUEST_STATE_KEY) or {}
-        if existing.get("tool_name") == outcome["tool_name"] and existing.get("status") in ("proposed", "running"):
-            return
+        observe_tool(event, outcome, count=counts[key], escalate=True, side_effecting=side_effecting)
+        if existing.get("tool_name") == name and existing.get("status") in ("investigating", "approval"):
+            return  # one investigation per tool at a time; the result updates the guidance
+        from agent.api.core.panel_storage import current_request_text
+
+        spec = getattr(event.selected_tool, "tool_spec", None)
+        # BidiAgent has no trace_attributes; the Live trigger carries the identity explicitly.
+        traces = dict(getattr(event.agent, "trace_attributes", None) or {})
+        evidence = RepairEvidence(
+            user_id=str(self.user_id or traces.get("user.id") or ""),
+            session_id=str(self.session_id or traces.get("session.id") or ""),
+            tool_name=name, kind=kind, exception_class=_exception_class(outcome), count=counts[key],
+            failing_tool_use_id=outcome["toolUseId"], tool_use=tool_use,
+            outcome=redact_outcome(outcome, tool_use), error=_error_text(event, outcome),
+            tool_spec={"name": spec.get("name"), "description": spec.get("description"), "inputSchema": spec.get("inputSchema")}
+            if isinstance(spec, dict) else None,
+            current_request=current_request_text(list(event.agent.messages)), messages=list(event.agent.messages),
+            browser=self.browser, agent=event.agent,
+            observation=bool(os.getenv("RON_TOOL_OBSERVATION", "").strip().lower() in {"1", "true", "yes"}),
+            side_effecting=side_effecting,
+        )
         event.agent.state.set(REPAIR_REQUEST_STATE_KEY, {
-            "id": uuid.uuid4().hex, "tool_name": outcome["tool_name"], "exception_class": _exception_class(outcome),
-            "kind": kind, "count": counts[key], "status": "proposed", "proposed_at": _now(),
-            "failing_tool_use_id": outcome["toolUseId"],
-            "outcome": redact_outcome(outcome, dict(event.tool_use)),
-            "observation": bool(os.getenv("RON_TOOL_OBSERVATION", "").strip().lower() in {"1", "true", "yes"}),
+            "id": uuid.uuid4().hex, "tool_name": name, "exception_class": evidence.exception_class, "kind": kind,
+            "count": counts[key], "status": "investigating" if self.start else "proposed", "proposed_at": evidence.captured_at,
+            "failing_tool_use_id": outcome["toolUseId"], "outcome": evidence.outcome, "observation": evidence.observation,
         })
-        logger.warning("tool_name=<%s>, kind=<%s>, count=<%d> | repeated failure, repair proposed",
-                       outcome["tool_name"], kind, counts[key])
+        logger.warning("tool_name=<%s>, kind=<%s>, count=<%d> | tool failure, investigation %s", name, kind, counts[key],
+                       "started" if self.start else "recorded (no repair service)")
+        if self.start is not None:
+            self.start(evidence)
 
 
 def pending_proposal(agent: Agent) -> dict[str, Any] | None:
-    """The proposal the runtime should surface, or ``None``."""
+    """The latest repair request on the agent (``proposed`` or ``investigating``), or ``None``."""
     request = agent.state.get(REPAIR_REQUEST_STATE_KEY)
-    return dict(request) if isinstance(request, dict) and request.get("status") == "proposed" else None
+    return dict(request) if isinstance(request, dict) and request.get("status") in ("proposed", "investigating") else None
 
 
 # --- Context examples -------------------------------------------------------------------------
@@ -550,11 +656,32 @@ class RepairRun:
     submitted: bool = False
     sandbox: str = "none"
     container: str | None = None
+    #: Set by ``apply_repair`` once the user approved and ``activate`` succeeded.
+    applied: dict[str, Any] | None = None
+    #: Set when the user declined the apply interrupt.
+    declined: bool = False
+
+
+class SandboxUnavailable(RuntimeError):
+    """No isolated environment could be started; the investigation is ``blocked``."""
 
 
 #: One Docker container per fixer run; the harness's built-in shell/read/write/edit route through it.
+#: ``deploy/repair-replica/`` builds the versioned Ron replica image (Ubuntu, Python, Node, Electron,
+#: Xvfb, both halves of electron-playwright-mcp); ``python:3.12-slim`` is the minimal fallback that
+#: still verifies pure-Python library tools.
 SANDBOX_IMAGE = os.getenv("RON_TOOL_REPAIR_SANDBOX_IMAGE", "python:3.12-slim")
 SANDBOX_WORKDIR = "/workspace"
+#: Per-container bounds (``docker run`` flags). The sandbox never joins the host network: the
+#: replica's own automation listeners live inside its network namespace, so a repaired call cannot
+#: reach the user's live Electron, the API or the Docker socket.
+SANDBOX_LIMITS = {
+    "memory": os.getenv("RON_TOOL_REPAIR_SANDBOX_MEMORY", "4g"),
+    "cpus": os.getenv("RON_TOOL_REPAIR_SANDBOX_CPUS", "2"),
+    "pids": os.getenv("RON_TOOL_REPAIR_SANDBOX_PIDS", "512"),
+    "network": os.getenv("RON_TOOL_REPAIR_SANDBOX_NETWORK", "bridge"),
+    "shm": os.getenv("RON_TOOL_REPAIR_SANDBOX_SHM", "1g"),
+}
 
 
 def _mount_sources(run: RepairRun) -> list[tuple[Path, str, bool]]:
@@ -569,30 +696,43 @@ def _mount_sources(run: RepairRun) -> list[tuple[Path, str, bool]]:
     return binds
 
 
+def sandbox_run_args(run: RepairRun, container: str) -> list[str]:
+    """The ``docker run`` command for one investigation's container (bounded, no host network)."""
+    args = ["docker", "run", "-d", "--rm", "--name", container, "-w", SANDBOX_WORKDIR,
+            "--memory", SANDBOX_LIMITS["memory"], "--cpus", SANDBOX_LIMITS["cpus"],
+            "--pids-limit", SANDBOX_LIMITS["pids"], "--network", SANDBOX_LIMITS["network"],
+            "--shm-size", SANDBOX_LIMITS["shm"], "--security-opt", "no-new-privileges",
+            "--label", "ron.repair=1", "--label", f"ron.repair.revision={run.revision}"]
+    for host, inside, read_only in _mount_sources(run):
+        args += ["-v", f"{host.resolve()}:{inside}{':ro' if read_only else ''}"]
+    args += [SANDBOX_IMAGE, "sleep", "infinity"]
+    return args
+
+
 def create_sandbox(run: RepairRun) -> tuple[Any, str]:
     """A fresh SDK ``DockerSandbox`` for this run (``docker run -d`` of ``SANDBOX_IMAGE`` with the
-    binds above), or the SDK's no-isolation local environment when Docker is unavailable —
-    reported as ``"local"`` so the run is marked ``unverified``."""
-    from strands.sandbox.docker import DockerSandbox
-    from strands.sandbox.not_a_sandbox_local_environment import NotASandboxLocalEnvironment
+    binds and bounds above). There is no host fallback: when Docker is unavailable the
+    investigation is ``blocked`` (:class:`SandboxUnavailable`) and nothing can be applied.
 
-    if shutil.which("docker"):
-        container = f"ron-repair-{run.revision}"
-        args = ["docker", "run", "-d", "--rm", "--name", container, "-w", SANDBOX_WORKDIR]
-        for host, inside, read_only in _mount_sources(run):
-            args += ["-v", f"{host.resolve()}:{inside}{':ro' if read_only else ''}"]
-        args += [SANDBOX_IMAGE, "sleep", "infinity"]
-        try:
-            subprocess.run(args, check=True, capture_output=True, timeout=120)
-            # Make a self-contained interpreter: pytest + the library's imports the tool under
-            # repair needs are installed by the fixer itself with `pip install` via `shell`.
-            subprocess.run(["docker", "exec", container, "pip", "install", "-q", "pytest"], check=False,
-                           capture_output=True, timeout=300)
-            run.container = container
-            return DockerSandbox(container, working_dir=SANDBOX_WORKDIR), "docker"
-        except (subprocess.SubprocessError, OSError) as error:
-            logger.warning("error=<%s> | Docker sandbox unavailable; running without isolation", error)
-    return NotASandboxLocalEnvironment(), "local"
+    Raises:
+        SandboxUnavailable: Docker is missing, the daemon is down, or the container did not start.
+    """
+    from strands.sandbox.docker import DockerSandbox
+
+    if not shutil.which("docker"):
+        raise SandboxUnavailable("Docker is not installed on the API host; the repair cannot be verified in isolation")
+    container = f"ron-repair-{run.revision}"
+    try:
+        subprocess.run(sandbox_run_args(run, container), check=True, capture_output=True, timeout=120)
+    except subprocess.CalledProcessError as error:
+        raise SandboxUnavailable(f"docker run failed: {error.stderr.decode(errors='replace').strip()[:500]}") from error
+    except (subprocess.SubprocessError, OSError) as error:
+        raise SandboxUnavailable(f"docker run failed: {error}") from error
+    run.container = container
+    # pytest for the SOP's test step; the fixer installs anything else it needs with pip inside.
+    subprocess.run(["docker", "exec", container, "pip", "install", "-q", "pytest"], check=False,
+                   capture_output=True, timeout=300)
+    return DockerSandbox(container, working_dir=SANDBOX_WORKDIR), "docker"
 
 
 def destroy_sandbox(run: RepairRun) -> None:
@@ -631,8 +771,30 @@ def fixer_sources() -> dict[str, Path]:
     return sources
 
 
-def _repair_tools(run: RepairRun) -> list[AgentTool]:
-    """``record_demonstration`` and ``submit_repair``: application tools writing the manifest."""
+def artifact_digest(files: dict[str, bytes]) -> str:
+    """sha256 over the sorted revision files (path + content): what an approval is bound to."""
+    digest = hashlib.sha256()
+    for relative in sorted(files):
+        digest.update(relative.encode())
+        digest.update(b"\0")
+        digest.update(files[relative])
+        digest.update(b"\0")
+    return digest.hexdigest()
+
+
+def approval_token(user_id: str, tool_name: str, revision: str, base_sha256: str | None, digest: str) -> str:
+    """Approval binds owner, tool, revision, base file sha and artifact digest; ``activate`` recomputes it."""
+    raw = "\n".join([user_id, tool_name, revision, base_sha256 or "", digest])
+    return hashlib.sha256(raw.encode()).hexdigest()
+
+
+#: ``apply_repair`` is the one gated tool: the fixer calls it after ``submit_repair`` returned
+#: ``verified``; native ``HumanInTheLoop`` parks the call until the user answers in the panel.
+APPLY_TOOL_NAME = "apply_repair"
+
+
+def _repair_tools(run: RepairRun, *, activate_fn: Callable[..., Any] | None = None) -> list[AgentTool]:
+    """``record_demonstration``, ``submit_repair`` and ``apply_repair``: application tools on the fixer."""
 
     @tool
     async def record_demonstration(kind: str, input: dict[str, Any], expected: str, actual: str, status: str,
@@ -721,17 +883,49 @@ def _repair_tools(run: RepairRun) -> list[AgentTool]:
                 raise ValueError(f"/workspace/server/{MCP_SERVER_PACKAGE}/ must contain the repaired server package")
         if route == "needs_maintainer" and not (diff.strip() or summary.strip()):
             raise ValueError("needs_maintainer requires at least a summary of the diagnosis (and a diff when possible)")
+        digest = artifact_digest(files)
         run.manifest.update({
             "status": status, "fix_type": fix_type, "route": route, "repair_kind": repair_kind, "summary": summary,
             "reflection": reflection, "wrapper_audit": wrapper_audit, "diff": diff, "test_file": test_file,
             "demonstrations": run.demonstrations, "sandbox": run.sandbox, "submitted_at": _now(), "files": sorted(files),
+            "artifact_digest": digest,
+            "approval_token": approval_token(run.user_id, run.tool_name, run.revision, run.manifest.get("base_sha256"), digest)
+            if status == "verified" else None,
         })
         await write_revision_files(run.user_id, run.tool_name, run.revision, files)
         await write_manifest(run.user_id, run.manifest)
         run.submitted = True
-        return {"revision": run.revision, "status": status, "route": route, "files": sorted(files)}
+        result = {"revision": run.revision, "status": status, "route": route, "files": sorted(files)}
+        if status == "verified":
+            result["next"] = (f"Call {APPLY_TOOL_NAME} once with this revision. The user approves or declines it in the "
+                              "panel; if declined, stop without applying.")
+        return result
 
-    return [record_demonstration, submit_repair]
+    @tool(name=APPLY_TOOL_NAME)
+    async def apply_repair(revision: str, summary: str) -> dict[str, Any]:
+        """Ask the user to put the verified revision in place. Pauses until the user approves or declines.
+
+        Call it exactly once, only after ``submit_repair`` returned ``status="verified"``. When the
+        user approves, the revision becomes active for their account from the next invocation of
+        their live sessions; when they decline, the call is cancelled and you must stop.
+
+        Args:
+            revision: The revision id ``submit_repair`` returned.
+            summary: The one-paragraph summary the user reads before deciding.
+        """
+        if revision != run.revision:
+            raise ValueError(f"Only this run's revision ({run.revision}) can be applied")
+        if run.manifest.get("status") != "verified":
+            raise ValueError(f"Revision {revision} is {run.manifest.get('status')!r}; only a verified revision can be applied")
+        token = run.manifest.get("approval_token")
+        if not token:
+            raise ValueError("The revision has no approval token; submit_repair did not verify it")
+        applied = await (activate_fn or activate)(run.user_id, run.tool_name, run.revision, approval_token_=token)
+        run.applied = applied
+        return {"applied": True, "revision": run.revision, "summary": summary[:500],
+                "live_sessions_reloaded": applied.get("live_sessions_reloaded", [])}
+
+    return [record_demonstration, submit_repair, apply_repair]
 
 
 def validate_adapter_source(source: str) -> None:
@@ -836,17 +1030,32 @@ def _with_hosted_tools(model: Any, hosted: list[dict[str, Any]]) -> Any:
     return model
 
 
+def fixer_hitl() -> Any:
+    """Native ``HumanInTheLoop`` for the fixer: every tool runs freely except ``apply_repair``, which
+    is negated (``!apply_repair``) so it always parks the run on an interrupt the user resolves."""
+    from strands.vended_interventions.hitl import HumanInTheLoop
+
+    return HumanInTheLoop(allowed_tools=["*", f"!{APPLY_TOOL_NAME}"])
+
+
 def build_fixer(run: RepairRun, *, models: Sequence[str], effort: str | None = DEFAULT_FIXER_EFFORT,
                 build_model: Callable[..., Any] | None = None,
                 sandbox_factory: Callable[[RepairRun], tuple[Any, str]] | None = None,
-                hosted_tools: Sequence[str] | None = None, a2a_agents: Sequence[str] | None = None) -> Agent:
+                hosted_tools: Sequence[str] | None = None, a2a_agents: Sequence[str] | None = None,
+                activate_fn: Callable[..., Any] | None = None, hooks: Sequence[Any] | None = None) -> Agent:
     """One ``create_harness`` call. The harness supplies the agent: built-in ``shell``/``read``/
     ``write``/``edit`` (all routed through the SDK ``Agent(sandbox=)`` seam, here a ``DockerSandbox``
-    with the workspace writable and every source read-only), ``todos`` for the multi-step SOP, and
-    the harness system-prompt contract. Ron adds only its domain: the two application tools
-    ``record_demonstration``/``submit_repair`` and read-only memory search. The SOP itself is the
-    agent's INPUT: the native Agent SOP server renders ``Run this SOP: <agent-sop>...<user-input>``
-    with the repair parameters (``sop_task``). No host tools, no session, no memory writes."""
+    with the workspace writable and every source read-only), ``todos`` and ``environment`` for the
+    multi-step SOP, the harness context manager (oversized tool results offloaded to a temporary
+    directory), native throttling retry and the harness system-prompt contract. Ron adds only its
+    domain: ``record_demonstration``/``submit_repair``/``apply_repair`` and read-only memory search,
+    plus the one intervention (``apply_repair`` needs the user). The SOP itself is the agent's
+    INPUT: the native Agent SOP server renders ``Run this SOP: <agent-sop>...<user-input>`` with the
+    repair parameters (``sop_task``). No host tools, no session, no memory writes, no skills.
+
+    Raises:
+        SandboxUnavailable: no isolated environment could be started (no host fallback).
+    """
     from agent.api.core import panel_agent
 
     builder = build_model or panel_agent.build_model
@@ -859,35 +1068,41 @@ def build_fixer(run: RepairRun, *, models: Sequence[str], effort: str | None = D
     for folder in ("files", "adapter", "server", "tests"):
         (run.workspace / folder).mkdir(exist_ok=True)
     sandbox, run.sandbox = (sandbox_factory or create_sandbox)(run)
-    tools: list[Any] = [*_repair_tools(run)]
+    tools: list[Any] = [*_repair_tools(run, activate_fn=activate_fn)]
     try:
         tools.extend(_memory_search_tools(run.user_id))
     except Exception as error:  # memory is optional for a repair
         logger.info("error=<%s> | fixer runs without memory search", error)
-    # Native A2A: the installed strands_tools provider (discover / list / send_message) over Ron's agents.
+    # Native A2A over fixer-only peers (never Ron's own /a2a agent, which runs host tools).
     a2a = fixer_a2a_provider(a2a_agents)
     if a2a is not None:
         tools.extend(a2a.tools)  # the provider vends plain AgentTools (not an SDK ToolProvider)
     return create_harness(
         model=router, instructions=FIXER_PROMPT, tools=tools,
-        builtin_tools=["shell", "read", "write", "edit"], builtin_plugins=["todos"],
-        sandbox=sandbox, memory=False, session=False, skills=False, caching=None, context_manager=False,
-        background_tasks=False, interventions=None, callback_handler=None, load_tools_from_directory=False,
-        retry_strategy=None, name="Ron Tool Fixer",
+        builtin_tools=["shell", "read", "write", "edit"], builtin_plugins=["todos", "environment"],
+        sandbox=sandbox, memory=False, session=False, skills=False, caching=None,
+        background_tasks=False, interventions=fixer_hitl(), callback_handler=None, load_tools_from_directory=False,
+        hooks=list(hooks or []), name="Ron Tool Fixer",
+        description="Reproduces a failed Ron tool in an isolated replica, repairs it and asks the user before applying.",
     )
 
 
 FIXER_PROMPT = """You are Ron's tool fixer. Your input is a native Agent SOP ("Repairing a Broken Tool") with
-its parameters in <user-input>; run it in order and finish by calling submit_repair exactly once.
+its parameters in <user-input>; run it in order and call submit_repair exactly once. When submit_repair
+returns status "verified", call apply_repair exactly once with that revision: the user approves or
+declines it in Ron's panel. If it is approved, report what is now active; if it is declined or
+cancelled, stop and say the repair was not applied. Never apply anything any other way.
 
 Server-side (Perplexity) tools run inside your model turn: web_search, fetch_url, image_search for
 documentation and prior art; the sandbox for scratch computation; the GitHub connector for upstream
-source/issues/PRs of the tool's project; Context7 (MCP) for current library documentation. A2A tools
-(a2a_discover_agent / a2a_send_message) reach Ron's other agents when you need their state.
-Your shell, read, write and edit tools run inside one sandbox container. Read-only mounts:
-/sources/tools (vendored tool library), /sources/core (Ron's wrapper code), /sources/strands_tools
-(installed host tools), /sources/mcp (browser MCP server package). /workspace is the only writable
-area. Install what you need with pip inside the sandbox. Never claim a run you did not perform."""
+source/issues/PRs of the tool's project; Context7 (MCP) for current library documentation.
+Your shell, read, write and edit tools run inside one isolated container (a replica of Ron's
+runtime when the replica image is configured). Read-only mounts: /sources/tools (vendored tool
+library), /sources/core (Ron's wrapper code), /sources/strands_tools (installed host tools),
+/sources/mcp (browser MCP server package). /workspace is the only writable area. Install what you
+need with pip inside the sandbox. The container has no access to the user's live browser, Ron's
+API or the host: a demonstration against the live server is a dry run. Never claim a run you did
+not perform; a model's belief that code works is not a passed demonstration."""
 
 
 def sop_parameters(run: RepairRun, request: dict[str, Any], failing_use: dict[str, Any] | None,
@@ -928,6 +1143,12 @@ def sop_parameters(run: RepairRun, request: dict[str, Any], failing_use: dict[st
         f"context_examples ({len(context)} from this session; synthesize the rest from tool_spec as source=synthetic, "
         f"{MAX_CONTEXT_EXAMPLES} in total): " + json.dumps(context, ensure_ascii=False),
     ]
+    if request.get("error"):
+        parts.append("error_text: " + json.dumps(str(request["error"])[:2000], ensure_ascii=False))
+    if request.get("current_request"):
+        parts.append("user_request_at_failure: " + json.dumps(str(request["current_request"])[:1500], ensure_ascii=False))
+    if request.get("browser"):
+        parts.append(f"browser_target_at_failure: {request['browser']} (the sandbox cannot reach it)")
     if schema:
         parts.append("tool_spec: " + json.dumps(schema, ensure_ascii=False)[:6000])
     if diagnosis is not None:
@@ -948,51 +1169,567 @@ def sop_task(run: RepairRun, request: dict[str, Any], failing_use: dict[str, Any
     return native_sop_prompt(SOPS_DIR, parameters, name=SOP_NAME)
 
 
-class RepairService:
-    """One active repair per user+tool; runs the fixer and tracks results for the endpoints."""
+#: Investigation states reported to the panel (``tool_repair_*`` events) and kept in ``agent.state``.
+INVESTIGATION_STATES = ("investigating", "approval", "applied", "declined", "failed", "blocked", "cancelled")
 
-    def __init__(self, config_: RepairConfig | None = None) -> None:
+#: A2A ``input_required`` interrupt name of the fixer's native HumanInTheLoop (``HumanInTheLoop.name``).
+HITL_INTERRUPT_NAME = "strands:human-in-the-loop"
+
+
+@dataclass
+class Investigation:
+    """One bounded investigation: the run, its A2A context and what the panel sees."""
+
+    run: RepairRun
+    evidence: RepairEvidence
+    context_id: str
+    state: str = "investigating"
+    task_id: str | None = None
+    #: The parked ``apply_repair`` interrupt (``{"interruptId", "name", "reason"}``) while ``approval``.
+    interrupt: dict[str, Any] | None = None
+    result: dict[str, Any] | None = None
+    task: asyncio.Task[dict[str, Any]] | None = None
+    #: Resolved by ``approve``/``decline``/``cancel``; awaited by the driver while ``approval``.
+    decision: asyncio.Future[str | None] | None = None
+    #: ``(sandbox, kind)`` prepared by the driver before the A2A request; the factory reuses it.
+    sandbox: tuple[Any, str] | None = None
+    started_at: str = field(default_factory=_now)
+
+    def summary(self) -> dict[str, Any]:
+        """What the owner's panel/surface may see: state, the redacted evidence, the artifact so far."""
+        manifest = self.run.manifest
+        return {"revision": self.run.revision, "tool_name": self.run.tool_name, "state": self.state,
+                "context_id": self.context_id, "task_id": self.task_id, "started_at": self.started_at,
+                "interrupt": self.interrupt, "result": self.result,
+                "evidence": {"kind": self.evidence.kind, "exception_class": self.evidence.exception_class, "count": self.evidence.count,
+                             "outcome": self.evidence.outcome, "current_request": self.evidence.current_request,
+                             "browser": self.evidence.browser, "session_id": self.evidence.session_id},
+                "artifact": {"status": manifest.get("status"), "summary": manifest.get("summary"), "diff": manifest.get("diff"),
+                             "repair_kind": manifest.get("repair_kind"), "target_kind": manifest.get("target_kind"),
+                             "demonstrations": manifest.get("demonstrations", []), "sandbox": self.run.sandbox,
+                             "route": manifest.get("route"), "approval_token": manifest.get("approval_token") if self.state == "approval" else None,
+                             "applied": self.run.applied, "declined": self.run.declined}}
+
+
+class FixerClient:
+    """The official ``a2a-sdk`` client over Ron's own fixer ``A2AServer``.
+
+    ``send`` streams one task; ``resume`` answers the parked interrupt with the SDK's
+    ``interruptResponse`` DataPart (``executor.INTERRUPT_RESPONSE_KEY``); ``cancel`` asks the
+    server to cancel the task (``Agent.cancel`` on the context agent).
+    """
+
+    def __init__(self, base_url: str, *, http: Any | None = None, timeout: float = 60.0) -> None:
+        self.base_url = base_url.rstrip("/")
+        self._http = http
+        self._timeout = timeout
+
+    async def _client(self) -> Any:
+        import httpx
+        from a2a.client import A2ACardResolver, ClientConfig, ClientFactory
+
+        http = self._http or httpx.AsyncClient(timeout=self._timeout)
+        card = await A2ACardResolver(httpx_client=http, base_url=self.base_url).get_agent_card()
+        return ClientFactory(ClientConfig(httpx_client=http, streaming=True)).create(card), http
+
+    async def stream(self, message: Any, on_event: Callable[[Any], Any] | None = None) -> Any:
+        """Send one message and iterate its task events; returns the last ``(Task, update)`` tuple."""
+        client, http = await self._client()
+        last: Any = None
+        try:
+            async for event in client.send_message(message):
+                last = event
+                if on_event is not None:
+                    await _maybe_await(on_event(event))
+        finally:
+            if self._http is None:
+                await http.aclose()
+        return last
+
+    async def cancel(self, task_id: str) -> None:
+        from a2a.types import TaskIdParams
+
+        client, http = await self._client()
+        try:
+            await client.cancel_task(TaskIdParams(id=task_id))
+        finally:
+            if self._http is None:
+                await http.aclose()
+
+
+def _a2a_message(text: str, *, context_id: str, task_id: str | None = None) -> Any:
+    from a2a.types import Message, Part, Role, TextPart
+
+    return Message(kind="message", role=Role.user, message_id=uuid.uuid4().hex, context_id=context_id, task_id=task_id,
+                   parts=[Part(root=TextPart(kind="text", text=text))])
+
+
+def _a2a_interrupt_response(interrupt_id: str, response: Any, *, context_id: str, task_id: str) -> Any:
+    from a2a.types import DataPart, Message, Part, Role
+    from strands.multiagent.a2a.executor import INTERRUPT_RESPONSE_KEY
+
+    return Message(kind="message", role=Role.user, message_id=uuid.uuid4().hex, context_id=context_id, task_id=task_id,
+                   parts=[Part(root=DataPart(kind="data", data={INTERRUPT_RESPONSE_KEY: {"interruptId": interrupt_id, "response": response}}))])
+
+
+def _task_of(event: Any) -> Any:
+    return event[0] if isinstance(event, tuple) and len(event) == 2 else None
+
+
+def _state_of(event: Any) -> Any:
+    from a2a.types import TaskStatusUpdateEvent
+
+    if isinstance(event, tuple) and len(event) == 2 and isinstance(event[1], TaskStatusUpdateEvent):
+        return event[1].status.state if event[1].status else None
+    task = _task_of(event)
+    return task.status.state if task is not None and task.status else None
+
+
+def _pending_interrupts(event: Any) -> list[dict[str, Any]]:
+    """The ``interrupts`` DataPart of an ``input_required`` status message (``executor.INTERRUPTS_KEY``)."""
+    from a2a.types import DataPart, TaskStatusUpdateEvent
+    from strands.multiagent.a2a.executor import INTERRUPTS_KEY
+
+    message = None
+    if isinstance(event, tuple) and len(event) == 2:
+        task, update = event
+        if isinstance(update, TaskStatusUpdateEvent) and update.status and update.status.message:
+            message = update.status.message
+        elif task is not None and task.status and task.status.message:
+            message = task.status.message
+    if message is None:
+        return []
+    for part in message.parts:
+        if isinstance(part.root, DataPart) and isinstance(part.root.data, dict) and INTERRUPTS_KEY in part.root.data:
+            return [dict(item) for item in part.root.data[INTERRUPTS_KEY]]
+    return []
+
+
+class RepairService:
+    """Owns every investigation of this API process.
+
+    - ``investigate(evidence)`` is what :class:`ToolRepairTrigger` calls (non-blocking): it builds
+      the :class:`RepairRun`, registers it under a fresh A2A ``context_id`` and starts the driver
+      task. Concurrency is bounded by ``RepairConfig.max_concurrent``; one investigation per
+      ``(user, tool)``.
+    - ``agent_for(context_id)`` is the fixer ``A2AServer``'s ``agent_factory``: the registered
+      run's real ``create_harness`` fixer, or a metadata-only agent for the card.
+    - ``approve`` / ``decline`` / ``cancel`` resolve the user's decision; the driver forwards it to
+      the parked task as the native interrupt response (or ``cancel_task``).
+    - ``on_event(user_id, session_id, payload)`` is how progress and outcomes reach the originating
+      session (``PanelRuntimeManager.repair_event``) without the hook awaiting anything.
+    """
+
+    def __init__(self, config_: RepairConfig | None = None, *, fixer_url: str | None = None,
+                 client_factory: Callable[[str], FixerClient] | None = None,
+                 reload_live_sessions: Callable[..., Any] | None = None) -> None:
         self.config = config_ or RepairConfig.from_env()
-        self._active: dict[tuple[str, str], asyncio.Task[dict[str, Any]]] = {}
+        self._fixer_url = fixer_url
+        self._client_factory = client_factory or (lambda url: FixerClient(url, timeout=max(60.0, float(self.config.timeout_s))))
+        self._reload_live_sessions = reload_live_sessions
+        #: Fixer agents built by ``agent_for``, by context id, so the driver can release them.
+        self._agents: dict[str, Agent] = {}
+        #: The native A2A executor serving ``/a2a/fixer`` (``bind_executor``); its per-context entry
+        #: is dropped when an investigation ends so a finished agent does not wait for LRU eviction.
+        self._executor: Any = None
+        self._by_key: dict[tuple[str, str], Investigation] = {}
+        self._by_context: dict[str, Investigation] = {}
         self._results: dict[tuple[str, str], dict[str, Any]] = {}
+        self._slots = asyncio.Semaphore(max(1, self.config.max_concurrent))
+        self._emit: Callable[[str, str, dict[str, Any]], Any] | None = None
+        # Test seams (production uses the module functions).
+        self.build_model: Callable[..., Any] | None = None
+        self.sandbox_factory: Callable[[RepairRun], tuple[Any, str]] | None = None
+        self.sop_prompt: str | None = None
+
+    # -- wiring -------------------------------------------------------------------------------
+
+    def bind_emitter(self, emit: Callable[[str, str, dict[str, Any]], Any]) -> None:
+        """``emit(user_id, session_id, payload)`` delivers repair events to the originating session."""
+        self._emit = emit
+
+    def bind_executor(self, server: Any) -> None:
+        """The fixer ``A2AServer`` (``PanelA2A.server``): lets ``_release`` drop finished contexts."""
+        self._executor = getattr(getattr(server, "request_handler", None), "agent_executor", None)
+
+    async def _release(self, investigation: Investigation) -> None:
+        """Release the fixer agent of a finished investigation (tool providers, container entry)."""
+        agent = self._agents.pop(investigation.context_id, None)
+        executor = self._executor
+        if executor is not None:
+            contexts = getattr(executor, "_contexts", None)
+            lock = getattr(executor, "_contexts_lock", None)
+            if isinstance(contexts, dict) and lock is not None:
+                async with lock:
+                    contexts.pop(investigation.context_id, None)
+        if agent is not None:
+            try:
+                await asyncio.to_thread(agent.cleanup)
+            except Exception:
+                logger.exception("revision=<%s> | fixer cleanup failed", investigation.run.revision)
+
+    @property
+    def fixer_url(self) -> str:
+        if self._fixer_url:
+            return self._fixer_url
+        from agent.api.core.a2a_tools import panel_a2a_url
+
+        return f"{panel_a2a_url()}/fixer"
+
+    def trigger(self, *, browser: str | None = None, user_id: str | None = None, session_id: str | None = None) -> ToolRepairTrigger:
+        """The hook to register on an agent: records guidance and starts investigations here.
+
+        Chat agents carry ``trace_attributes`` (session/user ids); a Live ``BidiAgent`` does not, so
+        pass ``user_id``/``session_id`` explicitly for it.
+        """
+        return ToolRepairTrigger(self.config, start=self.investigate, browser=browser, user_id=user_id, session_id=session_id)
+
+    def agent_for(self, context_id: str) -> Agent:
+        """A2A ``agent_factory``: the real fixer of the registered investigation, or a card-only agent."""
+        investigation = self._by_context.get(context_id)
+        if investigation is None:
+            from agent.api.core.panel_agent import build_model, default_selection
+
+            if context_id != "__agent_card__":
+                raise LookupError(f"No investigation is registered for A2A context {context_id!r}")
+            selection = default_selection()
+            model = build_model(*selection) if selection is not None else _CardModel()
+            return Agent(model=model, name="Ron Tool Fixer", callback_handler=None, load_tools_from_directory=False,
+                         description="Reproduces a failed Ron tool in an isolated replica, repairs it and asks the user before applying.")
+        run = investigation.run
+        # The driver prepared the sandbox before sending the A2A request (so "no sandbox" is a
+        # `blocked` outcome of the investigation, not a failed A2A task); hand that instance over.
+        prepared = investigation.sandbox
+        factory = (lambda _run: prepared) if prepared is not None else self.sandbox_factory
+        fixer = build_fixer(run, models=self.config.models, effort=self.config.effort, build_model=self.build_model,
+                            sandbox_factory=factory, hosted_tools=self.config.hosted_tools,
+                            a2a_agents=self.config.a2a_agents, activate_fn=self._activate_for(investigation))
+        self._agents[context_id] = fixer
+        return fixer
+
+    # -- inspection ---------------------------------------------------------------------------
 
     def status(self, user_id: str, tool_name: str) -> dict[str, Any]:
         key = (user_id, tool_name)
-        task = self._active.get(key)
-        if task is not None and not task.done():
-            return {"state": "running"}
+        investigation = self._by_key.get(key)
+        if investigation is not None and investigation.task is not None and not investigation.task.done():
+            return {"state": investigation.state, "investigation": investigation.summary()}
         return {"state": "idle", "last": self._results.get(key)}
 
-    async def start(self, *, user_id: str, session_id: str, tool_name: str, session_messages: Sequence[dict[str, Any]],
-                    agent: Agent | None, on_event: Callable[[dict[str, Any]], Any] | None = None,
-                    build_model: Callable[..., Any] | None = None,
-                    sandbox_factory: Callable[[RepairRun], tuple[Any, str]] | None = None,
-                    sop_prompt: str | None = None) -> dict[str, Any]:
-        if not self.config.enabled:
-            raise RuntimeError("RON_TOOL_REPAIR=0: tool repair is disabled")
-        key = (user_id, _tool_key(tool_name))
-        if (task := self._active.get(key)) is not None and not task.done():
-            raise RuntimeError(f"A repair of {tool_name!r} is already running for this user")
-        request = (agent.state.get(REPAIR_REQUEST_STATE_KEY) if agent is not None else None) or {}
-        if request.get("tool_name") != tool_name:
-            request = {"tool_name": tool_name, "count": 0, "outcome": None, "failing_tool_use_id": None}
-        registered = agent.tool_registry.registry.get(tool_name) if agent is not None else None
-        if registered is None:
-            raise ValueError(f"{tool_name!r} is not registered in this session")
-        kind = target_kind(registered)
-        source = tool_source(registered)
-        run = self._prepare(user_id, session_id, tool_name, source, registered, request, kind)
-        if agent is not None:
-            agent.state.set(REPAIR_REQUEST_STATE_KEY, {**request, "status": "running", "revision": run.revision})
-        coroutine = self._execute(run, request, session_messages, agent, on_event, build_model,
-                                  sandbox_factory, sop_prompt)
-        task = asyncio.create_task(coroutine, name=f"tool-repair-{user_id}-{tool_name}")
-        self._active[key] = task
-        return {"revision": run.revision, "tool_name": tool_name, "state": "running"}
+    def active(self, user_id: str) -> list[dict[str, Any]]:
+        return [inv.summary() for (owner, _), inv in self._by_key.items() if owner == user_id and inv.task is not None and not inv.task.done()]
 
     async def wait(self, user_id: str, tool_name: str) -> dict[str, Any] | None:
-        task = self._active.get((user_id, tool_name))
-        return await task if task is not None else None
+        investigation = self._by_key.get((user_id, tool_name))
+        return await investigation.task if investigation is not None and investigation.task is not None else None
+
+    # -- start --------------------------------------------------------------------------------
+
+    def investigate(self, evidence: RepairEvidence) -> Investigation | None:
+        """Start one bounded investigation for ``evidence`` (idempotent per ``(user, tool)``).
+
+        Synchronous and non-blocking: called from the ``AfterToolCallEvent`` hook on the API loop.
+        Returns ``None`` when repair is disabled, the owner is unknown, or one is already running.
+        """
+        if not self.config.enabled or not evidence.user_id or not evidence.session_id:
+            return None
+        key = (evidence.user_id, _tool_key(evidence.tool_name))
+        current = self._by_key.get(key)
+        if current is not None and current.task is not None and not current.task.done():
+            return None
+        source_agent = evidence.agent
+        registered = source_agent.tool_registry.registry.get(evidence.tool_name) if source_agent is not None else None
+        if source_agent is None or registered is None:
+            logger.warning("tool_name=<%s> | investigation skipped: tool not registered", evidence.tool_name)
+            return None
+        request = {"tool_name": evidence.tool_name, "count": evidence.count, "exception_class": evidence.exception_class,
+                   "outcome": evidence.outcome, "observation": evidence.observation,
+                   "failing_tool_use_id": evidence.failing_tool_use_id, "error": evidence.error,
+                   "current_request": evidence.current_request, "browser": evidence.browser}
+        run = self._prepare(evidence.user_id, evidence.session_id, evidence.tool_name, tool_source(registered), registered,
+                            request, evidence.kind)
+        investigation = Investigation(run=run, evidence=evidence, context_id=f"repair-{run.revision}")
+        self._by_key[key] = investigation
+        self._by_context[investigation.context_id] = investigation
+        source_agent.state.set(REPAIR_REQUEST_STATE_KEY, {
+            **(source_agent.state.get(REPAIR_REQUEST_STATE_KEY) or {}), "tool_name": evidence.tool_name,
+            "status": "investigating", "revision": run.revision, "context_id": investigation.context_id,
+        })
+        investigation.task = asyncio.get_running_loop().create_task(
+            self._drive(investigation, request), name=f"tool-repair-{evidence.user_id}-{evidence.tool_name}")
+        investigation.task.add_done_callback(lambda done: None if done.cancelled() else done.exception())
+        return investigation
+
+    async def start(self, *, user_id: str, session_id: str, tool_name: str, session_messages: Sequence[dict[str, Any]],
+                    agent: Agent | None, **_: Any) -> dict[str, Any]:
+        """Loopback service entry (``POST /tools/repairs``): investigate a tool the user names.
+
+        Builds the evidence from the session's latest recorded request for that tool.
+        """
+        if not self.config.enabled:
+            raise RuntimeError("RON_TOOL_REPAIR=0: tool repair is disabled")
+        if agent is None:
+            raise ValueError("A live session is required")
+        key = (user_id, _tool_key(tool_name))
+        if (current := self._by_key.get(key)) is not None and current.task is not None and not current.task.done():
+            raise RuntimeError(f"An investigation of {tool_name!r} is already running for this user")
+        registered = agent.tool_registry.registry.get(tool_name)
+        if registered is None:
+            raise ValueError(f"{tool_name!r} is not registered in this session")
+        request = agent.state.get(REPAIR_REQUEST_STATE_KEY) or {}
+        if request.get("tool_name") != tool_name:
+            request = {}
+        recorded = ((agent.state.get(REPAIR_CONTEXT_STATE_KEY) or {}).get(tool_name) or [{}])[0]
+        failing_use = {"toolUseId": recorded.get("toolUseId", ""), "name": tool_name, "input": recorded.get("input", {})}
+        from agent.api.core.panel_storage import current_request_text
+
+        spec = getattr(registered, "tool_spec", None)
+        evidence = RepairEvidence(
+            user_id=user_id, session_id=session_id, tool_name=tool_name, kind=target_kind(registered),
+            exception_class=str(request.get("exception_class") or recorded.get("exception") or "error").split(":", 1)[0],
+            count=int(request.get("count") or 0), failing_tool_use_id=str(request.get("failing_tool_use_id") or failing_use["toolUseId"]),
+            tool_use=failing_use, outcome=dict(request.get("outcome") or {"tool_name": tool_name}),
+            error=recorded.get("exception"), tool_spec={"name": spec.get("name"), "inputSchema": spec.get("inputSchema")} if isinstance(spec, dict) else None,
+            current_request=current_request_text(list(session_messages)), messages=list(session_messages), browser=None,
+            agent=agent, observation=bool(request.get("observation")), side_effecting=is_side_effecting(tool_name, failing_use["input"]),
+        )
+        investigation = self.investigate(evidence)
+        if investigation is None:
+            raise RuntimeError("The investigation could not be started")
+        return {"revision": investigation.run.revision, "tool_name": tool_name, "state": "investigating",
+                "context_id": investigation.context_id}
+
+    # -- decisions ----------------------------------------------------------------------------
+
+    def _awaiting(self, user_id: str, tool_name: str, rev: str | None) -> Investigation:
+        investigation = self._by_key.get((user_id, _tool_key(tool_name)))
+        if investigation is None or investigation.task is None or investigation.task.done():
+            raise LookupError(f"No running investigation of {tool_name!r} for this user")
+        if rev is not None and investigation.run.revision != rev:
+            raise LookupError(f"Revision {rev!r} is not the running investigation ({investigation.run.revision})")
+        return investigation
+
+    def approve(self, user_id: str, tool_name: str, rev: str, approval_token_: str) -> dict[str, Any]:
+        """The user approved in the panel. The token must match the verified artifact exactly."""
+        investigation = self._awaiting(user_id, tool_name, rev)
+        if investigation.state != "approval" or investigation.decision is None or investigation.decision.done():
+            raise RuntimeError(f"The investigation of {tool_name!r} is not waiting for approval")
+        expected = investigation.run.manifest.get("approval_token")
+        if not expected or approval_token_ != expected:
+            raise PermissionError("The approval does not match the verified artifact; review the current result")
+        investigation.decision.set_result("y")
+        return investigation.summary()
+
+    def decline(self, user_id: str, tool_name: str, rev: str | None = None) -> dict[str, Any]:
+        investigation = self._awaiting(user_id, tool_name, rev)
+        if investigation.state != "approval" or investigation.decision is None or investigation.decision.done():
+            raise RuntimeError(f"The investigation of {tool_name!r} is not waiting for approval")
+        investigation.decision.set_result("n")
+        return investigation.summary()
+
+    async def cancel(self, user_id: str, tool_name: str) -> dict[str, Any]:
+        """Stop the investigation: unpark a waiting approval as cancelled, or ``cancel_task`` the A2A run."""
+        investigation = self._awaiting(user_id, tool_name, None)
+        if investigation.decision is not None and not investigation.decision.done():
+            investigation.decision.set_result(None)
+        elif investigation.task_id:
+            try:
+                await self._client_factory(self.fixer_url).cancel(investigation.task_id)
+            except Exception as error:
+                logger.warning("revision=<%s>, error=<%s> | A2A cancel_task failed; cancelling the driver", investigation.run.revision, error)
+                investigation.task.cancel()  # type: ignore[union-attr]
+        else:
+            investigation.task.cancel()  # type: ignore[union-attr]
+        return investigation.summary()
+
+    async def shutdown(self) -> None:
+        for investigation in list(self._by_key.values()):
+            if investigation.task is not None and not investigation.task.done():
+                investigation.task.cancel()
+        tasks = [inv.task for inv in self._by_key.values() if inv.task is not None]
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
+
+    # -- the driver ---------------------------------------------------------------------------
+
+    def _activate_for(self, investigation: Investigation) -> Callable[..., Any]:
+        """``apply_repair`` inside the fixer: activate, then reload the owner's live sessions."""
+
+        async def activate_and_reload(user_id: str, tool_name: str, rev: str, *, approval_token_: str) -> dict[str, Any]:
+            if user_id != investigation.evidence.user_id:
+                raise PermissionError("A revision can only be applied by the user it was verified for")
+            active = await activate(user_id, tool_name, rev, approval_token_=approval_token_)
+            # The driver's final manifest write mirrors the activated state.
+            investigation.run.manifest.update({"status": "active", "activated_at": active["activated_at"]})
+            sessions: list[str] = []
+            if self._reload_live_sessions is not None:
+                sessions = list(await _maybe_return(self._reload_live_sessions(
+                    user_id, tool_name, active.get("revision_file"), active.get("repair_kind", "file"))) or [])
+            return {**active, "live_sessions_reloaded": sessions}
+
+        return activate_and_reload
+
+    async def _notify(self, investigation: Investigation, payload: dict[str, Any]) -> None:
+        if self._emit is None:
+            return
+        try:
+            await _maybe_await(self._emit(investigation.evidence.user_id, investigation.evidence.session_id,
+                                          {"revision": investigation.run.revision, "tool_name": investigation.run.tool_name, **payload}))
+        except Exception:
+            logger.exception("revision=<%s> | repair event delivery failed", investigation.run.revision)
+
+    def _guide(self, investigation: Investigation, phase: str, summary: str | None = None) -> None:
+        from agent.api.core.tool_failure import note_repair
+
+        agent = investigation.evidence.agent
+        if agent is None:
+            return
+        try:
+            note_repair(agent, investigation.run.tool_name, phase=phase, revision=investigation.run.revision, summary=summary)
+            agent.state.set(REPAIR_REQUEST_STATE_KEY, {**(agent.state.get(REPAIR_REQUEST_STATE_KEY) or {}),
+                                                       "tool_name": investigation.run.tool_name, "status": investigation.state,
+                                                       "revision": investigation.run.revision, "result": investigation.result})
+        except Exception:
+            logger.exception("revision=<%s> | guidance update failed", investigation.run.revision)
+
+    async def _drive(self, investigation: Investigation, request: dict[str, Any]) -> dict[str, Any]:
+        run, evidence = investigation.run, investigation.evidence
+        key = (run.user_id, run.tool_name)
+        client = self._client_factory(self.fixer_url)
+        result: dict[str, Any] = {}
+        try:
+            async with self._slots:
+                await write_manifest(run.user_id, run.manifest)
+                await self._notify(investigation, {"investigating": {"kind": run.manifest.get("target_kind"), "count": evidence.count,
+                                                                      "exception_class": evidence.exception_class,
+                                                                      "context_id": investigation.context_id}})
+                self._guide(investigation, "investigating")
+                diagnosis = None
+                try:
+                    from agent.api.core import panel_agent
+
+                    diag_builder = self.build_model or panel_agent.build_model
+                    diagnosis = await diagnose(run.session_id, model=diag_builder("perplexity", self.config.models[0], None, hosted_tools=False))
+                except Exception as error:
+                    logger.info("error=<%s> | diagnosis unavailable; fixer works from recorded outcomes", error)
+                run.manifest["diagnosis"] = diagnosis
+                # The isolated environment is a precondition of the investigation (no host fallback).
+                investigation.sandbox = await asyncio.to_thread(self.sandbox_factory or create_sandbox, run)
+                run.sandbox = investigation.sandbox[1]
+                failing_use = {"toolUseId": evidence.tool_use.get("toolUseId"), "input": evidence.tool_use.get("input", {})}
+                context = select_context_examples(evidence.messages, run.tool_name, exclude_tool_use_id=evidence.failing_tool_use_id)
+                task_text = await asyncio.to_thread(sop_task, run, request, failing_use, context, diagnosis, sop_prompt=self.sop_prompt)
+                result = await asyncio.wait_for(self._converse(investigation, client, task_text), timeout=self.config.timeout_s)
+        except asyncio.CancelledError:
+            investigation.state = "cancelled"
+            result = self._finish(run, "cancelled", "The investigation was cancelled.")
+        except asyncio.TimeoutError:
+            investigation.state = "failed"
+            result = self._finish(run, "failed", f"The investigation exceeded {self.config.timeout_s}s and was stopped.")
+            if investigation.task_id:
+                try:
+                    await client.cancel(investigation.task_id)
+                except Exception:
+                    logger.debug("revision=<%s> | cancel after timeout failed", run.revision)
+        except SandboxUnavailable as error:
+            investigation.state = "blocked"
+            result = self._finish(run, "blocked", f"No isolated environment: {error}")
+        except Exception as error:
+            logger.exception("tool_name=<%s>, revision=<%s> | investigation failed", run.tool_name, run.revision)
+            investigation.state = "failed"
+            result = self._finish(run, "failed", f"{type(error).__name__}: {error}"[:500])
+        finally:
+            self._by_context.pop(investigation.context_id, None)
+            await self._release(investigation)
+            await asyncio.to_thread(destroy_sandbox, run)
+            try:
+                await write_manifest(run.user_id, run.manifest)
+            except Exception:
+                logger.exception("manifest write failed")
+        investigation.result = result
+        self._results[key] = result
+        phase = {"applied": "confirm", "declined": "declined", "blocked": "blocked", "cancelled": "failed"}.get(investigation.state, "failed")
+        if investigation.state == "approval":
+            phase = "approval"
+        self._guide(investigation, phase, result.get("summary"))
+        await self._notify(investigation, {"ready": result})
+        return result
+
+    def _finish(self, run: RepairRun, status: str, summary: str) -> dict[str, Any]:
+        if not run.submitted or status in ("cancelled", "blocked"):
+            run.manifest.update({"status": status, "summary": summary, "demonstrations": run.demonstrations, "sandbox": run.sandbox})
+        return self._result(run)
+
+    def _result(self, run: RepairRun) -> dict[str, Any]:
+        manifest = run.manifest
+        return {"revision": run.revision, "tool_name": run.tool_name, "status": manifest.get("status"),
+                "summary": manifest.get("summary", ""), "demonstrations": manifest.get("demonstrations", []),
+                "sandbox": run.sandbox, "route": manifest.get("route"), "repair_kind": manifest.get("repair_kind"),
+                "target_kind": manifest.get("target_kind"), "diff": manifest.get("diff", ""),
+                "approval_token": manifest.get("approval_token"), "artifact_digest": manifest.get("artifact_digest"),
+                "applied": run.applied, "declined": run.declined}
+
+    async def _converse(self, investigation: Investigation, client: FixerClient, task_text: str) -> dict[str, Any]:
+        """One A2A conversation: the SOP message, then the interrupt response once the user decided."""
+        from a2a.types import TaskState
+
+        run = investigation.run
+
+        async def forward(event: Any) -> None:
+            task = _task_of(event)
+            if task is not None and investigation.task_id is None:
+                investigation.task_id = task.id
+            await self._notify(investigation, {"a2a": _wire_a2a(event)})
+
+        last = await client.stream(_a2a_message(task_text, context_id=investigation.context_id), forward)
+        state = _state_of(last)
+        if state == TaskState.input_required:
+            interrupts = _pending_interrupts(last)
+            hitl = next((item for item in interrupts if item.get("name") == HITL_INTERRUPT_NAME), None)
+            if hitl is None or run.manifest.get("status") != "verified":
+                investigation.state = "failed"
+                run.manifest.update({"status": "failed", "summary": "The fixer paused on an unexpected interrupt."})
+                if investigation.task_id:
+                    await client.cancel(investigation.task_id)
+                return self._result(run)
+            investigation.interrupt = hitl
+            investigation.state = "approval"
+            investigation.decision = asyncio.get_running_loop().create_future()
+            self._guide(investigation, "approval")
+            await self._notify(investigation, {"approval": {**self._result(run), "interrupt": hitl}})
+            decision = await investigation.decision
+            if decision is None:
+                investigation.state = "cancelled"
+                await client.cancel(investigation.task_id)  # type: ignore[arg-type]
+                run.manifest.update({"status": "cancelled", "summary": "The investigation was cancelled before the user decided."})
+                return self._result(run)
+            response = _a2a_interrupt_response(str(hitl["interruptId"]), decision, context_id=investigation.context_id,
+                                               task_id=str(investigation.task_id))
+            last = await client.stream(response, forward)
+            state = _state_of(last)
+            if decision == "n":
+                run.declined = True
+                investigation.state = "declined"
+                run.manifest.update({"status": "declined", "summary": run.manifest.get("summary", ""), "declined_at": _now()})
+                return self._result(run)
+        if run.applied is not None:
+            investigation.state = "applied"
+            return self._result(run)
+        if state == TaskState.failed:
+            investigation.state = "failed"
+            run.manifest.update({"status": "failed", "summary": run.manifest.get("summary") or "The fixer's A2A task failed."})
+        elif state == TaskState.canceled:
+            investigation.state = "cancelled"
+            run.manifest.update({"status": "cancelled", "summary": "The fixer's task was cancelled."})
+        elif not run.submitted:
+            investigation.state = "failed"
+            run.manifest.update({"status": "failed", "summary": "The fixer ended without calling submit_repair."})
+        else:
+            investigation.state = "failed" if run.manifest.get("status") in ("failed", "not_reproducible") else "failed"
+            if run.manifest.get("status") == "verified":
+                # Verified but the fixer never asked to apply: the artifact is stored; nothing applied.
+                run.manifest["summary"] = (run.manifest.get("summary") or "") + " (The fixer did not request approval; nothing was applied.)"
+        return self._result(run)
 
     def _prepare(self, user_id: str, session_id: str, tool_name: str, source: dict[str, Any] | None, registered: Any,
                  request: dict[str, Any], kind: str = "library") -> RepairRun:
@@ -1018,100 +1755,86 @@ class RepairService:
         manifest = {
             "tool_name": tool_name, "revision": revision, "target_kind": kind,
             "source_path": source_path, "base_sha256": source["sha256"] if source is not None else None,
-            "session_id": session_id, "created_at": _now(), "status": "proposed", "sop": SOP_NAME,
-            "request": {k: v for k, v in request.items() if k in ("count", "exception_class", "outcome", "observation")},
+            "session_id": session_id, "owner_id": user_id, "created_at": _now(), "status": "investigating", "sop": SOP_NAME,
+            "request": {k: v for k, v in request.items() if k in ("count", "exception_class", "outcome", "observation", "current_request", "browser")},
             "tool_spec": {"name": spec.get("name"), "inputSchema": spec.get("inputSchema")} if isinstance(spec, dict) else None,
             "demonstrations": [], "reflection": {}, "wrapper_audit": {}, "diagnosis": None,
         }
         return RepairRun(user_id=user_id, session_id=session_id, tool_name=tool_name, revision=revision,
                          workspace=workspace, manifest=manifest)
 
-    async def _execute(self, run: RepairRun, request: dict[str, Any], messages: Sequence[dict[str, Any]],
-                       agent: Agent | None, on_event: Callable[[dict[str, Any]], Any] | None,
-                       build_model: Callable[..., Any] | None, sandbox_factory: Any,
-                       sop_prompt: str | None) -> dict[str, Any]:
-        key = (run.user_id, run.tool_name)
-        fixer: Agent | None = None
-        try:
-            await write_manifest(run.user_id, run.manifest)
-            diagnosis = None
-            try:
-                from agent.api.core import panel_agent
-                diag_builder = build_model or panel_agent.build_model
-                diagnosis = await diagnose(run.session_id, model=diag_builder("perplexity", self.config.models[0], None, hosted_tools=False))
-            except Exception as error:
-                logger.info("error=<%s> | diagnosis unavailable; fixer works from recorded outcomes", error)
-            run.manifest["diagnosis"] = diagnosis
-            failing_use = None
-            for message in messages:
-                for block in message.get("content", []) if isinstance(message, dict) else []:
-                    use = block.get("toolUse") if isinstance(block, dict) else None
-                    if isinstance(use, dict) and use.get("toolUseId") == request.get("failing_tool_use_id"):
-                        failing_use = {"toolUseId": use.get("toolUseId"), "input": use.get("input", {})}
-            context = select_context_examples(messages, run.tool_name, exclude_tool_use_id=request.get("failing_tool_use_id"))
-            fixer = await asyncio.to_thread(build_fixer, run, models=self.config.models, effort=self.config.effort,
-                                            build_model=build_model, sandbox_factory=sandbox_factory,
-                                            hosted_tools=self.config.hosted_tools, a2a_agents=self.config.a2a_agents)
-            task_text = await asyncio.to_thread(sop_task, run, request, failing_use, context, diagnosis, sop_prompt=sop_prompt)
 
-            async def drive() -> None:
-                async for event in fixer.stream_async(task_text):
-                    if on_event is not None and "result" not in event:
-                        await _maybe_await(on_event({"revision": run.revision, "tool_name": run.tool_name, "event": event}))
+class _CardModel(Model):
+    """Metadata-only model for the fixer's agent card when no provider is configured."""
 
-            await asyncio.wait_for(drive(), timeout=self.config.timeout_s)
-            if not run.submitted:
-                run.manifest.update({"status": "failed", "summary": "The fixer ended without calling submit_repair.",
-                                     "demonstrations": run.demonstrations, "sandbox": run.sandbox})
-                await write_manifest(run.user_id, run.manifest)
-            result = {"revision": run.revision, "tool_name": run.tool_name, "status": run.manifest["status"],
-                      "summary": run.manifest.get("summary", ""), "demonstrations": run.manifest.get("demonstrations", []),
-                      "sandbox": run.sandbox, "route": run.manifest.get("route"), "repair_kind": run.manifest.get("repair_kind"),
-                      "target_kind": run.manifest.get("target_kind")}
-        except Exception as error:
-            logger.exception("tool_name=<%s>, revision=<%s> | repair run failed", run.tool_name, run.revision)
-            run.manifest.update({"status": "failed", "summary": f"{type(error).__name__}: {error}"[:500],
-                                 "demonstrations": run.demonstrations, "sandbox": run.sandbox})
-            try:
-                await write_manifest(run.user_id, run.manifest)
-            except Exception:
-                logger.exception("manifest write failed")
-            result = {"revision": run.revision, "tool_name": run.tool_name, "status": "failed",
-                      "summary": run.manifest["summary"], "demonstrations": run.demonstrations, "sandbox": run.sandbox}
-        finally:
-            if fixer is not None:
-                try:
-                    await asyncio.to_thread(fixer.cleanup)
-                except Exception:
-                    logger.exception("fixer cleanup failed")
-            await asyncio.to_thread(destroy_sandbox, run)
-        self._results[key] = result
-        if agent is not None:
-            agent.state.set(REPAIR_REQUEST_STATE_KEY, {**(agent.state.get(REPAIR_REQUEST_STATE_KEY) or {}),
-                                                       "status": "ready", "result": result})
-        if on_event is not None:
-            await _maybe_await(on_event({"revision": run.revision, "tool_name": run.tool_name, "ready": result}))
-        return result
+    def get_config(self) -> dict[str, Any]:
+        return {"model_id": "card-only"}
+
+    def update_config(self, **kwargs: Any) -> None:
+        pass
+
+    def structured_output(self, *args: Any, **kwargs: Any) -> AsyncGenerator[dict[str, Any], None]:  # pragma: no cover
+        return self._never()
+
+    def stream(self, *args: Any, **kwargs: Any) -> AsyncGenerator[Any, None]:  # pragma: no cover
+        return self._never()
+
+    @staticmethod
+    async def _never() -> AsyncGenerator[Any, None]:
+        raise RuntimeError("The card agent never runs")
+        yield  # pragma: no cover
+
+
+def _wire_a2a(event: Any) -> dict[str, Any]:
+    """A compact JSON view of one A2A client event for the panel's Repair chain card."""
+    from a2a.types import Message, TaskArtifactUpdateEvent, TaskStatusUpdateEvent
+
+    if isinstance(event, Message):
+        return {"kind": "message", "text": "".join(getattr(part.root, "text", "") for part in event.parts)}
+    if isinstance(event, tuple) and len(event) == 2:
+        task, update = event
+        if isinstance(update, TaskArtifactUpdateEvent):
+            return {"kind": "artifact", "task_id": task.id, "text": "".join(getattr(part.root, "text", "") for part in update.artifact.parts),
+                    "append": bool(update.append), "last_chunk": bool(update.last_chunk)}
+        if isinstance(update, TaskStatusUpdateEvent):
+            text = "".join(getattr(part.root, "text", "") for part in update.status.message.parts) if update.status and update.status.message else ""
+            return {"kind": "status", "task_id": task.id, "state": update.status.state.value if update.status else None, "text": text}
+        return {"kind": "task", "task_id": task.id, "state": task.status.state.value if task.status else None}
+    return {"kind": "unknown", "text": str(event)[:500]}
 
 
 async def _maybe_await(value: Any) -> None:
-    if asyncio.iscoroutine(value):
+    if asyncio.iscoroutine(value) or asyncio.isfuture(value):
         await value
+
+
+async def _maybe_return(value: Any) -> Any:
+    return await value if asyncio.iscoroutine(value) or asyncio.isfuture(value) else value
 
 
 # --- Activate / rollback ------------------------------------------------------------------
 
 class RevisionConflict(RuntimeError):
-    """The vendored file changed since the repair was verified (HTTP 409)."""
+    """The vendored file or the artifact changed since the repair was verified (HTTP 409)."""
 
 
-async def activate(user_id: str, tool_name: str, rev: str) -> dict[str, Any]:
-    """Re-check the vendored sha, write ``active.json`` and materialize the revision file."""
+async def activate(user_id: str, tool_name: str, rev: str, *, approval_token_: str | None = None) -> dict[str, Any]:
+    """Re-check owner, base sha, artifact digest and approval token; write ``active.json``;
+    materialize the revision.
+
+    Raises:
+        FileNotFoundError: unknown revision.
+        ValueError: the revision is not verified, or the token is missing.
+        PermissionError: another owner, or a token that does not match the verified artifact.
+        RevisionConflict: the library file or the stored files changed since verification.
+    """
     from agent.api.core.panel_agent import PROJECT_TOOLS_DIR
 
     manifest = await read_manifest(user_id, tool_name, rev)
     if manifest is None:
         raise FileNotFoundError(f"Unknown revision {rev!r} for {tool_name!r}")
+    if manifest.get("owner_id") not in (None, user_id):
+        raise PermissionError("This revision belongs to another user")
     if manifest.get("status") not in ("verified", "active", "rolled_back"):
         raise ValueError(f"Revision {rev!r} is {manifest.get('status')!r}; only verified revisions can be activated")
     repair_kind = manifest.get("repair_kind", "file")
@@ -1122,10 +1845,29 @@ async def activate(user_id: str, tool_name: str, rev: str) -> dict[str, Any]:
         current_sha = file_sha256(vendored) if vendored.is_file() else None
         if current_sha != manifest["base_sha256"]:
             raise RevisionConflict("The library file changed since this repair was verified; re-run the repair")
+    # The artifact in storage must still be the one that was verified (digest), and the approval
+    # must have been given for exactly that artifact (token).
+    storage = repair_storage(user_id)
+    prefix = f"{_tool_key(tool_name)}/{_rev_key(rev)}/"
+    files: dict[str, bytes] = {}
+    for key in await storage.list(prefix):
+        relative = key[len(prefix):]
+        if any(relative.startswith(f"{folder}/") for folder in ("files", "adapter", "server", "tests")):
+            data = await storage.read(key)
+            if data is not None:
+                files[relative] = data
+    digest = artifact_digest(files)
+    if manifest.get("artifact_digest") and digest != manifest["artifact_digest"]:
+        raise RevisionConflict("The stored revision files changed since this repair was verified")
+    expected = manifest.get("approval_token") or approval_token(user_id, tool_name, rev, manifest.get("base_sha256"), digest)
+    if approval_token_ is None:
+        raise ValueError("Activation requires the approval token of the verified artifact")
+    if approval_token_ != expected:
+        raise PermissionError("The approval token does not match this verified artifact")
     revision_file = await materialize_revision(user_id, tool_name, rev)
     active = {"revision": rev, "activated_at": _now(), "base_sha256": manifest.get("base_sha256"),
               "activated_by": user_id, "source_path": manifest.get("source_path"), "repair_kind": repair_kind,
-              "target_kind": manifest.get("target_kind", "library")}
+              "target_kind": manifest.get("target_kind", "library"), "artifact_digest": digest}
     await repair_storage(user_id).write(f"{_tool_key(tool_name)}/active.json", json.dumps(active).encode())
     _write_active_marker(user_id, tool_name, active)
     manifest["status"] = "active"
@@ -1202,7 +1944,9 @@ __all__ = [
     "fixer_a2a_provider", "fixer_hosted_tools", "MCP_SERVER_PACKAGE", "REPAIR_KINDS", "TARGET_KINDS", "active_adapter_file",
     "active_server_dirs", "adapt_tool", "browser_server_env", "fixer_sources", "load_adapter", "mcp_server_package_dir",
     "target_kind", "validate_adapter_source", "REPAIR_CONTEXT_STATE_KEY", "REPAIR_COUNTS_STATE_KEY", "REPAIR_HOOK_ORDER", "REPAIR_NOTICES_STATE_KEY",
-    "REPAIR_REQUEST_STATE_KEY", "REVISION_STATUSES", "RepairConfig", "RepairRun", "RepairService",
+    "REPAIR_REQUEST_STATE_KEY", "REVISION_STATUSES", "RepairConfig", "RepairRun", "RepairService", "RepairEvidence",
+    "Investigation", "FixerClient", "SandboxUnavailable", "APPLY_TOOL_NAME", "HITL_INTERRUPT_NAME", "INVESTIGATION_STATES",
+    "NON_REPAIRABLE_TOOLS", "approval_token", "artifact_digest", "fixer_hitl", "sandbox_run_args",
     "RevisionConflict", "SOP_NAME", "ToolRepairTrigger", "activate", "active_revision_file", "build_fixer", "sop_parameters", "sop_task",
     "create_sandbox", "destroy_sandbox", "diagnose", "is_side_effecting", "list_repairs", "materialize_revision", "pending_proposal",
     "read_active", "read_manifest", "repair_storage", "restore_active_markers", "revision_notice", "revision_notice_render", "revision_resolver",

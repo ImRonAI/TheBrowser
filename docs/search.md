@@ -1,6 +1,6 @@
 # Browser Search — contract
 
-One query from the navigation-accordion search bar becomes `ron://search?q=<query>&level=<level>`
+One query from the sidebar search bar (⌘K) becomes `ron://search?q=<query>&level=<level>`
 (the tab URL is the source of truth) and the results page streams everything below from
 `POST /search/stream` (`agent/api/endpoints/search.py`, fan-out helpers in
 `agent/api/core/search_agent.py`).
@@ -19,7 +19,7 @@ One query from the navigation-accordion search bar becomes `ron://search?q=<quer
 
 Search levels correlate 1:1 with Agent API presets: `fast`, `low`, `medium`, `high`,
 `xhigh` (`search_agent.SEARCH_LEVELS`; default `RON_SEARCH_DEFAULT_LEVEL` = `low`).
-The level selector lives in the navigation accordion's search bar and persists in the
+The level selector lives in the sidebar's search bar and persists in the
 search store (`ron-search` localStorage, level only).
 
 ## HTTP surface

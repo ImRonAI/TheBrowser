@@ -8,7 +8,7 @@ This directory contains the main and preload processes of the Electron applicati
 2. **Tab Isolation**: External tabs are generated as `WebContentsView` elements, isolating web content and cookies per user session using partition keys.
 3. **Active WebContents supplier**: The active tab's `WebContentsView` is registered dynamically to the `electron-playwright-mcp` server using `setActiveWebContentsSupplier` inside `main.ts` so the automation tools always execute against the active foreground tab.
 4. **Tab controller**: `setTabController` maps list / create / select / close / navigate onto `TabsManager` — the same list as the chrome tab bar. CDP target HTTP and Electron `BrowserWindow` loaders are not agent tab tools.
-5. **Page chrome**: `WebContentsView` bounds sit below the toolbar/tabs/nav drawer and left of the agent panel. Page context menus use `webContents` `context-menu` + `Menu`.
+5. **Page chrome**: `WebContentsView` bounds sit below the toolbar (and the tab strip while the sidebar is closed), right of the persistent left sidebar (`browser:set-sidebar-width`, measured by the renderer) and left of the agent panel. Chrome shortcuts (⌘J Ask Ron, ⌘K Search, ⌘\ sidebar, ⌘L address bar) are read from `before-input-event` on the shell and every tab view and relayed as `chrome:shortcut`, so they work while a website has focus. Page context menus use `webContents` `context-menu` + `Menu`.
    Double-clicking non-editable page text also shows a small native Ask Ron menu.
    Selection is read in an isolated world after Chromium handles the mouse event;
    only choosing the menu item emits `agent:ask-ron`. Navigation/active-tab checks

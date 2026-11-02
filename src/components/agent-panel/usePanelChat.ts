@@ -6,11 +6,12 @@ import {
 } from '@/lib/panel-stream'
 import type { ContextItem } from './ContextPicker'
 import { ARTICLE_PREFIX, type AgentDestination, type ArticleAttachment } from '@/lib/articles'
-import type { LiveContextTurn } from '@/lib/voice-events'
 import { notePanelTools } from '@/stores/agentPresenceStore'
 import { browserContextForSend } from '@/lib/panel-browser-context'
 
 import { API_BASE_URL } from '@/lib/api-base'
+import { useRepairStore } from '@/stores/repairStore'
+import { repairDecisionRequest } from '@/lib/repair-api'
 
 const API = API_BASE_URL
 type Connection = 'loading' | 'connected' | 'reconnecting' | 'detached'
@@ -38,8 +39,6 @@ interface Selection {
   provider: string
   effort: string
   contexts: ContextItem[]
-  /** Final Live turns to share with this message via the ephemeral request_context (never persisted). */
-  liveHistory?: LiveContextTurn[]
   options: RuntimeOptions
   onSent: () => void
 }
@@ -203,16 +202,17 @@ export function usePanelChat(selection: Selection) {
     return () => { ++generation.current; ready.current = false; abort.abort(); controller.current?.abort() }
   }, [sessionId, userId, destination, commit, replay, sessionUrl, syncBrowser, restoreVersion])
 
-  const newChat = useCallback(() => {
+  /** Switch this agent to a thread: a brand-new id (`newChat`) or an existing one from the Threads list. */
+  const openThread = useCallback((id: string) => {
     ++generation.current
     controller.current?.abort() // Detach only. The server owns the old run's lifecycle.
     ready.current = false
     setConnection('loading')
     setTransportError(undefined)
-    const id = newSessionId()
     commit(emptyPanelState(id))
     setSessionId(id)
   }, [commit])
+  const newChat = useCallback(() => openThread(newSessionId()), [openThread])
 
   const sendControl = useCallback(async (kind: 'steer' | 'cancel', message?: string) => {
     if (controlPending.current) return false
@@ -291,7 +291,7 @@ export function usePanelChat(selection: Selection) {
     let observed = false
     let rejected = false
     try {
-      const browserContext = await browserContextForSend(selection.contexts, selection.liveHistory)
+      const browserContext = await browserContextForSend(selection.contexts)
       if (token !== generation.current || abort.signal.aborted) return false
       const response = await fetch(`${API}/chat`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: abort.signal,
@@ -299,7 +299,7 @@ export function usePanelChat(selection: Selection) {
           session_id: id, user_id: userId, message: action === 'message' ? text.trim() : '', action,
           destination, attachments: action === 'message' ? selection.attachments ?? [] : [],
           ...(!previous.configurationLocked ? { model: configuration.model, provider: configuration.provider,
-            reasoning_effort: configuration.effort || null, options: configuration.options, browser } : {}),
+            reasoning_effort: configuration.effort || null, options: configuration.options } : {}),
           ...(browserContext ? { browser_context: browserContext } : {}),
           ...(responses ? { interrupt_responses: responses } : {}),
         }),
@@ -362,7 +362,9 @@ export function usePanelChat(selection: Selection) {
   }, [replay])
 
   const followRepair = useCallback(async (id: string, token: number, signal: AbortSignal) => {
-    for (let attempt = 0; attempt < 600 && !signal.aborted && token === generation.current; attempt++) {
+    // An investigation runs while the session is idle, so the replay stream returns after each
+    // batch; keep re-attaching at the cursor until the terminal `tool_repair_ready` arrives.
+    for (let attempt = 0; attempt < 1800 && !signal.aborted && token === generation.current; attempt++) {
       try {
         const response = await fetch(`${sessionUrl(id)}/events?user_id=${encodeURIComponent(userId)}&after=${current.current.sequence}`, { signal })
         let done = false
@@ -371,7 +373,7 @@ export function usePanelChat(selection: Selection) {
           commit(reducePanelEvent(current.current, event))
           if (event.node_path.length === 0 && event.type === 'tool_repair_ready') done = true
         })
-        if (done || current.current.repairReady) return
+        if (done || current.current.repair?.state === 'done') return
       } catch (error) {
         if (signal.aborted || token !== generation.current) return
         setTransportError(error instanceof Error ? error.message : 'Repair stream failed')
@@ -380,40 +382,39 @@ export function usePanelChat(selection: Selection) {
     }
   }, [commit, sessionUrl, userId])
 
+  // A running investigation (started by the server's tool-failure hook) is followed as soon as
+  // the run that triggered it has finished.
+  useEffect(() => {
+    const repair = state.repair
+    if (!repair || repair.state === 'done' || state.status === 'running') return
+    const abort = new AbortController()
+    void followRepair(state.sessionId, generation.current, abort.signal)
+    return () => abort.abort()
+  }, [followRepair, state.repair?.rev, state.repair?.state, state.status, state.sessionId])
+
   /**
-   * Per-user tool repair (CAT-50/51). `repair` starts the fixer for the proposed tool (the result
-   * streams back as `tool_repair_ready`); `activate`/`rollback` are user-scoped and swap the tool
-   * in every live session of this user at the SDK's next invocation. `dismiss` is local only.
+   * Per-user tool repair (CAT-50/51). Investigations start on their own; the user decides:
+   * `approve` answers the fixer's parked `apply_repair` interrupt with the approval token (the
+   * revision becomes active for this account at the next invocation of each live session),
+   * `decline` answers it negatively, `cancel` stops a running investigation, `rollback` swaps the
+   * vendored tool back, `dismiss` is local only.
    */
-  const repairAction = useCallback(async (kind: 'repair' | 'activate' | 'rollback' | 'dismiss', tool: string, rev?: string): Promise<boolean> => {
+  const repairAction = useCallback(async (kind: 'approve' | 'decline' | 'cancel' | 'rollback' | 'dismiss', tool: string, rev?: string, approvalToken?: string): Promise<boolean> => {
     if (kind === 'dismiss') {
-      commit({ ...current.current, repairProposal: undefined, repairReady: undefined })
+      commit({ ...current.current, repairProposal: undefined, repair: undefined })
       return true
     }
     if (controlPending.current) return false
     const token = generation.current
-    const id = current.current.sessionId
     controlPending.current = true
     setControlBusy(true)
     setTransportError(undefined)
     try {
-      const url = kind === 'repair' ? `${API}/tools/repairs` : `${API}/tools/repairs/${encodeURIComponent(tool)}/${kind}`
-      const body = kind === 'repair' ? { user_id: userId, session_id: id, tool_name: tool }
-        : kind === 'activate' ? { user_id: userId, rev } : { user_id: userId }
+      const { url, body } = repairDecisionRequest(API, kind, userId, tool, rev, approvalToken)
       const response = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
       if (!response.ok) throw await responseError(response)
       if (token !== generation.current) return false
-      if (kind === 'repair') {
-        // The fixer runs while the session is idle, so the replay stream returns after each
-        // batch; keep re-attaching at the cursor until `tool_repair_ready` arrives.
-        commit({ ...current.current, repairProposal: undefined })
-        const abort = new AbortController()
-        controller.current?.abort()
-        controller.current = abort
-        void followRepair(id, token, abort.signal)
-      } else {
-        commit({ ...current.current, repairReady: undefined })
-      }
+      if (kind === 'rollback') commit({ ...current.current, repair: undefined })
       return true
     } catch (error) {
       if (token === generation.current) setTransportError(error instanceof Error ? error.message : `${kind} failed`)
@@ -421,11 +422,20 @@ export function usePanelChat(selection: Selection) {
     } finally {
       if (token === generation.current) { controlPending.current = false; setControlBusy(false) }
     }
-  }, [commit, followRepair, userId])
+  }, [commit, userId])
+
+  // Publish the investigation for the native repair surface (works with the panel closed); the
+  // surface's decisions come back through the same `repairAction`.
+  const publishRepair = useRepairStore((store) => store.publish)
+  const clearRepair = useRepairStore((store) => store.clear)
+  useEffect(() => {
+    publishRepair(state.sessionId, state.repair, (kind, repair) => repairAction(kind, repair.tool, repair.rev, repair.approvalToken))
+  }, [publishRepair, repairAction, state.repair, state.sessionId])
+  useEffect(() => () => clearRepair(state.sessionId), [clearRepair, state.sessionId])
 
   // `configurationLocked` flips optimistically on the first accepted POST and on
   // every hydrated snapshot; `runId` alone lags until run_started arrives.
   const browserLocked = Boolean(state.configurationLocked)
-  return { ...state, connection, transportError, controlBusy, browser, setBrowser, browserLocked, browserHydrated, newChat, sendMessage,
+  return { ...state, connection, transportError, controlBusy, browser, setBrowser, browserLocked, browserHydrated, newChat, openThread, sendMessage,
     stop: () => sendControl('cancel'), reconnect, repairAction }
 }

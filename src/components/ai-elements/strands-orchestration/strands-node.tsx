@@ -73,7 +73,7 @@ const STATUS_CONFIG: Record<AgentStatus, {
     border: "border-violet-500/60",
     iconBg: "bg-violet-500/20",
     iconColor: "text-violet-400",
-    glow: "shadow-[0_0_24px_-4px_rgba(139,92,246,0.4)]",
+    glow: "shadow-[0_0_24px_-4px_rgba(194,106,65,0.4)]",
   },
 };
 

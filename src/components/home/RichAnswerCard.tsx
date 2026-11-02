@@ -9,9 +9,9 @@ export function RichAnswerCard({ answer }: { answer: RichAnswer }) {
   const body = renderBody(answer)
   if (!body) return null
   const provider = answer.provider?.name || answer.provider?.long_name
-  return <article className="flex min-w-[220px] max-w-[280px] shrink-0 flex-col justify-between rounded-2xl border border-surface-200 bg-white/70 p-4 text-sm shadow-sm dark:border-surface-700 dark:bg-surface-850">
+  return <article className="flex min-w-[220px] max-w-[280px] shrink-0 flex-col justify-between rounded-xl border border-surface-200/80 bg-surface-0 p-4 text-sm dark:border-surface-800 dark:bg-surface-900">
     {body}
-    {provider && <p className="mt-3 text-[10px] uppercase tracking-wider text-ink-muted dark:text-ink-inverse-muted">via {provider}</p>}
+    {provider && <p className="mt-3 text-[10.5px] text-ink-muted dark:text-ink-inverse-muted">via {provider}</p>}
   </article>
 }
 
@@ -27,19 +27,19 @@ function Trend({ change, percent, series }: { change: unknown; percent: unknown;
   const pct = num(percent)
   const points = sparklinePoints(series)
   const up = (delta ?? 0) >= 0
-  const tone = up ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'
+  const tone = up ? 'text-success' : 'text-danger'
   return <div className="mt-2 flex items-end justify-between gap-3">
-    <span className={`text-xs font-medium ${tone}`}>{delta !== null ? `${up ? '+' : ''}${formatNumber(delta)}` : ''}{pct !== null ? ` (${up ? '+' : ''}${formatNumber(pct)}%)` : ''}</span>
+    <span className={`font-mono text-[11.5px] font-medium tabular-nums ${tone}`}>{delta !== null ? `${up ? '+' : ''}${formatNumber(delta)}` : ''}{pct !== null ? ` (${up ? '+' : ''}${formatNumber(pct)}%)` : ''}</span>
     {points.length > 1 && <svg viewBox="0 0 96 28" width={96} height={28} aria-hidden="true" className={tone}><polyline fill="none" stroke="currentColor" strokeWidth={1.5} points={sparklinePath(points)} /></svg>}
   </div>
 }
 
 function Heading({ kicker, title }: { kicker: string; title: string }) {
-  return <header><p className={`text-[10px] font-semibold uppercase tracking-[0.18em] ${muted}`}>{kicker}</p><h3 className="mt-1 font-display text-base leading-tight">{title}</h3></header>
+  return <header><p className={`text-[10.5px] font-medium uppercase tracking-[0.12em] ${muted}`}>{kicker}</p><h3 className="mt-1 font-display text-[17px] leading-tight">{title}</h3></header>
 }
 
 function Price({ value, unit }: { value: unknown; unit: string }) {
-  return <p className="mt-2 text-2xl font-semibold">{formatNumber(value, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} <span className={`text-xs font-normal ${muted}`}>{unit}</span></p>
+  return <p className="mt-2 text-2xl font-semibold tabular-nums tracking-tight">{formatNumber(value, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} <span className={`text-xs font-normal ${muted}`}>{unit}</span></p>
 }
 
 function Weather({ card }: { card: Card }) {
@@ -48,7 +48,7 @@ function Weather({ card }: { card: Card }) {
   const deg = (value: unknown) => { const n = num(value); return n === null ? '–' : String(Math.round(n)) }
   return <div>
     <Heading kicker="Weather" title={str(card.location) || 'Local weather'} />
-    <p className="mt-2 text-3xl font-semibold">{temp !== null ? `${Math.round(temp)}°C` : '—'}<span className={`ml-2 text-xs font-normal ${muted}`}>{str(card.condition)}</span></p>
+    <p className="mt-2 text-3xl font-semibold tabular-nums tracking-tight">{temp !== null ? `${Math.round(temp)}°C` : '—'}<span className={`ml-2 text-xs font-normal ${muted}`}>{str(card.condition)}</span></p>
     {daily.length > 0 && <ul className={`mt-3 grid grid-cols-4 gap-1 text-[11px] ${muted}`}>{daily.map((day, index) =>
       <li key={index} className="text-center"><div className="truncate">{str(day.label).slice(0, 3) || '·'}</div><div className="text-ink dark:text-ink-inverse">{deg(day.max_c)}°</div><div>{deg(day.min_c)}°</div></li>)}</ul>}
   </div>
@@ -88,7 +88,7 @@ function renderBody(answer: RichAnswer) {
     case 'currency':
       return <div>
         <Heading kicker="Currency" title={`${str(card.from)} → ${str(card.to)}`} />
-        <p className="mt-2 text-2xl font-semibold">{formatNumber(card.result, { maximumFractionDigits: 4 })} <span className={`text-xs font-normal ${muted}`}>{str(card.to)}</span></p>
+        <p className="mt-2 text-2xl font-semibold tabular-nums tracking-tight">{formatNumber(card.result, { maximumFractionDigits: 4 })} <span className={`text-xs font-normal ${muted}`}>{str(card.to)}</span></p>
         <p className={`mt-1 text-xs ${muted}`}>{formatNumber(card.amount)} {str(card.from)} · rate {formatNumber(card.rate, { maximumFractionDigits: 4 })}</p>
         <Trend change={null} percent={null} series={card.sparkline} />
       </div>

@@ -131,9 +131,13 @@ async def test_session_uses_the_official_client_and_forwards_server_messages_as_
     result = await tools.music_set_weighted_prompts(prompts=[{"text": "minimal techno", "weight": 1.0}])
     assert client.connected_with == ["models/lyria-realtime-exp"]
     assert result["prompts"] == [{"text": "minimal techno", "weight": 1.0}]
-    assert "play" in result["hint"]
+    # Reference sequence (set_weighted_prompts -> play): the first prompts start playback immediately.
+    assert result["playback"] == "playing"
     first = await tools.music_set_generation_config(bpm=120, density=0.4)
-    assert first["reset_context_required"] is False, "no reset needed before the stream plays"
+    assert first["reset_context_required"] is True and "bpm" in first["hint"], "already playing: bpm is a hard transition"
+    await tools.music_playback_control(action="pause")
+    steer = await tools.music_set_weighted_prompts(prompts=[{"text": "minimal techno", "weight": 1.0}, {"text": "piano", "weight": 0.5}])
+    assert steer["playback"] == "paused", "steering never overrides the user's pause"
     assert (await tools.music_playback_control(action="play")) == {"action": "play", "playback": "playing"}
     second = await tools.music_set_generation_config(bpm=90, density=0.4)
     assert second["reset_context_required"] is True and "bpm" in second["hint"]
@@ -143,9 +147,9 @@ async def test_session_uses_the_official_client_and_forwards_server_messages_as_
             break
         await asyncio.sleep(0.01)
 
-    assert [call[0] for call in fake.calls] == ["prompts", "config", "play", "config", "reset_context"]
+    assert [call[0] for call in fake.calls] == ["prompts", "play", "config", "pause", "prompts", "play", "config", "reset_context"]
     assert fake.calls[0] == ("prompts", [("minimal techno", 1.0)])
-    assert fake.calls[1] == ("config", {"bpm": 120, "density": 0.4})
+    assert fake.calls[2] == ("config", {"bpm": 120, "density": 0.4})
     types = [f["type"] for f in frames]
     assert types[0] == "music_ready"
     for expected in ("music_setup_complete", "music_prompts", "music_config", "music_playback", "music_audio_delta", "music_filtered_prompt"):

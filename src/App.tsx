@@ -1,4 +1,5 @@
 import { Component, Suspense, useEffect, useState, type ReactNode } from 'react'
+import { SIGN_IN_HASH, closeSignIn, isFirstRun, markLaunched, openSignIn } from '@/lib/sign-in'
 import { useTheme } from '@/hooks/useTheme'
 import { handleDeepLinkCallback, useAuthStore } from '@/stores/authStore'
 import { useTabStore } from '@/stores/tabStore'
@@ -43,7 +44,11 @@ export function App() {
   const { tabs, createTab } = useTabStore()
   const { isComplete } = useOnboardingStore()
   const [hasHydrated, setHasHydrated] = useState(false)
-  const [showSignIn, setShowSignIn] = useState(() => window.location.hash === '#signin')
+  // A fresh install (nothing in localStorage yet) launches on the sign-in page.
+  const [showSignIn, setShowSignIn] = useState(() => {
+    if (isFirstRun()) openSignIn()
+    return window.location.hash === SIGN_IN_HASH
+  })
   // `#onboarding` lets a guest (or a returning user via "Personalize") run the interview.
   const [showOnboarding, setShowOnboarding] = useState(() => window.location.hash === '#onboarding')
   const { activeTab } = useNavigationStore()
@@ -81,12 +86,20 @@ export function App() {
 
   useEffect(() => {
     const update = () => {
-      setShowSignIn(window.location.hash === '#signin')
+      setShowSignIn(window.location.hash === SIGN_IN_HASH)
       setShowOnboarding(window.location.hash === '#onboarding')
     }
     window.addEventListener('hashchange', update)
     return () => window.removeEventListener('hashchange', update)
   }, [])
+
+  // A successful sign-in (password or OAuth loopback) while the sign-in page is up returns to the
+  // browser; leaving `#signin` behind keeps a later sign-out in the browser, not the form.
+  useEffect(() => {
+    if (!isAuthenticated) return
+    markLaunched()
+    if (showSignIn) { closeSignIn(); setShowSignIn(false) }
+  }, [isAuthenticated, showSignIn])
 
   useEffect(() => {
     void initialize()
@@ -262,8 +275,7 @@ export function App() {
     return (
       <RouteShell>
         <AuthPageLayout>
-          <SignInPage />
-          <button type="button" onClick={() => { window.location.hash = ''; setShowSignIn(false) }}>Continue without an account</button>
+          <SignInPage onContinueAsGuest={() => { markLaunched(); closeSignIn(); setShowSignIn(false) }} />
         </AuthPageLayout>
       </RouteShell>
     )

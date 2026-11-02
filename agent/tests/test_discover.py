@@ -74,7 +74,7 @@ def fake_brave(seen: list[httpx.Request] | None = None, *, fail: dict[str, httpx
     def respond(request: httpx.Request) -> httpx.Response:
         if seen is not None:
             seen.append(request)
-        assert request.headers["x-subscription-token"] == "test-key"
+        assert request.headers["x-subscription-token"] in ("test-key", "suggest-key", "spell-key")
         path = request.url.path.removeprefix("/res/v1")
         if fail and path in fail:
             return fail[path]
@@ -97,15 +97,26 @@ def fake_brave(seen: list[httpx.Request] | None = None, *, fail: dict[str, httpx
             "/local/place_search": {"type": "locations", "results": [PLACE]},
             "/local/pois": {"results": [PLACE]},
             "/local/descriptions": {"results": [{"type": "local_description", "id": PLACE["id"], "description": "A premier destination"}]},
-            "/suggest/search": NOT_IN_PLAN, "/spellcheck/search": NOT_IN_PLAN,
+            # Separate plans: the Search key gets OPTION_NOT_IN_PLAN; a plan key gets the documented body.
+            "/suggest/search": NOT_IN_PLAN if request.headers.get("x-subscription-token") != "suggest-key" else SUGGEST_BODY,
+            "/spellcheck/search": NOT_IN_PLAN if request.headers.get("x-subscription-token") != "spell-key" else SPELL_BODY,
         }
         body = table[path]
         return httpx.Response(400 if body is NOT_IN_PLAN else 200, json=body)
     return httpx.MockTransport(respond)
 
 
-def client(seen=None, **kwargs) -> bs.BraveClient:
-    return bs.BraveClient("test-key", transport=fake_brave(seen, **kwargs), limiter=bs.RateLimiter(1000))
+#: Documented response shapes, verified live 2026-10-07 against the Suggest and Spellcheck plans.
+SUGGEST_BODY = {"type": "suggest", "query": {"original": "palm spr"}, "results": [
+    {"query": "palm springs"}, {"query": "palm springs weather", "type": "query"},
+    {"query": "Palm Springs", "type": "entity", "title": "Palm Springs", "description": "City in California", "img": "https://img/ps.jpg"},
+]}
+SPELL_BODY = {"type": "spellcheck", "query": {"original": "recieve teh pakage"}, "results": [{"query": "receive the package"}]}
+
+
+def client(seen=None, suggest_api_key="suggest-key", spellcheck_api_key="spell-key", **kwargs) -> bs.BraveClient:
+    return bs.BraveClient("test-key", transport=fake_brave(seen, **kwargs), limiter=bs.RateLimiter(1000),
+                          suggest_api_key=suggest_api_key, spellcheck_api_key=spellcheck_api_key, assist_limiter=bs.RateLimiter(1000))
 
 
 def app_with(brave: bs.BraveClient) -> FastAPI:
@@ -162,10 +173,15 @@ def test_places_browse_requires_anchor_and_poi_details_merge_descriptions():
 
 
 def test_error_mapping_and_plan_entitlements():
-    brave = client()
+    # Without a Suggest plan key the Search key falls back in and Brave answers OPTION_NOT_IN_PLAN.
+    brave = client(suggest_api_key="test-key", spellcheck_api_key="test-key")
     with pytest.raises(bs.BraveSearchError) as info:
         asyncio.run(brave.suggest("golden gate", rich=True))
     assert info.value.code == "not_in_plan" and info.value.status == 400
+    revoked = client(fail={"/news/search": httpx.Response(422, json={"error": {"detail": "The provided API key is invalid.", "code": "SUBSCRIPTION_TOKEN_INVALID"}})})
+    with pytest.raises(bs.BraveSearchError) as info:
+        asyncio.run(revoked.news("x"))
+    assert info.value.code == "unauthorized", "a revoked key is 422 SUBSCRIPTION_TOKEN_INVALID, not a bad request"
     unauthorized = client(fail={"/news/search": httpx.Response(401, json={"error": {"detail": "bad key"}})})
     with pytest.raises(bs.BraveSearchError) as info:
         asyncio.run(unauthorized.news("x"))
@@ -206,8 +222,14 @@ def test_http_surface_never_leaks_key_and_reports_sections():
             assert [s["status"] for s in body["sections"]] == ["ok", "ok"]
             assert body["sections"][0]["items"][0]["kind"] == "article"
             assert "test-key" not in json.dumps(body)
-            suggest = await http.post("/discover/assist/suggest", json={"q": "golden"})
-            assert suggest.status_code == 400 and suggest.json()["detail"]["code"] == "not_in_plan"
+            suggest = await http.post("/assist/suggest", json={"q": "palm spr", "count": 3})
+            assert suggest.status_code == 200 and [r["query"] for r in suggest.json()["results"]][:2] == ["palm springs", "palm springs weather"]
+            assert suggest.json()["results"][2]["type"] == "entity" and suggest.json()["results"][2]["img"].endswith("ps.jpg")
+            spell = await http.post("/discover/assist/spellcheck", json={"q": "recieve teh pakage"})
+            assert spell.status_code == 200 and spell.json()["corrected"] == "receive the package"
+            assert status.json()["assist_configured"] == {"suggest": True, "spellcheck": True}
+            too_long = await http.post("/assist/suggest", json={"q": "w " * 60})
+            assert too_long.status_code == 422 and too_long.json()["detail"]["code"] == "invalid_request"
             pois = await http.post("/discover/pois", json={"ids": [PLACE["id"]]})
             assert pois.json()["results"][0]["ai_description"] == "A premier destination"
             assert (await http.post("/discover/feed", json={"sections": []})).status_code == 422

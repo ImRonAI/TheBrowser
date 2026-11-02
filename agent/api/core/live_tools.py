@@ -96,6 +96,13 @@ def live_host_tools(tools_dir: Path) -> list[AgentTool]:
     root = tools_dir.expanduser().resolve()
     search = import_vendored_module(root, root / "research" / "perplexity_search_api.py").perplexity_search_api
     tools.append(tool(name="perplexity_search")(search.__wrapped__))
+    # Brave Answers, the same native async tool the text agent carries (BidiAgent awaits async tools).
+    from agent.api.core.brave_answers_tool import brave_answer
+
+    tools.append(brave_answer)
+    from agent.api.core.render_ui_tool import render_ui_tools
+
+    tools.extend(render_ui_tools())
     return tools
 
 
@@ -153,26 +160,62 @@ def live_music_tools(emit: Callable[[dict[str, Any]], Awaitable[None]] | None, u
 def create_live_agent(
     model: Any, user_id: str, agent_scope: str, browser: str, *,
     emit: Callable[[dict[str, Any]], Awaitable[None]] | None = None,
+    session_id: str | None = None,
 ) -> tuple[BidiAgent, str]:
     """``BidiAgent(tools=[browser MCPClient, *tools])``; the registry owns the client's lifecycle.
 
-    Every Live agent gets a fresh random ``agent_id`` (the SDK default is the literal ``"default"``
-    for every instance): it keys ``LIVE_MUSIC_SESSIONS`` and is the capability the renderer presents
-    to ``/music/*`` for this socket's stream. ``emit`` is the renderer socket sender; when given, the
-    Live Music tools stream ``music_*`` frames through it and ``bidi.py`` closes the Lyria session
-    with ``close_live_music`` after ``run``.
+    With ``session_id`` the agent is a **thread**: it constructs with the user's shared native
+    ``agent_id`` (``thread_agent_id``) and a native ``SnapshotSessionManager`` over the user's session
+    storage -- the same key the Chat ``Agent`` uses -- so the SDK restores the thread's messages and
+    state on init (``AgentInitializedEvent``), saves on every ``MessageAddedEvent``/``MessageUpdatedEvent``
+    (``bidi_agent_save_latest_on="message"``, the default) and checkpoints on ``BidiAgentStopEvent``.
+    The Chat agent can then open the same thread, and take it over when the socket dies.
+
+    The renderer's capability for ``/music/*`` is ``agent.live_id``, a fresh random per-socket id (the
+    ``agent_id`` is now shared across the user's agents, so it can no longer key a socket). ``emit`` is
+    the renderer socket sender; when given, the Live Music tools stream ``music_*`` frames through it and
+    ``bidi.py`` closes the Lyria session with ``close_live_music`` after ``run``.
     """
+    from agent.api.core.panel_storage import ThreadSessionManager, thread_agent_id
+    from agent.api.core.panel_agent import get_user_session_storage
+
     created: dict[str, Any] = {}
     tools = build_live_tools(user_id, agent_scope, resolve_agent=lambda: created.get("agent"))
     music_tools, music_addendum, music = live_music_tools(emit, user_id)
     client = browser_client_factory(browser, tool_filters={"rejected": list(LIVE_REJECTED_BROWSER_TOOLS)})()
+    live_id = f"live-{uuid.uuid4().hex}"
+    session_kwargs: dict[str, Any] = {}
+    hooks: list[Any] = []
+    if session_id:
+        from agent.api.core.threads import ThreadProjection
+
+        session_kwargs = {
+            "agent_id": thread_agent_id(user_id),
+            "session_manager": ThreadSessionManager(session_id, storage=get_user_session_storage(user_id)),
+        }
+        # Same Supabase read model the Chat agent writes; `agent="live"` marks who wrote each row.
+        hooks.append(ThreadProjection(user_id=user_id, session_id=session_id, destination=agent_scope, agent="live", browser=browser))
+        # The bidi loop runs tools through the SDK executor, so AfterToolCallEvent fires here too:
+        # a failing Live tool starts the same bounded investigation as in Chat. The text fixer owns
+        # approval (the panel); BidiAgent never sees an interrupt.
+        from agent.api.endpoints.chat import repair_service
+
+        service = repair_service()
+        if service is not None and service.config.enabled:
+            from agent.api.core.tool_observation import ToolObservation
+
+            hooks.extend([ToolObservation(), service.trigger(browser=browser, user_id=user_id, session_id=session_id)])
+    else:
+        session_kwargs = {"agent_id": live_id}
+    if hooks:
+        session_kwargs["hooks"] = hooks
     try:
         agent = BidiAgent(model=model, tools=[client, *tools, *music_tools],
-                          system_prompt=live_system_prompt(browser) + music_addendum,
-                          agent_id=f"live-{uuid.uuid4().hex}")
+                          system_prompt=live_system_prompt(browser) + music_addendum, **session_kwargs)
     except BaseException:
         client.stop(None, None, None)
         raise
+    agent.live_id = live_id  # type: ignore[attr-defined]
     created["agent"] = agent
     try:
         _register_delegated_tools(agent)
@@ -180,16 +223,22 @@ def create_live_agent(
         agent.tool_registry.cleanup()
         raise
     if music is not None:
-        LIVE_MUSIC_SESSIONS[agent.agent_id] = music
+        LIVE_MUSIC_SESSIONS[live_id] = music
     return agent, server_name(browser)
+
+
+def live_id_of(agent: BidiAgent) -> str:
+    """The per-socket capability id (`/music/*`, `ready.agent_id`); falls back to ``agent_id``."""
+    return getattr(agent, "live_id", None) or agent.agent_id
 
 
 async def close_live_music(agent: BidiAgent) -> None:
     """End this agent's Lyria session (if any) when its socket ends; never another agent's entry."""
-    music = LIVE_MUSIC_SESSIONS.get(agent.agent_id)
+    live_id = live_id_of(agent)
+    music = LIVE_MUSIC_SESSIONS.get(live_id)
     if music is None:
         return
-    LIVE_MUSIC_SESSIONS.pop(agent.agent_id, None)
+    LIVE_MUSIC_SESSIONS.pop(live_id, None)
     await music.session.close()
 
 
@@ -201,9 +250,12 @@ LIVE_MUSIC_ADDENDUM = """
 
 ## Live music (Lyria RealTime)
 You can play and steer live instrumental music for the user with the music_* tools: music_set_weighted_prompts
-starts or steers the stream (the list replaces the previous list; cross-fade with intermediate weights),
-music_set_generation_config sends the whole config (bpm/scale changes need music_playback_control
-"reset_context"), music_playback_control plays/pauses/stops/resets, music_status reports what is in effect,
+starts the stream and plays immediately on first use, and steers it afterwards (the list replaces the previous
+list; cross-fade with intermediate weights). When the user asks for music, call it at once with your first
+prompts; do not ask questions or set config first. The deck's Edit box sends you "[music edit at m:ss]"
+messages: steer from that moment with music_set_weighted_prompts (the stream cannot go back and
+regenerate what already played). music_set_generation_config sends the whole config (bpm/scale changes need
+music_playback_control "reset_context"), music_playback_control plays/pauses/stops/resets, music_status reports what is in effect,
 music_take_status/music_save/music_discard_take manage the rolling recording (save needs a signed-in user)
 and music_close ends it. Saved songs are the user's library: music_library lists them, and
 music_playlists / music_playlist_create / music_playlist_add / music_playlist_remove / music_playlist_reorder /

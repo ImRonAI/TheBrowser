@@ -126,7 +126,12 @@ function getSendText(message: unknown): string {
   return ''
 }
 
-function useSuperAgentChat(sessionIdRef: React.MutableRefObject<string>, selectedModel: string, selectedProvider: string) {
+function useSuperAgentChat(
+  sessionIdRef: React.MutableRefObject<string>,
+  selectedModel: string,
+  selectedProvider: string,
+  selectedEffort: string,
+) {
   const [messages, setMessages] = useState<UIMessage[]>([])
   const [status, setStatus] = useState<SuperAgentStatus>('ready')
 
@@ -169,6 +174,7 @@ function useSuperAgentChat(sessionIdRef: React.MutableRefObject<string>, selecte
             browser_context: { surface: 'superagent' },
             model: selectedModel,
             provider: selectedProvider,
+            reasoning_effort: selectedEffort || null,
           }),
         })
 
@@ -292,7 +298,7 @@ function useSuperAgentChat(sessionIdRef: React.MutableRefObject<string>, selecte
         setStatus('error')
       }
     },
-    [selectedModel, selectedProvider, sessionIdRef],
+    [selectedModel, selectedProvider, selectedEffort, sessionIdRef],
   )
 
   return { messages, sendMessage, status, setMessages, clearError }
@@ -305,8 +311,13 @@ function useSuperAgentChat(sessionIdRef: React.MutableRefObject<string>, selecte
 export function SuperAgentInterface() {
   const sessionIdRef = useRef<string>(getOrCreateSuperAgentSessionId())
   const { defaultModel, defaultProvider, refresh: refreshModels, ...modelCatalogue } = useAgentModels()
-  const [selection, setSelection] = useState({ model: DEFAULT_AGENT_MODEL, provider: '' })
-  const { messages, sendMessage, status, setMessages, clearError } = useSuperAgentChat(sessionIdRef, selection.model, selection.provider)
+  const [selection, setSelection] = useState({ model: DEFAULT_AGENT_MODEL, provider: '', effort: '' })
+  const { messages, sendMessage, status, setMessages, clearError } = useSuperAgentChat(
+    sessionIdRef,
+    selection.model,
+    selection.provider,
+    selection.effort,
+  )
 
   // State
   const [input, setInput] = useState('')
@@ -343,7 +354,7 @@ export function SuperAgentInterface() {
 
   useEffect(() => {
     setSelection((current) => current.model === DEFAULT_AGENT_MODEL && !current.provider
-      ? { model: defaultModel, provider: defaultProvider } : current)
+      ? { model: defaultModel, provider: defaultProvider, effort: '' } : current)
   }, [defaultModel, defaultProvider])
 
   // ─────────────────────────────────────────────────────────────────────────────
@@ -626,9 +637,11 @@ export function SuperAgentInterface() {
           <ModelSelector
             value={selection.model}
             provider={selection.provider}
+            effort={selection.effort}
+            includeEffort
             {...modelCatalogue}
             disabled={isTyping}
-            onChange={(model, provider) => setSelection({ model, provider })}
+            onChange={(model, provider, effort) => setSelection({ model, provider, effort })}
             onOpen={refreshModels}
             className="w-[240px]"
           />
@@ -873,7 +886,7 @@ const AmbientBreathingGlow = memo(function AmbientBreathingGlow() {
         animate={{ scale: [1, 1.05, 1], opacity: [0.06, 0.08, 0.06] }}
         transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
         style={{ 
-          background: 'radial-gradient(ellipse, rgba(139,92,246,0.12), transparent 70%)', 
+          background: 'radial-gradient(ellipse, rgba(194,106,65,0.12), transparent 70%)', 
           filter: 'blur(80px)' 
         }}
       />
@@ -883,7 +896,7 @@ const AmbientBreathingGlow = memo(function AmbientBreathingGlow() {
         animate={{ scale: [1, 1.03, 1], opacity: [0.04, 0.06, 0.04] }}
         transition={{ duration: 5, repeat: Infinity, ease: "easeInOut", delay: 0.5 }}
         style={{ 
-          background: 'radial-gradient(ellipse, rgba(124,58,237,0.08), transparent 70%)', 
+          background: 'radial-gradient(ellipse, rgba(169,83,46,0.08), transparent 70%)', 
           filter: 'blur(100px)' 
         }}
       />
@@ -893,7 +906,7 @@ const AmbientBreathingGlow = memo(function AmbientBreathingGlow() {
         animate={{ scale: [1, 1.02, 1], opacity: [0.02, 0.04, 0.02] }}
         transition={{ duration: 6, repeat: Infinity, ease: "easeInOut", delay: 1 }}
         style={{ 
-          background: 'radial-gradient(ellipse, rgba(99,102,241,0.06), transparent 70%)', 
+          background: 'radial-gradient(ellipse, rgba(194,106,65,0.06), transparent 70%)', 
           filter: 'blur(120px)' 
         }}
       />

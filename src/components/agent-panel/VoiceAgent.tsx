@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { WebPreview, WebPreviewBody } from '@/components/ai-elements/web-preview'
 import { Conversation, ConversationContent, ConversationEmptyState, ConversationScrollButton } from '@/components/ai-elements/conversation'
 import { Message, MessageContent } from '@/components/ai-elements/message'
@@ -14,12 +14,12 @@ import { useVoiceSettingsStore } from '@/stores/voiceSettingsStore'
 import { micConstraints, isMicUnavailableError, personaState, personaCaption } from '@/lib/voice-settings'
 import {
   EMPTY_LIVE_STATE, authFrame, canHandOff, contextFrame, isIssueScope, isScopeBlocker, liveQuery, pendingTools,
-  reduceLiveEvent, withPlayback, type LiveContext, type LiveContextTurn, type LiveState, type LiveTurn,
+  reduceLiveEvent, withPlayback, type LiveContext, type LiveState, type LiveTurn,
 } from '@/lib/voice-events'
-import { liveKey, liveOwner, liveTurnsFor, useLiveSessionStore } from '@/stores/liveSessionStore'
+import { liveKey, liveOwner, useLiveSessionStore } from '@/stores/liveSessionStore'
 import { acquireScreenCapture, clearLiveTools, noteLiveTools, rememberSnapshot } from '@/stores/agentPresenceStore'
 import { cn } from '@/utils/cn'
-import { recordingCanSend, recordingMimeType } from '@/lib/bidi-recording'
+import { recordingCanSend, videoFrameMessage, VIDEO_FRAME_INTERVAL_MS } from '@/lib/bidi-recording'
 import pcmWorkletUrl from '@/lib/bidi-pcm.worklet.js?url'
 import { getAccessToken } from '@/api/supabase'
 import { useLivePlayback } from './useLivePlayback'
@@ -28,12 +28,11 @@ import { useLiveMusicStore } from '@/stores/liveMusicStore'
 import { useMascotStore } from '@/stores/mascotStore'
 import { genreFromPrompts } from '@/lib/mascot'
 import { COMPACT_SCALE, OubliStage, PINNED_SCALE } from './OubliStage'
-import { MusicDeck } from './MusicDeck'
 import { LIVE_API_BASE_URL } from '@/pages/types/api'
 import { checkLiveApi, liveSocketUrl } from '@/lib/live-api'
 import { projectEndpoint } from '@/lib/project-endpoint'
 
-type Capture = { stream: MediaStream; recorder: MediaRecorder }
+type Capture = { stream: MediaStream; timer: number }
 
 /** Graceful stop: how long to wait for `bidi_connection_stop` before force-closing. */
 const STOP_GRACE_MS = 15_000
@@ -41,11 +40,8 @@ const STOP_GRACE_MS = 15_000
 export interface VoiceAgentProps {
   userId?: string
   agentScope?: string
-  browser?: 'user' | 'cloud'
-  /** Panel session id (or issue id) the Live session is paired with. */
-  conversationId: string
-  /** Visible Chat history to share as context; never includes tool calls. */
-  sharedHistory?: LiveContextTurn[]
+  /** The native thread (`session_id`) this Live session opens: the BidiAgent restores and writes it natively. */
+  sessionId: string
   /** Issue scope: the saved issue, read-only context. */
   issue?: { id: string; title?: string; description?: string }
   /** Pending external prompt (Ask Ron) is consumed through this surface when it is the visible mode. */
@@ -58,11 +54,13 @@ export interface VoiceAgentProps {
   compact?: boolean
 }
 
-export function VoiceAgent({ userId = 'default', agentScope = 'panel', browser = 'user', conversationId, sharedHistory, issue,
+export function VoiceAgent({ userId = 'default', agentScope = 'panel', sessionId, issue,
   externalPrompt, onExternalPromptConsumed, registerHandOff, owner = 'panel', compact = false }: VoiceAgentProps) {
   const [live, setLive] = useState<LiveState>(EMPTY_LIVE_STATE)
-  const historyKey = liveKey(userId, agentScope, conversationId)
-  const savedTurns = useLiveSessionStore((s) => liveTurnsFor(s, historyKey))
+  // Live always drives the user's own browser; the server moves a thread to the cloud browser only on takeover.
+  const browser = 'user' as const
+  const conversationId = sessionId
+  const historyKey = liveKey(userId, agentScope, sessionId)
   const holder = useLiveSessionStore((s) => liveOwner(s, historyKey))
   const claimed = holder === owner
   const [source, setSource] = useState<'screen' | 'camera' | null>(null)
@@ -91,13 +89,8 @@ export function VoiceAgent({ userId = 'default', agentScope = 'panel', browser =
   const musicStore = useLiveMusicStore
   useEffect(() => {
     if (agentScope !== 'panel') return
-    musicStore.getState().attach({ setVolume: musicSink.setVolume })
-    return () => { musicStore.getState().attach(null); musicStore.getState().reset() }
-  }, [agentScope, musicSink.setVolume, musicStore])
-  useEffect(() => {
-    if (agentScope !== 'panel') return
-    musicStore.getState().publish({ liveStatus: live.status, available: Boolean(live.musicAvailable), music: live.music })
-  }, [agentScope, live.status, live.musicAvailable, live.music, musicStore])
+    musicStore.getState().publish({ liveStatus: live.status, available: Boolean(live.musicAvailable), music: live.music, agentId: live.agentId, userId })
+  }, [agentScope, live.status, live.musicAvailable, live.music, live.agentId, userId, musicStore])
   // Oubli: the analyser taps (voice = mouth, music = body), Live flags, costume and beat clock.
   useEffect(() => {
     if (agentScope !== 'panel') return
@@ -117,9 +110,7 @@ export function VoiceAgent({ userId = 'default', agentScope = 'panel', browser =
     const current = capture.current
     capture.current = null
     if (current) {
-      current.recorder.ondataavailable = null
-      current.recorder.onerror = null
-      if (current.recorder.state !== 'inactive') current.recorder.stop()
+      window.clearInterval(current.timer)
       current.stream.getTracks().forEach(track => track.stop())
       if (socket.current?.readyState === WebSocket.OPEN) socket.current.send(JSON.stringify({ type: 'video_stop' }))
     }
@@ -219,10 +210,9 @@ export function VoiceAgent({ userId = 'default', agentScope = 'panel', browser =
       page_title: typeof page.title === 'string' ? page.title : undefined,
       selected_text: typeof page.selected_text === 'string' ? page.selected_text : undefined,
       page_text: typeof page.text === 'string' ? page.text : undefined,
-      history: sharedHistory,
       issue,
     }
-  }, [sharedHistory, issue])
+  }, [issue])
 
   // Handshake (agent/api/endpoints/bidi.py `handshake`): the server waits for
   // the first client frame before `ready`, so the initial context goes out in
@@ -352,27 +342,33 @@ export function VoiceAgent({ userId = 'default', agentScope = 'panel', browser =
     let stream: MediaStream | null = null
     try {
       setError('')
-      const mimeType = recordingMimeType(type => MediaRecorder.isTypeSupported(type))
       stream = kind === 'screen'
         ? await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: 15 }, audio: false })
         : await navigator.mediaDevices.getUserMedia({ video: { width: 1280, height: 720, frameRate: 15 }, audio: false })
       if (epoch !== generation.current || ws?.readyState !== WebSocket.OPEN) { stream.getTracks().forEach(track => track.stop()); return }
-      const recorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 2_000_000 })
-      capture.current = { stream, recorder }
-      ws.send(JSON.stringify({ type: 'video_start', source: kind, mime_type: mimeType }))
-      recorder.ondataavailable = event => {
-        if (!event.data.size || capture.current?.recorder !== recorder) return
-        if (ws.readyState !== WebSocket.OPEN || !recordingCanSend(ws.bufferedAmount, event.data.size)) {
-          setError('Video transport fell behind. Sharing stopped rather than sending stale/corrupt video.')
+      const canvas = document.createElement('canvas')
+      const current: Capture = { stream, timer: 0 }
+      capture.current = current
+      ws.send(JSON.stringify({ type: 'video_start', source: kind, mime_type: 'image/jpeg' }))
+      const sendFrame = () => {
+        if (capture.current !== current || !video.current || ws.readyState !== WebSocket.OPEN) return
+        try {
+          const message = videoFrameMessage(video.current, canvas)
+          if (!message) return
+          if (!recordingCanSend(ws.bufferedAmount, message.length)) {
+            setError('Video transport fell behind. Sharing stopped rather than sending stale video.')
+            stopVideo()
+            return
+          }
+          ws.send(message)
+        } catch (cause) {
+          setError(cause instanceof Error ? cause.message : 'Screen/camera capture failed.')
           stopVideo()
-          return
         }
-        ws.send(event.data)
       }
-      recorder.onerror = () => { setError('Screen/camera recording failed.'); stopVideo() }
       stream.getVideoTracks()[0].onended = stopVideo
       if (video.current) video.current.srcObject = stream
-      recorder.start(250)
+      current.timer = window.setInterval(sendFrame, VIDEO_FRAME_INTERVAL_MS)
       setSource(kind)
     } catch (cause) {
       stream?.getTracks().forEach(track => track.stop())
@@ -436,17 +432,23 @@ export function VoiceAgent({ userId = 'default', agentScope = 'panel', browser =
     if (sendText(externalPrompt)) onExternalPromptConsumed?.()
   }, [externalPrompt, status, sendText, onExternalPromptConsumed])
 
+  // The music side panel (`MusicSidePanel`, outside this component) drives the sink's volume, reads the
+  // audible chunk for its Edit box and sends that edit to this Live agent as a typed turn.
+  useEffect(() => {
+    if (agentScope !== 'panel') return
+    musicStore.getState().attach({ setVolume: musicSink.setVolume, position: musicSink.position, sendText })
+    return () => { musicStore.getState().attach(null); musicStore.getState().reset() }
+  }, [agentScope, musicSink.setVolume, musicSink.position, sendText, musicStore])
+
   const agentSpeaking = status === 'ready' && (live.playing || live.turns.some((turn) => turn.role === 'assistant' && turn.kind !== 'tool' && !turn.final))
   const presence = agentSpeaking ? 'speaking' : personaState(status, live.activity)
   const caption = personaCaption(status, live.activity, mic, source)
   const active = !!source || mic || live.playing
   const pending = pendingTools(live)
   const blocker = isScopeBlocker(live.errorCode) ? live.error : null
-  // While disconnected, show the per-conversation saved transcript (same source Chat reads);
-  // while connected, the live reducer turns (which include tool cards and streaming deltas).
-  const turns = useMemo<LiveTurn[]>(() => status === 'idle' && !live.turns.length
-    ? savedTurns.map((turn) => ({ id: turn.id, role: turn.role, kind: turn.kind, text: turn.text, final: true }))
-    : live.turns, [status, live.turns, savedTurns])
+  // The thread's history lives in the native session (Threads list / `GET /sessions/{id}/thread`); this
+  // view shows the turns of the current socket, which the BidiAgent restored into and appends to natively.
+  const turns = live.turns
   const foreignOwner = Boolean(holder) && !claimed
 
   const iconButton = 'size-9'
@@ -465,7 +467,6 @@ export function VoiceAgent({ userId = 'default', agentScope = 'panel', browser =
             {stopping ? 'Finishing pending work…' : caption}{status === 'ready' && live.processing && !live.playing ? ' · working' : ''}
           </p>
         </section>
-        {agentScope === 'panel' && (live.musicAvailable || live.music.connected) && <MusicDeck userId={userId} agentId={live.agentId} className="shrink-0" />}
         <div className="flex shrink-0 items-center justify-center gap-2">
           <Button type="button" size="icon" variant="outline" className={iconButton} disabled={status !== 'ready' || stopping} aria-pressed={mic} aria-label={mic ? 'Mute microphone' : 'Enable microphone'} onClick={() => mic ? stopMic() : void startMic()}>
             {mic ? <MicIcon /> : <MicOffIcon />}

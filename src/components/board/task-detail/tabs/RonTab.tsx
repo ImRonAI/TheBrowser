@@ -43,6 +43,7 @@ import { usePreviewStore } from '@/stores/previewStore'
 import type { Citation } from '@/components/ai-elements/response-with-citations'
 import { Message, MessageAvatar, MessageContent } from '@/components/ai-elements/message'
 import { API_BASE_URL } from '@/lib/api-base'
+import { AssistField } from '@/components/shared/TextAssist'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TYPES & CONSTANTS
@@ -389,6 +390,7 @@ export function RonTab({ task }: RonTabProps) {
   }
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.defaultPrevented) return // consumed by text assist (suggestion pick / dismiss)
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
       handleCustomSubmit()
@@ -696,7 +698,7 @@ export function RonTab({ task }: RonTabProps) {
                   "bg-surface-900/60",
                   "border",
                   input 
-                    ? "border-violet-500/40 shadow-[0_0_30px_rgba(139,92,246,0.15)]" 
+                    ? "border-violet-500/40 shadow-[0_0_30px_rgba(194,106,65,0.15)]" 
                     : "border-surface-700/50",
                 )}
               >
@@ -706,11 +708,14 @@ export function RonTab({ task }: RonTabProps) {
                     onContextsChange={setSelectedContexts}
                   />
 
-                  <textarea
+                  <AssistField value={input} onChange={setInput} suggest count={5} placement="above" className="flex-1">
+                  {(field) => <textarea
                     ref={inputRef}
                     value={input}
                     onChange={(e) => setInput(e.target.value)}
-                    onKeyDown={handleKeyDown}
+                    onKeyDown={(e) => { field.onKeyDown(e); handleKeyDown(e) }}
+                    onFocus={field.onFocus}
+                    onBlur={field.onBlur}
                     onPaste={handlePaste}
                     placeholder="What would you like to accomplish?"
                     rows={1}
@@ -722,7 +727,8 @@ export function RonTab({ task }: RonTabProps) {
                       "outline-none",
                       "min-h-[28px] max-h-32",
                     )}
-                  />
+                  />}
+                  </AssistField>
                   
                   <motion.button
                     onClick={() => handleCustomSubmit()}
@@ -803,7 +809,7 @@ const AmbientBreathingGlow = memo(function AmbientBreathingGlow() {
         animate={{ scale: [1, 1.05, 1], opacity: [0.06, 0.08, 0.06] }}
         transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
         style={{ 
-          background: 'radial-gradient(ellipse, rgba(139,92,246,0.12), transparent 70%)', 
+          background: 'radial-gradient(ellipse, rgba(194,106,65,0.12), transparent 70%)', 
           filter: 'blur(80px)' 
         }}
       />
@@ -813,7 +819,7 @@ const AmbientBreathingGlow = memo(function AmbientBreathingGlow() {
         animate={{ scale: [1, 1.03, 1], opacity: [0.04, 0.06, 0.04] }}
         transition={{ duration: 5, repeat: Infinity, ease: "easeInOut", delay: 0.5 }}
         style={{ 
-          background: 'radial-gradient(ellipse, rgba(124,58,237,0.08), transparent 70%)', 
+          background: 'radial-gradient(ellipse, rgba(169,83,46,0.08), transparent 70%)', 
           filter: 'blur(100px)' 
         }}
       />
@@ -823,7 +829,7 @@ const AmbientBreathingGlow = memo(function AmbientBreathingGlow() {
         animate={{ scale: [1, 1.02, 1], opacity: [0.02, 0.04, 0.02] }}
         transition={{ duration: 6, repeat: Infinity, ease: "easeInOut", delay: 1 }}
         style={{ 
-          background: 'radial-gradient(ellipse, rgba(99,102,241,0.06), transparent 70%)', 
+          background: 'radial-gradient(ellipse, rgba(194,106,65,0.06), transparent 70%)', 
           filter: 'blur(120px)' 
         }}
       />

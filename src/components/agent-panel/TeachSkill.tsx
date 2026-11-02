@@ -24,7 +24,7 @@ interface TeachingSession {
   demonstration?: { status: 'running' | 'completed' | 'blocked' | 'failed' | 'skipped'; started_at: string; finished_at?: string; evidence?: string; result?: string } | null
 }
 interface LearnedSkill { id: string; name: string; description: string; files: string[]; tool_group?: { name: string; members: { id: string; kind: string; target: string }[]; steps: { step: number; member_ids: string[] }[] } }
-type CaptureState = 'idle' | 'starting' | 'observing' | 'stopping'
+type CaptureState = 'idle' | 'starting' | 'observing' | 'debriefing' | 'stopping'
 
 const message = (cause: unknown) => cause instanceof Error ? cause.message : 'The teaching request failed.'
 const elapsedLabel = (seconds: number) => `${Math.floor(seconds / 60).toString().padStart(2, '0')}:${(seconds % 60).toString().padStart(2, '0')}`
@@ -82,6 +82,8 @@ function TeachingWorkspace({ userId, agentId, apiBaseUrl = LIVE_API_BASE_URL, ch
   const [sessions, setSessions] = useState<TeachingSession[]>([])
   const [skills, setSkills] = useState<LearnedSkill[]>([])
   const [capture, setCapture] = useState<CaptureState>('idle')
+  const captureRef = useRef<CaptureState>('idle')
+  captureRef.current = capture
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [backendReady, setBackendReady] = useState(false)
@@ -153,7 +155,7 @@ function TeachingWorkspace({ userId, agentId, apiBaseUrl = LIVE_API_BASE_URL, ch
     return acquireScreenCapture()
   }, [sharingScreen])
   useEffect(() => {
-    if (capture !== 'observing') return
+    if (capture !== 'observing' && capture !== 'debriefing') return
     const since = Date.now()
     setElapsed(0)
     const timer = setInterval(() => setElapsed(Math.floor((Date.now() - since) / 1000)), 1000)
@@ -203,20 +205,25 @@ function TeachingWorkspace({ userId, agentId, apiBaseUrl = LIVE_API_BASE_URL, ch
     if (element && cameraStream.current) { element.srcObject = cameraStream.current; void element.play().catch(() => undefined) }
   }, [])
 
-  /** Everything the demonstration holds: screen, camera, microphone. Minimize never calls this; close and stop do. */
-  const stopCapture = useCallback(() => {
+  /** Screen sharing only: frames stop, the window/display stream is released. Microphone and camera stay for the debrief. */
+  const stopSharing = useCallback(() => {
     if (frameTimer.current) clearInterval(frameTimer.current)
     frameTimer.current = null
-    sharing.current = false
     pageSrcRef.current = ''
     setBrowserShare(false)
     stream.current?.getTracks().forEach((track) => { track.onended = null; track.stop() })
     stream.current = null
     if (video.current) { video.current.pause(); video.current.srcObject = null }
     video.current = null
+  }, [])
+
+  /** Everything the demonstration holds: screen, camera, microphone. Minimize never calls this; close and stop do. */
+  const stopCapture = useCallback(() => {
+    stopSharing()
+    sharing.current = false
     stopCamera()
     stopMic()
-  }, [stopCamera, stopMic])
+  }, [stopSharing, stopCamera, stopMic])
 
   /** Attach an already-granted camera stream (from the start gesture or the toggle). */
   const useCameraStream = async (media: MediaStream) => {
@@ -347,6 +354,17 @@ function TeachingWorkspace({ userId, agentId, apiBaseUrl = LIVE_API_BASE_URL, ch
     } finally { if (mounted.current) setBusy(false) }
   }
 
+  /** "Finish demonstration": sharing ends, the same Live session continues as a spoken debrief (no time limit). */
+  const finishDemo = () => {
+    const connection = socket.current
+    if (stopping.current || captureRef.current !== 'observing' || !connection || connection.readyState !== WebSocket.OPEN) return
+    stopSharing()
+    finishAfterStop.current = true
+    setCapture('debriefing')
+    connection.send(JSON.stringify({ type: 'finish_demo' }))
+    if (!micStream.current && audioSupported) void startMic()
+  }
+
   const stop = (finish: boolean) => {
     if (stopping.current) return
     stopCapture()
@@ -396,7 +414,7 @@ function TeachingWorkspace({ userId, agentId, apiBaseUrl = LIVE_API_BASE_URL, ch
         sharing.current = true
         stream.current = media
         setSource(media.getVideoTracks()[0]?.label || 'Selected screen')
-        media.getVideoTracks().forEach((track) => { track.onended = () => stop(true) })
+        media.getVideoTracks().forEach((track) => { track.onended = () => finishDemo() })
         preview = document.createElement('video')
         preview.muted = true; preview.playsInline = true; preview.srcObject = media
         video.current = preview
@@ -494,7 +512,8 @@ function TeachingWorkspace({ userId, agentId, apiBaseUrl = LIVE_API_BASE_URL, ch
             if (saved.kind === 'observation') observed.current = true
             setSession((current) => current ? { ...current, journal: [...current.journal.filter((item) => item.sequence !== saved.sequence), saved].sort((a, b) => a.sequence - b.sequence) } : current)
           }
-        } else if (data.type === 'transcript' && 'text' in data && typeof data.text === 'string') setTranscript(data.text)
+        } else if (data.type === 'debrief') { setCapture('debriefing'); setMinimized(false) }
+        else if (data.type === 'transcript' && 'text' in data && typeof data.text === 'string') setTranscript(data.text)
         else if (data.type === 'error') fail('message' in data && typeof data.message === 'string' ? data.message : 'Gemini observation failed.')
         else if (data.type === 'stopped') {
           // Analyze only when the demonstration finished (user Finish, or the observer's finish_observation)
@@ -533,6 +552,7 @@ function TeachingWorkspace({ userId, agentId, apiBaseUrl = LIVE_API_BASE_URL, ch
     finally { if (mounted.current) setBusy(false) }
   }
   const active = capture !== 'idle'
+  const conversing = capture === 'observing' || capture === 'debriefing'
   const processing = session?.status === 'compiling' || session?.status === 'reviewing'
   const locked = active || busy || processing
   const review = session?.review
@@ -544,29 +564,30 @@ function TeachingWorkspace({ userId, agentId, apiBaseUrl = LIVE_API_BASE_URL, ch
   </section>
   const commentary = <form className="teaching-commentary" onSubmit={(event) => {
     event.preventDefault()
-    if (!note.trim() || capture !== 'observing' || socket.current?.readyState !== WebSocket.OPEN) return
+    if (!note.trim() || !conversing || socket.current?.readyState !== WebSocket.OPEN) return
     socket.current.send(JSON.stringify({ type: 'note', text: note.trim() })); setNote('')
-  }}><label htmlFor={`${id}-note`}>Explain this step</label><div><textarea id={`${id}-note`} rows={2} value={note} maxLength={10000} disabled={capture !== 'observing'} onChange={(event) => setNote(event.target.value)} placeholder="Add a decision, detail, or exception…" />
-    {audioSupported && <button type="button" className="teaching-icon" aria-pressed={micOn} aria-label={micOn ? 'Mute microphone' : 'Unmute microphone'} title={micOn ? 'Mute microphone' : 'Unmute microphone'} disabled={capture !== 'observing'} onClick={() => micOn ? stopMic() : void startMic()}>{micOn ? <Mic size={17} /> : <MicOff size={17} />}</button>}
+  }}><label htmlFor={`${id}-note`}>Explain this step</label><div><textarea id={`${id}-note`} rows={2} value={note} maxLength={10000} disabled={!conversing} onChange={(event) => setNote(event.target.value)} placeholder="Add a decision, detail, or exception…" />
+    {audioSupported && <button type="button" className="teaching-icon" aria-pressed={micOn} aria-label={micOn ? 'Mute microphone' : 'Unmute microphone'} title={micOn ? 'Mute microphone' : 'Unmute microphone'} disabled={!conversing} onClick={() => micOn ? stopMic() : void startMic()}>{micOn ? <Mic size={17} /> : <MicOff size={17} />}</button>}
     <button type="button" className="teaching-icon" aria-pressed={cameraOn} aria-label={cameraOn ? 'Turn camera off' : 'Turn camera on'} title={cameraOn ? 'Camera off (removes you from the frame)' : 'Camera on (adds you as a small circle, bottom right)'} disabled={capture !== 'observing'} onClick={() => cameraOn ? stopCamera() : void startCamera().then((outcome) => setPlan((current) => current ? { ...current, camera: outcome } : current))}>{cameraOn ? <Camera size={17} /> : <CameraOff size={17} />}</button>
-    <button className="teaching-icon" aria-label="Send commentary" disabled={!note.trim() || capture !== 'observing'} type="submit"><Send size={17} /></button></div>
-    {capture === 'observing' && !audioSupported && <small className="teaching-meta">Voice commentary unavailable on this observer · typed notes only</small>}
+    <button className="teaching-icon" aria-label="Send commentary" disabled={!note.trim() || !conversing} type="submit"><Send size={17} /></button></div>
+    {conversing && !audioSupported && <small className="teaching-meta">Voice commentary unavailable on this observer · typed notes only</small>}
     {micOn && <small className="teaching-meta">● Microphone on · streaming to Gemini{speaking ? ' · Ron speaking' : heardAudio ? '' : ''}</small>}
     {micError && <small role="alert" className="teaching-error">{micError}</small>}
   </form>
 
   return <section className={chrome ? 'relative shrink-0' : 'teaching-launch shrink-0 border-b border-surface-200 dark:border-surface-800'}>
     <button type="button" aria-expanded={open} aria-label="Teach Ron" title="Teach Ron"
-      className={chrome ? 'flex items-center gap-2 rounded-xl p-2.5 text-xs font-medium text-accent hover:bg-surface-100 dark:text-accent-light dark:hover:bg-surface-800' : 'teaching-launch-button'}
+      className={chrome ? 'flex h-8 items-center gap-1.5 rounded-lg px-2 text-[12.5px] font-medium text-ink-secondary transition-colors hover:bg-surface-200/60 hover:text-ink dark:text-ink-inverse-secondary dark:hover:bg-surface-800 dark:hover:text-ink-inverse' : 'teaching-launch-button'}
       onClick={() => { setOpen(true); setMinimized(false) }}>
-      <BookOpen size={19} />{chrome ? <span>Teach Ron</span> : <><span><strong>Teach a skill</strong><small>Show Ron how you work</small></span><ArrowRight size={16} /></>}
+      <BookOpen size={chrome ? 16 : 19} strokeWidth={chrome ? 1.75 : 2} />{chrome ? <span className="hidden xl:inline">Teach Ron</span> : <><span><strong>Teach a skill</strong><small>Show Ron how you work</small></span><ArrowRight size={16} /></>}
     </button>
     {open && minimized && <aside className="teaching-dock" style={chrome ? { position: 'absolute', right: 0, top: '100%', width: 320, maxHeight: '70vh', overflowY: 'auto' } : undefined} aria-label="Teaching in progress">
-      <div className="teaching-section-heading"><span className="teaching-meta">{capture === 'observing' ? `● Observing${micOn ? ' · mic' : ''}${cameraOn ? ' · camera' : ''}` : 'Teaching draft'} · {elapsedLabel(elapsed)}</span><button className="teaching-icon" aria-label="Expand teaching studio" onClick={() => setMinimized(false)}><Maximize2 size={16} /></button></div>
+      <div className="teaching-section-heading"><span className="teaching-meta">{capture === 'observing' ? `● Observing${micOn ? ' · mic' : ''}${cameraOn ? ' · camera' : ''}` : capture === 'debriefing' ? `● Debrief${micOn ? ' · mic' : ''}` : 'Teaching draft'} · {elapsedLabel(elapsed)}</span><button className="teaching-icon" aria-label="Expand teaching studio" onClick={() => setMinimized(false)}><Maximize2 size={16} /></button></div>
       <strong>{title || 'Teach a skill'}</strong>
       <p className="teaching-dock-entry">{session?.journal.at(-1)?.text || 'Waiting for an observation.'}</p>
       {error && <p role="alert" className="teaching-error">{error}</p>}
-      {capture === 'observing' && <>{cameraOn && <video ref={attachCameraPreview} className="teaching-camera-pip teaching-camera-dock" muted playsInline aria-label="Your camera" />}<small className="teaching-meta">Capture continues while minimized. Close stops everything.</small>{commentary}<button className="teaching-button primary" onClick={() => stop(true)}><Square size={14} />Finish demonstration</button></>}
+      {capture === 'observing' && <>{cameraOn && <video ref={attachCameraPreview} className="teaching-camera-pip teaching-camera-dock" muted playsInline aria-label="Your camera" />}<small className="teaching-meta">Capture continues while minimized. Close stops everything.</small>{commentary}<button className="teaching-button primary" onClick={finishDemo}><Square size={14} />Finish demonstration</button></>}
+      {capture === 'debriefing' && <><small className="teaching-meta">Debrief in progress · Ron is talking it through with you.</small>{commentary}<button className="teaching-button primary" onClick={() => stop(true)}><Square size={14} />End conversation</button></>}
     </aside>}
     {open && !minimized && typeof document !== 'undefined' && document.getElementById('ron-teaching-slot') && createPortal(
       <div className="absolute inset-0 z-50 flex pointer-events-none">
@@ -593,11 +614,12 @@ function TeachingWorkspace({ userId, agentId, apiBaseUrl = LIVE_API_BASE_URL, ch
               <div className="teaching-capture-actions">
                 {!active && <button className="teaching-button primary" disabled={locked || !backendReady || !title.trim() || !objective.trim()} onClick={() => void start()}><Monitor size={17} />{session?.journal.length ? 'Resume teaching' : 'Start teaching'}<ArrowRight size={16} /></button>}
                 {capture === 'starting' && <button className="teaching-button" onClick={() => { disconnect(); setCapture('idle') }}>Cancel connection</button>}
-                {capture === 'observing' && <button className="teaching-button primary" onClick={() => stop(true)}><Square size={14} />Finish demonstration</button>}
+                {capture === 'observing' && <button className="teaching-button primary" onClick={finishDemo}><Square size={14} />Finish demonstration</button>}
+                {capture === 'debriefing' && <button className="teaching-button primary" onClick={() => stop(true)}><Square size={14} />End conversation</button>}
                 {session && !active && !review && session.journal.length > 0 && !processing && <button className="teaching-button" disabled={busy} onClick={() => void transition(session.id, 'finish')}><FileText size={16} />Prepare process document</button>}
               </div>
             </section>
-            <section className="teaching-observation"><div className="teaching-section-heading"><span className="teaching-meta"><Radio size={13} />{capture === 'observing' ? 'GEMINI CONNECTED' : capture === 'starting' ? 'CONNECTING TO GEMINI' : 'OBSERVATION DESK'}</span><span className="teaching-meta"><Clock3 size={13} />{elapsedLabel(elapsed)}</span></div>
+            <section className="teaching-observation"><div className="teaching-section-heading"><span className="teaching-meta"><Radio size={13} />{capture === 'observing' ? 'GEMINI CONNECTED' : capture === 'debriefing' ? 'DEBRIEF · GEMINI CONNECTED' : capture === 'starting' ? 'CONNECTING TO GEMINI' : 'OBSERVATION DESK'}</span><span className="teaching-meta"><Clock3 size={13} />{elapsedLabel(elapsed)}</span></div>
               <div className="teaching-preview">{active ? <>
                 {browserShare
                   ? <img ref={(element) => { pagePreview.current = element; if (element && pageSrcRef.current) element.src = pageSrcRef.current }} alt="Browser window" />
@@ -606,7 +628,7 @@ function TeachingWorkspace({ userId, agentId, apiBaseUrl = LIVE_API_BASE_URL, ch
               </> : <div><Monitor size={38} strokeWidth={1} /></div>}</div>
               {source && active && <p className="teaching-source">{source}{plan ? ` · ${captureSummary({ ...plan, camera: cameraOn ? 'granted' : plan.camera === 'granted' ? 'unavailable' : plan.camera, mic: micOn ? 'granted' : plan.mic === 'granted' ? 'unavailable' : plan.mic })}` : ''}</p>}
               {plan && active && (plan.camera === 'denied' || plan.mic === 'denied') && <p role="status" className="teaching-capture-status">{plan.camera === 'denied' && plan.mic === 'denied' ? 'Camera and microphone permission denied — screen only. Allow them in system settings and use the toggles to retry.' : plan.camera === 'denied' ? 'Camera permission denied — Ron sees the screen only.' : 'Microphone permission denied — use typed notes or the mic toggle to retry.'}</p>}
-              <p role="status" className="teaching-capture-status">{capture === 'starting' ? 'Waiting for Gemini to confirm observation…' : capture === 'stopping' ? 'Sharing stopped. Saving the final journal entries…' : capture === 'observing' ? 'The browser window is shared. Your camera stays in the corner. Minimize the studio to work.' : session?.journal.length ? 'Recording saved. Prepare the document when you are ready.' : 'The browser window is not being shared.'}</p>
+              <p role="status" className="teaching-capture-status">{capture === 'starting' ? 'Waiting for Gemini to confirm observation…' : capture === 'stopping' ? 'Saving the final journal entries…' : capture === 'debriefing' ? 'Sharing has ended. Ron will tell you what he understood, ask his questions, and propose how he will automate it. Correct him out loud or by typing; press End conversation when you are done.' : capture === 'observing' ? 'The browser window is shared. Your camera stays in the corner. Minimize the studio to work.' : session?.journal.length ? 'Recording saved. Prepare the document when you are ready.' : 'The browser window is not being shared.'}</p>
               {journal}{active && commentary}{transcript && <p className="teaching-transcript">{transcript}</p>}
             </section>
           </div></>}

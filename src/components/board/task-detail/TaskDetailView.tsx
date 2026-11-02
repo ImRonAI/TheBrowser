@@ -91,7 +91,7 @@ export function TaskDetailView({ task, onClose, onUpdate, onTaskClick, workspace
                 "h-[88dvh] max-h-[88dvh] min-h-0",
                 "rounded-2xl",
                 "border border-indigo-200/20 dark:border-indigo-900/40",
-                "shadow-2xl shadow-indigo-500/10 dark:shadow-[0_0_80px_rgba(99,102,241,0.12)]",
+                "shadow-2xl shadow-indigo-500/10 dark:shadow-[0_0_80px_rgba(194,106,65,0.12)]",
               ]
         )}
         style={viewMode === 'normal' ? {
@@ -362,7 +362,7 @@ function TabNavigation({ tabs, activeTab, onTabChange }: TabNavigationProps) {
                 className={cn(
                   "absolute bottom-0 left-0 right-0 h-0.5",
                   "bg-gradient-to-r from-indigo-500 to-violet-500",
-                  "shadow-[0_0_8px_rgba(99,102,241,0.5)]"
+                  "shadow-[0_0_8px_rgba(194,106,65,0.5)]"
                 )}
                 transition={{
                   type: 'spring',

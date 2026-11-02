@@ -149,7 +149,7 @@ export function ExecutePage() {
   }
 
   return (
-    <div className="min-h-full relative overflow-hidden bg-surface-0 dark:bg-surface-900">
+    <div className="glass-page min-h-full relative overflow-hidden bg-surface-0 dark:bg-surface-900">
       <PageBackground />
       <div className="relative z-10 px-6 py-6 space-y-6">
         

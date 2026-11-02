@@ -5,6 +5,7 @@ import { useTabStore } from '@/stores/tabStore'
 import { AskRonOptions } from '@/components/ai-elements/ask-ron-options'
 import { AskRonPrompt } from '@/components/ai-elements/ask-ron-prompt'
 import { InterestsContextItems } from '@/components/interests/InterestsContextItems'
+import { MOD_KEY } from '@/lib/shortcuts'
 import {
   ClipboardDocumentIcon,
   ScissorsIcon,
@@ -205,7 +206,7 @@ export function ContextMenu({ x, y, isOpen, onClose, selectedText }: ContextMenu
           {/* Ask Ron UI - Options or Custom Prompt */}
           {showAskRonUI ? (
             <motion.div
-              className="fixed z-[9999]"
+              className="fixed z-[9999] w-[320px] max-w-[calc(100vw-20px)] shadow-[0_18px_48px_-18px_rgb(26_25_23/0.28)] rounded-xl"
               style={{
                 left: `${adjustedPosition.x}px`,
                 top: `${adjustedPosition.y}px`,
@@ -269,7 +270,7 @@ export function ContextMenu({ x, y, isOpen, onClose, selectedText }: ContextMenu
                 ref={menuRef}
                 sideOffset={0}
                 align="start"
-                className="fixed z-[9999] rounded-xl py-1.5 min-w-[220px] overflow-hidden shadow-2xl bg-white dark:bg-zinc-800 border border-black/10 dark:border-white/10"
+                className="ron-popover fixed z-[9999] min-w-[232px] overflow-hidden rounded-xl border border-surface-200 bg-surface-0 p-1 shadow-[0_18px_48px_-18px_rgb(26_25_23/0.28)] dark:border-surface-700 dark:bg-surface-850"
               >
                 {/* Feedback toast */}
                 <AnimatePresence>
@@ -278,7 +279,7 @@ export function ContextMenu({ x, y, isOpen, onClose, selectedText }: ContextMenu
                       initial={{ opacity: 0, y: -10 }}
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0 }}
-                      className="absolute top-0 left-0 right-0 px-3 py-1.5 flex items-center justify-center gap-2 text-xs font-raleway font-raleway-bold bg-green-500/20 text-green-700 dark:text-green-400"
+                      className="absolute inset-x-0 top-0 flex items-center justify-center gap-2 bg-surface-100 px-3 py-1.5 text-xs font-medium text-ink dark:bg-surface-800 dark:text-ink-inverse"
                     >
                       <CheckIcon className="w-3.5 h-3.5" />
                       {copiedFeedback}
@@ -317,7 +318,7 @@ export function ContextMenu({ x, y, isOpen, onClose, selectedText }: ContextMenu
                 />
 
                 {/* Separator */}
-                <div className="my-1.5 h-px mx-2 bg-gradient-to-r from-transparent via-black/10 dark:via-white/10 to-transparent" />
+                <div className="mx-1 my-1 h-px bg-surface-200 dark:bg-surface-700" />
 
                 {/* Ask Ron - special highlight */}
                 <DropdownMenuItem
@@ -325,29 +326,15 @@ export function ContextMenu({ x, y, isOpen, onClose, selectedText }: ContextMenu
                     event.preventDefault()
                     handleAskRon()
                   }}
-                  className="w-full px-3 py-2.5 mx-0 flex items-center gap-3 text-left transition-all duration-200 group focus:bg-royal/10 dark:focus:bg-royal-light/15 hover:bg-royal/10 dark:hover:bg-royal-light/15"
+                  className="group flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-left transition-colors duration-150 hover:bg-ember-50 focus:bg-ember-50 dark:hover:bg-ember-950/60 dark:focus:bg-ember-950/60"
                 >
-                  <motion.div
-                    className="flex-shrink-0"
-                    animate={{
-                      scale: [1, 1.1, 1],
-                    }}
-                    transition={{
-                      duration: 2,
-                      repeat: Infinity,
-                      ease: "easeInOut",
-                    }}
-                  >
-                    <ChatBubbleLeftIcon className="w-4 h-4 text-royal dark:text-royal-light" />
-                  </motion.div>
-                  <span className="text-sm font-raleway font-raleway-bold text-royal dark:text-royal-light">
-                    Ask Ron?
+                  <ChatBubbleLeftIcon className="h-4 w-4 flex-shrink-0 text-accent dark:text-accent-light" />
+                  <span className="text-[13px] font-medium text-ink dark:text-ink-inverse">
+                    Ask Ron
                   </span>
-                  {selectedText && (
-                    <span className="ml-auto text-xs font-raleway text-ron-text/40 dark:text-white/40 group-hover:text-royal/70 dark:group-hover:text-royal-light/70 group-focus:text-royal/70 dark:group-focus:text-royal-light/70">
-                      with selection
-                    </span>
-                  )}
+                  <span className="ml-auto text-[11px] text-ink-muted dark:text-ink-inverse-muted">
+                    {selectedText ? 'with selection · ' : ''}{MOD_KEY}J
+                  </span>
                 </DropdownMenuItem>
                 <InterestsContextItems onClose={onClose} />
               </DropdownMenuContent>
@@ -373,16 +360,16 @@ function MenuAction({ icon, label, onSelect, shortcut }: MenuActionProps) {
         event.preventDefault()
         void onSelect()
       }}
-      className="w-full px-3 py-2 flex items-center gap-3 text-left transition-colors duration-200 focus:bg-black/5 dark:focus:bg-white/10 hover:bg-black/5 dark:hover:bg-white/10"
+      className="flex w-full items-center gap-3 rounded-lg px-2.5 py-1.5 text-left transition-colors duration-150 hover:bg-surface-100 focus:bg-surface-100 dark:hover:bg-surface-800 dark:focus:bg-surface-800"
     >
-      <span className="flex-shrink-0 text-ron-text/60 dark:text-white/60">
+      <span className="flex-shrink-0 text-ink-muted dark:text-ink-inverse-muted">
         {icon}
       </span>
-      <span className="flex-1 text-sm font-raleway text-ron-text dark:text-white">
+      <span className="flex-1 text-[13px] text-ink dark:text-ink-inverse">
         {label}
       </span>
       {shortcut && (
-        <span className="text-xs font-raleway text-ron-text/40 dark:text-white/40">
+        <span className="text-[11px] text-ink-muted dark:text-ink-inverse-muted">
           {shortcut}
         </span>
       )}

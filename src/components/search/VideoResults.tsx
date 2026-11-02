@@ -1,14 +1,16 @@
 /**
- * The Videos panel — Brave video search as cinematic rows: a 16:9 thumbnail with a
- * frosted duration chip and hover play affordance, then title, creator/publisher,
- * views and age.
+ * The Videos panel — Brave video search as a responsive grid: a 16:9 thumbnail
+ * with a duration chip and a hover play glyph, then a two-line title and one
+ * truncated meta line (creator · views · age).
  */
-import { motion } from 'framer-motion'
+import { useState } from 'react'
+import { motion, useReducedMotion } from 'framer-motion'
 import { Play } from 'lucide-react'
 import { sectionItems, type SearchRunState } from '@/lib/search-api'
 import type { DiscoverItem } from '@/lib/discover-feed'
 import { stripMarkup } from '@/lib/discover-feed'
-import { EmptyState, RowSkeleton, SourceErrorNotice } from './primitives'
+import { EmptyState, MasonrySkeleton, SourceErrorNotice } from './primitives'
+import { rowMotion } from './ResultRow'
 import { openResult } from './open-result'
 
 function formatViews(views: unknown): string | null {
@@ -16,58 +18,48 @@ function formatViews(views: unknown): string | null {
   return `${new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 1 }).format(views)} views`
 }
 
-function VideoRow({ item, index }: { item: DiscoverItem; index: number }) {
+function VideoTile({ item, index }: { item: DiscoverItem; index: number }) {
+  const reduced = useReducedMotion()
+  const [broken, setBroken] = useState(false)
   const video = item.video
-  const views = formatViews(video?.views)
+  const meta = [video?.creator || video?.publisher, formatViews(video?.views), item.age].filter(Boolean).join(' · ')
   return (
-    <motion.button
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.35, delay: Math.min(index, 12) * 0.035, ease: [0.16, 1, 0.3, 1] }}
-      onClick={() => openResult(item.url)}
-      className="group flex w-full items-start gap-4 rounded-2xl px-3 py-3 text-left transition-colors duration-150 hover:bg-surface-50 dark:hover:bg-surface-800/50"
-    >
-      <span className="relative aspect-video w-40 flex-shrink-0 overflow-hidden rounded-xl bg-surface-100 dark:bg-surface-800 sm:w-48">
-        {item.thumbnail && (
-          <img src={item.thumbnail} alt="" loading="lazy" className="h-full w-full object-cover transition-transform duration-500 ease-smooth group-hover:scale-[1.05]" />
-        )}
-        <span className="absolute inset-0 flex items-center justify-center bg-black/0 transition-colors duration-300 group-hover:bg-black/25">
-          <span className="flex h-9 w-9 items-center justify-center rounded-full bg-black/55 opacity-0 backdrop-blur-sm transition-opacity duration-300 group-hover:opacity-100">
-            <Play className="ml-0.5 h-3.5 w-3.5 fill-white text-white" />
+    <motion.li {...rowMotion(index, reduced)} className="list-none">
+      <button type="button" onClick={() => openResult(item.url)} className="group block w-full rounded-lg text-left">
+        <span className="relative block aspect-video w-full overflow-hidden rounded-lg bg-surface-100 dark:bg-surface-800">
+          {item.thumbnail && !broken && (
+            <img src={item.thumbnail} alt="" loading="lazy" onError={() => setBroken(true)} className="h-full w-full object-cover transition-transform duration-500 ease-smooth motion-safe:group-hover:scale-[1.03]" />
+          )}
+          <span className="absolute inset-0 flex items-center justify-center bg-black/0 transition-colors duration-300 group-hover:bg-black/20">
+            <span className="flex h-10 w-10 items-center justify-center rounded-full bg-black/55 opacity-0 backdrop-blur-sm transition-opacity duration-300 group-hover:opacity-100 group-focus-visible:opacity-100">
+              <Play className="ml-0.5 h-4 w-4 fill-white text-white" />
+            </span>
           </span>
+          {video?.duration && (
+            <span className="absolute bottom-1.5 right-1.5 rounded bg-black/75 px-1.5 py-px font-mono text-[10px] tabular-nums text-white">
+              {video.duration}
+            </span>
+          )}
         </span>
-        {video?.duration && (
-          <span className="absolute bottom-1.5 right-1.5 rounded-md bg-black/70 px-1.5 py-0.5 font-mono text-[10px] tabular-nums text-white backdrop-blur-sm">
-            {video.duration}
-          </span>
-        )}
-      </span>
-      <span className="min-w-0 flex-1 py-0.5">
-        <span className="line-clamp-2 text-[15px] font-normal leading-snug text-ink transition-colors group-hover:text-accent-light dark:text-ink-inverse dark:group-hover:text-accent-muted">
+        <span className="mt-2 line-clamp-2 block px-0.5 text-[13.5px] font-medium leading-snug text-ink decoration-accent/50 underline-offset-[3px] group-hover:underline dark:text-ink-inverse">
           {stripMarkup(item.title)}
         </span>
-        <span className="mt-1.5 block truncate text-xs font-light text-ink-secondary dark:text-ink-inverse-secondary">
-          {[video?.creator, video?.publisher].filter(Boolean).join(' · ')}
-        </span>
-        <span className="mt-1 flex items-center gap-2 font-mono text-[10px] text-ink-muted dark:text-ink-inverse-muted">
-          {views && <span className="tabular-nums">{views}</span>}
-          {item.age && <span>{item.age}</span>}
-        </span>
-      </span>
-    </motion.button>
+        {meta && <span className="mt-0.5 block truncate px-0.5 text-[12px] text-ink-muted dark:text-ink-inverse-muted">{meta}</span>}
+      </button>
+    </motion.li>
   )
 }
 
 export function VideoResults({ state, onRetry }: { state: SearchRunState; onRetry?: () => void }) {
   const section = state.sections.videos
-  if (!section) return <RowSkeleton rows={5} />
-  if (section.status === 'error') return <div className="mx-auto max-w-3xl"><SourceErrorNotice error={{ source: 'brave', ...section.error! }} onRetry={onRetry} /></div>
+  if (!section) return <MasonrySkeleton tiles={9} />
+  if (section.status === 'error') return <div className="max-w-[680px]"><SourceErrorNotice error={{ source: 'brave', ...section.error! }} onRetry={onRetry} /></div>
 
   const items = sectionItems(state, 'videos')
   if (!items.length) return <EmptyState title="No videos found" />
   return (
-    <div className="mx-auto max-w-3xl space-y-1">
-      {items.map((item, i) => <VideoRow key={item.id} item={item} index={i} />)}
-    </div>
+    <ul className="grid grid-cols-1 gap-x-4 gap-y-6 sm:grid-cols-2 lg:grid-cols-3">
+      {items.map((item, i) => <VideoTile key={item.id} item={item} index={i} />)}
+    </ul>
   )
 }

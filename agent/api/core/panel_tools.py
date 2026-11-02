@@ -13,6 +13,7 @@ import copy
 import importlib
 import importlib.util
 import os
+import re
 import sys
 import threading
 import weakref
@@ -62,7 +63,7 @@ __all__ = [
 
 #: Always-registered tool names (user-mandated). `tool_catalog` is appended by
 #: create_tool_catalog; `ask_user` (native interrupt) is composed separately.
-CORE_TOOL_NAMES = ("mcp_client", "editor", "shell", "environment", "http_request", "perplexity_search", "tool_catalog")
+CORE_TOOL_NAMES = ("mcp_client", "editor", "shell", "environment", "http_request", "perplexity_search", "brave_answer", "render_ui", "tool_catalog")
 
 #: Synthetic import package for agent/tools/strands_tools. The directory is never
 #: added to sys.path (AGENTS.md); modules are bound under this alias so their
@@ -902,6 +903,15 @@ def build_core_tools(project_tools_dir: Path) -> list[AgentTool]:
     renamed = tool(name="perplexity_search")(search.__wrapped__)
     stamp_source(renamed, search_path)
     tools.append(renamed)
+    # Brave Answers (POST /chat/completions) for every Ron agent: a native async @tool over
+    # BraveAnswersClient; the SDK runs async tool bodies directly.
+    from agent.api.core.brave_answers_tool import brave_answer
+
+    tools.append(brave_answer)
+    # render_ui: the agent builds HTML/JSX views the panel renders (iframe sandbox / component kit).
+    from agent.api.core.render_ui_tool import render_ui_tools
+
+    tools.extend(render_ui_tools())
     return tools
 
 
@@ -1043,6 +1053,39 @@ def create_skill_tool(
 #: (the parent owns the conversation), and catalog loading (parent registry only).
 THINK_EXCLUDED_TOOLS = frozenset({"think", "ask_user", "tool_catalog", "create_harness"})
 
+#: Non-browser ways of reading the web. Withheld from the think child when the user's current
+#: request says "browser only", because browser tools themselves are parent-only.
+RESEARCH_TOOL_NAMES = frozenset({
+    "http_request", "perplexity_search", "brave_answer", "fetch_url", "web_search",
+    "retrieve_context", "retrieve_offloaded_content",
+})
+
+_BROWSER_ONLY_PATTERN = re.compile(
+    r"\b(?:use|using|with|via|through|in)\s+(?:the\s+|my\s+|your\s+)?browser\s+only\b"
+    r"|\bbrowser[- ]only\b|\bonly\s+(?:use\s+)?(?:the\s+|my\s+|your\s+)?browser\b",
+    re.IGNORECASE,
+)
+
+
+def browser_only_requested(messages: Any) -> bool:
+    """True when the user's current request restricts the work to the browser.
+
+    Reads the newest user message that is not a tool-result turn (the same anchor as
+    memory injection), so a restriction holds for the whole run and lifts when the user
+    sends a new request without it.
+    """
+    for message in reversed(messages or []):
+        if message.get("role") != "user":
+            continue
+        blocks = message.get("content") or []
+        if any("toolResult" in block for block in blocks):
+            continue
+        text = " ".join(block.get("text", "") for block in blocks if isinstance(block, dict))
+        if text.startswith("[ui_action "):
+            continue
+        return bool(_BROWSER_ONLY_PATTERN.search(text))
+    return False
+
 
 def is_parent_only_tool(name: str) -> bool:
     """Tools children must never inherit or be assigned.
@@ -1081,6 +1124,11 @@ class ThinkToolsGuard(Plugin):
         if event.tool_use.get("name") != "think":
             return
         allowed = [name for name in event.agent.tool_registry.registry if not is_parent_only_tool(name)]
+        if browser_only_requested(event.agent.messages):
+            # The user restricted this request to the browser. Browser tools are parent-only, so the
+            # think child must not quietly answer through research/HTTP tools instead (2026-10-15: a
+            # "browser only" flight search was completed by think over fetch/search and then dropped).
+            allowed = [name for name in allowed if name not in RESEARCH_TOOL_NAMES]
         inputs = dict(event.tool_use.get("input") or {})
         requested = inputs.get("tools")
         if isinstance(requested, list):

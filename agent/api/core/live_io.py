@@ -17,7 +17,7 @@ import json
 from typing import Any
 from urllib.parse import urlparse
 
-from fastapi import WebSocket
+from fastapi import WebSocket, WebSocketDisconnect
 
 # Frames the renderer sends that are not model input. Passing them to BidiAgent.send
 # raises "invalid input" and the socket dies before the UI ever sees `ready`.
@@ -95,6 +95,7 @@ class LiveSocketInput:
         self._pending = list(pending or [])
         self._context = context
         self._agent: Any = None
+        self._binary_warning_sent = False
 
     async def start(self, agent: Any) -> None:
         self._agent = agent
@@ -107,7 +108,19 @@ class LiveSocketInput:
     async def _next_frame(self) -> Any:
         if self._pending:
             return self._pending.pop(0)
-        return json.loads(await self._websocket.receive_text())
+        while True:
+            message = await self._websocket.receive()
+            if message["type"] == "websocket.disconnect":
+                raise WebSocketDisconnect(message.get("code", 1000), message.get("reason", ""))
+            if message.get("text") is not None:
+                return json.loads(message["text"])
+            # An older renderer sends WebM chunks. They are not Gemini image frames; keep voice alive.
+            if not self._binary_warning_sent:
+                self._binary_warning_sent = True
+                await self._websocket.send_text(json.dumps({
+                    "type": "warning", "code": "unsupported_video",
+                    "message": "Binary video is not supported. Reload the app to share JPEG frames; voice can continue.",
+                }))
 
     async def __call__(self) -> Any:
         while True:
@@ -133,59 +146,63 @@ class LessonStopped(Exception):
     """Raised by ``TeachingObserveInput`` to end ``BidiAgent.run`` once the stop grace period expires."""
 
 
-#: Realtime text sent while frames arrive: Gemini Live answers only on user activity, so a silent
-#: demonstration otherwise never produces a turn (measured: 0 journal entries from 36 frames).
-OBSERVATION_TICK = (
-    "[observation tick] Journal what changed on the shared screen since your last journal entry, "
-    "using the journal tool. Do not speak unless you have a question for the user."
+#: Text turn sent when the user presses "Finish demonstration": screen sharing has ended and the
+#: spoken debrief begins in the same Live session (SOP step 2).
+DEBRIEF_REQUEST = (
+    "[demonstration finished] Screen sharing has ended; no more frames will arrive. Begin the "
+    "spoken debrief now, out loud, in this order. 1) State your understanding of what the user "
+    "wants to achieve and how they judge a good result: the goal, the inputs, the decisions they "
+    "made and why, and what success looks like. Ask whether that is right and wait; apply their "
+    "corrections and journal them. 2) Ask every question you still have, one at a time, and "
+    "journal each answer. 3) Reveal your implementation plan: how you will produce the same "
+    "outcome faster and more automatically with your own tools (http_request and web search, "
+    "the browser only where no API exists, shell and editor, environment for secrets, render_ui "
+    "for an interactive result with embedded players, thumbs up/down, ranking and a feedback box, "
+    "add_memory and search_memory to remember their feedback for next time), which existing "
+    "tools, MCP servers, skills or specialist agents you would reuse, and what would be new. Ask "
+    "whether they agree, apply changes, and journal the agreed plan. When the user confirms there "
+    "is nothing more, call finish_observation."
 )
-#: Text turn sent when the user presses Finish; the observer settles the journal and calls finish_observation.
+#: Text turn sent when the user ends the conversation; the observer settles the journal and calls finish_observation.
 STOP_REQUEST = (
-    "The user has stopped the demonstration. Journal every remaining observed detail now, "
-    "then call finish_observation with the final summary."
+    "The user has ended the lesson. Journal every remaining detail of the demonstration and the "
+    "debrief now, then call finish_observation with the final summary."
 )
 
 
 class TeachingObserveInput:
     """Teach Ron studio frames as native ``BidiAgent`` inputs.
 
-    The studio sends ``frame``, ``note``, ``audio``, ``audio_stream_end``, and ``stop``.
-    ``BidiAgent.send`` accepts realtime video, a text turn, an audio delta, or
+    The studio sends ``frame``, ``note``, ``audio``, ``audio_stream_end``, ``finish_demo`` and
+    ``stop``. ``BidiAgent.send`` accepts realtime video, a text turn, an audio delta, or
     ``audio_stream_end``. A note is a text turn so the observer can call ``journal``.
 
-    NOT NATIVE: the SDK has no proactive-observation option, so every ``tick_seconds`` of
-    incoming frames this stream adds one native ``RealtimeInput(text=OBSERVATION_TICK)``.
-    ``BidiAgent.cancel()`` only acts after a tool group, so ``stop`` asks the observer to call
-    ``finish_observation`` (whose ``cancel()`` ends the run natively) and raises
-    ``LessonStopped`` after ``stop_grace_seconds`` if it has not.
+    Frames, voice and notes are forwarded as-is: the bidirectional model watches the shared
+    screen itself and decides when to journal or speak; nothing here injects synthetic turns.
+    ``finish_demo`` (the user pressed "Finish demonstration") ends screen sharing and sends
+    ``DEBRIEF_REQUEST`` once: the same Live session continues as a spoken conversation
+    (understanding, corrections, questions, implementation plan) with no time limit; frames
+    that still arrive are dropped. ``BidiAgent.cancel()`` only acts after a tool group, so
+    ``stop`` asks the observer to call ``finish_observation`` (whose ``cancel()`` ends the run
+    natively) and raises ``LessonStopped`` after ``stop_grace_seconds`` if it has not.
     """
 
-    def __init__(self, websocket: WebSocket, *, tick_seconds: float = 8.0, stop_grace_seconds: float = 20.0,
-                 clock: Any = None) -> None:
+    def __init__(self, websocket: WebSocket, *, stop_grace_seconds: float = 20.0) -> None:
         self._websocket = websocket
         self._agent: Any = None
-        self._tick_seconds = tick_seconds
         self._stop_grace_seconds = stop_grace_seconds
-        self._clock = clock
-        self._last_tick: float | None = None
-        self._pending: list[dict[str, Any]] = []
         self.stop_requested = False
-        self.counts = {"frames": 0, "audio": 0, "notes": 0, "ticks": 0}
+        self.debriefing = False
+        self.counts = {"frames": 0, "audio": 0, "notes": 0}
 
     async def start(self, agent: Any) -> None:
         self._agent = agent
-        self._last_tick = self._now()
         await self._websocket.send_text(json.dumps({"type": "ready", "audio": True}))
-
-    def _now(self) -> float:
-        return self._clock() if self._clock is not None else asyncio.get_running_loop().time()
 
     async def stop(self) -> None:
         return
 
     async def __call__(self) -> Any:
-        if self._pending:
-            return self._pending.pop(0)
         if self.stop_requested:
             await asyncio.sleep(self._stop_grace_seconds)
             raise LessonStopped("observer did not call finish_observation within the stop grace period")
@@ -195,13 +212,16 @@ class TeachingObserveInput:
                 continue
             kind = frame.get("type")
             if kind == "frame" and isinstance(frame.get("data"), str) and frame["data"]:
+                if self.debriefing:
+                    continue  # sharing has ended; a frame still in flight is not evidence
                 self.counts["frames"] += 1
-                now = self._now()
-                if self._tick_seconds > 0 and self._last_tick is not None and now - self._last_tick >= self._tick_seconds:
-                    self._last_tick = now
-                    self.counts["ticks"] += 1
-                    self._pending.append({"realtime_input": {"text": OBSERVATION_TICK}})
                 return {"realtime_input": {"video": {"format": "jpeg", "source": {"bytes": base64.b64decode(frame["data"])}}}}
+            if kind == "finish_demo":
+                if self.debriefing:
+                    continue
+                self.debriefing = True
+                await self._websocket.send_text(json.dumps({"type": "debrief"}))
+                return {"text": DEBRIEF_REQUEST}
             if kind == "note" and isinstance(frame.get("text"), str) and frame["text"].strip():
                 self.counts["notes"] += 1
                 return {"text": frame["text"].strip()}
@@ -213,6 +233,116 @@ class TeachingObserveInput:
             if kind == "stop":
                 self.stop_requested = True
                 return {"text": STOP_REQUEST}
+
+
+#: Spoken by gemini-3.8-live-extended-thinking when it drops a tool call server-side (python-genai#3015).
+TOOL_DROP_PHRASES = ("system error", "error occurred")
+#: The community workaround from python-genai#3015: a short text nudge after the model goes idle.
+TOOL_NUDGE = (
+    "[system] Your previous tool call was never sent and did not run; there was no real system error. "
+    "Call the tool now, then verify the actual result."
+)
+
+
+class ToolCallRecovery:
+    """``OutputStream`` that re-prompts extended-thinking when it drops a tool call (NOT NATIVE).
+
+    ``gemini-3.8-live-extended-thinking`` intermittently announces a tool call, never emits the
+    ``toolCall`` frame, and then either speaks "a system error occurred" and goes ``IDLE`` or stalls
+    ``IN_PROGRESS`` forever (googleapis/python-genai#3015; reproduced on the raw WebSocket with
+    Google's own sample, so nothing client-side prevents it). The SDK has no hook for this, so this
+    stream watches the agent's own output events and, at most ``max_per_turn`` times per user turn,
+    sends one native ``RealtimeInput(text=TOOL_NUDGE)`` via ``agent.send`` when either:
+
+    * the assistant transcript of a turn that produced no tool call contains a ``TOOL_DROP_PHRASES``
+      match and the interaction goes ``idle``; or
+    * the interaction has been ``in_progress`` for ``stall_seconds`` after ``turn_complete`` with
+      neither a tool call nor further speech.
+
+    A turn that emitted ``bidi_tool_use_blocks`` is never nudged. ``report`` receives one
+    ``{"type": "warning", "code": "tool_call_recovered", ...}`` frame per nudge so the renderer can
+    show what happened. Only attach it for the extended model.
+    """
+
+    def __init__(self, report: Any = None, *, stall_seconds: float = 12.0, max_per_turn: int = 2,
+                 clock: Any = None) -> None:
+        self._report = report
+        self._stall_seconds = stall_seconds
+        self._max_per_turn = max_per_turn
+        self._clock = clock
+        self._agent: Any = None
+        self._tool_seen = False
+        self._assistant_text: list[str] = []
+        self._nudges_this_turn = 0
+        self._stall_task: asyncio.Task[None] | None = None
+        self.nudges = 0
+
+    def _now(self) -> float:
+        return self._clock() if self._clock is not None else asyncio.get_running_loop().time()
+
+    async def start(self, agent: Any) -> None:
+        self._agent = agent
+
+    async def stop(self) -> None:
+        self._cancel_stall()
+
+    def _cancel_stall(self) -> None:
+        if self._stall_task is not None:
+            self._stall_task.cancel()
+            self._stall_task = None
+
+    def _reset_turn(self) -> None:
+        self._tool_seen = False
+        self._assistant_text.clear()
+        self._nudges_this_turn = 0
+        self._cancel_stall()
+
+    async def __call__(self, event: Any) -> None:
+        kind = event.get("type") if isinstance(event, dict) else None
+        if kind == "bidi_tool_use_blocks":
+            self._tool_seen = True
+            self._cancel_stall()
+        elif kind == "bidi_transcript_delta" and event.get("role") == "user":
+            self._reset_turn()
+        elif kind == "bidi_transcript_delta" and event.get("role") == "assistant":
+            self._assistant_text.append(str(event.get("delta") or ""))
+            self._cancel_stall()
+        elif kind == "bidi_interaction_status":
+            await self._on_status(event)
+
+    async def _on_status(self, event: dict[str, Any]) -> None:
+        status = event.get("status")
+        if status == "idle":
+            self._cancel_stall()
+            if not self._tool_seen and self._dropped_phrase():
+                await self._nudge("apology")
+            else:
+                self._reset_turn()
+        elif status == "in_progress" and event.get("turn_complete") and not self._tool_seen:
+            self._cancel_stall()
+            self._stall_task = asyncio.get_running_loop().create_task(self._stall_watch())
+
+    def _dropped_phrase(self) -> bool:
+        text = "".join(self._assistant_text).lower()
+        return any(phrase in text for phrase in TOOL_DROP_PHRASES)
+
+    async def _stall_watch(self) -> None:
+        await asyncio.sleep(self._stall_seconds)
+        self._stall_task = None
+        if not self._tool_seen:
+            await self._nudge("stall")
+
+    async def _nudge(self, reason: str) -> None:
+        if self._agent is None or self._nudges_this_turn >= self._max_per_turn:
+            return
+        self._nudges_this_turn += 1
+        self.nudges += 1
+        self._assistant_text.clear()
+        await self._agent.send({"realtime_input": {"text": TOOL_NUDGE}})
+        if self._report is not None:
+            await self._report({"type": "warning", "code": "tool_call_recovered", "reason": reason,
+                                "attempt": self._nudges_this_turn,
+                                "message": "Extended Thinking dropped a tool call; asked it to retry."})
 
 
 class WebSocketOutput:

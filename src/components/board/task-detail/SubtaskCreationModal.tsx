@@ -57,7 +57,7 @@ export function SubtaskCreationModal({ isOpen, onClose, onCreate }: SubtaskCreat
                 "relative w-full max-w-lg",
                 "rounded-2xl overflow-hidden",
                 "border border-indigo-200/20 dark:border-indigo-900/40",
-                "shadow-2xl shadow-indigo-500/10 dark:shadow-[0_0_60px_rgba(99,102,241,0.15)]",
+                "shadow-2xl shadow-indigo-500/10 dark:shadow-[0_0_60px_rgba(194,106,65,0.15)]",
                 "bg-surface-0 dark:bg-[#0f0f14]",
               )}
             >

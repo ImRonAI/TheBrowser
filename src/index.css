@@ -9,97 +9,111 @@
 
 @layer base {
   :root {
-    /* Light mode semantic tokens */
-    --color-bg-primary: 255 255 255;
-    --color-bg-secondary: 250 250 250;
-    --color-bg-tertiary: 245 245 245;
-    --color-border: 229 229 229;
-    --color-border-subtle: 245 245 245;
+    /* Paper — warm, quiet light mode */
+    --color-bg-primary: 255 254 252;
+    --color-bg-secondary: 248 247 244;
+    --color-bg-tertiary: 241 239 235;
+    --color-border: 228 225 219;
+    --color-border-subtle: 241 239 235;
 
-    --color-text-primary: 10 10 10;
-    --color-text-secondary: 82 82 82;
-    --color-text-muted: 163 163 163;
+    --color-text-primary: 26 25 23;
+    --color-text-secondary: 87 82 76;
+    --color-text-muted: 127 121 113;
 
-    --color-accent: 55 48 163;
-    --color-accent-light: 99 102 241;
+    --color-accent: 169 83 46;
+    --color-accent-light: 214 130 90;
 
-    /* Shadows */
-    --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.03);
-    --shadow-md: 0 4px 16px -4px rgb(0 0 0 / 0.08);
-    --shadow-lg: 0 8px 32px -8px rgb(0 0 0 / 0.12);
+    /* Shadows — soft, warm-tinted, never coloured */
+    --shadow-sm: 0 1px 2px 0 rgb(26 25 23 / 0.04);
+    --shadow-md: 0 6px 20px -8px rgb(26 25 23 / 0.10);
+    --shadow-lg: 0 18px 48px -18px rgb(26 25 23 / 0.18);
 
     /* Transitions */
     --ease-smooth: cubic-bezier(0.16, 1, 0.3, 1);
     --ease-bounce: cubic-bezier(0.34, 1.56, 0.64, 1);
 
+    /* Chrome — the browser frame behind every surface */
+    --ron-chrome: 40 18% 95%;
+    --ron-sidebar-width: 264px;
+
     /* shadcn/ui CSS variables - Light mode */
-    --background: 0 0% 100%;
-    --foreground: 0 0% 4%;
-    --card: 0 0% 100%;
-    --card-foreground: 0 0% 4%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 0 0% 4%;
-    --primary: 243 75% 45%;
-    --primary-foreground: 0 0% 100%;
-    --secondary: 0 0% 96%;
-    --secondary-foreground: 0 0% 9%;
-    --muted: 0 0% 96%;
-    --muted-foreground: 0 0% 45%;
-    --accent: 0 0% 96%;
-    --accent-foreground: 0 0% 9%;
-    --destructive: 0 84% 60%;
+    --background: 40 60% 99%;
+    --foreground: 40 6% 10%;
+    --card: 40 60% 99%;
+    --card-foreground: 40 6% 10%;
+    --popover: 40 60% 99%;
+    --popover-foreground: 40 6% 10%;
+    --primary: 18 57% 42%;
+    --primary-foreground: 40 60% 99%;
+    --secondary: 40 17% 93%;
+    --secondary-foreground: 40 6% 10%;
+    --muted: 40 17% 93%;
+    --muted-foreground: 34 6% 47%;
+    --accent: 40 17% 93%;
+    --accent-foreground: 40 6% 10%;
+    --destructive: 3 53% 50%;
     --destructive-foreground: 0 0% 100%;
-    --border: 0 0% 90%;
-    --input: 0 0% 90%;
-    --ring: 243 75% 59%;
-    --radius: 0.5rem;
+    --border: 38 13% 88%;
+    --input: 38 13% 88%;
+    --ring: 18 50% 52%;
+    --radius: 0.625rem;
   }
 
   .dark {
-    --color-bg-primary: 10 10 10;
-    --color-bg-secondary: 18 18 18;
-    --color-bg-tertiary: 23 23 23;
-    --color-border: 38 38 38;
-    --color-border-subtle: 30 30 30;
-    
-    --color-text-primary: 250 250 250;
-    --color-text-secondary: 163 163 163;
-    --color-text-muted: 115 115 115;
-    
-    --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.2);
-    --shadow-md: 0 4px 16px -4px rgb(0 0 0 / 0.4);
-    --shadow-lg: 0 8px 32px -8px rgb(0 0 0 / 0.5);
-    
+    /* Graphite — warm near-black, never pure #000 */
+    --color-bg-primary: 19 19 18;
+    --color-bg-secondary: 25 24 23;
+    --color-bg-tertiary: 31 30 28;
+    --color-border: 45 43 40;
+    --color-border-subtle: 31 30 28;
+
+    --color-text-primary: 243 241 237;
+    --color-text-secondary: 173 167 159;
+    --color-text-muted: 134 128 122;
+
+    --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.3);
+    --shadow-md: 0 6px 20px -8px rgb(0 0 0 / 0.5);
+    --shadow-lg: 0 18px 48px -18px rgb(0 0 0 / 0.6);
+
+    --ron-chrome: 40 4% 9%;
+
     /* shadcn/ui CSS variables - Dark mode */
-    --background: 0 0% 4%;
-    --foreground: 0 0% 98%;
-    --card: 0 0% 7%;
-    --card-foreground: 0 0% 98%;
-    --popover: 0 0% 7%;
-    --popover-foreground: 0 0% 98%;
-    --primary: 243 75% 59%;
-    --primary-foreground: 0 0% 100%;
-    --secondary: 0 0% 15%;
-    --secondary-foreground: 0 0% 98%;
-    --muted: 0 0% 15%;
-    --muted-foreground: 0 0% 64%;
-    --accent: 0 0% 15%;
-    --accent-foreground: 0 0% 98%;
-    --destructive: 0 62% 50%;
+    --background: 40 3% 7%;
+    --foreground: 40 18% 94%;
+    --card: 40 4% 10%;
+    --card-foreground: 40 18% 94%;
+    --popover: 40 4% 11%;
+    --popover-foreground: 40 18% 94%;
+    --primary: 19 60% 60%;
+    --primary-foreground: 40 3% 7%;
+    --secondary: 36 6% 16%;
+    --secondary-foreground: 40 18% 94%;
+    --muted: 36 6% 15%;
+    --muted-foreground: 34 5% 55%;
+    --accent: 36 6% 16%;
+    --accent-foreground: 40 18% 94%;
+    --destructive: 3 55% 52%;
     --destructive-foreground: 0 0% 100%;
-    --border: 0 0% 15%;
-    --input: 0 0% 15%;
-    --ring: 243 75% 59%;
+    --border: 36 6% 17%;
+    --input: 36 6% 17%;
+    --ring: 19 60% 60%;
   }
 
   html {
     @apply antialiased;
-    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+    /* Inter: open digits, single-storey a off, tabular-friendly; ss03 rounded quotes */
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11", "ss03";
     text-rendering: optimizeLegibility;
+    color-scheme: light;
+  }
+
+  html.dark {
+    color-scheme: dark;
   }
 
   body {
-    @apply bg-surface-0 text-ink font-sans font-thin;
+    @apply bg-surface-0 text-ink font-sans font-normal;
+    letter-spacing: -0.006em;
     @apply dark:bg-surface-900 dark:text-ink-inverse;
     margin: 0;
     padding: 0;
@@ -107,7 +121,7 @@
     min-height: 100vh;
   }
 
-  /* Typography hierarchy */
+  /* Typography hierarchy — editorial serif headings, optical sizing on */
   h1,
   h2,
   h3,
@@ -115,6 +129,8 @@
   h5,
   h6 {
     @apply font-display tracking-tight;
+    font-optical-sizing: auto;
+    text-wrap: balance;
   }
 
   h1 {
@@ -139,17 +155,28 @@
 
   /* Selection styling */
   ::selection {
-    @apply bg-accent/20 dark:bg-accent-light/30;
+    @apply bg-accent/15 dark:bg-accent-light/25;
   }
 
-  /* Focus visible */
+  /* Focus visible — one consistent, high-contrast ember ring */
   :focus-visible {
-    @apply outline-none ring-2 ring-accent/50 ring-offset-2 ring-offset-surface-0 dark:ring-accent-light/50 dark:ring-offset-surface-900;
+    @apply outline-none ring-2 ring-accent/60 ring-offset-2 ring-offset-surface-0 dark:ring-accent-light/60 dark:ring-offset-surface-900;
   }
 
-  /* Smooth scrolling */
+  /* Smooth scrolling (disabled for reduced motion) */
   * {
     scroll-behavior: smooth;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    * {
+      scroll-behavior: auto !important;
+    }
+  }
+
+  /* Keyboard-shortcut glyphs */
+  kbd {
+    font-family: inherit;
   }
 
   /* Custom scrollbar */
@@ -163,22 +190,22 @@
   }
 
   ::-webkit-scrollbar-thumb {
-    background-color: #e5e5e5;
+    background-color: #E4E1DB;
     border-radius: 9999px;
     border: 2px solid transparent;
     background-clip: content-box;
   }
 
   .dark ::-webkit-scrollbar-thumb {
-    background-color: #262626;
+    background-color: #2D2B28;
   }
 
   ::-webkit-scrollbar-thumb:hover {
-    background-color: #d4d4d4;
+    background-color: #D2CEC6;
   }
 
   .dark ::-webkit-scrollbar-thumb:hover {
-    background-color: #404040;
+    background-color: #45413C;
   }
 
   /* Scrollbar corner */
@@ -328,17 +355,17 @@
     background: transparent;
   }
   .scrollbar-thin::-webkit-scrollbar-thumb {
-    background-color: #e5e5e5;
+    background-color: #E4E1DB;
     border-radius: 3px;
   }
   .dark .scrollbar-thin::-webkit-scrollbar-thumb {
-    background-color: #262626;
+    background-color: #2D2B28;
   }
   .scrollbar-thin::-webkit-scrollbar-thumb:hover {
-    background-color: #d4d4d4;
+    background-color: #D2CEC6;
   }
   .dark .scrollbar-thin::-webkit-scrollbar-thumb:hover {
-    background-color: #404040;
+    background-color: #45413C;
   }
 
   /* Text balance */
@@ -393,11 +420,11 @@
 
   /* Glow effects */
   .glow-accent {
-    box-shadow: 0 0 24px -4px rgb(99 102 241 / 0.35);
+    box-shadow: 0 0 24px -6px rgb(194 106 65 / 0.35);
   }
 
   .glow-accent-lg {
-    box-shadow: 0 0 48px -8px rgb(99 102 241 / 0.4);
+    box-shadow: 0 0 48px -10px rgb(194 106 65 / 0.4);
   }
 
   /* Backdrop utilities */
@@ -473,28 +500,28 @@
    ============================================ */
 
 .glass-ultra {
-  background: rgba(255, 255, 255, 0.92);
+  background: rgba(255, 254, 252, 0.92);
   backdrop-filter: blur(24px) saturate(180%);
   -webkit-backdrop-filter: blur(24px) saturate(180%);
   border: 1px solid rgba(0, 0, 0, 0.04);
 }
 
 .dark .glass-ultra {
-  background: rgba(18, 18, 18, 0.95);
+  background: rgba(25, 24, 23, 0.95);
   backdrop-filter: blur(24px) saturate(180%);
   -webkit-backdrop-filter: blur(24px) saturate(180%);
   border: 1px solid rgba(255, 255, 255, 0.05);
 }
 
 .glass-frosted {
-  background: rgba(255, 255, 255, 0.75);
+  background: rgba(255, 254, 252, 0.75);
   backdrop-filter: blur(16px) saturate(150%);
   -webkit-backdrop-filter: blur(16px) saturate(150%);
   border: 1px solid rgba(0, 0, 0, 0.03);
 }
 
 .dark .glass-frosted {
-  background: rgba(23, 23, 23, 0.85);
+  background: rgba(31, 30, 28, 0.85);
   backdrop-filter: blur(16px) saturate(150%);
   -webkit-backdrop-filter: blur(16px) saturate(150%);
   border: 1px solid rgba(255, 255, 255, 0.04);
@@ -502,13 +529,13 @@
 
 /* Chrome glass for header */
 .chrome-glass {
-  background: rgba(255, 255, 255, 0.85);
+  background: rgba(248, 247, 244, 0.88);
   backdrop-filter: blur(20px) saturate(180%);
   -webkit-backdrop-filter: blur(20px) saturate(180%);
 }
 
 .dark .chrome-glass {
-  background: rgba(18, 18, 18, 0.9);
+  background: rgba(22, 22, 21, 0.9);
   backdrop-filter: blur(20px) saturate(180%);
   -webkit-backdrop-filter: blur(20px) saturate(180%);
 }
@@ -596,7 +623,7 @@
 }
 
 .command-nexus:focus-within {
-  box-shadow: 0 0 60px rgba(139, 92, 246, 0.15);
+  box-shadow: 0 0 60px rgba(194, 106, 65, 0.12);
 }
 
 /* ============================================
@@ -694,4 +721,185 @@
 }
 .ProseMirror code {
   @apply font-mono text-sm;
+}
+
+/* ============================================
+   RON 2026 — Chrome primitives
+   ============================================ */
+
+/* The browser frame: one warm surface shared by toolbar, tab strip and sidebar. */
+.ron-chrome {
+  background-color: hsl(var(--ron-chrome));
+}
+
+/* Keyboard hint chips (⌘K, ⌘J) */
+.kbd {
+  @apply inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-[5px] px-1;
+  @apply border border-surface-200 bg-surface-0 text-[10px] font-medium leading-none text-ink-muted;
+  @apply dark:border-surface-700 dark:bg-surface-800 dark:text-ink-inverse-muted;
+  font-feature-settings: "tnum";
+}
+
+/* Subtle film grain for large hero surfaces (pointer-safe) */
+.ron-grain {
+  position: relative;
+  isolation: isolate;
+}
+.ron-grain::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.035;
+  mix-blend-mode: multiply;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  z-index: -1;
+}
+.dark .ron-grain::after {
+  mix-blend-mode: screen;
+  opacity: 0.025;
+}
+
+/* ============================================
+   GLASS — translucent shell over the desktop
+   ============================================
+   `html.glass` is set by lib/theme.ts. On macOS the Electron window carries a
+   native `sidebar` vibrancy material and a fully transparent background colour,
+   so everything that is not painted here shows the blurred desktop. The rule set
+   below un-paints the shell (body, chrome frame, sidebar, toolbar, tab strip,
+   agent panel, Ron's own pages) and replaces each opaque surface with a thin
+   wash, so the material reads through while text keeps its contrast.
+
+   Websites are native WebContentsViews and stay opaque by design. Without native
+   vibrancy (`html.glass:not(.glass-native)` — plain browser preview, Linux,
+   Windows) a painted backdrop stands in for the desktop so panes never float
+   over nothing. */
+
+html.glass,
+html.glass body {
+  background: transparent !important;
+}
+
+html.glass:not(.glass-native) body {
+  background:
+    radial-gradient(1200px 700px at 10% -10%, rgba(214, 130, 90, 0.18), transparent 60%),
+    radial-gradient(900px 600px at 100% 110%, rgba(108, 130, 150, 0.22), transparent 60%),
+    linear-gradient(160deg, #E9E4DC 0%, #D9D4CC 100%) !important;
+}
+html.glass.dark:not(.glass-native) body {
+  background:
+    radial-gradient(1200px 700px at 10% -10%, rgba(194, 106, 65, 0.16), transparent 60%),
+    radial-gradient(900px 600px at 100% 110%, rgba(74, 90, 110, 0.28), transparent 60%),
+    linear-gradient(160deg, #23221F 0%, #151513 100%) !important;
+}
+
+/* The frame: chrome, sidebar, tab strip. */
+html.glass .ron-chrome {
+  background-color: rgba(255, 254, 252, 0.28);
+  -webkit-backdrop-filter: saturate(140%) blur(18px);
+  backdrop-filter: saturate(140%) blur(18px);
+}
+html.glass.dark .ron-chrome {
+  background-color: rgba(19, 19, 18, 0.34);
+}
+
+/* Content surfaces (pages, panels, cards) get a wash instead of paint. The alpha
+   steps keep hierarchy: page < card/popover so popovers still sit "on top". */
+html.glass .glass-page,
+html.glass .glass-page.bg-surface-0,
+html.glass .glass-page.dark\:bg-surface-900 {
+  background-color: rgba(255, 254, 252, 0.42) !important;
+  -webkit-backdrop-filter: saturate(130%) blur(24px);
+  backdrop-filter: saturate(130%) blur(24px);
+}
+html.glass.dark .glass-page {
+  background-color: rgba(19, 19, 18, 0.46) !important;
+}
+
+html.glass .glass-pane {
+  background-color: rgba(255, 254, 252, 0.55) !important;
+  -webkit-backdrop-filter: saturate(140%) blur(28px);
+  backdrop-filter: saturate(140%) blur(28px);
+  border-color: rgba(255, 255, 255, 0.45) !important;
+}
+html.glass.dark .glass-pane {
+  background-color: rgba(26, 25, 23, 0.58) !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+/* Popovers and menus must stay readable over anything: a denser wash. */
+html.glass .ron-popover {
+  background-color: rgba(255, 254, 252, 0.82) !important;
+  -webkit-backdrop-filter: saturate(150%) blur(32px);
+  backdrop-filter: saturate(150%) blur(32px);
+}
+html.glass.dark .ron-popover {
+  background-color: rgba(26, 25, 23, 0.84) !important;
+}
+
+/* Cards and tiles inside glass pages: hairline + light wash, no solid fill. */
+html.glass .glass-page .bg-surface-0,
+html.glass .glass-page .bg-surface-50,
+html.glass .glass-page .dark\:bg-surface-900,
+html.glass .glass-page .dark\:bg-surface-850,
+html.glass .glass-pane .bg-surface-0,
+html.glass .glass-pane .dark\:bg-surface-850 {
+  background-color: rgba(255, 255, 255, 0.28);
+}
+html.glass.dark .glass-page .bg-surface-0,
+html.glass.dark .glass-page .bg-surface-50,
+html.glass.dark .glass-page .dark\:bg-surface-900,
+html.glass.dark .glass-page .dark\:bg-surface-850,
+html.glass.dark .glass-pane .bg-surface-0,
+html.glass.dark .glass-pane .dark\:bg-surface-850 {
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+/* Hairlines soften to white/black alpha so they do not read as painted edges. */
+html.glass .border-surface-200,
+html.glass .border-surface-200\/80,
+html.glass .border-surface-200\/70 {
+  border-color: rgba(26, 25, 23, 0.10);
+}
+html.glass.dark .dark\:border-surface-800,
+html.glass.dark .dark\:border-surface-700 {
+  border-color: rgba(255, 255, 255, 0.09);
+}
+
+/* Keyboard hint chips and inputs keep a faint fill so they stay legible. */
+html.glass .kbd {
+  background-color: rgba(255, 255, 255, 0.35);
+  border-color: rgba(26, 25, 23, 0.12);
+}
+html.glass.dark .kbd {
+  background-color: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.10);
+}
+
+/* Text shadows are off by default; glass adds a hair of lift on muted ink so it
+   survives a busy desktop. */
+html.glass .text-ink-muted,
+html.glass .text-ink-inverse-muted {
+  text-shadow: 0 0 1px rgba(255, 255, 255, 0.15);
+}
+
+/* shadcn surfaces (Radix popover/menu/select/dialog) share the popover wash. */
+html.glass .bg-popover,
+html.glass .bg-card {
+  background-color: rgba(255, 254, 252, 0.82) !important;
+  -webkit-backdrop-filter: saturate(150%) blur(32px);
+  backdrop-filter: saturate(150%) blur(32px);
+}
+html.glass.dark .bg-popover,
+html.glass.dark .bg-card {
+  background-color: rgba(26, 25, 23, 0.84) !important;
+}
+
+/* Discover story cards: when a slot gets narrow (sidebar + agent panel both open),
+   the compact thumbnail shrinks and the one-line dek is dropped so the headline
+   keeps its measure. Pure CSS container query — no plugin needed. */
+.story-card { container-type: inline-size; }
+@container (max-width: 300px) {
+  .story-thumb { width: 88px; }
+  .story-dek { display: none; }
 }

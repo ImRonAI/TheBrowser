@@ -250,9 +250,9 @@ interface AmbientParticlesProps {
 function AmbientParticles({ count, isDark, isGlass }: AmbientParticlesProps) {
   // Theme-adaptive particle colors
   const getParticleColor = () => {
-    if (isDark) return 'rgba(99, 102, 241, 0.25)' // Indigo
-    if (isGlass) return 'rgba(45, 59, 135, 0.2)' // Royal
-    return 'rgba(45, 59, 135, 0.15)' // Royal lighter
+    if (isDark) return 'rgba(194, 106, 65, 0.25)' // Indigo
+    if (isGlass) return 'rgba(107, 52, 32, 0.2)' // Royal
+    return 'rgba(107, 52, 32, 0.15)' // Royal lighter
   }
 
   return (
@@ -268,8 +268,8 @@ function AmbientParticles({ count, isDark, isGlass }: AmbientParticlesProps) {
             top: `${Math.random() * 100}%`,
             backgroundColor: getParticleColor(),
             boxShadow: isDark 
-              ? '0 0 6px rgba(99, 102, 241, 0.3)' 
-              : '0 0 4px rgba(45, 59, 135, 0.2)'
+              ? '0 0 6px rgba(194, 106, 65, 0.3)' 
+              : '0 0 4px rgba(107, 52, 32, 0.2)'
           }}
           animate={{
             x: [0, (Math.random() - 0.5) * 40, 0],

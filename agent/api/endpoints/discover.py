@@ -38,10 +38,14 @@ class PoiRequest(BaseModel):
 
 
 class AssistRequest(BaseModel):
+    """Suggest / Spellcheck query per the API reference: q <= 400 chars (and <= 50 words, enforced in
+    the client), lang (default en), country (default US); count 1-20 (default 5) and rich apply to
+    suggest only."""
     q: str = Field(min_length=1, max_length=400)
-    count: int = Field(default=8, ge=1, le=20)
+    count: int = Field(default=5, ge=1, le=20)
     rich: bool = False
     country: str = Field(default="US", min_length=2, max_length=3)
+    lang: str = Field(default="en", min_length=2, max_length=8)
 
 
 class AnswerRequest(BaseModel):
@@ -57,7 +61,8 @@ def _raise(error: BraveSearchError) -> None:
 async def discover_status(request: Request):
     client = get_client(request)
     return {"configured": client.configured, "sources": ["news", "videos", "images", "web", "places", "pois", "rich"],
-            "rich_verticals": sorted(RICH_VERTICALS), "assist": ["suggest", "spellcheck"]}
+            "rich_verticals": sorted(RICH_VERTICALS), "assist": ["suggest", "spellcheck"],
+            "assist_configured": client.assist_configured}
 
 
 @router.post("/discover/answer")
@@ -87,17 +92,24 @@ async def discover_pois(body: PoiRequest, request: Request):
         _raise(error)
 
 
+# Text assist for every free-text field in the renderer (search bar, URL bar, prompt inputs,
+# issue titles/descriptions). `/assist/*` is the canonical path; `/discover/assist/*` stays as alias.
+@router.post("/assist/suggest")
 @router.post("/discover/assist/suggest")
-async def discover_suggest(body: AssistRequest, request: Request):
+async def assist_suggest(body: AssistRequest, request: Request):
+    """``GET /suggest/search`` proxied: ``results`` exactly as Brave returns them (query, type, title, description, img)."""
     try:
-        return {"results": await get_client(request).suggest(body.q, count=body.count, rich=body.rich, country=body.country)}
+        return {"query": body.q, "results": await get_client(request).suggest(
+            body.q, count=body.count, rich=body.rich, country=body.country, lang=body.lang)}
     except BraveSearchError as error:
         _raise(error)
 
 
+@router.post("/assist/spellcheck")
 @router.post("/discover/assist/spellcheck")
-async def discover_spellcheck(body: AssistRequest, request: Request):
+async def assist_spellcheck(body: AssistRequest, request: Request):
+    """``GET /spellcheck/search`` proxied: ``corrected`` is ``results[0].query`` or null when Brave has no correction."""
     try:
-        return {"corrected": await get_client(request).spellcheck(body.q, country=body.country)}
+        return {"query": body.q, "corrected": await get_client(request).spellcheck(body.q, country=body.country, lang=body.lang)}
     except BraveSearchError as error:
         _raise(error)

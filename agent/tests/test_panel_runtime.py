@@ -12,7 +12,8 @@ from pydantic import BaseModel
 from strands.agent.agent_result import AgentResult
 from strands.hooks.events import AfterToolCallEvent, BeforeToolCallEvent
 from strands.event_loop._retry import ModelRetryStrategy
-from strands.types.exceptions import ModelThrottledException
+from strands.agent.conversation_manager import NullConversationManager
+from strands.types.exceptions import ContextWindowOverflowException, ModelThrottledException
 from strands.interrupt import Interrupt
 from strands.models.model import Model
 from strands.multiagent.base import MultiAgentResult, NodeResult
@@ -369,6 +370,44 @@ def test_nested_translation_ids_results_and_background_callback_threads():
         assert len([e for e in events if e["type"] == "text_delta"]) == 1
         assert events[-1]["type"] == "background_event"
         session.agent.state.delete("strands.background_tasks")
+        await manager.shutdown()
+
+    asyncio.run(scenario())
+
+
+class OverflowOnce(OfflineModel):
+    async def stream(self, messages, tool_specs=None, system_prompt=None, **kwargs):
+        if not self.calls:
+            self.calls.append(copy.deepcopy(messages))
+            raise ContextWindowOverflowException("full")
+        async for event in super().stream(messages, tool_specs=tool_specs, system_prompt=system_prompt, **kwargs):
+            yield event
+
+
+def test_context_overflow_reopens_the_same_session():
+    async def scenario():
+        agents = []
+        model = OverflowOnce()
+        factory = factory_for(model, constructed=agents, conversation_manager=NullConversationManager())
+        manager = manager_for(factory)
+        session = await manager.start("u", "overflow-session", "remember this")
+        events = await finished(session)
+        assert session.status == "completed"
+        assert events[-1]["status"] == "completed"
+        assert len(agents) == 2
+        assert agents[0] is not agents[1]
+        assert agents[1]._session_manager is session.session_manager
+        assert agents[0]._session_manager is session.session_manager
+        user_texts = [
+            block["text"] for message in agents[1].messages if message["role"] == "user"
+            for block in message["content"] if "text" in block
+        ]
+        assert user_texts.count("remember this") == 1
+        assert any(
+            block.get("text") == "answer"
+            for message in agents[1].messages if message["role"] == "assistant"
+            for block in message["content"]
+        )
         await manager.shutdown()
 
     asyncio.run(scenario())

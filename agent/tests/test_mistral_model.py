@@ -27,7 +27,7 @@ def test_tool_results_precede_injected_user_text(monkeypatch, tool_count, contex
         *([{"role": "user", "content": [{"text": context}]}] if context else []),
     ]
     original = copy.deepcopy(messages)
-    assert type(model) is MistralModel
+    assert isinstance(model, MistralModel)  # RonMistralModel subclass keeps the vended formatter
     request = model.format_request(messages, system_prompt="Be helpful")
     formatted = request["messages"]
     assert [message["role"] for message in formatted] == [
@@ -66,3 +66,142 @@ def test_responses_function_outputs_precede_injected_context(monkeypatch, provid
         "user", *(["function_call"] * tool_count), *(["function_call_output"] * tool_count), "user",
     ]
     assert messages == original
+
+# --- reasoning_effort + thinking chunks (agent.api.core.mistral_model) -------------------
+
+
+class _Chunk:
+    def __init__(self, **kw):
+        self.__dict__.update(kw)
+
+
+def _event(content=None, finish_reason=None, usage=None, tool_calls=None):
+    delta = _Chunk(content=content, tool_calls=tool_calls)
+    choice = _Chunk(delta=delta, finish_reason=finish_reason)
+    return _Chunk(data=_Chunk(choices=[choice], usage=usage))
+
+
+class _FakeStream:
+    def __init__(self, events):
+        self._events = list(events)
+
+    def __aiter__(self):
+        return self
+
+    async def __anext__(self):
+        if not self._events:
+            raise StopAsyncIteration
+        return self._events.pop(0)
+
+
+class _FakeClient:
+    """Stands in for ``mistralai.client.Mistral`` inside ``RonMistralModel._client``."""
+
+    captured: dict = {}
+    events: list = []
+
+    def __init__(self, **kwargs):
+        _FakeClient.captured["client_args"] = kwargs
+        self.chat = self
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *exc):
+        return False
+
+    async def stream_async(self, **request):
+        _FakeClient.captured["request"] = request
+        return _FakeStream(_FakeClient.events)
+
+
+def test_reasoning_effort_rides_on_the_chat_completion_request(monkeypatch):
+    monkeypatch.setenv("MISTRAL_API_KEY", "offline-test-key")
+    model = build_model("mistral", "mistral-small-latest", "high")
+    request = model.format_request([{"role": "user", "content": [{"text": "hi"}]}])
+    assert request["reasoning_effort"] == "high"
+    assert "reasoning_effort" not in build_model("mistral", "mistral-small-latest").format_request(
+        [{"role": "user", "content": [{"text": "hi"}]}]
+    )
+
+
+def test_stored_reasoning_is_replayed_as_thinking_chunks(monkeypatch):
+    # https://docs.mistral.ai/studio/conversations/reasoning: replay the full assistant
+    # message including ThinkChunk; dropping it degrades the next turn.
+    monkeypatch.setenv("MISTRAL_API_KEY", "offline-test-key")
+    model = build_model("mistral", "mistral-medium-3-5", "high")
+    request = model.format_request([
+        {"role": "user", "content": [{"text": "17*23?"}]},
+        {"role": "assistant", "content": [
+            {"reasoningContent": {"reasoningText": {"text": "17*20=340, 17*3=51"}}},
+            {"text": "391"},
+        ]},
+        {"role": "user", "content": [{"text": "times 3"}]},
+    ])
+    assert request["messages"][1] == {
+        "role": "assistant",
+        "content": [
+            {"type": "thinking", "thinking": [{"type": "text", "text": "17*20=340, 17*3=51"}]},
+            {"type": "text", "text": "391"},
+        ],
+    }
+
+
+@pytest.mark.asyncio
+async def test_think_chunks_stream_as_reasoning_content(monkeypatch):
+    monkeypatch.setenv("MISTRAL_API_KEY", "offline-test-key")
+    from agent.api.core import mistral_model
+
+    think = _Chunk(type="thinking", thinking=[_Chunk(type="text", text="let me think")])
+    text_chunk = _Chunk(type="text", text="The answer")
+    usage = _Chunk(prompt_tokens=3, completion_tokens=5, total_tokens=8)
+    _FakeClient.events = [
+        _event(content=[think]),
+        _event(content=[_Chunk(type="thinking", thinking=[], closed=True), text_chunk]),
+        _event(content=" is 391."),
+        _event(finish_reason="stop", usage=usage),
+    ]
+    monkeypatch.setattr(mistral_model, "Mistral", _FakeClient)
+
+    model = build_model("mistral", "mistral-small-latest", "high")
+    events = [e async for e in model.stream([{"role": "user", "content": [{"text": "17*23?"}]}])]
+
+    assert _FakeClient.captured["request"]["reasoning_effort"] == "high"
+    reasoning = "".join(
+        e["contentBlockDelta"]["delta"]["reasoningContent"]["text"]
+        for e in events if "contentBlockDelta" in e and "reasoningContent" in e["contentBlockDelta"]["delta"]
+    )
+    text = "".join(
+        e["contentBlockDelta"]["delta"]["text"]
+        for e in events if "contentBlockDelta" in e and "text" in e["contentBlockDelta"]["delta"]
+    )
+    assert reasoning == "let me think"
+    assert text == "The answer is 391."
+    # one reasoning block, then one text block, each opened and closed
+    assert sum(1 for e in events if "contentBlockStart" in e) == 2
+    assert sum(1 for e in events if "contentBlockStop" in e) == 2
+    assert events[-2] == {"messageStop": {"stopReason": "end_turn"}}
+    assert events[-1]["metadata"]["usage"]["totalTokens"] == 8
+
+
+def test_max_effort_is_reinserted_on_the_wire():
+    # mistralai 2.10.1's ReasoningEffort literal has no "max": the marshaller drops it,
+    # so the hook puts it back for zai-glm-5-3 (documented low/high/max).
+    import json
+
+    import httpx
+
+    from agent.api.core.mistral_model import _MistralReasoningEffortHook
+
+    hook = _MistralReasoningEffortHook("max")
+    ctx = type("Ctx", (), {"operation_id": "stream_chat"})()
+    request = httpx.Request(
+        "POST", "https://api.mistral.ai/v1/chat/completions",
+        headers={"content-type": "application/json", "content-length": "20"},
+        content=json.dumps({"model": "zai-glm-5-3", "messages": []}).encode(),
+    )
+    patched = hook.before_request(ctx, request)
+    assert json.loads(patched.content)["reasoning_effort"] == "max"
+    assert "content-length" not in {k.lower() for k in patched.headers} or int(patched.headers["content-length"]) == len(patched.content)
+    other = httpx.Request("GET", "https://api.mistral.ai/v1/models")
+    assert hook.before_request(type("Ctx", (), {"operation_id": "list_models"})(), other) is other

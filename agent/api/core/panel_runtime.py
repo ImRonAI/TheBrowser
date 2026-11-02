@@ -68,11 +68,11 @@ from strands.hooks.events import (
 )
 from strands.hooks.registry import HookRegistry
 from strands.multiagent.base import MultiAgentResult, NodeResult
-from strands.session import SnapshotSessionManager
 from strands.storage import Storage
+from strands.types.exceptions import ContextWindowOverflowException
 from strands.vended_plugins.context_injector import ContextInjector, InjectionContext
 
-from .panel_storage import get_user_session_storage
+from .panel_storage import ThreadSessionManager, get_user_session_storage, thread_agent_id
 from .panel_tools import serializable_event
 
 STEERING_STATE_KEY = "panel.runtime.steering"
@@ -81,7 +81,7 @@ _BACKGROUND_TOOL = "strands_manage_background_task"
 _BACKGROUND_STATE = "strands.background_tasks"
 _ACTIVE = {"starting", "running", "finishing"}
 _DURABLE_EVENTS = {"run_started", "steering_accepted", "steering_applied", "checkpoint", "interrupt", "run_finished", "error",
-                   "tool_repair_proposed", "tool_repair_ready"}
+                   "tool_repair_proposed", "tool_repair_investigating", "tool_repair_approval", "tool_repair_ready"}
 
 
 class RuntimeConflict(RuntimeError):
@@ -141,8 +141,8 @@ class SessionRun:
     ) -> None:
         self.user_id, self.session_id = user_id, session_id
         self.storage = storage
-        self.session_manager = SnapshotSessionManager(session_id, storage=storage, save_latest_on="trigger")
-        self.agent_id = "panel-" + hashlib.sha256(user_id.encode()).hexdigest()[:32]
+        self.session_manager = ThreadSessionManager(session_id, storage=storage, save_latest_on="trigger")
+        self.agent_id = thread_agent_id(user_id)
         self.key = f"panel-runtime/{hashlib.sha256(session_id.encode()).hexdigest()}.json"
         self.factory = factory
         self.selection: dict[str, Any] = {}
@@ -242,7 +242,7 @@ class SessionRun:
                 "Server restarted during invocation; restored last committed snapshot. Execution was not repeated."})
         return True
 
-    async def _ensure_agent(self) -> None:
+    async def _ensure_agent(self, *, restore_checkpoint: bool = True) -> None:
         if self.agent is not None:
             return
         if self.factory is None:
@@ -268,14 +268,32 @@ class SessionRun:
         self.agent = agent
         if agent.agent_id != self.agent_id:
             raise ValueError("Factory must pass runtime_options['agent_id'] to Agent")
-        if self.snapshot_id is not None:
+        if restore_checkpoint and self.snapshot_id is not None:
             if not await self.session_manager.restore_snapshot(agent, snapshot_id=self.snapshot_id):
                 raise RuntimeError("Committed native snapshot is missing")
-        elif self.recovery_required:
+        elif restore_checkpoint and self.recovery_required:
             raise RuntimeError("Interrupted startup has no committed snapshot; use a new session")
         # The journal also persists steering accepted since the last native snapshot.
         agent.state.set(STEERING_STATE_KEY, self.steering)
         self.messages = _wire(agent.messages)
+
+    async def _reopen_agent(self) -> None:
+        """Construct a new agent on this session after a context-window overflow.
+
+        The factory is the same one that built the agent that overflowed (same
+        ``agent_id``, same ``ThreadSessionManager``). Session init loads
+        ``snapshot_latest``, which already contains the turn the model rejected.
+        The pre-run immutable snapshot stays put.
+        """
+        old = self.agent
+        if old is not None:
+            old.state.set(STEERING_STATE_KEY, self.steering)
+            await self.session_manager.save_snapshot(old, is_latest=True)
+            if old.memory_manager is not None:
+                await old.memory_manager.flush()
+            await asyncio.to_thread(old.cleanup)
+        self.agent = None
+        await self._ensure_agent(restore_checkpoint=False)
 
     async def _emit(self, event_type: str, *, node_path: tuple[str, ...] = (), **payload: Any) -> dict[str, Any]:
         async with self._lock:
@@ -480,39 +498,50 @@ class SessionRun:
         task.add_done_callback(lambda done: None if done.cancelled() else done.exception())
 
     async def _announce_repair_proposal(self) -> None:
-        """Emit ``tool_repair_proposed`` once per proposal recorded by ``ToolRepairTrigger``.
+        """Investigations start from the native tool hook (``ToolRepairTrigger`` -> ``RepairService``);
+        there is no proposal to announce and nothing to approve before investigating."""
+        return
 
-        The trigger only writes ``agent.state``; the panel decides. Emitting here (after the native
-        stream ended) keeps the event out of the tool loop and lets the renderer show the Alert
-        with Repair / Not now. Nothing runs until ``POST /tools/repairs``.
-        """
-        if self.agent is None:
-            return
-        from agent.api.core.tool_repair import REPAIR_REQUEST_STATE_KEY, pending_proposal
-
-        proposal = pending_proposal(self.agent)
-        if proposal is None or proposal.get("announced"):
-            return
-        self.agent.state.set(REPAIR_REQUEST_STATE_KEY, {**proposal, "announced": True})
-        await self._emit("tool_repair_proposed", id=proposal["id"], tool=proposal["tool_name"],
-                         kind=proposal.get("kind", "library"),
-                         exception_class=proposal.get("exception_class"), count=proposal.get("count"),
-                         observation=proposal.get("observation", False), outcome=proposal.get("outcome"))
+    def _repair_fields(self, result: Mapping[str, Any]) -> dict[str, Any]:
+        return {"tool": result.get("tool_name"), "rev": result.get("revision"), "repair_kind": result.get("repair_kind"),
+                "status": result.get("status"), "summary": result.get("summary", ""), "diff": result.get("diff", ""),
+                "demonstrations": result.get("demonstrations", []), "sandbox": result.get("sandbox"),
+                "route": result.get("route"), "approval_token": result.get("approval_token"),
+                "applied": result.get("applied"), "declined": result.get("declined")}
 
     async def repair_event(self, payload: Mapping[str, Any]) -> None:
-        """Repair-service callback: child fixer events render as a ChainOfThought "Repair" under a
-        synthetic tool-use id (``repair:<revision>``); the final result is ``tool_repair_ready``."""
+        """Repair-service callback for the originating session.
+
+        ``investigating`` -> ``tool_repair_investigating``; A2A progress (``a2a``) renders as the
+        ChainOfThought "Repair" under the synthetic tool-use id ``repair:<revision>``; ``approval``
+        -> ``tool_repair_approval`` (the verified artifact, the parked interrupt, the approval
+        token); ``ready`` -> ``tool_repair_ready`` (terminal: applied / declined / failed / blocked
+        / cancelled / needs_maintainer / not_reproducible).
+        """
         revision = str(payload.get("revision", ""))
         tool_use = {"toolUseId": f"repair:{revision}", "name": "repair", "input": {"tool": payload.get("tool_name")}}
+        if "investigating" in payload:
+            info = dict(payload["investigating"])
+            await self._tool_input(tool_use, ())
+            await self._emit("tool_repair_investigating", tool=payload.get("tool_name"), rev=revision,
+                             kind=info.get("kind"), count=info.get("count"), exception_class=info.get("exception_class"),
+                             context_id=info.get("context_id"))
+            return
+        if "approval" in payload:
+            result = dict(payload["approval"])
+            interrupt = result.pop("interrupt", None)
+            await self._emit("tool_repair_approval", **self._repair_fields(result), interrupt=interrupt)
+            return
         if "ready" in payload:
             result = dict(payload["ready"])
-            await self._tool_result({"toolUseId": tool_use["toolUseId"], "status": "success" if result.get("status") in ("verified", "active") else "error",
+            ok = result.get("status") in ("verified", "active") or result.get("applied")
+            await self._tool_result({"toolUseId": tool_use["toolUseId"], "status": "success" if ok else "error",
                                      "content": [{"json": _wire(result)}]}, (), name="repair")
-            await self._emit("tool_repair_ready", tool=result.get("tool_name"), rev=result.get("revision"),
-                             repair_kind=result.get("repair_kind"),
-                             status=result.get("status"), summary=result.get("summary", ""),
-                             demonstrations=result.get("demonstrations", []), sandbox=result.get("sandbox"),
-                             route=result.get("route"))
+            await self._emit("tool_repair_ready", **self._repair_fields(result))
+            return
+        if "a2a" in payload:
+            await self._tool_input(tool_use, ())
+            await self._emit("tool_progress", id=tool_use["toolUseId"], name="repair", data=payload["a2a"])
             return
         if "event" in payload:
             await self._tool_input(tool_use, ())
@@ -619,12 +648,26 @@ class SessionRun:
                 self.status = "running"
                 await self._emit_locked("run_started", model_id=self.selection.get("model_id"), provider=self.selection.get("provider"))
             final = None
-            if not self._cancel.is_set():
-                async with aclosing(self.agent.stream_async(prompt, cancel_signal=self._cancel)) as stream:
-                    async for event in stream:
-                        if isinstance(event.get("result"), AgentResult):
-                            final = event["result"]
-                        await self._translate(event)
+            prompt_for_stream: Any = prompt
+            for attempt in range(2):
+                try:
+                    if self._cancel.is_set():
+                        break
+                    async with aclosing(self.agent.stream_async(prompt_for_stream, cancel_signal=self._cancel)) as stream:
+                        async for event in stream:
+                            if isinstance(event.get("result"), AgentResult):
+                                final = event["result"]
+                            await self._translate(event)
+                    break
+                except ContextWindowOverflowException:
+                    # The conversation manager already had its chance inside the SDK
+                    # (reduce_context, then retry). A fresh agent on this same session
+                    # loads snapshot_latest — the turn that overflowed — and continues
+                    # it. The pre-run checkpoint is not restored; that would drop the turn.
+                    if attempt or self._cancel.is_set():
+                        raise
+                    await self._reopen_agent()
+                    prompt_for_stream = None
             async with self._lock:
                 self.status = "finishing"
             await self._announce_repair_proposal()

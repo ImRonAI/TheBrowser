@@ -500,7 +500,7 @@ function MonthView({ date }: { date: Date }) {
               whileHover={{ 
                 scale: isCurrentMonth ? 1.05 : 1,
                 backgroundColor: isCurrentMonth 
-                  ? 'rgba(99, 102, 241, 0.05)' 
+                  ? 'rgba(194, 106, 65, 0.05)' 
                   : 'transparent'
               }}
               className={`
@@ -624,7 +624,7 @@ function QuarterView({ date }: { date: Date }) {
                         className={`
                           w-6 h-6 rounded-full flex items-center justify-center text-xs
                           ${isToday
-                            ? 'bg-gradient-to-br from-indigo-500 to-violet-500 text-white font-bold shadow-[0_0_8px_rgba(99,102,241,0.4)]'
+                            ? 'bg-gradient-to-br from-indigo-500 to-violet-500 text-white font-bold shadow-[0_0_8px_rgba(194,106,65,0.4)]'
                             : isCurrentMonth
                               ? 'text-ink dark:text-ink-inverse'
                               : 'text-ink-muted dark:text-ink-inverse-muted'

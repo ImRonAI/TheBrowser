@@ -69,15 +69,16 @@ def _named(name):
 
 
 PARENT_TOOLS = ["shell", "recall", "search_memories", "ask_user", "tool_catalog",
-                "user_browser_playwright_click", "strands_manage_background_task"]
-ALLOWED = ["recall", "search_memories", "shell"]
+                "user_browser_playwright_click", "strands_manage_background_task",
+                "http_request", "perplexity_search"]
+ALLOWED = ["http_request", "perplexity_search", "recall", "search_memories", "shell"]
 
 
-def _run(think_input):
+def _run(think_input, prompt="think hard"):
     model = ParentAndChildModel(think_input)
     agent = Agent(model=model, tools=[load_vendored_think(PROJECT_TOOLS_DIR), *map(_named, PARENT_TOOLS)],
                   plugins=[ThinkToolsGuard()], callback_handler=None)
-    result = asyncio.run(agent.invoke_async("think hard"))
+    result = asyncio.run(agent.invoke_async(prompt))
     results = [b["toolResult"] for m in agent.messages for b in m["content"] if "toolResult" in b]
     return model, result, results
 
@@ -95,6 +96,31 @@ def test_guard_gives_the_think_child_only_non_parent_only_tools_when_omitted():
     assert result.stop_reason == "end_turn"
     assert model.child_tools == [ALLOWED]
     assert results[0]["status"] == "success" and "child conclusion" in json.dumps(results[0])
+
+
+def test_guard_withholds_research_tools_when_the_user_said_browser_only():
+    """2026-10-15: a 'browser only' flight search was answered by the think child over fetch/search."""
+    prompt = "Find the cheapest flight from Palm Springs to Buffalo. Use the browser only."
+    model, _, _ = _run({"thought": "plan", "cycle_count": 1, "system_prompt": CHILD_PROMPT}, prompt=prompt)
+    assert model.child_tools == [["recall", "search_memories", "shell"]]
+    model, _, _ = _run({"thought": "plan", "cycle_count": 1, "system_prompt": CHILD_PROMPT,
+                        "tools": ["http_request", "shell"]}, prompt="Browser-only please: book it.")
+    assert model.child_tools == [["shell"]]
+
+
+def test_browser_only_detection_reads_the_current_request_only():
+    from agent.api.core.panel_tools import browser_only_requested
+
+    def user(text):
+        return {"role": "user", "content": [{"text": text}]}
+    tool_turn = {"role": "user", "content": [{"toolResult": {"toolUseId": "t", "status": "success", "content": []}}]}
+    assert browser_only_requested([user("Look this up. Use the browser only."), tool_turn])
+    assert browser_only_requested([user("only use the browser for this")])
+    assert browser_only_requested([user("browser-only")])
+    assert not browser_only_requested([user("open the browser and also search the web")])
+    # A later request without the restriction lifts it.
+    assert not browser_only_requested([user("Use the browser only."), tool_turn, user("Now summarize from memory.")])
+    assert not browser_only_requested([])
 
 
 def test_guard_filters_an_explicit_tool_list():

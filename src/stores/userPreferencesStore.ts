@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { createJSONStorage, persist } from 'zustand/middleware'
+import { applyThemeClasses, nextTheme } from '@/lib/theme'
 
 type Theme = 'light' | 'dark' | 'glass' | 'system'
 type InteractionMode = 'talk' | 'type'
@@ -81,38 +82,17 @@ export const useUserPreferencesStore = create<UserPreferencesState>()(
 
       setTheme: (theme: Theme) => {
         set({ theme })
-        // Apply theme to document
+        // Apply theme to document (light / dark / glass / system — see lib/theme.ts)
         if (typeof window !== 'undefined') {
-          const root = document.documentElement
-          // Remove theme classes first
-          root.classList.remove('dark', 'glass')
-
-          if (theme === 'dark') {
-            root.classList.add('dark')
-            localStorage.setItem('theme', 'dark')
-          } else if (theme === 'light') {
-            localStorage.setItem('theme', 'light')
-          } else if (theme === 'glass') {
-            root.classList.add('dark', 'glass')
-            localStorage.setItem('theme', 'glass')
-          } else {
-            // System preference fallback: default to dark to preserve Ron's DS
-            root.classList.add('dark')
-            localStorage.setItem('theme', 'dark')
-          }
-
-          // Notify Electron main process
+          applyThemeClasses(theme)
+          // Notify Electron main process (window background + macOS vibrancy)
           window.electron?.setTheme(theme)
         }
       },
 
       toggleTheme: () => {
-        const currentTheme = get().theme
-        // Cycle: system -> dark -> light -> system
-        const themeOrder: Theme[] = ['system', 'dark', 'light']
-        const currentIndex = themeOrder.indexOf(currentTheme)
-        const nextIndex = (currentIndex + 1) % themeOrder.length
-        get().setTheme(themeOrder[nextIndex])
+        // Cycle: light -> dark -> glass -> system -> light
+        get().setTheme(nextTheme(get().theme))
       },
 
       setContentDensity: (density: ContentDensity) => {
@@ -168,7 +148,11 @@ export const useUserPreferencesStore = create<UserPreferencesState>()(
           state.setTheme('glass')
           return
         }
-        // No stored theme or system: force dark
+        if (storedTheme === 'system') {
+          state.setTheme('system')
+          return
+        }
+        // No stored theme: dark is Ron's default
         state.setTheme('dark')
       }
     }
@@ -185,20 +169,15 @@ if (typeof window !== 'undefined') {
     store.setTheme('light')
   } else if (storedTheme === 'glass') {
     store.setTheme('glass')
+  } else if (storedTheme === 'system') {
+    store.setTheme('system')
   } else {
     store.setTheme('dark')
   }
 
-  // Listen for system theme changes
-  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
-    const store = useUserPreferencesStore.getState()
-    if (store.theme === 'system') {
-      const root = document.documentElement
-      if (e.matches) {
-        root.classList.add('dark')
-      } else {
-        root.classList.remove('dark')
-      }
-    }
+  // System and Glass both follow the OS appearance for their ink.
+  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+    const { theme } = useUserPreferencesStore.getState()
+    if (theme === 'system' || theme === 'glass') applyThemeClasses(theme)
   })
 }

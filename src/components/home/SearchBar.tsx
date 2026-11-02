@@ -57,7 +57,7 @@ export function SearchBar() {
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.9 }}
               style={{
-                background: 'radial-gradient(circle at center, rgba(99, 102, 241, 0.08), transparent 70%)',
+                background: 'radial-gradient(circle at center, rgba(194, 106, 65, 0.08), transparent 70%)',
                 filter: 'blur(24px)',
               }}
             />
@@ -75,7 +75,7 @@ export function SearchBar() {
               strokeLinejoin="round"
               animate={{
                 scale: isFocused ? 1.1 : 1,
-                color: isFocused ? 'rgb(99, 102, 241)' : undefined,
+                color: isFocused ? 'rgb(194, 106, 65)' : undefined,
               }}
               transition={{ duration: 0.2 }}
             >

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import {
-  CHAIN_TOOLS, PanelReplayOverflow, PanelSSEParser, emptyPanelState, groupThinkParts, hydratePanelSession, parsePanelEvent, readPanelStream, reconcilePanelSession, isBrowserUnavailable, isNativePart, reducePanelEvent, resolveBrowserSelection, shouldFollowPanel,
+  CHAIN_TOOLS, PanelReplayOverflow, PanelSSEParser, emptyPanelState, groupThinkParts, hydratePanelSession, parsePanelEvent, readPanelStream, reconcilePanelSession, isBrowserUnavailable, isHitlApproval, repairToolTitle, isNativePart, reducePanelEvent, resolveBrowserSelection, shouldFollowPanel,
   type NativePart, type PanelEvent, type PanelPart, type ToolPart,
 } from './panel-stream.ts'
 
@@ -530,6 +530,20 @@ test('isBrowserUnavailable detects the availability-hook interrupt by reason.bro
   }
 })
 
+test('isHitlApproval matches the native HumanInTheLoop prompt and nothing else', () => {
+  assert.equal(isHitlApproval('Approve "apply_repair"?\n  Input: {"revision": "r1"}'), true)
+  assert.equal(isHitlApproval('approve "apply_repair"'), false)
+  assert.equal(isHitlApproval({ question: 'Continue?' }), false)
+  assert.equal(isHitlApproval(null), false)
+})
+
+test('repair chain card title comes from the synthetic repair tool only', () => {
+  assert.equal(repairToolTitle({ name: 'repair', finished: false }), 'Repairing…')
+  assert.equal(repairToolTitle({ name: 'repair', finished: true }), 'Repair finished')
+  assert.equal(repairToolTitle({ name: 'a2a_send_message', finished: false }), null)
+  assert.equal(repairToolTitle({ name: 'shell', finished: false }), null)
+})
+
 test('native_tool envelopes become NativePart entries: output items once, reasoning steps merged', () => {
   const base = { version: 1, session_id: 's', run_id: 'r1', node_path: [] as unknown[] }
   const env = (sequence: number, extra: Record<string, unknown>): PanelEvent =>
@@ -588,42 +602,77 @@ test('image_search native_tool events retain queries and image results on Native
   assert.equal(natives[2].item?.type, 'image_search_results')
 })
 
-test('tool_repair_proposed and tool_repair_ready reduce into state and an activity line; repair is a chain tool', () => {
+test('tool_repair_investigating / approval / ready reduce into one investigation; repair is a chain tool', () => {
   let state = reducePanelEvent(emptyPanelState('session'), event(1, 'run_started', { model_id: 'm', provider: 'p' }))
+  // Stored sessions may still carry the former proposal event; it is parsed, never acted on.
   state = reducePanelEvent(state, event(2, 'tool_repair_proposed', {
     id: 'prop1', tool: 'perplexity_search', exception_class: 'KeyError', count: 2, observation: false, outcome: { arg_types: { query: 'str' } },
   }))
   assert.deepEqual(state.repairProposal, { id: 'prop1', tool: 'perplexity_search', kind: 'library', exceptionClass: 'KeyError', count: 2, observation: false })
+
+  // The investigation starts on its own (server hook), inside the failing run.
+  state = reducePanelEvent(state, event(3, 'tool_repair_investigating', {
+    tool: 'perplexity_search', rev: 'r1', kind: 'library', exception_class: 'KeyError', count: 2, context_id: 'repair-r1',
+  }))
+  assert.equal(state.repairProposal, undefined)
+  assert.deepEqual(state.repair, { tool: 'perplexity_search', rev: 'r1', state: 'investigating', kind: 'library', exceptionClass: 'KeyError', count: 2, demonstrations: [] })
   const assistant = state.messages.find((m) => m.role === 'assistant')
   assert.ok(assistant)
-  const activity = assistant.parts.find((p) => p.kind === 'activity')
-  assert.ok(activity && activity.kind === 'activity' && activity.text.startsWith('Repair proposed · perplexity_search'))
+  assert.ok(assistant.parts.some((p) => p.kind === 'activity' && p.text.startsWith('Investigating · perplexity_search failed (2× KeyError)')))
 
-  // The fixer's child events stream under the synthetic root tool `repair:<rev>`.
-  state = reducePanelEvent(state, event(3, 'tool_input', { id: 'repair:r1', name: 'repair', input: { tool: 'perplexity_search' } }))
-  state = reducePanelEvent(state, { ...event(4, 'text_delta', { data: 'reproducing…' }), node_path: ['repair:r1'] })
-  state = reducePanelEvent(state, event(5, 'tool_result', { id: 'repair:r1', name: 'repair', status: 'success', content: [] }))
+  // The fixer's A2A progress streams under the synthetic root tool `repair:<rev>`.
+  state = reducePanelEvent(state, event(4, 'tool_input', { id: 'repair:r1', name: 'repair', input: { tool: 'perplexity_search' } }))
+  state = reducePanelEvent(state, event(5, 'tool_progress', { id: 'repair:r1', name: 'repair', data: { kind: 'artifact', text: 'reproducing…' } }))
+  state = reducePanelEvent(state, { ...event(6, 'text_delta', { data: 'reproducing…' }), node_path: ['repair:r1'] })
+  state = reducePanelEvent(state, event(7, 'tool_result', { id: 'repair:r1', name: 'repair', status: 'success', content: [] }))
   const parts = state.messages.find((m) => m.role === 'assistant')!.parts
   assert.ok(CHAIN_TOOLS.has('repair'))
   const grouped = groupThinkParts(parts, false)
   const chain = grouped.find((item) => item.kind === 'think')
   assert.ok(chain && chain.kind === 'think' && chain.tool.name === 'repair' && chain.steps.length === 1)
 
-  state = reducePanelEvent(state, event(6, 'tool_repair_ready', {
+  // Verified artifact waiting for the user: the approval token and the parked native interrupt travel with it.
+  const token = 'a'.repeat(64)
+  state = reducePanelEvent(state, event(8, 'tool_repair_approval', {
     tool: 'perplexity_search', rev: 'r1', status: 'verified', summary: 'Guarded the missing key.', sandbox: 'docker', route: 'repair',
+    repair_kind: 'file', diff: '-a\n+b', approval_token: token,
+    interrupt: { interruptId: 'v1:before_tool_call:u1:x', name: 'strands:human-in-the-loop', reason: 'Approve "apply_repair"?' },
     demonstrations: [
       { kind: 'failing', input: { query: 'x' }, status: 'passed', dry_run: false, source: 'session' },
       { kind: 'context', input: { query: 'y' }, status: 'passed', dry_run: false, source: 'synthetic' },
     ],
   }))
-  assert.equal(state.repairProposal, undefined)
-  assert.equal(state.repairReady?.rev, 'r1')
-  assert.equal(state.repairReady?.status, 'verified')
-  assert.equal(state.repairReady?.demonstrations.length, 2)
-  assert.equal(state.repairReady?.demonstrations[1].source, 'synthetic')
-  assert.ok(state.messages.find((m) => m.role === 'assistant')!.parts.some((p) => p.kind === 'activity' && p.text.startsWith('Repair verified · perplexity_search revision r1')))
+  assert.equal(state.repair?.state, 'approval')
+  assert.equal(state.repair?.status, 'verified')
+  assert.equal(state.repair?.approvalToken, token)
+  assert.equal(state.repair?.interrupt?.interruptId, 'v1:before_tool_call:u1:x')
+  assert.equal(state.repair?.repairKind, 'file')
+  assert.equal(state.repair?.diff, '-a\n+b')
+  assert.equal(state.repair?.demonstrations.length, 2)
+  assert.equal(state.repair?.demonstrations[1].source, 'synthetic')
+  assert.ok(state.messages.find((m) => m.role === 'assistant')!.parts.some((p) => p.kind === 'activity' && p.text.startsWith('Repair ready for your approval · perplexity_search revision r1')))
+
+  // Terminal: applied. The token is gone (nothing left to approve); demonstrations/diff carry over.
+  state = reducePanelEvent(state, event(9, 'tool_repair_ready', {
+    tool: 'perplexity_search', rev: 'r1', status: 'active', summary: 'Guarded the missing key.', sandbox: 'docker', route: 'repair',
+    repair_kind: 'file', applied: { revision: 'r1', live_sessions_reloaded: ['session'] },
+  }))
+  assert.equal(state.repair?.state, 'done')
+  assert.equal(state.repair?.status, 'active')
+  assert.equal(state.repair?.applied, true)
+  assert.equal(state.repair?.approvalToken, undefined)
+  assert.equal(state.repair?.demonstrations.length, 2)
+  assert.ok(state.messages.find((m) => m.role === 'assistant')!.parts.some((p) => p.kind === 'activity' && p.text.startsWith('Repair active · perplexity_search revision r1')))
+
+  // A new investigation of another revision starts fresh; a declined outcome is terminal too.
+  state = reducePanelEvent(state, event(10, 'tool_repair_investigating', { tool: 'perplexity_search', rev: 'r2', kind: 'library', count: 1 }))
+  assert.equal(state.repair?.rev, 'r2')
+  assert.equal(state.repair?.demonstrations.length, 0)
+  state = reducePanelEvent(state, event(11, 'tool_repair_ready', { tool: 'perplexity_search', rev: 'r2', status: 'declined', declined: true }))
+  assert.equal(state.repair?.state, 'done')
+  assert.equal(state.repair?.declined, true)
 
   // Malformed envelopes never poison state.
-  const bad = reducePanelEvent(state, event(7, 'tool_repair_ready', { status: 'failed' }))
-  assert.equal(bad.repairReady?.rev, 'r1')
+  const bad = reducePanelEvent(state, event(12, 'tool_repair_ready', { status: 'failed' }))
+  assert.equal(bad.repair?.rev, 'r2')
 })

@@ -46,7 +46,7 @@ export function ProjectsIndexPage() {
   })
 
   return (
-    <div className="min-h-full relative overflow-hidden bg-surface-0 dark:bg-surface-900">
+    <div className="glass-page min-h-full relative overflow-hidden bg-surface-0 dark:bg-surface-900">
       <PageBackground />
       <div className="relative z-10 px-10 py-8 space-y-8">
         <ProjectsSyncStatus initialize />

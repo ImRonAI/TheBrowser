@@ -1,33 +1,12 @@
 /**
- * Ambient backdrop for the search page: two slow radial orbs keyed to the active
- * tab's hue plus the app's signature hairline grid. The orbs cross-fade (never snap)
- * as the user moves between lenses.
+ * Backdrop for the search page. The redesign drops the hue-keyed orbs and grid:
+ * the page is plain paper/graphite with one faint warm wash under the header.
+ * `hue` is kept on the contract for callers.
  */
-import { motion } from 'framer-motion'
-import { hueWash } from './tabs-meta'
-
-export function SearchBackdrop({ hue }: { hue: string }) {
+export function SearchBackdrop({ hue: _hue }: { hue: string }) {
   return (
-    <div className="absolute inset-0 overflow-hidden pointer-events-none" aria-hidden>
-      <motion.div
-        className="absolute -top-[35%] -left-[15%] w-[75%] h-[75%] rounded-full blur-3xl"
-        animate={{ background: `radial-gradient(closest-side, ${hueWash(hue, 0.09)}, transparent)` }}
-        transition={{ duration: 1.1, ease: [0.16, 1, 0.3, 1] }}
-      />
-      <motion.div
-        className="absolute -bottom-[30%] -right-[15%] w-[65%] h-[65%] rounded-full blur-3xl"
-        animate={{ background: `radial-gradient(closest-side, ${hueWash(hue, 0.07)}, transparent)` }}
-        transition={{ duration: 1.1, ease: [0.16, 1, 0.3, 1] }}
-      />
-      <div
-        className="absolute inset-0 opacity-[0.02] dark:opacity-[0.035]"
-        style={{
-          backgroundImage:
-            'linear-gradient(rgba(99, 102, 241, 0.4) 1px, transparent 1px),' +
-            'linear-gradient(90deg, rgba(99, 102, 241, 0.4) 1px, transparent 1px)',
-          backgroundSize: '56px 56px',
-        }}
-      />
+    <div className="pointer-events-none absolute inset-x-0 top-0 h-40 overflow-hidden" aria-hidden>
+      <div className="absolute inset-0 bg-gradient-to-b from-surface-50/80 via-surface-50/30 to-transparent dark:from-surface-850/50 dark:via-surface-850/20" />
     </div>
   )
 }

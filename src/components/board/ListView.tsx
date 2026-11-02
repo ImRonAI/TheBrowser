@@ -148,7 +148,7 @@ export function ListView() {
                 'group flex items-center gap-3 px-5 py-3',
                 'border-b border-surface-100 dark:border-surface-800/50',
                 'hover:bg-indigo-500/[0.03] dark:hover:bg-indigo-500/[0.04]',
-                'hover:shadow-[inset_0_0_0_1px_rgba(99,102,241,0.08)]',
+                'hover:shadow-[inset_0_0_0_1px_rgba(194,106,65,0.08)]',
                 'transition-all duration-200 cursor-pointer'
               )}
             >
