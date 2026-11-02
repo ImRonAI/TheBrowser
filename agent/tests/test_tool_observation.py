@@ -86,9 +86,9 @@ def test_tool_outcome_shape():
                        "implementation": None, "wrapped": [], "source": None}
 
 
-def test_provenance_reports_wrapper_chain_and_vendored_source(tmp_path):
-    """A catalog-loaded library tool reports its file (relative to the library) + sha; a renamed
-    facade reports both the wrapper chain and the innermost source."""
+def test_provenance_reports_vendored_source(tmp_path):
+    """A catalog-loaded library tool reports its file (relative to the library) + sha; the renamed
+    ``perplexity_search`` built by ``build_core_tools`` is stamped with the same source."""
     from strands.hooks import AfterToolCallEvent
 
     from agent.api.core import panel_tools
@@ -96,12 +96,13 @@ def test_provenance_reports_wrapper_chain_and_vendored_source(tmp_path):
 
     path = PROJECT_TOOLS_DIR / "research" / "perplexity_search_api.py"
     loaded = panel_tools.load_library_tool(PROJECT_TOOLS_DIR, path, "perplexity_search_api")
-    renamed = panel_tools._RenamedTool(loaded, "perplexity_search")
+    assert tool_observation.tool_source(loaded)["path"] == "research/perplexity_search_api.py"
+    renamed = next(t for t in panel_tools.build_core_tools(PROJECT_TOOLS_DIR) if t.tool_name == "perplexity_search")
     event = AfterToolCallEvent(agent=None, selected_tool=renamed, tool_use={"toolUseId": "t", "name": "perplexity_search", "input": {"query": "SECRETVALUE", "n": 2}},
                                invocation_state={}, result={"toolUseId": "t", "status": "success", "content": []}, exception=None, duration=0.1)
     outcome = tool_observation.tool_outcome(event)
-    assert outcome["implementation"] == "_RenamedTool"
-    assert outcome["wrapped"] == ["_AsyncNativeTool", "DecoratedFunctionTool"]
+    assert outcome["implementation"] == "DecoratedFunctionTool"
+    assert outcome["wrapped"] == []
     assert outcome["source"]["path"] == "research/perplexity_search_api.py"
     assert outcome["source"]["sha256"] == tool_observation.file_sha256(path)
     assert tool_observation.is_library_tool(renamed)

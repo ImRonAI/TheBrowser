@@ -38,7 +38,7 @@ Read the source under repair and the recorded outcome, then reproduce the record
 Determine whether the defect is in the tool or in one of Ron's wrapper layers around it.
 
 **Constraints:**
-- You MUST reproduce the failure twice: once calling the tool function directly, and once through the recorded `implementation` / `wrapped` chain (`_AsyncNativeTool`, `_RenamedTool`, `_IdempotentMCPTool`, `_AdaptedTool` in `/sources/core/panel_tools.py` and `/sources/core/tool_repair.py`; `_MCPToolView`, `_OwnedPanelCatalog` in `/sources/core/panel_agent.py`; the hooks `ThinkToolsGuard`, `BrowserAvailabilityHook`, `ToolObservation`).
+- You MUST reproduce the failure twice: once calling the tool function directly, and once through the recorded `implementation` / `wrapped` chain (`_AdaptedTool` in `/sources/core/tool_repair.py` is the only tool wrapper; `_MCPToolView`, `_OwnedPanelCatalog` in `/sources/core/panel_agent.py`; the hooks `MCPConnectionGuard`, `ThinkToolsGuard`, `BrowserAvailabilityHook`, `ToolObservation`).
 - If ONLY the wrapped call fails, you MUST set `fix_type="WRAPPER_FIX"`; when the wrapper is Ron's core code you MUST submit `status="needs_maintainer"` with the patch as `diff` and a test under `/workspace/tests/`, because `/sources/core` is shared code that no per-user revision can replace.
 - You MUST NOT re-wrap the tool to hide a wrapper defect because that would stack a second layer on a broken one and make the next failure harder to diagnose.
 - You MUST record `wrapper_audit` as `{direct_call, wrapped_call, conclusion}`.

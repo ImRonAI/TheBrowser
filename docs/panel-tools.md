@@ -61,51 +61,37 @@ ownership. Build agents off the event loop if provider/plugin initialization may
 block. Drain native work before provider cleanup. Do not register the same MCP
 client both directly on the parent and through the catalog.
 
-## Dynamic meta-tools
+## Core tools and `tool_catalog`
 
 ```python
-create_catalog_tools(catalog: PanelToolCatalog, project_tools_dir: Path) -> list[AgentTool]
-adapt_native_tool(value: AgentTool) -> AgentTool
+build_core_tools(project_tools_dir: Path) -> list[AgentTool]
+create_tool_catalog(catalog: PanelToolCatalog, project_tools_dir: Path, *, mcp_servers: Mapping[str, Any]) -> AgentTool
+load_library_tool(root: Path, path: Path, name: str, *, revision_file: Path | None = None) -> AgentTool
+MCPConnectionGuard()      # Plugin: BeforeToolCallEvent cancel for redundant mcp_client connect/load_tools
+ThinkToolsGuard()         # Plugin: BeforeToolCallEvent rewrite of think.py's `tools` (and blank model_provider)
 ```
 
-The returned list contains:
+`build_core_tools` registers the installed `strands_tools` modules (`mcp_client`,
+`editor`, `shell`, `environment`, `http_request`) **as the native tool objects their
+modules export**. `DecoratedFunctionTool` and `PythonAgentTool` already offload
+synchronous bodies with `asyncio.to_thread`, so there are no async or rename facades.
+`perplexity_search` is the vendored `research/perplexity_search_api.py` function
+re-declared with `@tool(name="perplexity_search")` over its `__wrapped__`, stamped
+with its source (`stamp_source`) for CAT-49 provenance.
 
-| Tool | Model-facing inputs | Behavior |
-| --- | --- | --- |
-| `discover_tools` | `query: str = ""` | Recursively parses `.py` ASTs under the project tools root without importing them. Reports decorated function names/descriptions, literal `TOOL_SPEC` declarations, configured MCP names, and active catalog names. |
-| `load_tool` | `path: str, name: str` | Loads a named export from a `.py` file under the project tools root into an isolated staging registry; queues publication after the tool batch. Relative paths resolve against that root. |
-| `editor` | Native editor schema | Async streaming facade over installed `strands_tools.editor`; native validation, results and sync-body `asyncio.to_thread` offload are preserved. Supports create/view/replace/insert/search/undo. |
-| `load_mcp_server` | `name: str` | Starts only a server in the application-configured `mcpServers` mapping, with native registry ownership; queues its tools after the batch. No transport config or executable supplied by the model. |
+`mcp_client` idempotency is `MCPConnectionGuard`: a native `BeforeToolCallEvent`
+callback that sets `cancel_tool` when `connect` targets an already-active connection,
+or when `load_tools` targets a connection whose tools are already registered in **this**
+agent (checked through `_connection_id` on the registry entries, so a child agent or a
+name collision still loads). The SDK writes the cancel message into the tool result.
 
-This preserves the usable creation flow: **editor create → discover → load → use**
-within one native agent invocation. `load_tool` returns `activation="after_tools_batch"`;
-it does not claim the new tool is available to a sibling call in the current batch.
-Direct calls outside an agent invocation stay queued until the next invocation.
-
-`load_tool` executes `ToolRegistry.load_tool_from_filepath` in a worker thread on
-a **staging registry**, not the active parent. That native API is deprecated for
-SDK 2.0 but still present in 1.56. Only the explicitly named export is published.
-Both `@tool` functions and legacy `TOOL_SPEC` modules are supported. Re-loading a
-previously loaded name replaces it at the boundary. Static tools, foreign plugin
-tools, normalized `-`/`_` collisions and provider-owned names cannot be overwritten.
-The returned adapter is marked dynamic and appears in both registry maps.
-
-`register_dynamic_tool()` is not used alone: it writes only `dynamic_tools`.
-Native `register_tool()` with `mark_dynamic()` and `replace()` keep lookup and
-model specifications consistent across both maps. Native `load_tool_from_filepath`
-loads code; it is not a sandbox. `STRANDS_DISABLE_LOAD_TOOL=true` is honored.
-The editor operates on host paths and preserves its existing consent behavior;
-it does not globally change environment flags. Native tools 0.8.6 deprecates
-`editor` in favor of vended `file_editor`; the compatibility adapter retains the
-requested editor interface. For non-interactive deployments the parent must
-configure existing editor consent behavior appropriately.
-
-`adapt_native_tool` delegates only known native `DecoratedFunctionTool` and
-`PythonAgentTool` streams. Both inspected implementations offload sync function
-bodies via `asyncio.to_thread`. It does not invoke the agent, wrap an old recursive
-discovery agent, invent a scheduler, or monkeypatch any module. Other AgentTools
-must implement async streaming themselves. An arbitrary loaded tool can still
-contain application logic; this adapter does not audit its source or dependencies.
+`tool_catalog` (`create_tool_catalog`) is the model-facing meta-tool: `list`/`search`/
+`describe` parse `.py` ASTs under the project tools root without importing; `load`
+publishes one vendored tool or one configured MCP server after the current tool batch
+(`AfterToolsEvent`). `load_library_tool`/`stage_tool` import the file through the native
+`load_tools_from_file_path` loader (synthetic `ron_vendored_tools.<category>.<module>`
+package so relative imports resolve), mark the tool dynamic and stamp its source.
+A per-user tool-repair revision (`revision_file`) is executed under the same module name.
 
 ## Catalog lifecycle and safe boundaries
 
@@ -114,7 +100,7 @@ ModelFactory = Callable[[str], Model]
 AsyncToolLoader = Callable[[], Awaitable[Sequence[AgentTool]]]
 ToolAssignment = AgentTool | MCPClient
 
-ManagedMCP(client: MCPClient, refresh: AsyncToolLoader | None = None)
+ManagedMCP(client: MCPClient)
 PanelToolCatalog(
     *, tools: Sequence[AgentTool] = (),
     managed_mcp: Sequence[ManagedMCP] = (),
@@ -128,9 +114,6 @@ catalog.request_refresh() -> None  # Thread-safe dirty notification only.
 catalog.child_tools(names: Sequence[str]) -> tuple[ToolAssignment, ...]
 async catalog.stage_tool(path: Path, name: str, *, agent: Agent) -> list[str]
 async catalog.stage_mcp_server(name: str, *, agent: Agent) -> list[str]
-async list_mcp_tools(
-    client: MCPClient, *, prefix: str | None = None, tool_filters: Any = None,
-) -> list[AgentTool]
 ```
 
 `stage_tool` is the lower-level trusted application API; the model-facing wrapper
@@ -171,10 +154,8 @@ the parent registry. Existing callbacks are preserved and restored on cleanup.
 
 Initial-discovery races are covered: a notification during startup can supersede
 the initial list. Cleanup does not hold the catalog lock while joining MCP workers,
-so a concurrent callback cannot deadlock teardown. An optional `ManagedMCP.refresh`
-can provide explicit polling; otherwise the notification payload is authoritative.
-`list_mcp_tools` remains an explicit fresh-pagination helper and uses 1.56's native
-constructor defaults when prefix/filters are omitted.
+so a concurrent callback cannot deadlock teardown. The notification payload is
+authoritative; there is no application-side polling or re-listing helper.
 
 Lazy MCP activation uses native `MCPClient.load_servers(...,
 prefix_with_server_name=True)` and accepts flat mappings or `{"mcpServers": ...}`.
@@ -264,7 +245,6 @@ ChildSpec(
 async create_child_agent(
     spec: ChildSpec, *, model_factory: ModelFactory, plugins: Sequence[Any] = (),
 ) -> Agent
-async create_subagent_tool(spec: ChildSpec, *, model_factory: ModelFactory) -> AgentTool
 GraphSpec(
     name: str, nodes: Mapping[str, ChildSpec | GraphSpec | SwarmSpec],
     edges: tuple[tuple[str, str], ...] = (), entry_points: tuple[str, ...] = (),
@@ -302,9 +282,7 @@ must compose a separate child catalog/Agent; parent meta-tools close over the pa
 and reject calls from a different agent. Do not share mutable agent-as-tool instances
 between unrelated conversations.
 
-`create_subagent_tool` uses native `Agent.as_tool(preserve_context=False)`; parent
-composition owns eventual `returned_tool.agent.cleanup()`. Native concurrent use
-returns a busy error. Formations instantiate native Graph/Swarm/nested Graphs per
+Formations instantiate native Graph/Swarm/nested Graphs per
 call and consume `stream_async` **once**. No post-stream `invoke_async` reexecution.
 Native scheduling/handoffs remain in the SDK. Their async generator's last yield
 is the tool result. Intermediate envelopes retain nested node IDs/events; final
@@ -329,12 +307,6 @@ shown above. The unused `BackgroundReferences` / `create_background_tools` addit
 and their tests have been removed. There is no application-side scheduling
 implementation or external AsyncToolManager integration in these helpers.
 
-`LoopCallbackBridge(handler)` is a callback delivery utility, not an agent scheduler:
-construct it on the receiving loop, call `bridge(**event)` from threads, and await
-`bridge.aclose()` before loop shutdown. It queues serializable events with
-`call_soon_threadsafe`, retains its worker, drains accepted callbacks and reports
-handler errors. Avoid forwarding both native stream and callback copies to one sink.
-
 The exact supplied commits were read via `gh api` (no installation):
 
 1. [`aws-samples/sample-strands-agents-agentskills@c5564fcd2e7c249ec57b32027ffbea49e9abeb7b`](https://github.com/aws-samples/sample-strands-agents-agentskills/tree/c5564fcd2e7c249ec57b32027ffbea49e9abeb7b)
@@ -354,12 +326,9 @@ The exact supplied commits were read via `gh api` (no installation):
 Direct external-manager integration is therefore not enabled for native panel tools:
 it would introduce competing dispatch/result ownership and misleading cancellation.
 Live does not install this package. `GoogleGeminiLiveModel` declares its functions `NON_BLOCKING`.
-If an application already owns an audited manager at that commit, its independent
-sync jobs may report serializable progress/completion through `LoopCallbackBridge`;
-the application owns submission, owner/reference mapping, shutdown and any explicit
-next-turn dispatch. Do not instantiate the external `AsyncAgent`, pass native async
-tools to `submit`, or schedule the same job through native background tasks as well.
-No unverified dependencies were installed and no optional capability is advertised.
+Do not instantiate the external `AsyncAgent`, pass native async tools to `submit`,
+or schedule the same job through native background tasks as well. No unverified
+dependencies were installed and no optional capability is advertised.
 
 ## A2A exports and limitations
 

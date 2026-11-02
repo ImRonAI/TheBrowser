@@ -220,6 +220,25 @@ class PerplexityResponsesModel(OpenAIResponsesModel):
             events.append({"perplexity": state.queue.get_nowait()})  # type: ignore[typeddict-unknown-key]
         return events
 
+    @classmethod
+    @override
+    def _format_request_messages(cls, messages: Messages) -> list[dict[str, Any]]:
+        """Parent formatting, except a tool-result turn's text follows its ``function_call_output`` items.
+
+        The SDK's ``ContextInjector(trigger="everyTurn")`` appends text to the last user message,
+        which on a tool-result turn also holds the ``toolResult`` blocks. The parent emits that
+        turn as ``message, function_call_output...``; the Perplexity Agent API rejects text between
+        a ``function_call`` and its outputs with ``400 invalid_request`` (live-verified on
+        ``xai/grok-4.5``) and accepts ``function_call_output..., message``.
+        """
+        formatted: list[dict[str, Any]] = []
+        for message in messages:
+            items = super()._format_request_messages([message])
+            if message["role"] == "user" and any("toolResult" in block for block in message["content"]):
+                items.sort(key=lambda item: item.get("type") != "function_call_output")
+            formatted.extend(items)
+        return formatted
+
     @override
     def _format_request(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
         """Parent request, retargeted at the Agent API envelope."""

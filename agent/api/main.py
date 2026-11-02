@@ -24,6 +24,7 @@ from agent.api.endpoints import bidi
 from agent.api.endpoints import memory
 from agent.api.endpoints import teaching, teaching_observe
 from agent.api.endpoints import tool_repairs
+from agent.api.core.harness_agents import harness_a2a_host
 from agent.api.core.teaching import get_teaching_service, mcp_app as skills_mcp_app
 
 
@@ -88,6 +89,7 @@ async def lifespan(app: FastAPI):
             try:
                 if app.state.panel_a2a is not None:
                     await app.state.panel_a2a.aclose()
+                await harness_a2a_host.aclose()
             finally:
                 for route in mounted_routes:
                     app.routes.remove(route)
@@ -121,6 +123,11 @@ app.include_router(teaching.router, tags=["teaching"])
 app.include_router(teaching_observe.router, tags=["teaching"])
 app.include_router(tool_repairs.router, tags=["tool-repairs"])
 app.mount("/skills/mcp", skills_mcp_app)
+# Stored harness specialists over native A2A (<PANEL_A2A_URL>/agents/<id>). Mounted before the
+# lifespan's /a2a mount so this prefix wins; loopback-only like /a2a (never on the ngrok allowlist).
+from agent.api.core.a2a_tools import a2a_enabled as _a2a_enabled  # noqa: E402
+if _a2a_enabled():
+    app.mount("/a2a/agents", harness_a2a_host)
 
 
 @app.get("/health")

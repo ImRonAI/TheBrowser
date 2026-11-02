@@ -8,6 +8,7 @@ import asyncio
 import json
 import textwrap
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from strands import Agent, tool
@@ -144,7 +145,7 @@ def test_target_kind_classifies_mcp_core_library_and_other(library):
     mcp_tool = Mock(spec=MCPAgentTool)
     mcp_tool.wrapped = None
     assert tool_repair.target_kind(mcp_tool) == "mcp"
-    assert tool_repair.target_kind(panel_tools._AsyncNativeTool(mcp_tool)) == "mcp"  # browser tools are wrapped MCP tools
+    assert tool_repair.target_kind(tool_repair._AdaptedTool(mcp_tool, SimpleNamespace(), "r")) == "mcp"  # adapted MCP tools stay mcp
     assert tool_repair.target_kind(None) == "other"
     # Every kind is repairable per user (file / adapter / server); only a system prompt is not.
     assert tool_repair.route_fix("OTHERS", source_path="x.py", kind="mcp") == "repair"
@@ -556,12 +557,20 @@ def test_activate_checks_sha_then_reload_takes_effect_at_next_invocation_and_rol
     # from the next invocation on (native ToolRegistry.replace semantics).
     swapped: dict = {}
 
-    class SwapDuringCall(panel_tools._AsyncNativeTool):
+    class SwapDuringCall(AgentTool):
+        def __init__(self, wrapped):
+            super().__init__()
+            self.wrapped = wrapped
+
+        tool_name = property(lambda self: self.wrapped.tool_name)
+        tool_spec = property(lambda self: self.wrapped.tool_spec)
+        tool_type = property(lambda self: self.wrapped.tool_type)
+
         async def stream(self, tool_use, invocation_state, **kwargs):
             if not swapped:
                 swapped["done"] = await catalog.reload_tool("flaky", agent=live, root=library, path=path,
                                                             revision_file=Path(active["revision_file"]))
-            async for event in super().stream(tool_use, invocation_state, **kwargs):
+            async for event in self.wrapped.stream(tool_use, invocation_state, **kwargs):
                 yield event
 
     old_tool = SwapDuringCall(panel_tools.load_library_tool(library, path, "flaky"))

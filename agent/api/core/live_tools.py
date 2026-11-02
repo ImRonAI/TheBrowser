@@ -125,7 +125,7 @@ def build_live_tools(
         available = list(agent.tool_registry.registry.values()) if agent is not None else host
         return [
             value for value in available
-            if value.tool_name not in {"use_skill", "list_learned_skills"}
+            if value.tool_name not in {"use_skill", "list_learned_skills", "create_harness"}
             and not value.tool_name.startswith("strands_") and not is_browser_tool(value.tool_name)
             and not value.tool_name.startswith("a2a_")
         ]
@@ -136,8 +136,10 @@ def build_live_tools(
     # BidiAgent takes no plugins: the manager's tools (search_memory, journal-only add_memory and
     # the stores' search_memories via get_tools) are registered directly, with no injection.
     from agent.api.core.a2a_tools import a2a_tools
+    from agent.api.core.harness_agents import create_harness_tools
 
-    return [*host, *learned, *user_memory_manager(user_id, agent_scope).tools, *a2a_tools()]
+    return [*host, *learned, *user_memory_manager(user_id, agent_scope).tools, *a2a_tools(),
+            *create_harness_tools(user_id)]
 
 
 def create_live_agent(model: Any, user_id: str, agent_scope: str, browser: str) -> tuple[BidiAgent, str]:

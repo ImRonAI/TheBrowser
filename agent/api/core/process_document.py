@@ -30,8 +30,8 @@ class CapabilityRequirement(BaseModel):
     kind: CapabilityKind = Field(description="Category of capability: tool, mcp_server, skill, or subagent.")
     name: str = Field(min_length=1, max_length=200, description="Exact registry name of the capability, as listed by tool_catalog or the MCP/skill configuration.")
     purpose: str = Field(min_length=1, max_length=2000, description="Which workflow steps need it and what it does for them.")
-    source: str = Field(min_length=1, max_length=500, description="Where it comes from: installed strands_tools, the vendored catalog, mcp.json, a configured skills directory, or the lesson workspace.")
-    disposition: CapabilityDisposition = Field(description="existing = already available and preferred over a duplicate; new = must be authored in the lesson workspace; unavailable = genuinely missing or blocked.")
+    source: str = Field(min_length=1, max_length=500, description="Where it comes from: installed strands_tools, the vendored catalog, a configured MCP server, a taught or configured skill, a stored specialist agent (list_harness_agents), an A2A agent, or the lesson workspace.")
+    disposition: CapabilityDisposition = Field(description="existing = already available and preferred over a duplicate; new = must be authored in the lesson workspace or created with create_harness at publication; unavailable = genuinely missing or blocked.")
     loader: str | None = Field(default=None, max_length=500, description="Native loading mechanism, e.g. tool_catalog(action=\"load\", name=...). Omit when none is known.")
     verification: str | None = Field(default=None, max_length=1000, description="How successful registration is verified in the agent registry. Omit when none is known.")
 
@@ -48,6 +48,10 @@ class ProcessDocument(BaseModel):
     # Default keeps reviews persisted before capability analysis valid; an empty list means "not recorded", not "none".
     capabilities: list[CapabilityRequirement] = Field(default_factory=list, max_length=80,
         description="Every tool, MCP server, agent skill, and subagent the workflow depends on, assessed per category. Prefer existing capabilities; list genuinely missing ones as unavailable.")
+    implementation: str = Field(default="", max_length=6000,
+        description="The most efficient way to perform this workflow from now on and why: compare reusing existing tools, skills, MCP servers or specialist agents with connecting an MCP server, authoring a tool or script, writing an Agent Skill, or creating a specialist agent with create_harness. The learned workflow is always published as a native Agent SOP.")
+    questions: list[str] = Field(default_factory=list, max_length=30,
+        description="Questions the user must answer before approval; each one changes the workflow if answered differently. Empty when nothing is unresolved.")
 
 
 def render_capabilities(capabilities: list[CapabilityRequirement]) -> str:
@@ -127,6 +131,8 @@ footer{{margin-top:var(--space-10);border-top:1px solid var(--rule);padding-top:
 <p class="overview">{escape(document.overview)}</p><p class="metadata">Revision {revision} · {escape(created_at)} · {len(document.steps)} steps · {len(document.capabilities)} capabilities</p></header>
 <section class="preparation" aria-label="Preparation"><div><h2>Before you begin</h2>{items(document.prerequisites, "No additional prerequisites were identified.")}</div>
 <div><h2>Inputs</h2>{items(document.inputs, "No additional inputs were identified.")}</div></section>
+<section class="closing" aria-labelledby="questions-heading"><h2 id="questions-heading">Questions for you</h2>{items(document.questions, "Ron has no open questions about this revision.")}<p class="quiet">Answer them in the correction box; Ron prepares a new revision with your answers.</p></section>
+<section class="closing" aria-labelledby="implementation-heading"><h2 id="implementation-heading">Recommended implementation</h2>{f'<p class="instructions">{escape(document.implementation)}</p>' if document.implementation else '<p class="quiet">No implementation recommendation was recorded in this revision.</p>'}</section>
 <section class="closing" aria-labelledby="capabilities-heading"><h2 id="capabilities-heading">Required capabilities</h2><p class="quiet">Tools, MCP servers, agent skills, and subagents the workflow depends on. Existing capabilities are preferred; nothing is loaded or created until this revision is approved.</p>{render_capabilities(document.capabilities)}</section>
 <section aria-labelledby="workflow-heading"><h2 id="workflow-heading">The workflow</h2><ol class="stages">{stages}</ol></section>
 <section class="closing"><h2>What done looks like</h2>{items(document.completion_criteria, "")}</section>

@@ -21,6 +21,7 @@ interface TeachingSession {
   review_failure?: boolean
   review?: { revision: number; created_at: string; journal_digest: string; html: string } | null
   approval?: { revision: number; approved_at: string; journal_digest: string } | null
+  demonstration?: { status: 'running' | 'completed' | 'blocked' | 'failed' | 'skipped'; started_at: string; finished_at?: string; evidence?: string; result?: string } | null
 }
 interface LearnedSkill { id: string; name: string; description: string; files: string[]; tool_group?: { name: string; members: { id: string; kind: string; target: string }[]; steps: { step: number; member_ids: string[] }[] } }
 type CaptureState = 'idle' | 'starting' | 'observing' | 'stopping'
@@ -312,8 +313,9 @@ function TeachingWorkspace({ userId, agentId, apiBaseUrl = LIVE_API_BASE_URL, ch
     if (mounted.current) { setSessions(history.sessions); setSkills(learned.skills) }
   }, [request, scope])
 
+  const demonstrating = session?.demonstration?.status === 'running'
   useEffect(() => {
-    if (!session || !['compiling', 'reviewing'].includes(session.status)) return
+    if (!session || (!['compiling', 'reviewing'].includes(session.status) && !demonstrating)) return
     let current = true
     let timer: ReturnType<typeof setTimeout>
     const poll = async () => {
@@ -321,7 +323,7 @@ function TeachingWorkspace({ userId, agentId, apiBaseUrl = LIVE_API_BASE_URL, ch
         const saved = await request<TeachingSession>(`/sessions/${encodeURIComponent(session.id)}?${scope}`)
         if (!current) return
         setSession(saved)
-        if (['compiling', 'reviewing'].includes(saved.status)) timer = setTimeout(() => void poll(), 2000)
+        if (['compiling', 'reviewing'].includes(saved.status) || saved.demonstration?.status === 'running') timer = setTimeout(() => void poll(), 2000)
         else await refresh()
       } catch (cause) {
         if (current) { setError(message(cause)); timer = setTimeout(() => void poll(), 5000) }
@@ -329,7 +331,7 @@ function TeachingWorkspace({ userId, agentId, apiBaseUrl = LIVE_API_BASE_URL, ch
     }
     timer = setTimeout(() => void poll(), 1000)
     return () => { current = false; clearTimeout(timer) }
-  }, [session?.id, session?.status, request, refresh, scope])
+  }, [session?.id, session?.status, demonstrating, request, refresh, scope])
 
   const transition = async (sessionId: string, action: 'finish' | 'review' | 'approve', extra: Record<string, unknown> = {}) => {
     setBusy(true); setError(null)
@@ -495,9 +497,10 @@ function TeachingWorkspace({ userId, agentId, apiBaseUrl = LIVE_API_BASE_URL, ch
         } else if (data.type === 'transcript' && 'text' in data && typeof data.text === 'string') setTranscript(data.text)
         else if (data.type === 'error') fail('message' in data && typeof data.message === 'string' ? data.message : 'Gemini observation failed.')
         else if (data.type === 'stopped') {
-          // Analyze only when the user finished a demonstration that actually recorded observations.
-          // The review is a document for human approval; nothing is published here.
-          const finish = finishAfterStop.current && observed.current
+          // Analyze only when the demonstration finished (user Finish, or the observer's finish_observation)
+          // and actually recorded observations. The review is a document for human approval; nothing is published here.
+          const finished = 'finished' in data && data.finished === true
+          const finish = (finishAfterStop.current || finished) && observed.current
           disconnect(); setCapture('idle')
           setSession((current) => current ? { ...current, status: 'recorded' } : current)
           setMinimized(false)
@@ -575,7 +578,9 @@ function TeachingWorkspace({ userId, agentId, apiBaseUrl = LIVE_API_BASE_URL, ch
         <div className="teaching-body">
           {(error || session?.error) && <p role="alert" className="teaching-error">{error || session?.error}</p>}
           {processing && <div role="status" className="teaching-progress"><Loader2 className="animate-spin" size={19} /><div><strong>{session?.status === 'reviewing' ? 'Analyzing workflow and capabilities' : 'Building the approved skill'}</strong><p>{session?.status === 'reviewing' ? 'Ron is following the Learning a New Skill protocol: organizing the saved observations and determining which existing or new tools, MCP servers, skills, and subagents the workflow needs. Nothing is created until you approve.' : 'Saving the skill, ordered SOP, and reusable capability group.'}</p></div></div>}
-          {session?.status === 'ready' ? <section className="teaching-saved"><CheckCheck size={36} /><p className="teaching-meta">ADDED TO THIS AGENT’S LIBRARY</p><h2>{savedSkill?.name || session.title}</h2><p>{savedSkill?.description || 'Your approved process is saved as a reusable skill.'}</p><div className="teaching-saved-assets"><span><BookOpen size={18} />Skill</span><span><FileText size={18} />Ordered SOP</span>{savedSkill?.tool_group && <span><Layers3 size={18} />{savedSkill.tool_group.members.length} capabilities</span>}</div><button className="teaching-button" onClick={() => { setSession(null); setTitle(''); setObjective(''); setContext(''); setFeedback(''); setError(null); setArtifact(null) }}><Plus size={16} />Teach another skill</button></section>
+          {session?.status === 'ready' ? <section className="teaching-saved"><CheckCheck size={36} /><p className="teaching-meta">ADDED TO THIS AGENT’S LIBRARY</p><h2>{savedSkill?.name || session.title}</h2><p>{savedSkill?.description || 'Your approved process is saved as a reusable skill.'}</p><div className="teaching-saved-assets"><span><BookOpen size={18} />Skill</span><span><FileText size={18} />Ordered SOP</span>{savedSkill?.tool_group && <span><Layers3 size={18} />{savedSkill.tool_group.members.length} capabilities</span>}</div>
+            {session.demonstration && <div role="status" className="teaching-progress">{session.demonstration.status === 'running' ? <Loader2 className="animate-spin" size={19} /> : <CheckCheck size={19} />}<div><strong>{session.demonstration.status === 'running' ? 'Ron is demonstrating the skill' : `Demonstration ${session.demonstration.status}`}</strong><p>{session.demonstration.status === 'running' ? 'Following the new SOP once with the approved tools, so you can watch it work.' : session.demonstration.result || session.demonstration.evidence || ''}</p></div></div>}
+            <button className="teaching-button" onClick={() => { setSession(null); setTitle(''); setObjective(''); setContext(''); setFeedback(''); setError(null); setArtifact(null) }}><Plus size={16} />Teach another skill</button></section>
           : review ? <section className="teaching-review"><div className="teaching-section-heading"><div><p className="teaching-meta">LEARNING A NEW SKILL / PROCESS DOCUMENT / REVISION {review.revision}</p><h2>Read it before Ron learns it.</h2><p className="teaching-footnote">The document lists the workflow and the capabilities it requires — existing tools, MCP servers, skills, and subagents Ron found, plus anything new or unavailable.</p></div><span className="teaching-meta">{session?.journal.length} evidence entries · {session?.approval?.revision === review.revision ? 'Approved' : 'Not yet published'}</span></div>
             <iframe title={`Learning a New Skill — process document revision ${review.revision}`} sandbox="" srcDoc={review.html} className="teaching-document" />
             <div className="teaching-review-controls"><div><label htmlFor={`${id}-feedback`}>Anything to correct?</label><textarea id={`${id}-feedback`} value={feedback} onChange={(event) => setFeedback(event.target.value)} disabled={locked} rows={3} maxLength={10000} placeholder="Describe the change Ron should make to this process…" /><button className="teaching-button" disabled={locked || !feedback.trim()} onClick={() => session && void transition(session.id, 'review', { revision: review.revision, feedback: feedback.trim() })}>Revise process</button>{session?.review_failure && <button className="teaching-button" disabled={locked} onClick={() => void transition(session.id, 'finish')}>Retry process review</button>}</div><div className="teaching-approval"><label><input type="checkbox" checked={approved} disabled={locked} onChange={(event) => setApproved(event.target.checked)} /><span>I have reviewed revision {review.revision} and approve this process.</span></label><button className="teaching-button primary" disabled={locked || !!session?.review_failure || (!approved && session?.approval?.revision !== review.revision)} onClick={() => session && void transition(session.id, 'approve', { revision: review.revision })}>{session?.approval?.revision === review.revision ? 'Retry approved generation' : 'Approve and generate'}<ArrowRight size={16} /></button><p>Creates the skill, SOP, and capability group from this exact revision.</p></div></div>

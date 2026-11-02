@@ -282,13 +282,13 @@ async def perplexity_search_api(
         query: A single natural-language search query.
         queries: Several queries to run together (up to 5); use instead of `query`.
         max_results: Maximum number of results to return (1-20, default 10).
-        max_tokens: Total token budget across all result snippets.
-        max_tokens_per_page: Token budget per result page.
+        max_tokens: Total token budget across all result snippets. Omit when using search_context_size (the API rejects the combination).
+        max_tokens_per_page: Token budget per result page. Omit when using search_context_size (the API rejects the combination).
         search_domain_filter: Restrict to these domains, e.g. ["arxiv.org"]; prefix with "-" to exclude.
         search_recency_filter: Only recent content: one of "hour", "day", "week", "month", "year".
         search_after_date_filter: Only content published after this date (M/D/YYYY).
         search_before_date_filter: Only content published before this date (M/D/YYYY).
-        search_context_size: Snippet depth: "low", "medium" or "high".
+        search_context_size: Snippet depth: "low", "medium" or "high". Mutually exclusive with max_tokens and max_tokens_per_page; prefer this alone.
         country: Two-letter ISO country code to localize results, e.g. "US".
         user_location: Optional location object with city/region/country/latitude/longitude.
         return_images: Also fetch representative images for each result.

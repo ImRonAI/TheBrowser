@@ -262,7 +262,7 @@ See [storage implementation details](../agent/docs/panel-storage.md).
 ## Tools
 
 The agent always carries the mandated core set, registered from the installed
-`strands_tools` package (sync bodies offloaded via `adapt_native_tool`) plus the
+`strands_tools` package (registered as the native tool objects; the SDK offloads sync bodies) plus the
 vendored Strands `@tool`:
 
 | Tool | Source | Purpose |
