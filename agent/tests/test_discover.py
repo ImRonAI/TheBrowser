@@ -284,3 +284,100 @@ def test_rich_in_feed_and_answer_endpoint():
             assert sections[1]["items"] == [] and sections[3]["error"]["code"] == "invalid_request"
     asyncio.run(scenario())
 
+
+
+# ─── Brave Answers (POST /chat/completions) ────────────────────────────────────────────────────────
+
+def answers_sse(*deltas: str, model: str = "brave-pro", finish: str | None = "stop") -> str:
+    """SSE body in the documented ``chat.completion.chunk`` shape, one delta per event."""
+    chunks = []
+    for index, delta in enumerate(deltas):
+        last = index == len(deltas) - 1
+        chunks.append(json.dumps({"model": model, "system_fingerprint": "", "id": "acac687c", "object": "chat.completion.chunk",
+                                  "created": 1791378104, "usage": None,
+                                  "choices": [{"delta": {"role": "assistant", "content": delta}, "finish_reason": finish if last else None}]}))
+    return "".join(f"data: {chunk}\n\n" for chunk in chunks) + "data: [DONE]\n\n"
+
+
+CITATION = {"start_index": 0, "end_index": 6, "number": 1, "url": "https://en.wikipedia.org/wiki/K2", "favicon": "https://f/ico", "snippet": "K2 is the second-highest mountain"}
+USAGE = {"X-Request-Requests": 1, "X-Request-Queries": 2, "X-Request-Tokens-In": 1234, "X-Request-Tokens-Out": 300, "X-Request-Total-Cost": 0.01567}
+
+
+def fake_answers(seen: list[dict] | None = None, *, status: int = 200, error: dict | None = None) -> httpx.MockTransport:
+    def respond(request: httpx.Request) -> httpx.Response:
+        assert request.method == "POST" and request.url.path == "/res/v1/chat/completions"
+        assert request.headers.get("x-subscription-token") == "answers-key"
+        body = json.loads(request.content)
+        if seen is not None:
+            seen.append(body)
+        if status != 200:
+            return httpx.Response(status, json={"type": "ErrorResponse", "error": error or {"detail": "boom", "code": "INTERNAL"}})
+        text = answers_sse("**K2** i", "s the second highest mountain.", f"<citation>{json.dumps(CITATION)}</citation>", f"<usage>{json.dumps(USAGE)}</usage>")
+        return httpx.Response(200, headers={"content-type": "text/event-stream"}, content=text.encode())
+    return httpx.MockTransport(respond)
+
+
+def test_answers_body_is_exactly_the_documented_schema_and_clamps_research_bounds():
+    seen: list[dict] = []
+    answers = bs.BraveAnswersClient("answers-key", transport=fake_answers(seen), limiter=bs.RateLimiter(1000))
+    asyncio.run(answers.answer("What is the second highest mountain?"))
+    assert seen[0] == {"messages": [{"role": "user", "content": "What is the second highest mountain?"}], "model": "brave", "stream": True,
+                       "country": "us", "language": "en", "safesearch": "moderate", "enable_citations": True, "enable_research": False}
+    asyncio.run(answers.answer("history of rome", model="brave-pro", country="IT", language="it", enable_research=True,
+                               search_context_size="high", research_maximum_number_of_queries=500, research_maximum_number_of_seconds=0))
+    body = seen[1]
+    assert body["model"] == "brave-pro" and body["country"] == "IT" and body["language"] == "it"
+    assert body["enable_research"] is True and body["enable_citations"] is False, "citations are not supported in research mode"
+    assert body["web_search_options"] == {"search_context_size": "high"}
+    assert body["research_maximum_number_of_queries"] == 50 and body["research_maximum_number_of_seconds"] == 1
+    with pytest.raises(bs.BraveSearchError):
+        answers.body("x", research_maximum_number_of_moons=3)
+    with pytest.raises(bs.BraveSearchError):
+        answers.body("   ")
+
+
+def test_answers_stream_parses_text_citation_and_usage_tags():
+    answers = bs.BraveAnswersClient("answers-key", transport=fake_answers(), limiter=bs.RateLimiter(1000))
+    result = asyncio.run(answers.answer("What is the second highest mountain?"))
+    assert result.text == "**K2** is the second highest mountain."
+    assert result.citations[0].number == 1 and result.citations[0].url.endswith("/K2") and result.citations[0].snippet.startswith("K2 is")
+    assert result.usage["X-Request-Total-Cost"] == 0.01567 and result.model == "brave-pro" and result.finish_reason == "stop"
+    assert bs.parse_answer_delta("<citation>not json</citation>") == ("text", None), "a malformed tag is kept as text, never dropped"
+    assert bs.parse_answer_delta("<usage>{\\"a\\":1}</usage>") == ("usage", {"a": 1})
+
+
+def test_answers_error_mapping():
+    for status, error, code in [
+        (429, {"detail": "Request rate limit exceeded for plan", "code": "RATE_LIMITED"}, "rate_limited"),
+        (402, {"detail": "payment", "code": "PAYMENT_REQUIRED"}, "payment_required"),
+        (400, {"detail": "The option is not included in the plan.", "code": "OPTION_NOT_IN_PLAN"}, "not_in_plan"),
+        (422, {"detail": "The provided API key is invalid.", "code": "SUBSCRIPTION_TOKEN_INVALID"}, "unauthorized"),
+        (500, {"detail": "boom", "code": "INTERNAL"}, "upstream"),
+    ]:
+        answers = bs.BraveAnswersClient("answers-key", transport=fake_answers(status=status, error=error), limiter=bs.RateLimiter(1000))
+        with pytest.raises(bs.BraveSearchError) as info:
+            asyncio.run(answers.answer("q"))
+        assert info.value.code == code, status
+    with pytest.raises(bs.BraveSearchError) as info:
+        asyncio.run(bs.BraveAnswersClient(None, limiter=bs.RateLimiter(1000)).answer("q"))
+    assert info.value.code == "not_configured"
+
+
+def test_brave_answer_tool_is_native_async_and_returns_the_collected_answer():
+    from agent.api.core import brave_answers_tool
+
+    brave_answers_tool.set_answers_client(bs.BraveAnswersClient("answers-key", transport=fake_answers(), limiter=bs.RateLimiter(1000)))
+    try:
+        tool = brave_answers_tool.brave_answer
+        assert tool.tool_name == "brave_answer"
+        schema = tool.tool_spec["inputSchema"]["json"]
+        assert schema["required"] == ["question"]
+        assert set(schema["properties"]) >= {"question", "model", "country", "language", "enable_citations", "enable_research",
+                                             "search_context_size", "research_maximum_number_of_queries", "research_maximum_number_of_seconds"}
+        result = asyncio.run(tool._tool_func(question="What is the second highest mountain?"))
+        assert result["answer"].startswith("**K2**") and result["citations"][0]["url"].endswith("/K2") and result["usage"]["X-Request-Queries"] == 2
+        brave_answers_tool.set_answers_client(bs.BraveAnswersClient(None, limiter=bs.RateLimiter(1000)))
+        failed = asyncio.run(tool._tool_func(question="q"))
+        assert failed["status"] == "error" and "not_configured" in failed["content"][0]["text"]
+    finally:
+        brave_answers_tool.set_answers_client(None)

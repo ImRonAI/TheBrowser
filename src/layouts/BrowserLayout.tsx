@@ -3,6 +3,7 @@ import { motion } from 'framer-motion'
 import { ChromeToolbar } from '@/components/chrome/ChromeToolbar'
 import { TabBar } from '@/components/chrome/TabBar'
 import { AgentPanel } from '@/components/agent-panel/AgentPanel'
+import { MusicSidePanel } from '@/components/agent-panel/MusicSidePanel'
 import { ScreenVisionOverlay } from '@/components/agent-panel/ScreenVisionOverlay'
 import { InterestMenuSync } from '@/components/interests/InterestMenuSync'
 import { InterestsWidget } from '@/components/interests/InterestsWidget'
@@ -171,6 +172,8 @@ function BrowserLayoutContent({ children }: BrowserLayoutProps) {
         <AgentPanel />
         <AgentCursor />
         <div id="ron-teaching-slot" className="pointer-events-none absolute inset-0 z-[60]" />
+        {/* Music side tab + deck: visible only while Lyria RealTime is playing or a take awaits saving. */}
+        <MusicSidePanel />
 
         {/* Screen Vision Overlay */}
         <ScreenVisionOverlay />

@@ -18,7 +18,7 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from strands.bidi.models.google import GoogleGeminiLiveModel
 
 from agent.api.core import config
-from agent.api.core.live_io import LiveSocketInput, WebSocketOutput, context_text, local_origin
+from agent.api.core.live_io import LiveSocketInput, ToolCallRecovery, WebSocketOutput, context_text, local_origin
 from agent.api.core.live_tools import close_live_music, create_live_agent
 
 logger = logging.getLogger(__name__)
@@ -28,9 +28,22 @@ router = APIRouter()
 MODELS = ("gemini-3.8-live-extended-thinking", "gemini-3.8-live")
 # Default is the regular model: gemini-3.8-live-extended-thinking usually announces a browser
 # action, never emits the toolCall, and then reports "a system error occurred" (reproduced on the
-# raw Live WebSocket with the official doc declaration, so it is provider-side). gemini-3.8-live
-# calls the same declarations every time.
+# raw Live WebSocket with the official doc declaration, so it is provider-side; tracked as
+# googleapis/python-genai#3015). gemini-3.8-live calls the same declarations every time. Extended
+# sessions get ``ToolCallRecovery`` (the community workaround: one text nudge once the model is idle).
 DEFAULT_MODEL = MODELS[1]
+
+
+def live_outputs(websocket: WebSocket, model: str) -> list[Any]:
+    """The socket output plus, for the extended model only, the dropped-tool-call recovery stream."""
+    outputs: list[Any] = [WebSocketOutput(websocket)]
+    if model == MODELS[0] and config.LIVE_TOOL_NUDGE_ENABLED:
+        outputs.append(ToolCallRecovery(
+            report=lambda frame: _send(websocket, frame),
+            stall_seconds=config.LIVE_TOOL_NUDGE_STALL_SECONDS,
+            max_per_turn=config.LIVE_TOOL_NUDGE_MAX_PER_TURN,
+        ))
+    return outputs
 VOICES = ("Puck", "Charon", "Kore", "Fenrir", "Aoede", "Leda", "Orus", "Zephyr")
 EFFORTS = ("low", "medium", "high")
 
@@ -135,7 +148,7 @@ async def bidi(
             })
         await agent.run(
             inputs=[LiveSocketInput(websocket, pending, context)],
-            outputs=[WebSocketOutput(websocket)],
+            outputs=live_outputs(websocket, model),
         )
     except WebSocketDisconnect:
         return

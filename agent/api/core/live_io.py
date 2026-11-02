@@ -215,6 +215,116 @@ class TeachingObserveInput:
                 return {"text": STOP_REQUEST}
 
 
+#: Spoken by gemini-3.8-live-extended-thinking when it drops a tool call server-side (python-genai#3015).
+TOOL_DROP_PHRASES = ("system error", "error occurred")
+#: The community workaround from python-genai#3015: a short text nudge after the model goes idle.
+TOOL_NUDGE = (
+    "[system] Your previous tool call was never sent and did not run; there was no real system error. "
+    "Call the tool now, then verify the actual result."
+)
+
+
+class ToolCallRecovery:
+    """``OutputStream`` that re-prompts extended-thinking when it drops a tool call (NOT NATIVE).
+
+    ``gemini-3.8-live-extended-thinking`` intermittently announces a tool call, never emits the
+    ``toolCall`` frame, and then either speaks "a system error occurred" and goes ``IDLE`` or stalls
+    ``IN_PROGRESS`` forever (googleapis/python-genai#3015; reproduced on the raw WebSocket with
+    Google's own sample, so nothing client-side prevents it). The SDK has no hook for this, so this
+    stream watches the agent's own output events and, at most ``max_per_turn`` times per user turn,
+    sends one native ``RealtimeInput(text=TOOL_NUDGE)`` via ``agent.send`` when either:
+
+    * the assistant transcript of a turn that produced no tool call contains a ``TOOL_DROP_PHRASES``
+      match and the interaction goes ``idle``; or
+    * the interaction has been ``in_progress`` for ``stall_seconds`` after ``turn_complete`` with
+      neither a tool call nor further speech.
+
+    A turn that emitted ``bidi_tool_use_blocks`` is never nudged. ``report`` receives one
+    ``{"type": "warning", "code": "tool_call_recovered", ...}`` frame per nudge so the renderer can
+    show what happened. Only attach it for the extended model.
+    """
+
+    def __init__(self, report: Any = None, *, stall_seconds: float = 12.0, max_per_turn: int = 2,
+                 clock: Any = None) -> None:
+        self._report = report
+        self._stall_seconds = stall_seconds
+        self._max_per_turn = max_per_turn
+        self._clock = clock
+        self._agent: Any = None
+        self._tool_seen = False
+        self._assistant_text: list[str] = []
+        self._nudges_this_turn = 0
+        self._stall_task: asyncio.Task[None] | None = None
+        self.nudges = 0
+
+    def _now(self) -> float:
+        return self._clock() if self._clock is not None else asyncio.get_running_loop().time()
+
+    async def start(self, agent: Any) -> None:
+        self._agent = agent
+
+    async def stop(self) -> None:
+        self._cancel_stall()
+
+    def _cancel_stall(self) -> None:
+        if self._stall_task is not None:
+            self._stall_task.cancel()
+            self._stall_task = None
+
+    def _reset_turn(self) -> None:
+        self._tool_seen = False
+        self._assistant_text.clear()
+        self._nudges_this_turn = 0
+        self._cancel_stall()
+
+    async def __call__(self, event: Any) -> None:
+        kind = event.get("type") if isinstance(event, dict) else None
+        if kind == "bidi_tool_use_blocks":
+            self._tool_seen = True
+            self._cancel_stall()
+        elif kind == "bidi_transcript_delta" and event.get("role") == "user":
+            self._reset_turn()
+        elif kind == "bidi_transcript_delta" and event.get("role") == "assistant":
+            self._assistant_text.append(str(event.get("delta") or ""))
+            self._cancel_stall()
+        elif kind == "bidi_interaction_status":
+            await self._on_status(event)
+
+    async def _on_status(self, event: dict[str, Any]) -> None:
+        status = event.get("status")
+        if status == "idle":
+            self._cancel_stall()
+            if not self._tool_seen and self._dropped_phrase():
+                await self._nudge("apology")
+            else:
+                self._reset_turn()
+        elif status == "in_progress" and event.get("turn_complete") and not self._tool_seen:
+            self._cancel_stall()
+            self._stall_task = asyncio.get_running_loop().create_task(self._stall_watch())
+
+    def _dropped_phrase(self) -> bool:
+        text = "".join(self._assistant_text).lower()
+        return any(phrase in text for phrase in TOOL_DROP_PHRASES)
+
+    async def _stall_watch(self) -> None:
+        await asyncio.sleep(self._stall_seconds)
+        self._stall_task = None
+        if not self._tool_seen:
+            await self._nudge("stall")
+
+    async def _nudge(self, reason: str) -> None:
+        if self._agent is None or self._nudges_this_turn >= self._max_per_turn:
+            return
+        self._nudges_this_turn += 1
+        self.nudges += 1
+        self._assistant_text.clear()
+        await self._agent.send({"realtime_input": {"text": TOOL_NUDGE}})
+        if self._report is not None:
+            await self._report({"type": "warning", "code": "tool_call_recovered", "reason": reason,
+                                "attempt": self._nudges_this_turn,
+                                "message": "Extended Thinking dropped a tool call; asked it to retry."})
+
+
 class WebSocketOutput:
     """``OutputStream``: every native output event, as JSON."""
 

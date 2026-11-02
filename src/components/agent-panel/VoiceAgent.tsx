@@ -28,7 +28,6 @@ import { useLiveMusicStore } from '@/stores/liveMusicStore'
 import { useMascotStore } from '@/stores/mascotStore'
 import { genreFromPrompts } from '@/lib/mascot'
 import { COMPACT_SCALE, OubliStage, PINNED_SCALE } from './OubliStage'
-import { MusicDeck } from './MusicDeck'
 import { LIVE_API_BASE_URL } from '@/pages/types/api'
 import { checkLiveApi, liveSocketUrl } from '@/lib/live-api'
 import { projectEndpoint } from '@/lib/project-endpoint'
@@ -91,13 +90,8 @@ export function VoiceAgent({ userId = 'default', agentScope = 'panel', browser =
   const musicStore = useLiveMusicStore
   useEffect(() => {
     if (agentScope !== 'panel') return
-    musicStore.getState().attach({ setVolume: musicSink.setVolume })
-    return () => { musicStore.getState().attach(null); musicStore.getState().reset() }
-  }, [agentScope, musicSink.setVolume, musicStore])
-  useEffect(() => {
-    if (agentScope !== 'panel') return
-    musicStore.getState().publish({ liveStatus: live.status, available: Boolean(live.musicAvailable), music: live.music })
-  }, [agentScope, live.status, live.musicAvailable, live.music, musicStore])
+    musicStore.getState().publish({ liveStatus: live.status, available: Boolean(live.musicAvailable), music: live.music, agentId: live.agentId, userId })
+  }, [agentScope, live.status, live.musicAvailable, live.music, live.agentId, userId, musicStore])
   // Oubli: the analyser taps (voice = mouth, music = body), Live flags, costume and beat clock.
   useEffect(() => {
     if (agentScope !== 'panel') return
@@ -436,6 +430,14 @@ export function VoiceAgent({ userId = 'default', agentScope = 'panel', browser =
     if (sendText(externalPrompt)) onExternalPromptConsumed?.()
   }, [externalPrompt, status, sendText, onExternalPromptConsumed])
 
+  // The music side panel (`MusicSidePanel`, outside this component) drives the sink's volume, reads the
+  // audible chunk for its Edit box and sends that edit to this Live agent as a typed turn.
+  useEffect(() => {
+    if (agentScope !== 'panel') return
+    musicStore.getState().attach({ setVolume: musicSink.setVolume, position: musicSink.position, sendText })
+    return () => { musicStore.getState().attach(null); musicStore.getState().reset() }
+  }, [agentScope, musicSink.setVolume, musicSink.position, sendText, musicStore])
+
   const agentSpeaking = status === 'ready' && (live.playing || live.turns.some((turn) => turn.role === 'assistant' && turn.kind !== 'tool' && !turn.final))
   const presence = agentSpeaking ? 'speaking' : personaState(status, live.activity)
   const caption = personaCaption(status, live.activity, mic, source)
@@ -465,7 +467,6 @@ export function VoiceAgent({ userId = 'default', agentScope = 'panel', browser =
             {stopping ? 'Finishing pending work…' : caption}{status === 'ready' && live.processing && !live.playing ? ' · working' : ''}
           </p>
         </section>
-        {agentScope === 'panel' && (live.musicAvailable || live.music.connected) && <MusicDeck userId={userId} agentId={live.agentId} className="shrink-0" />}
         <div className="flex shrink-0 items-center justify-center gap-2">
           <Button type="button" size="icon" variant="outline" className={iconButton} disabled={status !== 'ready' || stopping} aria-pressed={mic} aria-label={mic ? 'Mute microphone' : 'Enable microphone'} onClick={() => mic ? stopMic() : void startMic()}>
             {mic ? <MicIcon /> : <MicOffIcon />}

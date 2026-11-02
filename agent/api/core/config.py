@@ -70,6 +70,13 @@ LIVE_MUSIC_MODEL = os.getenv("RON_LIVE_MUSIC_MODEL", "models/lyria-realtime-exp"
 LIVE_MUSIC_API_VERSION = os.getenv("RON_LIVE_MUSIC_API_VERSION", "v1beta")
 #: RON_LIVE_MUSIC=0 removes the music_* tools and the Lyria skill from the Live agent.
 LIVE_MUSIC_ENABLED = os.getenv("RON_LIVE_MUSIC", "1") != "0"
+#: gemini-3.8-live-extended-thinking announces a tool call, never emits the toolCall frame, and either
+#: says "a system error occurred" or stalls IN_PROGRESS (googleapis/python-genai#3015, reproduced on the
+#: raw WebSocket with Google's own sample). The community workaround is one text nudge once the model is
+#: idle; RON_LIVE_TOOL_NUDGE=0 disables it, the others bound how long IN_PROGRESS may stall and how often.
+LIVE_TOOL_NUDGE_ENABLED = os.getenv("RON_LIVE_TOOL_NUDGE", "1") != "0"
+LIVE_TOOL_NUDGE_STALL_SECONDS = float(os.getenv("RON_LIVE_TOOL_NUDGE_STALL_SECONDS", "12"))
+LIVE_TOOL_NUDGE_MAX_PER_TURN = int(os.getenv("RON_LIVE_TOOL_NUDGE_MAX_PER_TURN", "2"))
 #: Rolling take kept in memory per Live session for ``music_save`` (48 kHz stereo PCM16 = 192 KB/s;
 #: 240 s = 46 MB, under Supabase Storage's default 50 MB per-file limit). Oldest audio is dropped when full.
 LIVE_MUSIC_RECORD_SECONDS = float(os.getenv("RON_LIVE_MUSIC_RECORD_SECONDS", "240"))

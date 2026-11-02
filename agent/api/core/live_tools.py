@@ -201,9 +201,12 @@ LIVE_MUSIC_ADDENDUM = """
 
 ## Live music (Lyria RealTime)
 You can play and steer live instrumental music for the user with the music_* tools: music_set_weighted_prompts
-starts or steers the stream (the list replaces the previous list; cross-fade with intermediate weights),
-music_set_generation_config sends the whole config (bpm/scale changes need music_playback_control
-"reset_context"), music_playback_control plays/pauses/stops/resets, music_status reports what is in effect,
+starts the stream and plays immediately on first use, and steers it afterwards (the list replaces the previous
+list; cross-fade with intermediate weights). When the user asks for music, call it at once with your first
+prompts; do not ask questions or set config first. The deck's Edit box sends you "[music edit at m:ss]"
+messages: steer from that moment with music_set_weighted_prompts (the stream cannot go back and
+regenerate what already played). music_set_generation_config sends the whole config (bpm/scale changes need
+music_playback_control "reset_context"), music_playback_control plays/pauses/stops/resets, music_status reports what is in effect,
 music_take_status/music_save/music_discard_take manage the rolling recording (save needs a signed-in user)
 and music_close ends it. Saved songs are the user's library: music_library lists them, and
 music_playlists / music_playlist_create / music_playlist_add / music_playlist_remove / music_playlist_reorder /

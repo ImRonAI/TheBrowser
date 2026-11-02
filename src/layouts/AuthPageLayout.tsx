@@ -52,7 +52,7 @@ function AuthPageLayoutInner({ children }: AuthPageLayoutProps) {
   }, [])
 
   return (
-    <div className="min-h-screen w-full bg-surface-50 dark:bg-surface-900 flex relative overflow-hidden">
+    <div className="h-screen w-full bg-surface-50 dark:bg-surface-900 flex relative overflow-hidden">
       {/* Dramatic geometric background - Light mode */}
       <div className="absolute inset-0 dark:hidden">
         {/* Large gradient orb */}
@@ -156,7 +156,7 @@ function AuthPageLayoutInner({ children }: AuthPageLayoutProps) {
       </motion.div>
 
       {/* Right side - Auth form */}
-      <div className="flex-1 flex items-center justify-center p-6 lg:p-16 relative z-10">
+      <div className="flex-1 flex items-start lg:items-center justify-center p-6 lg:p-10 relative z-10 min-h-0 overflow-y-auto">
         <motion.div 
           className="w-full max-w-md"
           initial={{ opacity: 0, x: 24 }}

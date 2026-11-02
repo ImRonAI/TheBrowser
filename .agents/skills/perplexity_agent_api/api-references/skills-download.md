@@ -1,0 +1,130 @@
+> ## Documentation Index
+> Fetch the complete documentation index at: https://docs.perplexity.ai/llms.txt
+> Use this file to discover all available pages before exploring further.
+
+# Get a skill download URL
+
+> Returns a short-lived URL to download the skill bundle as a zip. Without
+`revision`, returns the active revision.
+
+
+
+
+## OpenAPI
+
+````yaml get /v1/skills/{skill_id}/download
+openapi: 3.1.0
+info:
+  title: Perplexity AI API
+  description: Perplexity AI API
+  version: 1.0.0
+servers:
+  - url: https://api.perplexity.ai
+    description: Perplexity AI API
+security: []
+paths:
+  /v1/skills/{skill_id}/download:
+    get:
+      tags:
+        - Skills
+      summary: Get a skill download URL
+      description: |
+        Returns a short-lived URL to download the skill bundle as a zip. Without
+        `revision`, returns the active revision.
+      operationId: downloadSkill
+      parameters:
+        - $ref: '#/components/parameters/SkillId'
+        - $ref: '#/components/parameters/Revision'
+      responses:
+        '200':
+          description: The skill bundle download
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SkillDownload'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '404':
+          description: Skill or revision not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '429':
+          description: Rate limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '502':
+          description: Skill service unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+      security:
+        - HTTPBearer: []
+components:
+  parameters:
+    SkillId:
+      name: skill_id
+      in: path
+      required: true
+      description: Skill identifier returned by create or `GET /v1/skills`
+      schema:
+        type: string
+    Revision:
+      name: revision
+      in: query
+      required: false
+      description: Opaque revision token; when omitted, the active revision is used
+      schema:
+        type: string
+  schemas:
+    SkillDownload:
+      type: object
+      required:
+        - download_url
+      properties:
+        revision:
+          type: string
+          description: Opaque token of the downloaded revision
+        name:
+          type: string
+          description: Skill name at this revision
+        download_url:
+          type: string
+          description: Short-lived URL to download the zip bundle
+    ApiError:
+      type: object
+      properties:
+        error:
+          type: object
+          required:
+            - message
+            - type
+            - code
+          properties:
+            message:
+              description: Human-readable error message
+              type: string
+            type:
+              type: string
+              description: Error type identifier
+            code:
+              type: integer
+              description: HTTP status code
+            param:
+              type: string
+              description: Parameter that caused the error
+              nullable: true
+  securitySchemes:
+    HTTPBearer:
+      type: http
+      scheme: bearer
+
+````

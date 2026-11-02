@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { PauseIcon, PlayIcon, RotateCcwIcon, SaveIcon, SquareIcon, Trash2Icon, Volume2Icon } from 'lucide-react'
+import { LogInIcon, PauseIcon, PlayIcon, RotateCcwIcon, SaveIcon, SquareIcon, Trash2Icon, Volume2Icon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ButtonGroup, ButtonGroupText } from '@/components/ui/button-group'
 import {
@@ -10,10 +10,12 @@ import { Badge } from '@/components/ai-elements/badge'
 import { getSession } from '@/api/supabase'
 import { LIVE_API_BASE_URL } from '@/pages/types/api'
 import {
-  createMusicRequest, describeConfig, formatSeconds, musicControl, musicDeleteSong, musicDiscardTake, musicSave, musicSongs,
-  SIGN_IN_MESSAGE, SOURCE_LABELS, type MusicAction, type SavedSong,
+  createMusicRequest, describeConfig, formatSeconds, musicAddPlaylistSongs, musicControl, musicDeleteSong, musicDiscardTake,
+  musicPlaylists, musicSave, musicSongs, SIGN_IN_MESSAGE, SOURCE_LABELS, type MusicAction, type PlaylistSummary, type SavedSong,
 } from '@/lib/music-api'
 import { musicCaption, useLiveMusicStore } from '@/stores/liveMusicStore'
+import { isGuestUserId, openSignIn } from '@/lib/sign-in'
+import { MusicEditBox } from './MusicEditBox'
 import { PlaylistShelf } from './PlaylistShelf'
 import { usePlaylistPlayer } from './usePlaylistPlayer'
 import { cn } from '@/utils/cn'
@@ -28,8 +30,8 @@ import { cn } from '@/utils/cn'
  */
 export function MusicDeck({ userId, agentId, className }: { userId: string; agentId?: string; className?: string }) {
   const deck = useLiveMusicStore()
-  const { music, available, liveStatus, playing, volume, setVolume, publishTake } = deck
-  const signedIn = userId !== 'default' && !userId.startsWith('guest:')
+  const { music, available, liveStatus, playing, volume, setVolume, publishTake, controls } = deck
+  const signedIn = !isGuestUserId(userId)
   const request = useMemo(() => createMusicRequest(LIVE_API_BASE_URL, getSession, userId), [userId])
   const [busy, setBusy] = useState<MusicAction | 'save' | 'discard' | null>(null)
   const [notice, setNotice] = useState('')
@@ -37,6 +39,9 @@ export function MusicDeck({ userId, agentId, className }: { userId: string; agen
   const [songs, setSongs] = useState<SavedSong[]>([])
   const [signInRequired, setSignInRequired] = useState(false)
   const [libraryOpen, setLibraryOpen] = useState(false)
+  /** Playlists for "Save to playlist" ('' = library only). */
+  const [playlists, setPlaylists] = useState<PlaylistSummary[]>([])
+  const [targetPlaylist, setTargetPlaylist] = useState('')
 
   const run = useCallback(async (label: MusicAction | 'save' | 'discard', action: () => Promise<unknown>) => {
     if (!signedIn) { setNotice(SIGN_IN_MESSAGE); return }
@@ -47,12 +52,23 @@ export function MusicDeck({ userId, agentId, className }: { userId: string; agen
   }, [agentId, signedIn])
 
   const control = (action: MusicAction) => run(action, () => musicControl(request, agentId!, action))
+  // Save the take as a song; optionally append it to a playlist (`/music/save` then `/music/playlists/{id}/songs`,
+  // the same two calls the agent's music_save + music_playlist_add make).
   const save = () => run('save', async () => {
     const result = await musicSave(request, agentId!, title)
-    setNotice(`Saved “${result.title}” (${formatSeconds(result.duration_seconds)}, ${result.segments} segment${result.segments === 1 ? '' : 's'}).`)
+    let where = ''
+    if (targetPlaylist) {
+      const list = await musicAddPlaylistSongs(request, targetPlaylist, [result.song_id])
+      where = ` → ${list.kind === 'album' ? 'album' : 'playlist'} “${list.title}”`
+    }
+    setNotice(`Saved “${result.title}” (${formatSeconds(result.duration_seconds)}, ${result.segments} segment${result.segments === 1 ? '' : 's'})${where}.`)
     setTitle('')
     await loadSongs()
   })
+  useEffect(() => {
+    if (!signedIn) return
+    musicPlaylists(request).then((result) => setPlaylists(result.playlists)).catch(() => setPlaylists([]))
+  }, [signedIn, request])
   const discard = () => run('discard', async () => { publishTake(await musicDiscardTake(request, agentId!) as unknown as Record<string, unknown>) })
 
   const loadSongs = useCallback(async () => {
@@ -97,6 +113,9 @@ export function MusicDeck({ userId, agentId, className }: { userId: string; agen
       </li>)}
     </ul>}
     {chips.length > 0 && <p className="mt-2 text-ink-muted dark:text-ink-inverse-muted">{chips.join(' · ')}</p>}
+
+    {controls?.position && controls.sendText && <MusicEditBox className="mt-3" position={controls.position} prompts={music.prompts}
+      sendText={controls.sendText} disabled={!connected || music.playback !== 'playing'} />}
     {music.filtered.length > 0 && <p role="status" className="mt-2 rounded-lg border border-amber-200 bg-amber-50/70 p-2 dark:border-amber-900 dark:bg-amber-950/20">
       Lyria ignored: {music.filtered.map((item) => `“${item.text ?? '?'}” (${item.reason ?? 'filtered'})`).join(', ')}
     </p>}
@@ -106,14 +125,28 @@ export function MusicDeck({ userId, agentId, className }: { userId: string; agen
       <input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Song title" aria-label="Song title"
         className="min-w-0 flex-1 rounded-lg border border-surface-200 bg-white/70 px-2 py-1 dark:border-surface-700 dark:bg-surface-850" />
       <Button size="sm" variant="outline" disabled={!signedIn || !agentId || takeSeconds <= 0 || busy !== null} onClick={() => void save()} aria-label="Save recorded music"><SaveIcon />Save</Button>
-      <Button size="icon-sm" variant="ghost" disabled={!signedIn || !agentId || takeSeconds <= 0 || busy !== null} onClick={() => void discard()} aria-label="Discard recorded take"><Trash2Icon /></Button>
+      <Button size="icon-sm" variant="ghost" disabled={!signedIn || !agentId || takeSeconds <= 0 || busy !== null} onClick={() => void discard()} aria-label="Delete recorded take"><Trash2Icon /></Button>
     </div>
-    {!signedIn && <p role="status" className="mt-2 text-ink-muted dark:text-ink-inverse-muted">{SIGN_IN_MESSAGE} Ron can still play music for you by voice.</p>}
+    {signedIn && playlists.length > 0 && <label className="mt-2 flex items-center gap-2 text-ink-muted dark:text-ink-inverse-muted">
+      <span className="shrink-0">Save to</span>
+      <select value={targetPlaylist} onChange={(event) => setTargetPlaylist(event.target.value)} aria-label="Playlist to add the saved song to"
+        className="min-w-0 flex-1 rounded-lg border border-surface-200 bg-white/70 px-2 py-1 text-ink dark:border-surface-700 dark:bg-surface-850 dark:text-ink-inverse">
+        <option value="">Library only</option>
+        {playlists.map((list) => <option key={list.id} value={list.id}>{list.kind === 'album' ? 'Album' : 'Playlist'} · {list.title}</option>)}
+      </select>
+    </label>}
+    {!signedIn && <div role="status" className="mt-2 flex flex-wrap items-center gap-2 text-ink-muted dark:text-ink-inverse-muted">
+      <span>Ron plays music for you by voice. Sign in to control the transport and save what you hear.</span>
+      <Button size="sm" variant="outline" onClick={() => openSignIn()} aria-label="Sign in to Ron"><LogInIcon />Sign in</Button>
+    </div>}
     {notice && <p role="status" className="mt-2 whitespace-pre-wrap break-words">{notice}</p>}
 
     <details className="mt-3" open={libraryOpen} onToggle={(event) => setLibraryOpen((event.target as HTMLDetailsElement).open)}>
       <summary className="cursor-pointer font-medium">Saved songs{songs.length ? ` · ${songs.length}` : ''}</summary>
-      {signInRequired && <p className="mt-2 text-ink-muted dark:text-ink-inverse-muted">Sign in to Ron to save and replay music.</p>}
+      {(signInRequired || !signedIn) && <p className="mt-2 flex flex-wrap items-center gap-2 text-ink-muted dark:text-ink-inverse-muted">
+        <span>Sign in to Ron to save and replay music.</span>
+        <Button size="sm" variant="ghost" onClick={() => openSignIn()}><LogInIcon />Sign in</Button>
+      </p>}
       {signedIn && libraryOpen && <PlaylistShelf request={request} songs={songs} player={player} onNotice={setNotice} />}
       <p className="mt-3 font-medium">Songs</p>
       <ul className="mt-2 space-y-3">

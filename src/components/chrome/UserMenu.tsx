@@ -7,12 +7,32 @@ import {
   Palette
 } from 'lucide-react'
 import { useAuthStore } from '@/stores/authStore'
+import { openSignIn } from '@/lib/sign-in'
 import { useUserPreferencesStore } from '@/stores/userPreferencesStore'
 import { cn } from '@/utils/cn'
 
 export function UserMenu() {
-  const { user, logout } = useAuthStore()
+  const { user, isAuthenticated, logout } = useAuthStore()
   const { toggleTheme, theme } = useUserPreferencesStore()
+
+  // Guests: a single entry point to the existing SignInPage (App.tsx renders it on `#signin`).
+  if (!isAuthenticated) {
+    return (
+      <button
+        type="button"
+        onClick={() => openSignIn()}
+        aria-label="Sign in to Ron"
+        className={cn(
+          'px-3 py-1.5 rounded-xl text-sm font-raleway transition-all duration-200',
+          'text-ron-text dark:text-white glass:text-zinc-800',
+          'hover:bg-white/60 dark:hover:bg-white/5 glass:hover:bg-white/40',
+          'hover:scale-[1.02] active:scale-[0.98]'
+        )}
+      >
+        Sign in
+      </button>
+    )
+  }
 
   const getThemeLabel = () => {
     switch (theme) {
@@ -25,6 +45,7 @@ export function UserMenu() {
   return (
     <Menu as="div" className="relative">
       <MenuButton
+        aria-label="Account menu"
         className={cn(
           "flex items-center gap-2 p-1.5 rounded-xl transition-all duration-200",
           "hover:bg-white/60 dark:hover:bg-white/5 glass:hover:bg-white/40",
@@ -40,11 +61,9 @@ export function UserMenu() {
             "bg-gradient-to-br from-royal to-royal-purple dark:from-royal-light dark:to-royal-purple",
             "shadow-md"
           )}>
-            <span className="text-white text-sm font-georgia">
-              {user?.name?.charAt(0).toUpperCase() || 'U'}
-            </span>
+            <span className="text-white text-sm font-georgia">{user?.name?.charAt(0).toUpperCase() || user?.email?.charAt(0).toUpperCase() || 'U'}</span>
           </div>
-          {/* Online indicator */}
+          {/* Signed-in indicator */}
           <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-emerald-500 border-2 border-white dark:border-ron-black glass:border-white/80" />
         </div>
         <ChevronDown className={cn(
@@ -137,10 +156,8 @@ export function UserMenu() {
             </button>
           </MenuItem>
 
-          {/* Divider */}
-          <div className="h-px bg-gradient-to-r from-transparent via-ron-text/10 dark:via-white/10 glass:via-zinc-400/30 to-transparent my-2" />
-
           {/* Sign out */}
+          <div className="h-px bg-gradient-to-r from-transparent via-ron-text/10 dark:via-white/10 glass:via-zinc-400/30 to-transparent my-2" />
           <MenuItem>
             <button
               onClick={logout}
