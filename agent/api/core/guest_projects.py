@@ -17,7 +17,8 @@ from uuid import UUID, uuid4
 from fastapi import HTTPException
 
 TABLES = {"projects", "issues", "issue_links", "issue_events", "activity_log",
-          "issue_agents", "issue_agent_runs", "issue_agent_blobs"}
+          "issue_agents", "issue_agent_runs", "issue_agent_blobs", "project_documents", "document_issue_links",
+          "document_conversations"}
 DEFAULT_TYPES = [{"key": key, "label": key.title(), "level": level} for key, level in
                  [("initiative", 1), ("epic", 2), ("story", 3), ("task", 4), ("bug", 4), ("subtask", 5)]]
 
@@ -173,6 +174,36 @@ class Workspace:
             if not valid:
                 fail(f"Invalid field: {field['label']}")
 
+    def validate_document(self, row):
+        """Mirrors 015_project_documents.sql: title/content bounds, same-project parent, no cycles."""
+        if not isinstance(row.get("title"), str) or not 1 <= len(row["title"].strip()) <= 300:
+            fail("Page title must be 1-300 characters")
+        if not isinstance(row.get("content"), str) or len(row["content"]) > 2_000_000:
+            fail("Page content is too large")
+        ancestor, depth = row.get("parent_id"), 0
+        while ancestor:
+            if ancestor == row["id"]:
+                fail("A page cannot be nested under itself")
+            parent = self.require("project_documents", ancestor)
+            if parent["project_id"] != row["project_id"]:
+                fail("Parent page must belong to the same project")
+            depth += 1
+            if depth > 50:
+                fail("Pages are nested too deeply")
+            ancestor = parent.get("parent_id")
+
+    def document_subtree(self, root_id):
+        """The page and every page nested under it (deleted together, like the SQL cascade)."""
+        pages = self.rows("project_documents")
+        ids, frontier = {root_id}, [root_id]
+        while frontier:
+            current = frontier.pop()
+            for page in pages:
+                if page.get("parent_id") == current and page["id"] not in ids:
+                    ids.add(page["id"])
+                    frontier.append(page["id"])
+        return ids
+
     def insert(self, table, body):
         now = datetime.now(timezone.utc).isoformat()
         row = {"id": str(uuid4()), "created_at": now, **body}
@@ -201,11 +232,36 @@ class Workspace:
             self.require("issues", row["issue_id"])
             if datetime.fromisoformat(row["ends_at"]) <= datetime.fromisoformat(row["starts_at"]):
                 fail("Event end must be after start")
+        elif table == "document_issue_links":
+            # Mirrors 015_project_documents.sql: both ends exist (any project), one link per pair.
+            row = {"document_id": row["document_id"], "issue_id": row["issue_id"], "id": row["id"], "created_at": now,
+                   "created_by": self.identity.user_id}
+            self.require("project_documents", row["document_id"])
+            self.require("issues", row["issue_id"])
+            if any(link["document_id"] == row["document_id"] and link["issue_id"] == row["issue_id"] for link in self.rows(table)):
+                fail("This page is already linked to that issue", 409)
+        elif table == "document_conversations":
+            # Mirrors 018_document_conversations.sql: the page exists, the store assigns the session id.
+            self.require("project_documents", row["document_id"])
+            row = {"id": row["id"], "document_id": row["document_id"], "user_id": self.identity.user_id,
+                   "session_id": f"doc-{row['id']}", "title": self.conversation_title(row.get("title")),
+                   "goal": bool(row.get("goal", False)), "created_at": now, "updated_at": now}
+        elif table == "project_documents":
+            self.require("projects", row["project_id"])
+            row = {"parent_id": None, "title": "Untitled", "content": "", **row,
+                   "version": 1, "updated_at": now, "created_by": self.identity.user_id}
+            self.validate_document(row)
         else:
             fail("Unsupported workspace insert")
         self.put(table, row)
         if table == "issues": self.audit(row, None)
         return [row]
+
+    @staticmethod
+    def conversation_title(title):
+        if not isinstance(title, str) or not 1 <= len(title.strip()) <= 200:
+            fail("Conversation title must be 1 to 200 characters")
+        return title
 
     def audit(self, row, old):
         self.put("activity_log", {"id": str(uuid4()), "project_id": row["project_id"], "issue_id": row["id"],
@@ -246,12 +302,36 @@ class Workspace:
                 rows.sort(key=lambda r: (r.get(key) is not None, r.get(key)), reverse=direction == "desc")
             offset = int(params.get("offset", 0))
             return rows[offset:offset + int(params.get("limit", len(rows)))]
-        if method == "DELETE" and resource in {"issue_links", "issue_agent_blobs"}:
+        if method == "DELETE" and resource == "project_documents":
+            for row in rows:
+                pages = self.document_subtree(row["id"])
+                for page_id in pages:
+                    self.db.execute("delete from workspace_rows where workspace=? and kind=? and id=?", (self.identity.token, resource, page_id))
+                # document_issue_links.document_id ... on delete cascade
+                for link in self.rows("document_issue_links"):
+                    if link["document_id"] in pages:
+                        self.db.execute("delete from workspace_rows where workspace=? and kind=? and id=?", (self.identity.token, "document_issue_links", link["id"]))
+                # document_conversations.document_id ... on delete cascade
+                for conversation in self.rows("document_conversations"):
+                    if conversation["document_id"] in pages:
+                        self.db.execute("delete from workspace_rows where workspace=? and kind=? and id=?", (self.identity.token, "document_conversations", conversation["id"]))
+            return rows
+        if method == "DELETE" and resource in {"issue_links", "issue_agent_blobs", "document_issue_links"}:
             for row in rows:
                 key = row["agent_id"] + ":" + row["key"] if resource == "issue_agent_blobs" else row["id"]
                 self.db.execute("delete from workspace_rows where workspace=? and kind=? and id=?", (self.identity.token, resource, key))
             return rows
-        if method == "PATCH" and resource in {"projects", "issues", "issue_agent_runs"}:
+        if method == "PATCH" and resource == "document_conversations":
+            if set(body) - {"title"}:
+                fail("Conversation identity is immutable")
+            result = []
+            for old in rows:
+                row = {**old, "title": self.conversation_title(body.get("title", old["title"])),
+                       "updated_at": datetime.now(timezone.utc).isoformat()}
+                self.put(resource, row)
+                result.append(row)
+            return result
+        if method == "PATCH" and resource in {"projects", "issues", "issue_agent_runs", "project_documents"}:
             result = []
             for old in rows:
                 immutable = {"id", "user_id", "owner_id", "project_id", "number", "created_by", "agent_id", "issue_counter", "version", "key"}
@@ -262,6 +342,7 @@ class Workspace:
                     row.update(version=old["version"] + 1, updated_at=datetime.now(timezone.utc).isoformat())
                 if resource == "projects": self.configuration(row, old)
                 if resource == "issues": self.validate_issue(row, old)
+                if resource == "project_documents": self.validate_document(row)
                 self.put(resource, row)
                 if resource == "issues": self.audit(row, old)
                 result.append(row)

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { ChevronLeft, ChevronRight, Pause, Play, RefreshCw, Sparkles } from 'lucide-react'
 import { useDiscoverProfile } from '@/stores/discoverProfileStore'
+import { STORY_GRID_SLOTS } from '@/lib/discover-profile'
 import { useOnboardingStore } from '@/stores/onboardingStore'
 import { useDiscoverFeedStore } from '@/stores/discoverFeedStore'
 import { useInterestsStore } from '@/stores/interestsStore'
@@ -22,6 +23,7 @@ import {
   type SwapAnimationName, type SwapCustom, type SwapDirection,
 } from '@/lib/story-animations'
 import { cn } from '@/utils/cn'
+import aiData from '../../data/ai.json'
 import billsData from '../../data/bills.json'
 import rollercoastData from '../../data/rollercoast.json'
 import travelData from '../../data/travel.json'
@@ -43,12 +45,12 @@ export function HomePage() {
 
 interface SearchDataset { results?: SearchResult[]; web?: { results?: SearchResult[] } }
 interface SearchResult { title?: string; url?: string; description?: string; age?: string; page_age?: string; thumbnail?: { src?: string }; meta_url?: { hostname?: string; favicon?: string } }
-/** Bundled editorial datasets: shown until the Brave feed loads, and when the backend is unavailable. */
+/** Bundled editorial datasets: 8 groups to fill all 3 rows (2 + 3 + 3) of the desktop Discover grid. */
 const FALLBACK_GROUPS: Story[][] = [
   { data: videoData, topic: 'AI & moving images' }, { data: billsData, topic: 'On the field' },
   { data: rollercoastData, topic: 'The thrill of it' }, { data: recipesData, topic: 'At the table' },
   { data: travelData, topic: 'Somewhere new' }, { data: localData, topic: 'Closer to home' },
-  { data: umData, topic: 'Health & discovery' },
+  { data: umData, topic: 'Health & discovery' }, { data: aiData, topic: 'Artificial intelligence' },
 ].map(({ data, topic }) => {
   const dataset = data as SearchDataset
   return (dataset.results || dataset.web?.results || []).filter((result) => result.title && /^https?:\/\//.test(result.url || '')).map((result) => {
@@ -66,7 +68,7 @@ type SlotSwap = { name: SwapAnimationName; direction: SwapDirection }
 function DiscoverContent() {
   const reducedMotion = useReducedMotion()
   const profile = useDiscoverProfile()
-  const topics = profile.topics.slice(0, 4)
+  const topics = profile.topics.slice(0, 5)
   const { sections, loading, error, fetchedAt, load } = useDiscoverFeedStore()
   const recordInteraction = useInterestsStore((state) => state.recordInteraction)
   const hasAnswers = useOnboardingStore((state) => state.answers.length > 0)
@@ -75,7 +77,24 @@ function DiscoverContent() {
   const personalize = () => { resetOnboarding(); window.location.hash = '#onboarding' }
   useEffect(() => { void load(profile) }, [profile, load])
   const liveGroups = useMemo(() => sectionsToStoryGroups(sections), [sections])
-  const groups = liveGroups.length ? liveGroups : FALLBACK_GROUPS
+  const groups = useMemo(() => {
+    if (!liveGroups.length) return FALLBACK_GROUPS.slice(0, STORY_GRID_SLOTS)
+    if (liveGroups.length >= STORY_GRID_SLOTS) return liveGroups.slice(0, STORY_GRID_SLOTS)
+    const usedTopics = new Set(liveGroups.map((g) => g[0]?.topic.toLowerCase()))
+    const usedUrls = new Set(liveGroups.flatMap((g) => g.map((s) => s.url)))
+    const padded = [...liveGroups]
+    for (const fallback of FALLBACK_GROUPS) {
+      if (padded.length >= STORY_GRID_SLOTS) break
+      const topic = fallback[0]?.topic
+      if (!topic || usedTopics.has(topic.toLowerCase())) continue
+      const filtered = fallback.filter((s) => !usedUrls.has(s.url))
+      if (filtered.length > 0) {
+        usedTopics.add(topic.toLowerCase())
+        padded.push(filtered)
+      }
+    }
+    return padded
+  }, [liveGroups])
   const answers = useMemo(() => richAnswers(sections), [sections])
   const failed = useMemo(() => failedSections(sections), [sections])
   const live = liveGroups.length > 0

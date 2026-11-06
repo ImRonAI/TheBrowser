@@ -172,7 +172,11 @@ def test_real_constructor_defaults_stream_and_complete_cleanup(offline):
     assert len(build.memory_models) == 1 and agent.aux_model is build.memory_models[0]
     assert [s.name for s in agent.memory_manager._stores] == ["facts", "remember", "feedback", "tasks", "learned-skills"]
     assert agent.memory_manager._stores[0].extraction
-    assert [b["text"] for m in models[0].calls[-1] for b in m["content"] if "text" in b] == ["hello"]
+    texts = [b["text"] for m in models[0].calls[-1] for b in m["content"] if "text" in b]
+    # PANEL_ENVIRONMENT_CONTEXT (default on) injects the harness environment block
+    # (platform/date/cwd/AGENTS.md) before the user turn.
+    assert texts[0] == "hello"
+    assert len(texts) == 2 and texts[1].startswith("\n\n<system-reminder>\n<environment>"), texts[1][:80]
     agent.cleanup()
     agent.cleanup()
 
@@ -696,6 +700,17 @@ def test_create_panel_agent_without_hooks_is_unchanged(offline):
     assert constructed[-1][1]["trace_attributes"] == {"session.id": "session", "user.id": "user"}
 
 
+def test_document_agent_conversations_are_not_projected_as_threads(offline):
+    """Document Agent conversations belong to their page (document_conversations), not the thread list."""
+    build, _models, _catalogs, constructed, _storage = offline
+    from agent.api.core.threads import ThreadProjection
+
+    build(agent_scope="document")
+    assert not any(isinstance(hook, ThreadProjection) for hook in constructed[-1][1]["hooks"])
+    build(agent_scope="panel")
+    assert any(isinstance(hook, ThreadProjection) for hook in constructed[-1][1]["hooks"])
+
+
 def test_create_panel_agent_repair_disabled_drops_trigger(offline, monkeypatch):
     monkeypatch.setenv("RON_TOOL_REPAIR", "0")
     build, _models, _catalogs, constructed, _storage = offline
@@ -793,3 +808,27 @@ def test_xai_agents_get_the_state_pruner_hook(offline, monkeypatch):
                                    system_prompt="Test composition", extra_tools=[])
     hooks = constructed[-1][1]["hooks"]
     assert sum(isinstance(h, XAIStatePruner) for h in hooks) == 1
+
+
+def test_harness_builtin_plugins_and_todo_tool(offline):
+    from strands_harness.plugins import EnvironmentContext, Todos
+    build, models, catalogs, constructed, storage = offline
+    agent = build()
+    kwargs = constructed[-1][1]
+    assert any(isinstance(p, Todos) for p in kwargs["plugins"])
+    assert any(isinstance(p, EnvironmentContext) for p in kwargs["plugins"])
+    # The Todos plugin vends todo_write; the list lives in agent.state (snapshot-persisted).
+    assert "todo_write" in agent.tool_registry.registry
+
+
+def test_harness_plugins_gated_and_interventions_resolved(offline, monkeypatch):
+    from strands_harness.plugins import EnvironmentContext, Todos
+    build, models, catalogs, constructed, storage = offline
+    monkeypatch.setattr(composition, "PANEL_TODOS", False)
+    monkeypatch.setattr(composition, "PANEL_ENVIRONMENT_CONTEXT", False)
+    monkeypatch.setattr(composition, "PANEL_INTERVENTIONS", "ask")
+    build()
+    kwargs = constructed[-1][1]
+    assert not any(isinstance(p, (Todos, EnvironmentContext)) for p in kwargs["plugins"])
+    # strands_harness intervention sugar resolved onto the native Agent kwarg.
+    assert kwargs["interventions"]

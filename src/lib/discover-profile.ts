@@ -28,10 +28,15 @@ export interface FeedRequestBody {
 }
 
 /** Server-side `FeedRequest.sections` max_length. */
-export const MAX_FEED_SECTIONS = 12
+export const MAX_FEED_SECTIONS = 14
+/** Total story cards in the 3-row desktop Discover grid (Row 1: 2, Row 2: 3, Row 3: 3). */
+export const STORY_GRID_SLOTS = 8
+/** Maximum user topics parsed from onboarding. */
+export const MAX_TOPICS = 5
 /** Teams carried to the feed: one sports card each, four across the "At a glance" row on desktop. */
 export const MAX_TEAMS = 4
 export const DEFAULT_TOPICS = ['Technology', 'AI', 'Design']
+export const FALLBACK_NEWS_TOPICS = ['Technology', 'AI', 'Design', 'Science', 'Culture', 'World news']
 export const DEFAULT_PROFILE: DiscoverProfile = {
   topics: DEFAULT_TOPICS, location: null, country: 'US', teams: [], stocks: [], crypto: [], currencies: [],
   media: { articles: true, videos: true, local: true },
@@ -130,7 +135,7 @@ export type AnswerLookup = (id: InterviewQuestionId) => string | undefined
 
 /** Build the whole profile from an answer lookup (see `answerFor` in onboardingStore). */
 export function buildProfile(answer: AnswerLookup): DiscoverProfile {
-  const topics = parseList(answer('topics'), 4)
+  const topics = parseList(answer('topics'), MAX_TOPICS)
   return {
     topics: topics.length ? topics : DEFAULT_TOPICS,
     ...parseHome(answer('home')),
@@ -140,22 +145,56 @@ export function buildProfile(answer: AnswerLookup): DiscoverProfile {
   }
 }
 
+function extraNewsTopic(profile: DiscoverProfile, usedQueries: Set<string>): string | null {
+  const candidates = [...profile.teams, ...profile.stocks, ...FALLBACK_NEWS_TOPICS]
+  for (const candidate of candidates) {
+    const clean = candidate.trim()
+    if (!clean) continue
+    if (!usedQueries.has(clean.toLowerCase())) {
+      return clean
+    }
+  }
+  return null
+}
+
 /**
  * Profile → `POST /discover/feed` body. Sections are emitted in priority order and capped
- * at MAX_FEED_SECTIONS so a maximal profile never 422s.
+ * at MAX_FEED_SECTIONS so a maximal profile never 422s. When articles are enabled, an extra
+ * trailing `news` section is appended so the 3-row desktop grid (2 + 3 + 3 = 8 cards) fills
+ * its bottom-right 8th slot.
  */
 export function buildFeedRequest(profile: DiscoverProfile): FeedRequestBody {
   const sections: FeedSectionRequest[] = []
+  const usedNews = new Set<string>()
   const city = profile.location?.split(',')[0]?.trim()
   if (profile.location) sections.push({ kind: 'rich', q: `weather in ${profile.location}` })
-  if (profile.media.articles) for (const topic of profile.topics) sections.push({ kind: 'news', q: topic, count: 6, freshness: 'pw' })
-  if (profile.media.local && city) sections.push({ kind: 'news', q: `${city} news`, count: 6, freshness: 'pw' })
+  if (profile.media.articles) {
+    for (const topic of profile.topics) {
+      sections.push({ kind: 'news', q: topic, count: 6, freshness: 'pw' })
+      usedNews.add(topic.toLowerCase())
+    }
+  }
+  if (profile.media.local && city) {
+    const localQuery = `${city} news`
+    sections.push({ kind: 'news', q: localQuery, count: 6, freshness: 'pw' })
+    usedNews.add(localQuery.toLowerCase())
+    usedNews.add(city.toLowerCase())
+  }
   for (const team of profile.teams) sections.push({ kind: 'rich', q: `${team} game` })
   for (const stock of profile.stocks) sections.push({ kind: 'rich', q: `${stock} stock` })
   for (const coin of profile.crypto) sections.push({ kind: 'rich', q: `${coin} price` })
   const base = homeCurrency(profile.country)
   for (const code of profile.currencies) if (code !== base) sections.push({ kind: 'rich', q: `1 ${code} to ${base}` })
   if (profile.media.videos) for (const topic of profile.topics.slice(0, 2)) sections.push({ kind: 'videos', q: topic, count: 4, freshness: 'pm' })
+  if (profile.media.articles) {
+    const storyCount = sections.filter((section) => section.kind === 'news' || section.kind === 'videos').length
+    if (storyCount < STORY_GRID_SLOTS) {
+      const extra = extraNewsTopic(profile, usedNews)
+      if (extra) {
+        sections.push({ kind: 'news', q: extra, count: 6, freshness: 'pw' })
+      }
+    }
+  }
   return {
     sections: sections.slice(0, MAX_FEED_SECTIONS),
     ...(profile.location ? { location: { location: profile.location } } : {}),

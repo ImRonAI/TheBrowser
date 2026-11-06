@@ -37,16 +37,57 @@ export interface SearchRequestBody {
   q: string
   level?: SearchLevel
   country?: string
+  location?: { location?: string; latitude?: number; longitude?: number }
   shopping?: boolean
+  session_id?: string | null
+  follow_up?: boolean
 }
 
-export interface AgentSearchResult { url: string; title?: string; snippet?: string; [key: string]: unknown }
+export interface AgentSearchResult {
+  url: string
+  title?: string
+  snippet?: string
+  kind?: 'online' | 'local'
+  address?: string | null
+  rating?: number | null
+  review_count?: number | null
+  price_range?: string | null
+  hours?: string | null
+  phone?: string | null
+  distance?: number | null
+  [key: string]: unknown
+}
 export interface AgentImageResult { url: string; width?: number | null; height?: number | null; [key: string]: unknown }
 export interface Citation { url: string; title: string }
 export interface SourceError { source: string; code: string; message: string; status?: number | null }
 
+export interface SearchConversationTurn {
+  id: string
+  question: string
+  text: string
+  reasoning: string
+  citations: Citation[]
+  status: SourceStatus
+  model: string | null
+  usage: Record<string, unknown> | null
+  error: SourceError | null
+}
+
 export type SearchEvent =
-  | { event: 'meta'; data: { q: string; level: string; model: string; shopping_model: string | null; country: string } }
+  | {
+      event: 'meta'
+      data: {
+        q: string
+        level: string
+        model: string
+        provider?: string | null
+        effort?: string | null
+        shopping_model: string | null
+        country: string
+        session_id?: string | null
+        follow_up?: boolean
+      }
+    }
   | { event: 'section'; data: FeedSection }
   | { event: 'agent.delta'; data: { text: string } }
   | { event: 'agent.reasoning'; data: { text: string } }
@@ -84,7 +125,21 @@ export interface AgentRunState {
 }
 
 export interface SearchRunState {
-  meta: { q: string; level: string; model: string; shoppingModel: string | null; country: string } | null
+  meta: {
+    q: string
+    level: string
+    model: string
+    provider?: string | null
+    effort?: string | null
+    shoppingModel: string | null
+    country: string
+    sessionId?: string | null
+    followUp?: boolean
+  } | null
+  sessionId: string | null
+  effort: string | null
+  activeQuestion: string | null
+  turns: SearchConversationTurn[]
   sections: Partial<Record<SectionKind, FeedSection>>
   agent: AgentRunState
   shopping: AgentRunState
@@ -98,7 +153,57 @@ function initialAgentRun(): AgentRunState {
 }
 
 export function initialRunState(): SearchRunState {
-  return { meta: null, sections: {}, agent: initialAgentRun(), shopping: initialAgentRun(), errors: [], durationMs: null }
+  return {
+    meta: null,
+    sessionId: null,
+    effort: null,
+    activeQuestion: null,
+    turns: [],
+    sections: {},
+    agent: initialAgentRun(),
+    shopping: initialAgentRun(),
+    errors: [],
+    durationMs: null,
+  }
+}
+
+/**
+ * Archive the completed current agent answer into `state.turns` and reset `state.agent`
+ * to stream a conversational follow-up turn while preserving accumulated sources/images,
+ * Brave sections, shopping results, and `sessionId`.
+ */
+export function beginFollowUpState(state: SearchRunState, question: string): SearchRunState {
+  const previousQuestion = state.activeQuestion || state.meta?.q || ''
+  const hasPreviousTurn = Boolean(state.agent.text || state.agent.reasoning || state.agent.error)
+  const nextTurns: SearchConversationTurn[] = hasPreviousTurn
+    ? [
+        ...state.turns,
+        {
+          id: `turn-${state.turns.length + 1}`,
+          question: previousQuestion,
+          text: state.agent.text,
+          reasoning: state.agent.reasoning,
+          citations: state.agent.citations,
+          status: state.agent.status === 'streaming' ? 'done' : state.agent.status,
+          model: state.agent.model,
+          usage: state.agent.usage,
+          error: state.agent.error,
+        },
+      ]
+    : state.turns
+
+  return {
+    ...state,
+    activeQuestion: question,
+    turns: nextTurns,
+    agent: {
+      ...initialAgentRun(),
+      status: 'streaming',
+      sources: state.agent.sources,
+      images: state.agent.images,
+      fetched: state.agent.fetched,
+    },
+  }
 }
 
 function mergeByUrl<T extends { url: string }>(existing: T[], incoming: T[]): T[] {
@@ -140,8 +245,25 @@ function applyAgentEvent(run: AgentRunState, name: string, data: Record<string, 
 
 export function applySearchEvent(state: SearchRunState, event: SearchEvent): SearchRunState {
   if (event.event === 'meta') {
-    const { q, level, model, shopping_model, country } = event.data
-    return { ...state, meta: { q, level, model, shoppingModel: shopping_model, country } }
+    const { q, level, model, provider, effort, shopping_model, country, session_id, follow_up } = event.data
+    const nextMeta = {
+      q: follow_up && state.meta?.q ? state.meta.q : q,
+      level,
+      model,
+      ...(provider !== undefined ? { provider } : {}),
+      ...(effort !== undefined ? { effort } : {}),
+      shoppingModel: shopping_model ?? state.meta?.shoppingModel ?? null,
+      country,
+      ...(session_id !== undefined ? { sessionId: session_id } : {}),
+      ...(follow_up !== undefined ? { followUp: follow_up } : {}),
+    }
+    return {
+      ...state,
+      meta: nextMeta,
+      sessionId: session_id ?? state.sessionId,
+      effort: effort ?? state.effort,
+      activeQuestion: state.activeQuestion ?? q,
+    }
   }
   if (event.event === 'section') {
     const section = event.data

@@ -8,7 +8,9 @@ import { projectEndpoint } from '@/lib/project-endpoint'
 import { createProjectsStore } from './projects-state'
 import { PROJECT_TYPE_SCHEMES, ROOT_ISSUE_TYPES, STANDARD_HIERARCHY, type Issue, type IssueTypeKey, type Project } from '@/types/projects'
 
-const store = createProjectsStore((userId) => createProjectsRequest(projectEndpoint(userId, API_BASE_URL), getSession, userId))
+/** The Projects API as `userId` (bearer token, or the guest workspace capability). */
+export const projectsRequestFor = (userId: string) => createProjectsRequest(projectEndpoint(userId, API_BASE_URL), getSession, userId)
+const store = createProjectsStore(projectsRequestFor)
 export const useProjectsStore = () => useStore(store)
 
 // Never hydrate the old shared demo cache into an authenticated account.

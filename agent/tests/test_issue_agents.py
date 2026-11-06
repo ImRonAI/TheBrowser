@@ -107,7 +107,8 @@ class Service:
 #: pair (teaching.create_learned_skill_tools) and the native memory search tool exposed by the
 #: per-issue memory_manager ``search_tool_config``. Not shell/browser/delegation.
 ISSUE_AGENT_TOOLS = {'read_issue', 'update_issue', 'edit_issue', 'create_child', 'read_issue_context', 'link_issue',
-                     'save_work_product', 'list_learned_skills', 'use_skill', 'search_memory'}
+                     'save_work_product', 'add_workflow_to_description',
+                     'list_learned_skills', 'use_skill', 'search_memory'}
 
 
 @pytest.fixture(autouse=True)

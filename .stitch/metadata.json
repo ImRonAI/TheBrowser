@@ -1,0 +1,86 @@
+{
+  "project_name": "projects/8358802464742911485",
+  "project_id": "8358802464742911485",
+  "design_systems": {
+    "light": "assets/4454734286657677792",
+    "dark": "assets/14633680896317112463",
+    "glass": "assets/10860546343485637515"
+  },
+  "screens": {
+    "01_signin_empty": {
+      "glass": "047e6885c7e84e5c823521896fd7a93a",
+      "dark": "f2b0efb908ba4fbdbf6d310965ac7ba8",
+      "light": "720eee07ec7243a2b3e66199fe515f6e"
+    },
+    "02_onboarding_empty": {
+      "light": "1331f01604da4b8595504f7c90a88c0d",
+      "glass": "6c2bbf4678fe496eaf22434e2178f053",
+      "dark": "352d4c539d9d4f928a6e0409eae4d56b"
+    },
+    "03_discover_empty": {
+      "dark": "49bc5849608541d3b9cfc9bf31d307d3",
+      "light": "6af23f941efc4a09ba2a390d66cd3ba7",
+      "glass": "8e52518d0fae485db8bb1012ae9d1fb5"
+    },
+    "04_sidebar_drawer_empty": {
+      "light": "8dcaff6748714fa78656587e1946db3a",
+      "dark": "a18e1e38d3ef439389e6e5bdbaf8668d",
+      "glass": "5157aa6a80114aca80815d5bff143643"
+    },
+    "05_search_empty": {
+      "dark": "d87fd6cdc4dd49e5b73745d3aed4df87",
+      "light": "6ee460651a804251adc77469c2a995e0",
+      "glass": "b2c2013016d34eb38de1aae8575ff8f0"
+    },
+    "06_reader_empty": {
+      "glass": "cae21a76900c45d6b82926c9bee37e19",
+      "dark": "7e5eba6c2f3044a394f80db97314d60f",
+      "light": "a7bf05761fe34c2691cbe4418b8d05f9"
+    },
+    "07_execute_empty": {
+      "dark": "dc14d28e44d446bdb9c85ca26250c1ff",
+      "glass": "a6351ba9d6014692bc7152edb5360094",
+      "light": "4e2e78d3e2854f078f439a987e4e1dfa"
+    },
+    "08_calendar_empty": {
+      "dark": "ddefb8616d0641e5bded27350b56fc4c",
+      "glass": "58f2e0d816654d978555ccc652342fce",
+      "light": "f4a38e4bd04d4d3ba63f2861652c3ffa"
+    },
+    "09_projects_empty": {
+      "glass": "417a4741cbef404c9e422d172ab67feb",
+      "light": "e7a6faf701474fd093ce265953dc7547",
+      "dark": "fd55bfffe95646c69837213e3d01057a"
+    },
+    "10_project_issue_empty": {
+      "glass": "9a0f657cebc14203aba8f222ba5e0890",
+      "light": "a87f1c2c798b46baabbee8d2ac1052e9",
+      "dark": "90eac1b9b8cc49709783f0c089a471f9"
+    },
+    "11_vibe_superagent_empty": {
+      "light": "94e0f3c3a0704ba2825bfc1e68155ea1",
+      "glass": "2594568179414c6d9fde61acd0b5a718",
+      "dark": "239ef8b2a47d4c45b5733174c09772cc"
+    },
+    "12_build_workbench_empty": {
+      "light": "a5ca045110d547f495d2c82cc4d5fcd4",
+      "glass": "6126d8882bf74252802f52aab25c9e69",
+      "dark": "2f725eb6e79b4e54ae1fea90f60f73b8"
+    },
+    "13_agent_panel_empty": {
+      "light": "945c8c0ed3ff4633a9391654d9f63f31",
+      "glass": "919407edc29543abbcc17316c583241b",
+      "dark": "8ded96e1a9ad45b5b347918855a24c31"
+    },
+    "14_teach_ron_empty": {
+      "glass": "d0a91010b015490c9724cbaf1295c421",
+      "dark": "f841368e60534b5a94f1f2c7e41953be",
+      "light": "68b217e68f97468db03b35ad82f50b70"
+    },
+    "15_showcase_empty": {
+      "light": "c6e73fc8c1714c35a45e9fc997d8f257",
+      "glass": "0ffc2ef3d2b744bdbb65157e0e0356c7",
+      "dark": "c191e91fdab4421088d521594766f17d"
+    }
+  }
+}

@@ -4,6 +4,7 @@ import asyncio
 import copy
 import json
 import threading
+import time
 from unittest.mock import AsyncMock, Mock
 
 import pytest
@@ -1208,6 +1209,103 @@ def test_perplexity_native_tool_events_reach_the_sse_stream():
         # Never persisted into the agent's message history.
         assert "sandbox_results" not in json.dumps(session.messages)
         assert "x_search_results" not in json.dumps(session.messages)
+        await manager.shutdown()
+
+    asyncio.run(scenario())
+
+
+def _respawn_factory(models, agents, tools=()):
+    """A factory that hands out models[i] in construction order and records the agents."""
+    async def factory(*, user_id, session_id, selection, options, runtime_options):
+        agent = await asyncio.to_thread(Agent, model=models[len(agents)],
+                                        tools=list(tools), **runtime_options)
+        agents.append(agent)
+        return agent
+    return factory
+
+
+async def _until(predicate, timeout=20.0):
+    """Poll until predicate holds; the watchdog acts asynchronously of run completion."""
+    deadline = time.monotonic() + timeout
+    while not predicate():
+        assert time.monotonic() < deadline, "expected condition was not reached"
+        await asyncio.sleep(0.05)
+
+
+def test_stall_watchdog_respawns_fresh_agent_on_same_session():
+    async def scenario():
+        agents = []
+        wedged = OfflineModel(release=asyncio.Event())  # never releases: silent stream
+        healthy = OfflineModel()
+        manager = manager_for(_respawn_factory([wedged, healthy], agents),
+                              stall_seconds=1.0, tool_stall_seconds=1.0, max_recoveries=2)
+        session = await manager.start("u", "s", "do the research", selection={"model_id": "offline"})
+        await _until(lambda: session.status == "completed")
+        assert session.recovery_required is False
+        # A fresh agent instance was constructed on the same session.
+        assert len(agents) == 2 and agents[0] is not agents[1]
+        # The wedged run failed with the stall reason; the recovery run restates the request.
+        events = [event async for event in session.events(0)]
+        errors = [e for e in events if e["type"] == "error"]
+        assert len(errors) == 1 and "Run stalled" in str(errors[0]["error"]), errors
+        assert "[recovery]" in session.input and "do the research" in session.input
+        # The completed recovery run resets the consecutive-stall budget.
+        assert session._recoveries == 0
+        await manager.shutdown()
+
+    asyncio.run(scenario())
+
+
+def test_stall_recovery_budget_exhausts_to_recovery_required():
+    async def scenario():
+        agents = []
+        wedged = [OfflineModel(release=asyncio.Event()) for _ in range(3)]
+        manager = manager_for(_respawn_factory(wedged, agents),
+                              stall_seconds=0.5, tool_stall_seconds=0.5, max_recoveries=2)
+        session = await manager.start("u", "s", "hang forever", selection={"model_id": "offline"})
+        await _until(lambda: session.recovery_required and not session.active)
+        # Initial run plus two respawns; the third stall is left failed.
+        assert len(agents) == 3
+        assert session.status in ("failed", "cancelled")
+        with pytest.raises(RuntimeConflict, match="recovery"):
+            await manager.start("u", "s", "try again")
+        await manager.shutdown()
+
+    asyncio.run(scenario())
+
+
+def test_stall_watchdog_disabled_leaves_run_alone():
+    async def scenario():
+        agents = []
+        wedged = OfflineModel(release=asyncio.Event())
+        manager = manager_for(_respawn_factory([wedged], agents),
+                              stall_seconds=0.0, shutdown_timeout=0.5)
+        session = await manager.start("u", "s", "hang", selection={"model_id": "offline"})
+        await asyncio.sleep(1.5)
+        assert session.active and session.status == "running"
+        assert len(agents) == 1
+        await manager.shutdown()  # close() force-cancels the wedged run
+        assert session.recovery_required is True
+
+    asyncio.run(scenario())
+
+
+def test_no_recovery_while_events_flow_or_tool_in_flight():
+    async def scenario():
+        @tool
+        def slow_probe() -> str:
+            time.sleep(2.5)
+            return "ok"
+
+        agents = []
+        model = OfflineModel(tools=("slow_probe",))
+        manager = manager_for(_respawn_factory([model], agents, tools=(slow_probe,)),
+                              stall_seconds=1.0, tool_stall_seconds=10.0, max_recoveries=2)
+        session = await manager.start("u", "s", "run the probe", selection={"model_id": "offline"})
+        await _until(lambda: session.status == "completed")
+        assert len(agents) == 1 and session.recovery_required is False
+        events = [event async for event in session.events(0)]
+        assert not [e for e in events if e["type"] == "error"]
         await manager.shutdown()
 
     asyncio.run(scenario())

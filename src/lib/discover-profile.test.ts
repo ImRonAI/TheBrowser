@@ -7,7 +7,7 @@ Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: {
   setItem: (key: string, value: string) => { storage.set(key, value) },
   removeItem: (key: string) => { storage.delete(key) },
 } })
-const { buildFeedRequest, buildProfile, DEFAULT_TOPICS, interestSeeds, MAX_FEED_SECTIONS, MAX_TEAMS, parseHome, parseList, parseMarkets, parseMedia } =
+const { buildFeedRequest, buildProfile, DEFAULT_TOPICS, interestSeeds, MAX_FEED_SECTIONS, MAX_TEAMS, MAX_TOPICS, STORY_GRID_SLOTS, parseHome, parseList, parseMarkets, parseMedia } =
   await import('./discover-profile.ts')
 const { INTERVIEW, answerFor, useOnboardingStore } = await import('../stores/onboardingStore.ts')
 const { getDiscoverProfile, resolveDiscoverProfile, useDiscoverProfileStore } = await import('../stores/discoverProfileStore.ts')
@@ -81,9 +81,23 @@ test('buildProfile and buildFeedRequest produce a valid FeedRequest for a full p
   assert.deepEqual(body.sections.map((section) => `${section.kind}:${section.q}`), [
     'rich:weather in London, UK', 'news:AI', 'news:design', 'news:climate', 'news:London news',
     'rich:Arsenal game', 'rich:Lakers game', 'rich:TSLA stock', 'rich:bitcoin price', 'rich:1 USD to GBP',
-    'videos:AI', 'videos:design',
+    'videos:AI', 'videos:design', 'news:Arsenal',
   ])
   assert.ok(body.sections.length <= MAX_FEED_SECTIONS)
+})
+
+test('buildFeedRequest fills the 8th story slot on the 3-row Discover grid', () => {
+  assert.equal(STORY_GRID_SLOTS, 8)
+  assert.equal(MAX_TOPICS, 5)
+  const profile = buildProfile((id) => answerFor(answered({
+    topics: 'AI, Roller Coasters, Buffalo Bills, RuPaul\'s Drag Race',
+    home: 'Palm Springs, USA',
+    media: 'A mix, including local',
+  }), id))
+  const body = buildFeedRequest(profile)
+  const storySections = body.sections.filter((section) => section.kind === 'news' || section.kind === 'videos')
+  assert.equal(storySections.length, STORY_GRID_SLOTS)
+  assert.equal(storySections.at(-1)?.kind, 'news')
 })
 
 test('buildFeedRequest never exceeds the server section cap and skips the home currency pair', () => {

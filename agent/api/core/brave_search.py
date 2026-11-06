@@ -713,7 +713,7 @@ class FeedLocation(BaseModel):
 
 
 class FeedRequest(BaseModel):
-    sections: list[SectionRequest] = Field(min_length=1, max_length=12)
+    sections: list[SectionRequest] = Field(min_length=1, max_length=14)
     location: FeedLocation | None = None
     country: str = Field(default="US", min_length=2, max_length=3)
 

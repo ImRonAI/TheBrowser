@@ -101,6 +101,34 @@ Forced shutdown, an unclean restart, or failure to save that history still
 requires recovery; the renderer displays the underlying error alongside the
 recovery explanation.
 
+### Run stall watchdog and agent respawn
+
+`PanelRuntimeManager` runs one loop-local watchdog task (started by the first
+`start()`; cancelled in `shutdown()`). Every emitted event refreshes a
+run's activity clock; a run in `starting`/`running` with no events past
+`PANEL_RUN_STALL_SECONDS` (default 120s; `0` disables the watchdog) is
+stalled. A tool call in flight is legitimate silence — tools emit no events
+while executing — so it gets the longer `PANEL_RUN_TOOL_STALL_SECONDS` window
+(default 480s, above the longest bounded silent tool: song generation, 420s).
+Tool ids enter the in-flight set at their deduplicated `tool_input` event and
+leave at `AfterToolCallEvent`.
+
+On a stall the watchdog hard-cancels the wedged run's task (a wedged agent
+does not heed the cooperative cancel event); the run's `_fail` emits the stall
+as its `error` envelope. Within `PANEL_RUN_MAX_RECOVERIES` (default 2)
+consecutive recoveries it then respawns: the wedged agent instance is evicted
+(bounded best-effort memory flush + cleanup) and a fresh instance is built by
+the same factory on the same `ThreadSessionManager`, so native construction
+restores the committed thread (messages, state, todos, queued steering) and a
+durable `[recovery]` user turn continues the stalled request — restating the
+original user input, warning that the stalled turn was not committed and a tool
+result may have been lost (never replay it). The recovery run is a normal run
+on the same session: the SSE stream continues by sequence, no new event types.
+A run that completes normally resets the recovery budget; when the budget is
+exhausted the run is left `recovery_required` (the existing 409 semantics). A
+run that ignores asyncio cancellation is left to shutdown semantics rather than
+double-booked.
+
 Browser context and queued steering are delivered by the SDK's
 `ContextInjector(trigger="everyTurn")` plugin (runtime options), after the complete
 tool result batch. The SDK appends the text to the last user message for that model

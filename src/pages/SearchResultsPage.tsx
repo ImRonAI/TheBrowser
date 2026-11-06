@@ -49,7 +49,7 @@ const PANEL_KEY: Record<SearchTab, string> = {
 }
 
 export function SearchResultsPage({ query, level, onBack }: SearchResultsPageProps) {
-  const { run, isRunning, startedAt, fatal, start } = useSearchResultsStore()
+  const { run, isRunning, followUpLoading, startedAt, fatal, start, sendFollowUp, cancel } = useSearchResultsStore()
   const [activeTab, setActiveTab] = useState<SearchTab>('agent')
   const reduced = useReducedMotion()
 
@@ -60,6 +60,17 @@ export function SearchResultsPage({ query, level, onBack }: SearchResultsPagePro
       ...(profile.location ? { location: { location: profile.location } } : {}),
     })
   }, [query, level, start])
+
+  const handleFollowUp = useCallback(
+    async (message: string) => {
+      const profile = getDiscoverProfile()
+      await sendFollowUp(message, {
+        country: profile.country,
+        ...(profile.location ? { location: { location: profile.location } } : {}),
+      })
+    },
+    [sendFollowUp],
+  )
 
   useEffect(() => {
     fire()
@@ -165,13 +176,32 @@ export function SearchResultsPage({ query, level, onBack }: SearchResultsPagePro
               transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
               className="focus:outline-none"
             >
-              {activeTab === 'agent' && <AgentAnswer run={run.agent} hue={hue} onRetry={fire} />}
+              {activeTab === 'agent' && (
+                <AgentAnswer
+                  run={run.agent}
+                  turns={run.turns}
+                  activeQuestion={run.activeQuestion}
+                  effort={run.effort}
+                  hue={hue}
+                  onRetry={fire}
+                  onFollowUp={handleFollowUp}
+                  onCancel={cancel}
+                  followUpLoading={followUpLoading}
+                />
+              )}
               {activeTab === 'web' && <WebResults state={run} hue={hue} onRetry={fire} onOpenAnswer={() => setActiveTab('agent')} />}
               {activeTab === 'local' && <LocalResults state={run} hue={hue} onRetry={fire} />}
               {activeTab === 'news' && <NewsResults state={run} onRetry={fire} />}
               {activeTab === 'images' && <ImageMasonry state={run} hue={hue} onRetry={fire} />}
               {activeTab === 'videos' && <VideoResults state={run} onRetry={fire} />}
-              {activeTab === 'shopping' && <ShoppingResults run={run.shopping} hue={hue} onRetry={fire} />}
+              {activeTab === 'shopping' && (
+                <ShoppingResults
+                  run={run.shopping}
+                  places={sectionItems(run, 'places')}
+                  hue={hue}
+                  onRetry={fire}
+                />
+              )}
             </motion.div>
           </AnimatePresence>
         )}

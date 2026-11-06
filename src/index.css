@@ -667,6 +667,23 @@
 .ProseMirror h3 {
   @apply text-display-sm font-semibold text-ink dark:text-ink-inverse mb-2;
 }
+.ProseMirror :is(h1, h2, h3):not(:first-child) {
+  @apply mt-6;
+}
+
+/* Bulleted and numbered lists (Tailwind's preflight removes their markers) */
+.ProseMirror ul:not([data-type="taskList"]) {
+  @apply list-disc pl-6 my-3;
+}
+.ProseMirror ol {
+  @apply list-decimal pl-6 my-3;
+}
+.ProseMirror :is(ul:not([data-type="taskList"]), ol) li {
+  @apply my-1;
+}
+.ProseMirror :is(ul:not([data-type="taskList"]), ol) li::marker {
+  @apply text-ink-muted dark:text-ink-inverse-muted;
+}
 
 /* Task list */
 .ProseMirror ul[data-type="taskList"] {
@@ -916,3 +933,30 @@ html.glass .ron-popover {
   mix-blend-mode: screen;
   opacity: 0.025;
 }
+
+/* Workflow diagrams. The AI Elements workflow components (canvas, node, edge, connection, controls)
+   expect shadcn v4 colour variables (--sidebar, --color-ring, a full colour in --primary); Ron's tokens
+   are HSL channels, so map both those and React Flow's own theme variables here, per theme. */
+.ron-workflow {
+  --sidebar: hsl(var(--muted) / 0.45);
+  --color-ring: hsl(var(--ring));
+  --xy-background-color: transparent;
+  --xy-edge-stroke: hsl(var(--muted-foreground) / 0.75);
+  --xy-edge-stroke-selected: hsl(var(--primary));
+  --xy-edge-stroke-width: 1.5;
+  --xy-connectionline-stroke: hsl(var(--ring));
+  --xy-handle-background-color: hsl(var(--card));
+  --xy-handle-border-color: hsl(var(--muted-foreground));
+  --xy-controls-button-background-color: hsl(var(--card));
+  --xy-controls-button-background-color-hover: hsl(var(--secondary));
+  --xy-controls-button-color: hsl(var(--foreground));
+  --xy-controls-button-color-hover: hsl(var(--foreground));
+  --xy-controls-button-border-color: hsl(var(--border));
+  --xy-selection-background-color: hsl(var(--primary) / 0.08);
+  --xy-selection-border: 1px dotted hsl(var(--primary) / 0.6);
+  --xy-attribution-background-color: transparent;
+}
+.ron-workflow .react-flow__edge circle { fill: hsl(var(--primary)); }
+.ron-workflow .react-flow__handle { width: 10px; height: 10px; border-width: 1.5px; }
+.ron-workflow .react-flow__node.selected .node-container { box-shadow: 0 0 0 1.5px hsl(var(--primary)); }
+.ron-workflow .react-flow__attribution a { color: hsl(var(--muted-foreground)); }

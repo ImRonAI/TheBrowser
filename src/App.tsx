@@ -8,7 +8,7 @@ import { useInterestsStore } from '@/stores/interestsStore'
 import { useSearchStore, selectShowFullResults, selectShowChat } from '@/stores/searchStore'
 import { useNavigationStore } from '@/stores/navigationStore'
 import { getSearchLevelFromRonUrl, getSearchQueryFromRonUrl } from '@/components/chrome/UrlBar'
-import { DEFAULT_SEARCH_LEVEL, type SearchLevel } from '@/lib/search-api'
+import { DEFAULT_SEARCH_LEVEL, SEARCH_LEVELS, type SearchLevel } from '@/lib/search-api'
 import { BrowserLayout } from '@/layouts/BrowserLayout'
 import { AuthPageLayout } from '@/layouts/AuthPageLayout'
 import { HomePage } from '@/pages/HomePage'
@@ -167,7 +167,13 @@ export function App() {
     const updateSearchRoute = () => {
       const queryParams = new URLSearchParams(window.location.search)
       const query = queryParams.get('q')
+      const rawLevel = queryParams.get('level')
       setSearchRouteQuery(query && query.trim() ? query : null)
+      setSearchRouteLevel(
+        rawLevel && (SEARCH_LEVELS as readonly string[]).includes(rawLevel)
+          ? (rawLevel as SearchLevel)
+          : null,
+      )
     }
 
     const handleUrlChanged = (newUrl: string) => {
@@ -343,8 +349,8 @@ function MainContent({ activeTab }: { activeTab: string }) {
   if (url === 'ron://projects' || url === 'ron://projects/') {
     return <ProjectsIndexPage key={userId} />
   }
-  const projectRoute = url?.match(/^ron:\/\/project\/([^/?#]+)\/?$/)
-  if (projectRoute) return <ProjectHomePage key={`${userId}:${projectRoute[1]}`} projectKey={projectRoute[1]} />
+  const projectRoute = url?.match(/^ron:\/\/project\/([^/?#]+)(?:\/docs\/([^/?#]+))?\/?$/)
+  if (projectRoute) return <ProjectHomePage key={`${userId}:${projectRoute[1]}`} projectKey={projectRoute[1]} documentId={projectRoute[2]} />
   if (url?.startsWith('ron://read?')) return <ArticleReaderPage key={url} href={url} />
   switch (activeTab) {
     case 'execute':

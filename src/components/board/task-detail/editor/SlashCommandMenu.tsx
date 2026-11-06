@@ -11,7 +11,8 @@ import {
   Minus, 
   Quote,
   Upload,
-  Sparkles
+  Sparkles,
+  Workflow
 } from 'lucide-react'
 import { fileToDataUrl } from '@/utils/file-utils'
 
@@ -29,6 +30,7 @@ const icons: Record<string, any> = {
   'quote-right': Quote,
   upload: Upload,
   sparkles: Sparkles,
+  workflow: Workflow,
 }
 
 export const SlashCommandMenu = forwardRef((props: any, ref) => {
@@ -112,6 +114,9 @@ export const SlashCommandMenu = forwardRef((props: any, ref) => {
         break
       case 'blockquote':
         editor.chain().focus().deleteRange(range).toggleBlockquote().run()
+        break
+      case 'workflow':
+        editor.chain().focus().deleteRange(range).insertWorkflow().run()
         break
       default:
         break

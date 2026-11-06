@@ -1,5 +1,5 @@
-import { useMemo, useState, useEffect } from 'react'
-import { ChevronDown, ChevronRight, Plus, ArrowUp, ArrowDown } from 'lucide-react'
+import { useCallback, useMemo, useState, useEffect } from 'react'
+import { ChevronDown, ChevronRight, Plus, ArrowUp, ArrowDown, FilePlus } from 'lucide-react'
 import { useProjectsStore, projectSelectors, projectUtils } from '@/stores/projectsStore'
 import { useNavigationStore } from '@/stores/navigationStore'
 import {
@@ -23,25 +23,35 @@ import { fromLocalDateTime, toLocalDateTime } from '@/lib/project-issue-utils'
 import { ProjectsSyncStatus } from '@/components/projects/ProjectsSyncStatus'
 import { ProjectTypeBadge, IssueTypeBadge, IssueStatusBadge } from '@/components/projects/badges'
 import { CreateIssueDialog } from '@/components/projects/dialogs'
-import { Button } from '@catalyst/button'
+import { Button } from '@/components/ui/button'
+import { ProjectDocuments } from '@/components/projects/documents/ProjectDocuments'
 import { PageBackground } from '@/components/shared/PageBackground'
 import { cn } from '@/utils/cn'
 
 interface ProjectHomePageProps {
   projectKey: string
+  /** `ron://project/<id>/docs/<page>`: open the Docs view on this page. */
+  documentId?: string
 }
 
-export function ProjectHomePage({ projectKey }: ProjectHomePageProps) {
+export function ProjectHomePage({ projectKey, documentId }: ProjectHomePageProps) {
   const { projects, issues, activity, updateProject, people, isInitialized, isLoading, userId } = useProjectsStore()
   const { setActiveTab } = useNavigationStore()
   const project = projectSelectors.getProjectByKey(projects, projectKey)
-  const [activeView, setActiveView] = useState<ProjectView>('backlog')
+  const [activeView, setActiveView] = useState<ProjectView>(documentId ? 'docs' : 'backlog')
   const [selectedIssueId, setSelectedIssueId] = useState<string | null>(null)
   const [showCreateIssue, setShowCreateIssue] = useState(false)
+  const [newDocumentRequested, setNewDocumentRequested] = useState(false)
+  const onDraftStarted = useCallback(() => setNewDocumentRequested(false), [])
 
   useEffect(() => {
     setActiveTab('execute')
   }, [setActiveTab])
+
+  // Following a page link (e.g. from an issue's Documents) shows that page.
+  useEffect(() => {
+    if (documentId) { setActiveView('docs'); setSelectedIssueId(null) }
+  }, [documentId])
 
   const projectIssues = useMemo(() => {
     if (!project) return []
@@ -93,11 +103,13 @@ export function ProjectHomePage({ projectKey }: ProjectHomePageProps) {
               </div>
             </div>
             <div className="flex items-center gap-3">
-              <Button outline onClick={() => setShowCreateIssue(true)}>
+              <Button type="button" variant="outline" className="rounded-full" onClick={() => setShowCreateIssue(true)}>
+                <Plus />
                 New Issue
               </Button>
-              <Button color="indigo" onClick={() => setActiveView('backlog')}>
-                Backlog
+              <Button type="button" className="rounded-full" onClick={() => { setActiveView('docs'); setNewDocumentRequested(true) }}>
+                <FilePlus />
+                New Document
               </Button>
             </div>
           </div>
@@ -156,9 +168,8 @@ export function ProjectHomePage({ projectKey }: ProjectHomePageProps) {
           />
         )}
         {activeView === 'docs' && (
-          <div className="rounded-3xl glass-card border border-white/10 p-8 text-body-sm text-ink-muted dark:text-ink-inverse-muted">
-            Docs shell. Link project docs here.
-          </div>
+          <ProjectDocuments key={`${userId}:${project.id}`} project={project} openDocumentId={documentId}
+            startWithDraft={newDocumentRequested} onDraftStarted={onDraftStarted} onIssueSelect={setSelectedIssueId} />
         )}
         {activeView === 'settings' && (
           <ProjectSettingsView
@@ -417,13 +428,16 @@ function ProjectBacklogView({
       <div className="flex items-center justify-between">
         <h3 className="text-body-sm font-semibold text-ink dark:text-ink-inverse">Hierarchy</h3>
         <Button
-          outline
+          type="button"
+          size="sm"
+          variant="outline"
+          className="rounded-full"
           onClick={() => {
             setActiveParentId(null)
             setShowCreateChild(true)
           }}
         >
-          <Plus data-slot="icon" />
+          <Plus />
           New root item
         </Button>
       </div>
@@ -636,8 +650,8 @@ function ReparentDialog({
           ))}
         </select>
         <div className="mt-6 flex justify-end gap-3">
-          <Button outline onClick={onClose}>Cancel</Button>
-          <Button color="indigo" disabled={pendingSaves > 0} onClick={handleSubmit}>Update Parent</Button>
+          <Button type="button" variant="outline" className="rounded-full" onClick={onClose}>Cancel</Button>
+          <Button type="button" className="rounded-full" disabled={pendingSaves > 0} onClick={handleSubmit}>Update Parent</Button>
         </div>
       </div>
     </div>

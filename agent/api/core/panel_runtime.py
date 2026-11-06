@@ -43,6 +43,10 @@ preserve_context=False and checkpoint/interrupt workflows is unsupported; its
 history rollback happens before pause hooks. Runtime hooks use priority 200:
 application resume/retry/result-transform hooks must use a lower priority.
 Idle steering reserves a native follow-up invocation; paused steering stays queued.
+The manager's stall watchdog (stall_seconds/tool_stall_seconds/max_recoveries; 0 disables)
+cancels a wedged run and, within the budget, reserves a fresh "[recovery]" run on the same
+session: the factory rebuilds the agent on the same ThreadSessionManager, so construction
+restores the committed thread and the recovery prompt restates the stalled request.
 Finishing-phase arrivals are admitted after the native stream exits. Root model
 deltas/retries carry cycle (native cycle ID) and model_attempt (1-based per cycle).
 Retry identifies the discarded attempt; attempt is the next attempt number.
@@ -54,11 +58,13 @@ import asyncio
 import copy
 import hashlib
 import json
+import logging
 import threading
+import time
 import uuid
 from collections import deque
 from collections.abc import AsyncIterator, Awaitable, Callable, Mapping
-from contextlib import aclosing
+from contextlib import aclosing, suppress
 from typing import Any, Protocol
 
 from strands import Agent
@@ -82,6 +88,26 @@ _BACKGROUND_STATE = "strands.background_tasks"
 _ACTIVE = {"starting", "running", "finishing"}
 _DURABLE_EVENTS = {"run_started", "steering_accepted", "steering_applied", "checkpoint", "interrupt", "run_finished", "error",
                    "tool_repair_proposed", "tool_repair_investigating", "tool_repair_approval", "tool_repair_ready"}
+_LOGGER = logging.getLogger(__name__)
+
+#: Durable user turn the stall watchdog starts after respawning a fresh agent instance on the
+#: same session. The stalled turn is NOT in the committed snapshot (Chat saves on invocation
+#: triggers), so the prompt carries the original request into the restored context.
+RECOVERY_PROMPT = (
+    "[recovery] The previous agent instance stalled ({reason}) and was automatically respawned "
+    "(recovery {attempt} of {limit}). Your conversation, agent state, and todo list were restored "
+    "from the session's committed snapshot; the stalled turn itself was not committed, so your "
+    "context resumes from the last completed turn.{input_clause} A tool result may have been lost "
+    "with the stall — never replay a tool whose result was lost. Check your todo list, review the "
+    "thread, and continue the user's request from where it stopped without redoing completed work."
+)
+
+
+def _recovery_prompt(reason: str, attempt: int, limit: int, stalled_input: Any) -> str:
+    request = ""
+    if isinstance(stalled_input, str) and stalled_input.strip():
+        request = f' The user\'s request was: "{stalled_input.strip()[:2000]}".'
+    return RECOVERY_PROMPT.format(reason=reason, attempt=attempt, limit=limit, input_clause=request)
 
 
 class RuntimeConflict(RuntimeError):
@@ -186,7 +212,14 @@ class SessionRun:
         self._attempt = 0
         self._cycle: str | None = None
         self._model_attempt = 0
-        self._retried: tuple[str | None, int] | None = None
+        self._retried: tuple[str, None] | tuple[str | None, int] | None = None
+        # Stall-watchdog state: every emitted event refreshes _last_event_at; tool ids enter
+        # _tools_in_flight at their (deduplicated) input event and leave at AfterToolCallEvent,
+        # so a legitimately long silent tool gets the longer tool window.
+        self._last_event_at = time.monotonic()
+        self._tools_in_flight: set[str] = set()
+        self._stall_reason: str | None = None
+        self._recoveries = 0
 
     @property
     def active(self) -> bool:
@@ -302,6 +335,7 @@ class SessionRun:
     async def _emit_locked(self, event_type: str, *, node_path: tuple[str, ...] = (), **payload: Any) -> dict[str, Any]:
         if event_type == "error" and not node_path:
             self.error = _wire(payload.get("error"))
+        self._last_event_at = time.monotonic()
         self.sequence += 1
         event = {"version": 1, "sequence": self.sequence, "session_id": self.session_id,
                  "run_id": self.run_id, "type": event_type, "node_path": list(node_path), **_wire(payload)}
@@ -448,6 +482,7 @@ class SessionRun:
             await asyncio.gather(*tuple(self._callback_tasks))
 
     async def _after_tool(self, event: AfterToolCallEvent) -> None:
+        self._tools_in_flight.discard(str(event.tool_use.get("toolUseId", "")))
         payload = {"tool_result": _wire(event.result), "tool_use": _wire(event.tool_use), "retry": event.retry}
         background = self._background_id(event.tool_use["toolUseId"])
         if threading.get_ident() != self._thread:
@@ -563,6 +598,7 @@ class SessionRun:
         if self._inputs.get(key) == payload:
             return
         self._inputs[key] = payload
+        self._tools_in_flight.add(str(use.get("toolUseId", "")))
         await self._emit("tool_input", node_path=path, id=key[1], name=use.get("name", ""), input=use.get("input", {}))
 
     async def _translate(self, event: Mapping[str, Any], path: tuple[str, ...] = ()) -> None:
@@ -677,6 +713,9 @@ class SessionRun:
             status = {"checkpoint": "checkpointed", "interrupt": "interrupted", "cancelled": "cancelled"}.get(stop, "completed")
             if stop not in ("checkpoint", "interrupt", "cancelled", "end_turn", "stop_sequence"):
                 status = "failed"
+            if status == "completed":
+                # A healthy run clears the consecutive-stall recovery budget.
+                self._recoveries = 0
             await self._drain_callbacks()
             # Snapshot first, then one journal commit pairs it with pause metadata.
             async with self._lock:
@@ -695,7 +734,7 @@ class SessionRun:
                     await self._emit_locked("interrupt", interrupts=self.interrupts)
                 await self._emit_locked("run_finished", stop_reason=stop, status=status, result=self.result)
         except asyncio.CancelledError:
-            await self._fail("Server shutdown forced invocation cancellation", cancelled=True)
+            await self._fail(self._stall_reason or "Server shutdown forced invocation cancellation", cancelled=True)
         except Exception as error:
             await self._fail(error)
         finally:
@@ -725,6 +764,8 @@ class SessionRun:
         self._cycle = None
         self._model_attempt = 0
         self._retried = None
+        self._tools_in_flight.clear()
+        self._stall_reason = None
         self.task = asyncio.create_task(self._execute(prompt), name=f"panel-{self.session_id}-{self.run_id}")
         self.task.add_done_callback(lambda done: None if done.cancelled() else done.exception())
 
@@ -823,15 +864,21 @@ class PanelRuntimeManager:
         storage_factory: Callable[[str], Storage] = get_user_session_storage,
         history_limit: int = 2048, history_bytes: int = 8 * 1024 * 1024,
         shutdown_timeout: float = 10.0,
+        stall_seconds: float = 120.0, tool_stall_seconds: float = 480.0, max_recoveries: int = 2,
     ) -> None:
         if history_limit < 1 or history_bytes < 1 or shutdown_timeout <= 0:
             raise ValueError("History limits and shutdown timeout must be positive")
+        if stall_seconds < 0 or tool_stall_seconds < 0 or max_recoveries < 0:
+            raise ValueError("Stall windows and recovery budget must be nonnegative")
         self.factory, self.storage_factory = factory, storage_factory
         self.history_limit, self.history_bytes = history_limit, history_bytes
         self.shutdown_timeout = shutdown_timeout
+        self.stall_seconds, self.tool_stall_seconds = stall_seconds, tool_stall_seconds
+        self.max_recoveries = max_recoveries
         self._sessions: dict[tuple[str, str], SessionRun] = {}
         self._locks: dict[tuple[str, str], asyncio.Lock] = {}
         self._closed = False
+        self._watchdog_task: asyncio.Task[None] | None = None
 
     def _key(self, user_id: str, session_id: str) -> tuple[str, str]:
         if not isinstance(user_id, str) or not user_id.strip():
@@ -872,6 +919,7 @@ class PanelRuntimeManager:
         key = self._key(user_id, session_id)
         if action not in ("message", "resume", "interrupt"):
             raise ValueError("action must be message, resume, or interrupt")
+        self._ensure_watchdog()
         async with self._locks.setdefault(key, asyncio.Lock()):
             session = await self._get_locked(key, factory, create=True)
             assert session is not None
@@ -950,6 +998,84 @@ class PanelRuntimeManager:
             await session._cancel_background()
         return {"session_id": session_id, "run_id": session.run_id, "cancel_requested": True}
 
+    def _ensure_watchdog(self) -> None:
+        """One loop-local stall watchdog; ``stall_seconds=0`` disables it entirely."""
+        if self.stall_seconds <= 0 or self._closed:
+            return
+        if self._watchdog_task is None or self._watchdog_task.done():
+            tick = max(1.0, min(15.0, self.stall_seconds / 4))
+            self._watchdog_task = asyncio.create_task(self._watchdog(tick), name="panel-runtime-watchdog")
+
+    def _stalled_for(self, session: SessionRun) -> float | None:
+        """Seconds the run has been silent past its window, or None when it is healthy.
+
+        A tool call in flight is legitimate silence (tools emit no events while executing),
+        so it gets the longer tool window; everything else must produce events inside the
+        plain stall window.
+        """
+        if session.status not in ("starting", "running") or session._closed:
+            return None
+        idle = time.monotonic() - session._last_event_at
+        limit = self.tool_stall_seconds if session._tools_in_flight else self.stall_seconds
+        return idle if idle > limit else None
+
+    async def _watchdog(self, tick: float) -> None:
+        while not self._closed:
+            await asyncio.sleep(tick)
+            for key, session in list(self._sessions.items()):
+                try:
+                    await self._recover_if_stalled(key, session)
+                except asyncio.CancelledError:
+                    raise
+                except Exception:
+                    _LOGGER.exception("Stall recovery failed for session %s", session.session_id)
+
+    async def _recover_if_stalled(self, key: tuple[str, str], session: SessionRun) -> None:
+        """Respawn a fresh agent instance on the same session when a run stalls.
+
+        The wedged run is hard-cancelled (a wedged agent does not heed the cooperative
+        cancel event), its ``_fail`` emits the stall as the run's error, and — within the
+        recovery budget — a new agent is built on the same ``ThreadSessionManager`` and a
+        durable ``[recovery]`` user turn continues the stalled request. The stalled turn was
+        never committed to the snapshot, so the prompt restates the original request.
+        """
+        async with self._locks.setdefault(key, asyncio.Lock()):
+            idle = self._stalled_for(session)
+            if idle is None or not session.active:
+                return
+            reason = f"no activity for {idle:.0f}s"
+            session._stall_reason = f"Run stalled ({reason})"
+            task = session.task
+            if task is None:
+                return
+            task.cancel()
+            done, _ = await asyncio.wait({task}, timeout=30.0)
+            if not done:
+                # A run that ignores asyncio cancellation cannot be recovered from the loop;
+                # leave it to the existing shutdown/409 semantics instead of double-booking.
+                _LOGGER.error("Stalled run %s ignored cancellation; leaving it failed", session.run_id)
+                session._stall_reason = None
+                return
+            if session._recoveries >= self.max_recoveries:
+                # Budget exhausted: _fail already set recovery_required; do not respawn again.
+                _LOGGER.warning("Recovery budget exhausted for session %s; run left failed", session.session_id)
+                return
+            session._recoveries += 1
+            _LOGGER.warning("Session %s stalled (%s); respawning agent (recovery %d/%d)",
+                            session.session_id, reason, session._recoveries, self.max_recoveries)
+            stalled_input = session.input
+            session.recovery_required = False
+            old, session.agent = session.agent, None
+            if old is not None:
+                # Best-effort, bounded: never let a wedged instance block its own replacement.
+                if old.memory_manager is not None:
+                    with suppress(Exception):
+                        await asyncio.wait_for(old.memory_manager.flush(), 10.0)
+                with suppress(Exception):
+                    await asyncio.wait_for(asyncio.to_thread(old.cleanup), 10.0)
+            session._reserve(_recovery_prompt(
+                reason, session._recoveries, self.max_recoveries, stalled_input))
+
     async def snapshot(self, user_id: str, session_id: str, *, factory: AgentFactory | None = None) -> dict[str, Any]:
         session = await self.get(user_id, session_id, factory=factory)
         if session is None:
@@ -958,6 +1084,9 @@ class PanelRuntimeManager:
 
     async def shutdown(self) -> None:
         self._closed = True
+        if self._watchdog_task is not None:
+            self._watchdog_task.cancel()
+            await asyncio.gather(self._watchdog_task, return_exceptions=True)
         # Join GET construction and registry loads admitted before the close fence.
         # New callers cannot pass _get_locked once the fence is set.
         for lock in list(self._locks.values()):

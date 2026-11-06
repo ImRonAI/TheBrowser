@@ -62,7 +62,7 @@ def events(response):
     return [json.loads(line[6:]) for line in response.text.splitlines() if line.startswith("data: ")]
 
 
-@pytest.mark.parametrize('destination', ['panel', 'search', 'build'])
+@pytest.mark.parametrize('destination', ['panel', 'search', 'build', 'document'])
 @pytest.mark.parametrize('explicit_selection', [True, False])
 def test_article_reaches_native_model_and_restored_history(monkeypatch, destination, explicit_selection):
     from agent.api.core.articles import ARTICLE_PREFIX

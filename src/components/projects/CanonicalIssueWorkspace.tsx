@@ -1,18 +1,25 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { useProjectsStore } from '@/stores/projectsStore'
 import { TaskDetailView } from '@/components/board/task-detail/TaskDetailView'
+import type { Editor } from '@tiptap/react'
+import { Markdown } from '@tiptap/markdown'
 import { NotionEditor } from '@/components/board/task-detail/editor/NotionEditor'
+import { WorkflowBlockExtension } from '@/components/board/task-detail/editor/extensions/WorkflowBlockExtension'
 import type { Task } from '@/pages/types/task'
 import { ISSUE_PRIORITY_CONFIG, ISSUE_STATUS_CONFIG, type Issue, type Project } from '@/types/projects'
 import { canPlaceIssue, fromLocalDateTime, issueDefinitions, toLocalDateTime, validateIssueDates } from '@/lib/project-issue-utils'
 import { issueDraftPatch, rebaseIssueDraft } from '@/lib/project-issue-draft'
 import { ProjectFieldInput, projectInputClass } from './ProjectFieldInput'
 import { IssueRelationships } from './IssueRelationships'
+import { IssueDocuments } from './IssueDocuments'
 import { IssueRonPane } from './IssueRonPane'
 import { IssueDescriptionRon } from './IssueDescriptionRon'
 import { IssueWorkProducts } from './IssueWorkProducts'
 import { CreateIssueDialog } from './dialogs'
 import { AssistField } from '@/components/shared/TextAssist'
+
+/** Ron writes Markdown and draws workflows: the description editor parses both, as project pages do. */
+const DESCRIPTION_EXTENSIONS = [WorkflowBlockExtension, Markdown]
 
 export function CanonicalIssueWorkspace({ issue, project, onClose, onNavigate }: {
   issue: Issue; project: Project; onClose: () => void; onNavigate: (id: string) => void
@@ -27,6 +34,7 @@ export function CanonicalIssueWorkspace({ issue, project, onClose, onNavigate }:
   const [ronDraft, setRonDraft] = useState('')
   const [ronNeedsReview, setRonNeedsReview] = useState(false)
   const [descriptionRunning, setDescriptionRunning] = useState(false)
+  const [descriptionEditor, setDescriptionEditor] = useState<Editor | null>(null)
   const inFlight = useRef(false)
   const mounted = useRef(true)
   const dirty = Object.keys(issueDraftPatch(base, draft)).length > 0
@@ -143,9 +151,10 @@ export function CanonicalIssueWorkspace({ issue, project, onClose, onNavigate }:
   return <>
     <TaskDetailView task={task} onClose={() => void navigate(onClose)} workspace={{ banner, sidebar,
       description: <div className="h-full overflow-y-auto p-6 space-y-6 text-ink dark:text-ink-inverse">
-        <IssueDescriptionRon issueId={issue.id} issueTitle={issue.title} currentDescription={draft.description ?? ''} disabled={disabled || conflict} beforeStart={save}
-          onPreview={(description) => edit({ description })} onRunning={setDescriptionRunning} />
-        <NotionEditor canonical content={draft.description ?? ''} readOnly={disabled} onChange={(description) => edit({ description })} onSave={() => void save()}
+        <IssueDescriptionRon issueId={issue.id} issueTitle={issue.title} currentDescription={draft.description ?? ''} editor={descriptionEditor}
+          disabled={disabled || conflict} beforeStart={save} onPreview={(description) => edit({ description })} onRunning={setDescriptionRunning} />
+        <NotionEditor canonical content={draft.description ?? ''} readOnly={disabled} extensions={DESCRIPTION_EXTENSIONS} onEditor={setDescriptionEditor}
+          onChange={(description) => edit({ description })} onSave={() => void save()}
           onAskRon={(goal) => window.dispatchEvent(new CustomEvent('issue-description-ron', { detail: { issueId: issue.id, goal } }))} />
         <section className="space-y-2"><div className="flex justify-between"><h3 className="font-semibold">Child issues</h3>
           {definitions.some((d) => canPlaceIssue(project, d.key, issue)) && <button disabled={disabled} className="text-indigo-500" onClick={() => void navigate(() => setShowChild(true))}>Create child</button>}</div>
@@ -153,8 +162,19 @@ export function CanonicalIssueWorkspace({ issue, project, onClose, onNavigate }:
           {children.map((child) => <button key={child.id} disabled={disabled} className="block text-left text-sm text-indigo-500" onClick={() => void navigate(() => onNavigate(child.id))}>#{child.number} · {child.title} · {ISSUE_STATUS_CONFIG[child.status].label}</button>)}
         </section>
         <IssueRelationships issue={issue} onNavigate={(id) => void navigate(() => onNavigate(id))} />
+        <IssueDocuments issue={issue} disabled={disabled}
+          onOpenDocument={(doc) => void navigate(() => { void window.electron?.browser?.navigate(`ron://project/${doc.projectId}/docs/${doc.id}`) })} />
         <IssueWorkProducts products={issue.workProducts} />
       </div>,
+      context: <section aria-label="Issue context" className="h-full overflow-y-auto p-6">
+        <h3 className="text-sm font-semibold text-ink dark:text-ink-inverse">Context</h3>
+        <div className="mt-4 flex flex-col items-center justify-center rounded-2xl border border-dashed border-surface-200 px-6 py-12 text-center dark:border-surface-700">
+          <span className="flex size-11 items-center justify-center rounded-xl bg-surface-100 text-ink-muted dark:bg-surface-800 dark:text-ink-inverse-muted">
+            <svg className="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden><polygon points="12 2 2 7 12 12 22 7 12 2" /><polyline points="2 17 12 22 22 17" /><polyline points="2 12 12 17 22 12" /></svg>
+          </span>
+          <p className="mt-3 text-sm font-medium text-ink dark:text-ink-inverse">No context yet</p>
+        </div>
+      </section>,
       ron: <IssueRonPane issueId={issue.id} issue={{ title: issue.title, description: issue.description }} hasUnsavedChanges={dirty || saving} draft={ronDraft} onDraftChange={setRonDraft}
         needsReview={ronNeedsReview} onReviewChange={setRonNeedsReview} />,
       comms: <div className="p-6 text-sm">Canonical communications and attachment storage are not configured. Legacy messages, attachments, and conversations are not imported or written into custom fields.</div>,

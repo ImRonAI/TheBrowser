@@ -66,6 +66,9 @@ from agent.api.core.config import DEFAULT_MEMORY_MODEL
 from agent.api.core.config import (
     GEMINI_DEFAULT_MODEL,
     MISTRAL_DEFAULT_MODEL,
+    PANEL_ENVIRONMENT_CONTEXT,
+    PANEL_INTERVENTIONS,
+    PANEL_TODOS,
     PERPLEXITY_API_BASE_URL,
     PERPLEXITY_DEFAULT_MODEL,
     PERPLEXITY_MAX_OUTPUT_TOKENS,
@@ -991,9 +994,11 @@ def create_panel_agent(
             selected_browser, extra_env=(lambda: browser_server_env(user_id)) if repair_config.enabled else None)},
     )
     from agent.api.core.threads import ThreadProjection
-    hooks = [*hooks, BrowserAvailabilityHook(selected_browser), ToolObservation(),
-             # Mirrors this thread into Supabase (threads/thread_messages) on every message change; guests skipped.
-             ThreadProjection(user_id=user_id, session_id=session_id, destination=agent_scope, agent="chat", browser=selected_browser)]
+    hooks = [*hooks, BrowserAvailabilityHook(selected_browser), ToolObservation()]
+    if agent_scope != "document":
+        # Mirrors this thread into Supabase (threads/thread_messages) on every message change; guests skipped.
+        # Document Agent conversations belong to their page (document_conversations), not the thread list.
+        hooks.append(ThreadProjection(user_id=user_id, session_id=session_id, destination=agent_scope, agent="chat", browser=selected_browser))
     if provider == "xai":
         # strands_xai appends the whole encrypted protobuf history to every assistant turn and
         # only ever reads the newest copy; keep one so history/snapshots/token estimates stay linear.
@@ -1055,6 +1060,15 @@ def create_panel_agent(
         catalog.add_tools(music_generation_tools(user_id))
         # Native BeforeToolCallEvent cancel: an active mcp_client connection is never re-connected or re-loaded.
         plugins: list[Any] = [MCPConnectionGuard()]
+        # Harness builtin plugins (strands_harness.plugins): Todos keeps the task list in
+        # agent.state — session-snapshotted and re-injected before every model call — so a
+        # stall-respawned instance resumes mid-task with its plan; EnvironmentContext injects
+        # platform/date/cwd/AGENTS.md before each user turn.
+        from strands_harness.plugins import EnvironmentContext, Todos
+        if PANEL_TODOS:
+            plugins.append(Todos())
+        if PANEL_ENVIRONMENT_CONTEXT:
+            plugins.append(EnvironmentContext())
         if repair_config.enabled:
             # userTurn note "<tool> was repaired and is active", once per live session (agent.state).
             plugins.append(revision_notice(user_id))
@@ -1095,6 +1109,11 @@ def create_panel_agent(
             "aux_model": (build_model("perplexity", memory_aux_model_id(), None, hosted_tools=False)
                           if provider_api_key("perplexity") else None),
         }
+        if PANEL_INTERVENTIONS:
+            # strands_harness intervention sugar ("ask" | "smart" | policy | .cedar) onto the
+            # native Agent(interventions=...); ask=None parks flagged calls as interrupts.
+            from strands_harness.interventions import resolve_interventions
+            kwargs["interventions"] = resolve_interventions(PANEL_INTERVENTIONS)
         if context != "agentic":
             # Oversized tool results are stored on this user's session storage (namespaced
             # ``offloader``) and the native ``retrieve_offloaded_content`` tool reads them back.

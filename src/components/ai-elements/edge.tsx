@@ -10,6 +10,7 @@ import {
 
 const Temporary = ({
   id,
+  markerEnd,
   sourceX,
   sourceY,
   targetX,
@@ -30,6 +31,7 @@ const Temporary = ({
     <BaseEdge
       className="stroke-1 stroke-ring"
       id={id}
+      markerEnd={markerEnd}
       path={edgePath}
       style={{
         strokeDasharray: "5, 5",

@@ -1,4 +1,4 @@
-import { Extension } from '@tiptap/core'
+import { Extension, type Editor } from '@tiptap/core'
 import Suggestion from '@tiptap/suggestion'
 import { ReactRenderer } from '@tiptap/react'
 import tippy from 'tippy.js'
@@ -23,6 +23,8 @@ export const SLASH_COMMANDS = [
   { id: 'code', label: 'Code Block', icon: 'code', action: 'codeBlock' },
   { id: 'divider', label: 'Divider', icon: 'minus', action: 'divider' },
   { id: 'quote', label: 'Quote', icon: 'quote-right', action: 'blockquote' },
+  // Offered only by editors that load WorkflowBlockExtension (project documents).
+  { id: 'workflow', label: 'Show a workflow', icon: 'workflow', action: 'workflow', keywords: ['workflow', 'diagram', 'flowchart', 'process'] },
 ]
 
 export const SlashCommand = Extension.create({
@@ -51,9 +53,11 @@ export const SlashCommand = Extension.create({
 })
 
 export const suggestionOptions = {
-  items: ({ query }: { query: string }) => {
+  items: ({ query, editor }: { query: string; editor?: Editor }) => {
+    const needle = query.toLowerCase()
     return SLASH_COMMANDS.filter(item =>
-      item.label.toLowerCase().startsWith(query.toLowerCase())
+      (item.id !== 'workflow' || !!editor?.schema.nodes.workflow) &&
+      [item.label, ...(item.keywords ?? [])].some((word) => word.toLowerCase().startsWith(needle))
     ).slice(0, 20)
   },
 

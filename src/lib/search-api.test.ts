@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-const { DEFAULT_SEARCH_LEVEL, LEVEL_INFO, SearchApiError, applySearchEvent, initialRunState, levelLabel, mergedImages,
+const { DEFAULT_SEARCH_LEVEL, LEVEL_INFO, SearchApiError, applySearchEvent, beginFollowUpState, initialRunState, levelLabel, mergedImages,
   mergedWebResults, parseSseBlock, sectionItems, streamSearch } = await import('./search-api.ts')
 type FeedSection = import('./discover-feed.ts').FeedSection
 type SearchEvent = import('./search-api.ts').SearchEvent
@@ -160,4 +160,87 @@ test('streamSearch maps http and network failures to SearchApiError', async () =
   const offline = async (): Promise<Response> => { throw new TypeError('fetch failed') }
   await assert.rejects(streamSearch({ q: 'x' }, () => {}, undefined, offline, 'http://api.test'),
     (error: unknown) => error instanceof SearchApiError && error.code === 'unreachable')
+})
+
+test('beginFollowUpState archives the completed turn and preserves sessionId, sections, and shopping', () => {
+  const initial = run([
+    {
+      event: 'meta',
+      data: {
+        q: 'best espresso machines',
+        level: 'high',
+        model: 'xai/grok-4.7',
+        provider: 'xai',
+        effort: 'high',
+        shopping_model: 'xai/grok-4.7',
+        country: 'US',
+        session_id: 'search-session-123',
+        follow_up: false,
+      },
+    },
+    { event: 'section', data: section('web', [{ url: 'https://coffee.com', title: 'Coffee' }]) },
+    { event: 'agent.reasoning', data: { text: 'Comparing boilers' } },
+    { event: 'agent.delta', data: { text: 'The Rancilio Silvia Pro X is a top pick.' } },
+    { event: 'agent.citation', data: { url: 'https://coffee.com', title: 'Coffee' } },
+    { event: 'agent.sources', data: { results: [{ url: 'https://coffee.com', title: 'Coffee' }] } },
+    { event: 'agent.done', data: { usage: { total_tokens: 420 }, model: 'xai/grok-4.7' } },
+    {
+      event: 'shopping.sources',
+      data: {
+        results: [
+          { url: 'https://seattlecoffeegear.com/silvia', title: 'Silvia Pro X - $1,990', kind: 'online' },
+          {
+            url: 'https://localroaster.example.com',
+            title: 'Local Roaster & Supply',
+            kind: 'local',
+            address: '123 Main St, Seattle, WA',
+            rating: 4.8,
+            review_count: 210,
+          },
+        ],
+      },
+    },
+  ])
+  assert.equal(initial.sessionId, 'search-session-123')
+  assert.equal(initial.effort, 'high')
+  assert.equal(initial.shopping.sources.length, 2)
+  assert.equal(initial.shopping.sources[1].kind, 'local')
+
+  const next = beginFollowUpState(initial, 'How does it compare to the Profitec Pro 300?')
+  assert.equal(next.turns.length, 1)
+  assert.equal(next.turns[0].question, 'best espresso machines')
+  assert.equal(next.turns[0].text, 'The Rancilio Silvia Pro X is a top pick.')
+  assert.equal(next.turns[0].reasoning, 'Comparing boilers')
+  assert.equal(next.turns[0].citations.length, 1)
+  assert.equal(next.activeQuestion, 'How does it compare to the Profitec Pro 300?')
+  assert.equal(next.agent.status, 'streaming')
+  assert.equal(next.agent.text, '')
+  assert.equal(next.agent.sources.length, 1)
+  assert.equal(next.sessionId, 'search-session-123')
+  assert.equal(next.shopping.sources.length, 2)
+
+  const afterFollowUp = [
+    {
+      event: 'meta' as const,
+      data: {
+        q: 'How does it compare to the Profitec Pro 300?',
+        level: 'high',
+        model: 'xai/grok-4.7',
+        provider: 'xai',
+        effort: 'high',
+        shopping_model: null,
+        country: 'US',
+        session_id: 'search-session-123',
+        follow_up: true,
+      },
+    },
+    { event: 'agent.delta' as const, data: { text: 'The Profitec heats up faster.' } },
+    { event: 'agent.done' as const, data: { usage: { total_tokens: 310 }, model: 'xai/grok-4.7' } },
+  ].reduce(applySearchEvent, next)
+
+  assert.equal(afterFollowUp.meta?.q, 'best espresso machines')
+  assert.equal(afterFollowUp.meta?.shoppingModel, 'xai/grok-4.7')
+  assert.equal(afterFollowUp.turns.length, 1)
+  assert.equal(afterFollowUp.agent.text, 'The Profitec heats up faster.')
+  assert.equal(afterFollowUp.agent.status, 'done')
 })

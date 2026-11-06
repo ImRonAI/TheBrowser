@@ -67,7 +67,7 @@ CORE_TOOL_NAMES = (
     "mcp_client", "editor", "shell", "environment", "http_request", "perplexity_search",
     "brave_answer", "brave_web_search", "brave_news_search", "brave_image_search",
     "brave_video_search", "brave_local_search", "brave_rich_answer",
-    "render_ui", "programmatic_tool_caller", "tool_catalog",
+    "render_ui", "render_workflow", "programmatic_tool_caller", "tool_catalog",
 )
 
 #: Synthetic import package for agent/tools/strands_tools. The directory is never

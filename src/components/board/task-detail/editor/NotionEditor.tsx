@@ -1,4 +1,6 @@
-import { useEditor, EditorContent } from '@tiptap/react'
+import { useEditor, EditorContent, type Editor } from '@tiptap/react'
+import type { Extensions } from '@tiptap/core'
+import { NodeSelection } from '@tiptap/pm/state'
 import { BubbleMenu } from '@tiptap/react/menus'
 import StarterKit from '@tiptap/starter-kit'
 import Placeholder from '@tiptap/extension-placeholder'
@@ -35,6 +37,12 @@ interface NotionEditorProps {
   readOnly?: boolean
   canonical?: boolean
   onAskRon?: (goal: boolean) => void
+  /** Extra blocks for this editor only (project documents add the workflow block). */
+  extensions?: Extensions
+  /** Receives the editor instance, e.g. for a fixed formatting toolbar; null on unmount. */
+  onEditor?: (editor: Editor | null) => void
+  /** Replaces the default classes of the editable area. */
+  editorClassName?: string
 }
 
 export function NotionEditor({ 
@@ -45,7 +53,10 @@ export function NotionEditor({
   users = [],
   readOnly = false,
   canonical = false,
-  onAskRon
+  onAskRon,
+  extensions = [],
+  onEditor,
+  editorClassName = 'prose prose-lg dark:prose-invert max-w-none focus:outline-none min-h-[200px] p-6',
 }: NotionEditorProps) {
   
   const editor = useEditor({
@@ -91,10 +102,11 @@ export function NotionEditor({
       }),
       SlashCommand.configure({
         onAskRon,
-        suggestion: canonical ? { ...suggestionOptions, items: (args: { query: string }) =>
+        suggestion: canonical ? { ...suggestionOptions, items: (args: Parameters<typeof suggestionOptions.items>[0]) =>
           suggestionOptions.items(args).filter((item) => item.id !== 'upload' && (!!onAskRon || !['ask-ron', 'goal'].includes(item.id))) } : suggestionOptions,
       }),
       ...(!canonical ? [FileAttachmentExtension, AskRonExtension] : []),
+      ...extensions,
     ],
     content,
     shouldRerenderOnTransaction: false,
@@ -103,7 +115,7 @@ export function NotionEditor({
     },
     editorProps: {
       attributes: {
-        class: 'prose prose-lg dark:prose-invert max-w-none focus:outline-none min-h-[200px] p-6',
+        class: editorClassName,
       },
       handleKeyDown: (_view, event) => {
         if (event.key === 's' && (event.metaKey || event.ctrlKey)) {
@@ -115,6 +127,11 @@ export function NotionEditor({
       }
     },
   })
+
+  useEffect(() => {
+    onEditor?.(editor)
+    return () => onEditor?.(null)
+  }, [editor, onEditor])
 
   useEffect(() => {
     // A lock transition is not a document edit. Emitting onUpdate here can
@@ -138,8 +155,8 @@ export function NotionEditor({
         <BubbleMenu 
           editor={editor} 
           shouldShow={({ editor, view }) => {
-            // Only show if selection is not empty and not a code block
-            return !editor.isActive('codeBlock') && !view.state.selection.empty
+            // Only show for a text selection outside code blocks (not when a block such as a workflow is selected)
+            return !editor.isActive('codeBlock') && !view.state.selection.empty && !(view.state.selection instanceof NodeSelection)
           }}
           className="flex items-center gap-1 p-1 rounded-lg glass-bold shadow-lg border border-white/20"
         >

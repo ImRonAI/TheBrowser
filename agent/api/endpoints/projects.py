@@ -83,6 +83,38 @@ class EventCreate(StrictModel):
     participants: list[str] = Field(default_factory=list)
 
 
+#: List rows omit `content`; a page body is read with GET /projects/documents/{id}.
+DOCUMENT_SUMMARY = "id,project_id,parent_id,title,version,created_by,created_at,updated_at"
+
+
+class DocumentCreate(StrictModel):
+    project_id: UUID
+    parent_id: UUID | None = None
+    title: str = Field(default="Untitled", min_length=1, max_length=300)
+    content: str = Field(default="", max_length=2_000_000)
+
+
+class DocumentLinkCreate(StrictModel):
+    document_id: UUID
+    issue_id: UUID
+
+
+class DocumentConversationCreate(StrictModel):
+    title: str = Field(min_length=1, max_length=200)
+    goal: bool = False
+
+
+class DocumentConversationUpdate(StrictModel):
+    title: str = Field(min_length=1, max_length=200)
+
+
+class DocumentUpdate(StrictModel):
+    version: int = Field(ge=1)
+    title: str | None = Field(default=None, min_length=1, max_length=300)
+    content: str | None = Field(default=None, max_length=2_000_000)
+    parent_id: UUID | None = None
+
+
 @router.get("")
 async def list_projects(identity: Identity, offset: int = Query(0, ge=0), limit: int = Query(200, ge=1, le=500)):
     return await ProjectService(identity).rows("projects", order="id.asc", offset=offset, limit=limit)
@@ -155,6 +187,102 @@ async def delete_link(link_id: UUID, identity: Identity):
 async def create_event(issue_id: UUID, body: EventCreate, identity: Identity):
     rows = await ProjectService(identity).request("POST", "issue_events", body={**body.model_dump(), "issue_id": str(issue_id)})
     return rows[0]
+
+
+@router.get("/{project_id}/documents")
+async def list_documents(project_id: UUID, identity: Identity, offset: int = Query(0, ge=0), limit: int = Query(200, ge=1, le=500)):
+    return await ProjectService(identity).rows("project_documents", select=DOCUMENT_SUMMARY, project_id=f"eq.{project_id}",
+                                               order="created_at.asc,id.asc", offset=offset, limit=limit)
+
+
+@router.get("/documents")
+async def list_all_documents(identity: Identity, offset: int = Query(0, ge=0), limit: int = Query(200, ge=1, le=500)):
+    """Every page the caller can access, across projects (for linking a page to an issue)."""
+    return await ProjectService(identity).rows("project_documents", select=DOCUMENT_SUMMARY,
+                                               order="updated_at.desc,id.asc", offset=offset, limit=limit)
+
+
+@router.get("/document-links")
+async def list_document_links(identity: Identity, document_id: UUID | None = None, issue_id: UUID | None = None,
+                              offset: int = Query(0, ge=0), limit: int = Query(200, ge=1, le=500)):
+    """Links of one page (document_id) or of one issue (issue_id)."""
+    if (document_id is None) == (issue_id is None):
+        raise HTTPException(422, "Pass exactly one of document_id or issue_id")
+    where = {"document_id": f"eq.{document_id}"} if document_id else {"issue_id": f"eq.{issue_id}"}
+    return await ProjectService(identity).rows("document_issue_links", order="created_at.asc,id.asc",
+                                               offset=offset, limit=limit, **where)
+
+
+@router.post("/document-links")
+async def create_document_link(body: DocumentLinkCreate, identity: Identity):
+    rows = await ProjectService(identity).request("POST", "document_issue_links", body=body.model_dump(mode="json"))
+    return rows[0]
+
+
+@router.delete("/document-links/{link_id}")
+async def delete_document_link(link_id: UUID, identity: Identity):
+    rows = await ProjectService(identity).request("DELETE", "document_issue_links", params={"id": f"eq.{link_id}"})
+    if not rows:
+        raise HTTPException(404, "Link not found or not accessible")
+    return {"deleted": True}
+
+
+@router.get("/documents/{document_id}/conversations")
+async def list_document_conversations(document_id: UUID, identity: Identity, offset: int = Query(0, ge=0),
+                                      limit: int = Query(100, ge=1, le=500)):
+    """The caller's saved Ask Ron conversations on one page, most recently used first."""
+    return await ProjectService(identity).rows("document_conversations", document_id=f"eq.{document_id}",
+                                               order="updated_at.desc,id.asc", offset=offset, limit=limit)
+
+
+@router.post("/documents/{document_id}/conversations")
+async def create_document_conversation(document_id: UUID, body: DocumentConversationCreate, identity: Identity):
+    """A new conversation on this page; the database assigns its session id (`doc-<id>`)."""
+    rows = await ProjectService(identity).request("POST", "document_conversations",
+        body={"document_id": str(document_id), **body.model_dump(mode="json")})
+    return rows[0]
+
+
+@router.patch("/document-conversations/{conversation_id}")
+async def touch_document_conversation(conversation_id: UUID, body: DocumentConversationUpdate, identity: Identity):
+    """Marks the conversation as used now (the trigger sets updated_at) and keeps or renames its title."""
+    rows = await ProjectService(identity).request("PATCH", "document_conversations",
+        params={"id": f"eq.{conversation_id}"}, body=body.model_dump(mode="json"))
+    if not rows:
+        raise HTTPException(404, "Conversation not found or not accessible")
+    return rows[0]
+
+
+@router.get("/documents/{document_id}")
+async def get_document(document_id: UUID, identity: Identity):
+    rows = await ProjectService(identity).rows("project_documents", id=f"eq.{document_id}")
+    if not rows:
+        raise HTTPException(404, "Document not found or not accessible")
+    return rows[0]
+
+
+@router.post("/documents")
+async def create_document(body: DocumentCreate, identity: Identity):
+    rows = await ProjectService(identity).request("POST", "project_documents", body=body.model_dump(mode="json"))
+    return rows[0]
+
+
+@router.patch("/documents/{document_id}")
+async def update_document(document_id: UUID, body: DocumentUpdate, identity: Identity):
+    rows = await ProjectService(identity).request("PATCH", "project_documents",
+        params={"id": f"eq.{document_id}", "version": f"eq.{body.version}"},
+        body=body.model_dump(mode="json", exclude={"version"}, exclude_unset=True))
+    if not rows:
+        raise HTTPException(409, "This page changed elsewhere or access was removed. Reload before saving again.")
+    return rows[0]
+
+
+@router.delete("/documents/{document_id}")
+async def delete_document(document_id: UUID, identity: Identity):
+    rows = await ProjectService(identity).request("DELETE", "project_documents", params={"id": f"eq.{document_id}"})
+    if not rows:
+        raise HTTPException(404, "Document not found or not accessible")
+    return {"deleted": True}
 
 
 class IssueAgentMessage(StrictModel):

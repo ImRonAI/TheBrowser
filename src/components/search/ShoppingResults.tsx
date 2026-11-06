@@ -1,13 +1,14 @@
 /**
- * The Shopping panel — a second, domain-restricted Agent API run (gpt-6-luna, tools
- * limited to web_search over known retail domains + fetch_url + image_search). The
- * streamed answer renders as a quiet buying guide; beneath it, the products the
- * agent actually surfaced, grouped by merchant: square product photo, a two-line
- * name, the price extracted from the copy, and the merchant.
+ * The Shopping panel — powered by the Strands Harness Shopping Subagent (`create_harness`
+ * on `xai/grok-4.7` with `brave_web_search`, `brave_local_search`, `brave_image_search`,
+ * and `web_fetch`). Streams a structured buying guide and surfaces both Online Retailers
+ * (grouped by merchant with product imagery and prices) and Brick-and-Mortar / Local Stores
+ * (with address, rating, hours, phone, and website/storefront links).
  */
 import { motion, useReducedMotion } from 'framer-motion'
-import { ShoppingBag } from 'lucide-react'
+import { ExternalLink, MapPin, Phone, ShoppingBag, Star, Store } from 'lucide-react'
 import { ResponseMarkdown } from '@/components/ai-elements/response'
+import type { DiscoverItem } from '@/lib/discover-feed'
 import type { AgentImageResult, AgentRunState, AgentSearchResult } from '@/lib/search-api'
 import { AnswerSkeleton, EmptyState, SourceErrorNotice } from './primitives'
 import { hostname, stripCitationMarkers } from './tabs-meta'
@@ -30,6 +31,11 @@ function imagePageHost(image: AgentImageResult): string {
     if (typeof value === 'string' && value) return hostname(value)
   }
   return ''
+}
+
+function isLocalSource(source: AgentSearchResult): boolean {
+  if (source.kind === 'local') return true
+  return Boolean(source.address || source.hours || source.phone || typeof source.distance === 'number')
 }
 
 /**
@@ -88,6 +94,34 @@ function groupByMerchant(sources: AgentSearchResult[], images: AgentImageResult[
   return [...groups.entries()].sort((a, b) => b[1].length - a[1].length)
 }
 
+function mergeLocalStores(sources: AgentSearchResult[], places: DiscoverItem[]): AgentSearchResult[] {
+  const seen = new Set<string>()
+  const merged: AgentSearchResult[] = []
+  for (const source of sources) {
+    if (!source.url || !isLocalSource(source) || seen.has(source.url)) continue
+    seen.add(source.url)
+    merged.push(source)
+  }
+  for (const item of places) {
+    if (!item.url || seen.has(item.url)) continue
+    seen.add(item.url)
+    const place = item.place || {}
+    merged.push({
+      url: item.url,
+      title: item.title,
+      snippet: item.description || '',
+      kind: 'local',
+      address: typeof place.address === 'string' ? place.address : null,
+      rating: typeof place.rating === 'number' ? place.rating : null,
+      review_count: typeof place.review_count === 'number' ? place.review_count : null,
+      price_range: typeof place.price_range === 'string' ? place.price_range : null,
+      phone: typeof place.phone === 'string' ? place.phone : null,
+      distance: typeof place.distance === 'number' ? place.distance : null,
+    })
+  }
+  return merged
+}
+
 function ProductCard({ product, index }: { product: Product; index: number }) {
   const reduced = useReducedMotion()
   const { source, image, price } = product
@@ -115,6 +149,73 @@ function ProductCard({ product, index }: { product: Product; index: number }) {
   )
 }
 
+function LocalStoreCard({ store, index }: { store: AgentSearchResult; index: number }) {
+  const reduced = useReducedMotion()
+  const rating = typeof store.rating === 'number' ? store.rating : null
+  const reviews = typeof store.review_count === 'number' ? store.review_count : null
+  const address = typeof store.address === 'string' && store.address ? store.address : null
+  const hours = typeof store.hours === 'string' && store.hours ? store.hours : null
+  const phone = typeof store.phone === 'string' && store.phone ? store.phone : null
+  const priceRange = typeof store.price_range === 'string' && store.price_range ? store.price_range : null
+
+  return (
+    <motion.li {...rowMotion(index, reduced)} className="list-none">
+      <button
+        type="button"
+        onClick={() => openResult(store.url)}
+        title={store.url}
+        className="group flex w-full items-start gap-3.5 rounded-xl border border-surface-200/80 bg-surface-0 p-3.5 text-left transition-colors hover:border-surface-300 hover:bg-surface-50 dark:border-surface-800 dark:bg-surface-900 dark:hover:border-surface-700 dark:hover:bg-surface-850"
+      >
+        <span className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-lg bg-surface-100 text-ink-secondary dark:bg-surface-800 dark:text-ink-inverse-secondary">
+          <Store className="h-5 w-5" strokeWidth={1.6} />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="flex items-center justify-between gap-2">
+            <span className="truncate text-[14px] font-medium text-ink decoration-accent/50 underline-offset-[3px] group-hover:underline dark:text-ink-inverse">
+              {store.title || hostname(store.url)}
+            </span>
+            <ExternalLink className="h-3.5 w-3.5 flex-shrink-0 text-ink-muted opacity-0 transition-opacity group-hover:opacity-100 dark:text-ink-inverse-muted" />
+          </span>
+          {(rating !== null || priceRange) && (
+            <span className="mt-0.5 flex items-center gap-2 text-[12px] text-ink-secondary dark:text-ink-inverse-secondary">
+              {rating !== null && (
+                <span className="inline-flex items-center gap-1">
+                  <Star className="h-3 w-3 fill-accent text-accent dark:fill-accent-light dark:text-accent-light" />
+                  <span className="font-medium tabular-nums text-ink dark:text-ink-inverse">{rating.toFixed(1)}</span>
+                  {reviews !== null && <span className="text-ink-muted dark:text-ink-inverse-muted">({reviews.toLocaleString()})</span>}
+                </span>
+              )}
+              {priceRange && <span className="font-mono text-[11px] text-ink-muted dark:text-ink-inverse-muted">{priceRange}</span>}
+            </span>
+          )}
+          {address && (
+            <span className="mt-1 flex items-center gap-1.5 truncate text-[12px] text-ink-muted dark:text-ink-inverse-muted">
+              <MapPin className="h-3 w-3 flex-shrink-0" />
+              <span className="truncate">{address}</span>
+            </span>
+          )}
+          {(hours || phone) && (
+            <span className="mt-0.5 flex flex-wrap items-center gap-2 font-mono text-[11px] text-ink-muted dark:text-ink-inverse-muted">
+              {hours && <span>{hours}</span>}
+              {phone && (
+                <span className="inline-flex items-center gap-1">
+                  <Phone className="h-2.5 w-2.5" />
+                  {phone}
+                </span>
+              )}
+            </span>
+          )}
+          {store.snippet && !address && (
+            <span className="mt-1 line-clamp-2 block text-[12px] text-ink-muted dark:text-ink-inverse-muted">
+              {store.snippet}
+            </span>
+          )}
+        </span>
+      </button>
+    </motion.li>
+  )
+}
+
 function MerchantHeader({ url, label, count }: { url: string; label: string; count: number }) {
   return (
     <div className="mb-3 flex items-center gap-2">
@@ -126,15 +227,26 @@ function MerchantHeader({ url, label, count }: { url: string; label: string; cou
   )
 }
 
-export function ShoppingResults({ run, onRetry }: { run: AgentRunState; hue?: string; onRetry?: () => void }) {
+export function ShoppingResults({
+  run,
+  places = [],
+  onRetry,
+}: {
+  run: AgentRunState
+  places?: DiscoverItem[]
+  hue?: string
+  onRetry?: () => void
+}) {
   if (run.status === 'error' && !run.text && !run.sources.length) {
     return <div className="max-w-[680px]"><SourceErrorNotice error={run.error!} onRetry={onRetry} /></div>
   }
-  if (run.status === 'idle' && !run.text && !run.sources.length) {
+  if (run.status === 'idle' && !run.text && !run.sources.length && places.length === 0) {
     return <div className="max-w-[680px]"><AnswerSkeleton /></div>
   }
 
-  const merchants = groupByMerchant(run.sources, run.images)
+  const onlineSources = run.sources.filter((source) => !isLocalSource(source))
+  const localStores = mergeLocalStores(run.sources, places)
+  const merchants = groupByMerchant(onlineSources, run.images)
   const streaming = run.status === 'streaming'
 
   return (
@@ -143,7 +255,7 @@ export function ShoppingResults({ run, onRetry }: { run: AgentRunState; hue?: st
         <section aria-label="Buying guide" className="max-w-[720px] rounded-xl border border-surface-200/80 px-5 py-4 dark:border-surface-800">
           <p className="mb-2 flex items-center gap-2 text-[11px] font-medium uppercase tracking-[0.12em] text-ink-muted dark:text-ink-inverse-muted">
             <ShoppingBag className="h-3.5 w-3.5" strokeWidth={1.75} />
-            Buying guide
+            Buying guide — Online &amp; Brick-and-Mortar
             {run.model && <span className="font-mono text-[10px] normal-case tracking-normal">{run.model}</span>}
             {streaming && <span className="h-1.5 w-1.5 rounded-full bg-accent motion-safe:animate-pulse dark:bg-accent-light" aria-label="writing" />}
           </p>
@@ -157,8 +269,24 @@ export function ShoppingResults({ run, onRetry }: { run: AgentRunState; hue?: st
         <div className="mt-4 max-w-[680px]"><SourceErrorNotice error={run.error!} onRetry={onRetry} /></div>
       )}
 
-      {merchants.length === 0 && run.status === 'done' && run.images.length === 0 && (
-        <EmptyState title="No products surfaced" hint="Try naming the product, brand or budget explicitly" />
+      {merchants.length === 0 && localStores.length === 0 && run.status === 'done' && run.images.length === 0 && (
+        <EmptyState title="No products or stores surfaced" hint="Try naming the product, brand, or city explicitly" />
+      )}
+
+      {localStores.length > 0 && (
+        <section className="mt-8" aria-label="Brick-and-mortar and local stores">
+          <div className="mb-3 flex items-center gap-2">
+            <Store className="h-4 w-4 text-ink-secondary dark:text-ink-inverse-secondary" strokeWidth={1.75} />
+            <span className="text-[13px] font-semibold text-ink dark:text-ink-inverse">Brick-and-Mortar &amp; Local Stores</span>
+            <span className="font-mono text-[10.5px] tabular-nums text-ink-muted dark:text-ink-inverse-muted">{localStores.length}</span>
+            <div className="h-px flex-1 bg-surface-200/80 dark:bg-surface-800" />
+          </div>
+          <ul className="grid grid-cols-1 gap-3 md:grid-cols-2">
+            {localStores.map((store, i) => (
+              <LocalStoreCard key={store.url} store={store} index={i} />
+            ))}
+          </ul>
+        </section>
       )}
 
       {/* The agent pulled photos but no structured sources: still show the imagery. */}

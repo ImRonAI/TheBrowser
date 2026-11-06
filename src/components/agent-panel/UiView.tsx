@@ -1,15 +1,17 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { JSXPreview } from '@/components/ai-elements/jsx-preview'
+import { JSXPreview, JSXPreviewContent, JSXPreviewError } from '@/components/ai-elements/jsx-preview'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ai-elements/card'
 import { Badge } from '@/components/ai-elements/badge'
 import { Button } from '@/components/ai-elements/button'
 import { Carousel, CarouselContent, CarouselItem, CarouselNext, CarouselPrevious } from '@/components/ai-elements/carousel'
+import { Workflow, WorkflowEdge, WorkflowNode } from '@/components/workflow/WorkflowJsx'
 import type { UiView as UiViewData } from '@/lib/panel-stream'
 import type { JSXPreviewProps } from '@/components/ai-elements/jsx-preview'
 
-/** Components a `render_ui` JSX fragment may use (markup only; expressions are not executed). */
+/** Components a `render_ui` / `render_workflow` JSX fragment may use (markup only; expressions are not executed). */
 const JSX_COMPONENTS = { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle, Badge, Button,
-  Carousel, CarouselContent, CarouselItem, CarouselNext, CarouselPrevious } as unknown as NonNullable<JSXPreviewProps['components']>
+  Carousel, CarouselContent, CarouselItem, CarouselNext, CarouselPrevious,
+  Workflow, WorkflowNode, WorkflowEdge } as unknown as NonNullable<JSXPreviewProps['components']>
 
 /** `window.parent.postMessage({type:'ron:ui_action', action, payload}, '*')` from inside an html view. */
 export interface UiActionMessage { type: 'ron:ui_action'; action: unknown; payload: unknown }
@@ -47,7 +49,7 @@ export function UiView({ view, onAction, superseded }: { view: UiViewData; onAct
       // oxlint-disable-next-line eslint-plugin-react(iframe-missing-sandbox)
       sandbox="allow-scripts allow-forms allow-popups allow-presentation" allow="autoplay; fullscreen; picture-in-picture; encrypted-media" />
   } else {
-    body = <div className="p-3"><JSXPreview jsx={view.source} components={JSX_COMPONENTS} /></div>
+    body = <div className="p-3"><JSXPreview jsx={view.source} components={JSX_COMPONENTS}><JSXPreviewContent /><JSXPreviewError /></JSXPreview></div>
   }
   return <section className="my-3 overflow-hidden rounded-xl border border-surface-200 dark:border-surface-700" aria-label={view.title || 'Rendered view'}>
     {view.title && <header className="border-b border-surface-200 px-3 py-1.5 text-xs font-medium dark:border-surface-700">{view.title}</header>}

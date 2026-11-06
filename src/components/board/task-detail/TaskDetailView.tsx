@@ -15,7 +15,7 @@ const EASE = [0.16, 1, 0.3, 1] as const
 
 type ViewMode = 'normal' | 'fullscreen'
 
-type TabId = 'description' | 'ron' | 'comms' | 'history'
+type TabId = 'description' | 'context' | 'ron' | 'comms' | 'history'
 
 interface Tab {
   id: TabId
@@ -30,6 +30,9 @@ const TABS: Tab[] = [
   { id: 'history', label: 'History', icon: <ClockIcon /> },
 ]
 
+/** Canonical issues add a Context tab after Description; the legacy Task model has no pane for it. */
+const WORKSPACE_TABS: Tab[] = [TABS[0], { id: 'context', label: 'Context', icon: <LayersIcon /> }, ...TABS.slice(1)]
+
 interface TaskDetailViewProps {
   task: Task
   onClose: () => void
@@ -40,6 +43,7 @@ interface TaskDetailViewProps {
     banner: ReactNode
     sidebar: ReactNode
     description: ReactNode
+    context: ReactNode
     ron: ReactNode
     comms: ReactNode
     history: ReactNode
@@ -129,7 +133,7 @@ export function TaskDetailView({ task, onClose, onUpdate, onTaskClick, workspace
           <div className={cn('flex-1 flex flex-col min-w-0 border-r border-surface-200 dark:border-white/[0.05]', workspace && 'min-h-[400px] lg:min-h-0')}>
             {/* Tab Navigation */}
             <TabNavigation
-              tabs={TABS}
+              tabs={workspace ? WORKSPACE_TABS : TABS}
               activeTab={activeTab}
               onTabChange={setActiveTab}
             />
@@ -138,6 +142,7 @@ export function TaskDetailView({ task, onClose, onUpdate, onTaskClick, workspace
             <div className="flex-1 overflow-hidden min-h-0">
               {workspace ? <>
                 <div hidden={activeTab !== 'description'} className="h-full">{workspace.description}</div>
+                <div hidden={activeTab !== 'context'} className="h-full">{workspace.context}</div>
                 <div hidden={activeTab !== 'ron'} className="h-full"><ErrorBoundary componentName="RonTab">{workspace.ron}</ErrorBoundary></div>
                 <div hidden={activeTab !== 'comms'} className="h-full">{workspace.comms}</div>
                 <div hidden={activeTab !== 'history'} className="h-full">{workspace.history}</div>
@@ -514,6 +519,16 @@ function MessageIcon({ className }: { className?: string }) {
   return (
     <svg className={className || "w-3.5 h-3.5"} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
       <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+    </svg>
+  )
+}
+
+function LayersIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className || "w-3.5 h-3.5"} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <polygon points="12 2 2 7 12 12 22 7 12 2" />
+      <polyline points="2 17 12 22 22 17" />
+      <polyline points="2 12 12 17 22 12" />
     </svg>
   )
 }

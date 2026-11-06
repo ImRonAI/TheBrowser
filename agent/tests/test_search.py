@@ -76,21 +76,67 @@ def parse_sse(text: str) -> list[tuple[str, dict]]:
 def test_agent_request_preset_with_model_override():
     request = sa.build_agent_request("best ebikes", "medium")
     assert request["preset"] == "medium" and request["model"] == sa.RON_SEARCH_AGENT_MODEL
+    assert request["provider"] == "xai" and request["effort"] == "medium"
     assert request["stream"] is True and request["input"] == "best ebikes"
     tool_types = [tool["type"] for tool in request["tools"]]
-    assert tool_types == ["web_search", "image_search", "fetch_url"]
+    assert tool_types == ["web_search", "image_search", "fetch_url", "subagent"]
 
 
-def test_shopping_request_no_preset_exact_tools_domain_filtered():
+def test_shopping_request_unrestricted_online_and_local_by_default():
     request = sa.build_shopping_request("ebike")
     assert "preset" not in request
     assert request["model"] == sa.RON_SEARCH_SHOPPING_MODEL
+    assert request["provider"] == "xai"
     tools = {tool["type"]: tool for tool in request["tools"]}
-    assert set(tools) == {"web_search", "fetch_url", "image_search"}
-    domains = tools["web_search"]["filters"]["search_domain_filter"]
-    assert 0 < len(domains) <= 20
-    assert {"amazon.com", "target.com", "walmart.com", "kohls.com", "macys.com",
-            "ebay.com", "etsy.com"} <= set(domains)
+    assert set(tools) == {"web_search", "local_search", "fetch_url", "image_search"}
+    # Unrestricted by default so both online retailers and brick-and-mortar stores are returned.
+    assert "filters" not in tools["web_search"]
+    # Explicit domain list is still honored when passed.
+    filtered = sa.build_shopping_request("ebike", domains=["amazon.com", "rei.com"])
+    filtered_web = next(t for t in filtered["tools"] if t["type"] == "web_search")
+    assert filtered_web["filters"]["search_domain_filter"] == ["amazon.com", "rei.com"]
+
+
+def test_native_strands_harness_configs_and_progressive_efforts(monkeypatch, tmp_path):
+    monkeypatch.setenv("XAI_API_KEY", "xai-test-key")
+    monkeypatch.setattr(sa.app_config, "XAI_API_KEY", "xai-test-key")
+
+    expected_efforts = {
+        "fast": "low",
+        "low": "low",
+        "medium": "medium",
+        "high": "high",
+        "xhigh": "xhigh",
+    }
+    for level, expected_effort in expected_efforts.items():
+        cfg = sa.load_search_harness_config(level)
+        assert cfg["model"] == "xai/grok-4.7"
+        assert cfg["effort"] == expected_effort
+        assert cfg["instructions"] and len(cfg["instructions"]) > 80
+        assert cfg["agentConfig"] == {"background_tasks": False}
+
+        agent = sa.create_search_agent(
+            level,  # type: ignore[arg-type]
+            session_id=f"test-{level}",
+            session_dir=tmp_path,
+        )
+        assert agent.model.config["model_id"] in ("grok-4.7", "xai/grok-4.7")
+        assert agent.model.config.get("reasoning_effort") == expected_effort
+        assert "subagent" in agent.tool_names
+        assert "brave_web_search" in agent.tool_names
+        assert "brave_local_search" in agent.tool_names
+        assert "web_fetch" in agent.tool_names
+        assert agent._session_manager is not None
+
+    shop_cfg = sa.load_search_harness_config("shopping")
+    assert shop_cfg["model"] == "xai/grok-4.7"
+    assert shop_cfg["effort"] == "medium"
+    assert shop_cfg["session"] is False
+    shop_agent = sa.build_shopping_harness(location={"location": "Seattle, WA"}, country="US")
+    assert shop_agent.model.config["model_id"] in ("grok-4.7", "xai/grok-4.7")
+    assert shop_agent.model.config.get("reasoning_effort") == "medium"
+    assert "brave_local_search" in shop_agent.tool_names
+    assert "Seattle, WA" in (shop_agent.system_prompt or "")
 
 
 # --- SSE parsing ------------------------------------------------------------
@@ -195,7 +241,7 @@ def test_stream_endpoint_fans_out_all_sources(monkeypatch):
     shopping_request = next(r for r in recorded if "preset" not in r)
     assert agent_request["preset"] == "medium" and agent_request["model"] == sa.RON_SEARCH_AGENT_MODEL
     assert shopping_request["model"] == sa.RON_SEARCH_SHOPPING_MODEL
-    assert {t["type"] for t in shopping_request["tools"]} == {"web_search", "fetch_url", "image_search"}
+    assert {"web_search", "local_search", "fetch_url", "image_search"} <= {t["type"] for t in shopping_request["tools"]}
 
 
 def test_stream_endpoint_isolates_source_failures(monkeypatch):
@@ -225,6 +271,9 @@ def test_stream_endpoint_isolates_source_failures(monkeypatch):
 
 def test_stream_endpoint_validates_level_and_keys(monkeypatch):
     monkeypatch.setattr(search_ep, "PERPLEXITY_API_KEY", None)
+    monkeypatch.setattr(search_ep, "XAI_API_KEY", None)
+    monkeypatch.setattr(sa.app_config, "XAI_API_KEY", None)
+    monkeypatch.setattr(sa.app_config, "PERPLEXITY_API_KEY", None)
 
     async def scenario():
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app_with(brave_client())),
@@ -243,6 +292,7 @@ def test_stream_endpoint_validates_level_and_keys(monkeypatch):
 
 def test_search_status(monkeypatch):
     monkeypatch.setattr(search_ep, "PERPLEXITY_API_KEY", "pplx-test")
+    monkeypatch.setattr(search_ep, "XAI_API_KEY", "xai-test")
 
     async def scenario():
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app_with(brave_client())),
@@ -252,15 +302,18 @@ def test_search_status(monkeypatch):
             return response.json()
 
     body = asyncio.run(scenario())
-    assert body["configured"] == {"brave": True, "perplexity": True}
+    assert body["configured"] == {"brave": True, "xai": True, "perplexity": True}
+    assert body["provider"] == "xai"
     assert body["levels"] == list(sa.SEARCH_LEVELS)
+    assert body["reasoning_efforts"] == dict(sa.LEVEL_REASONING_EFFORT)
     assert body["models"] == {"agent": sa.RON_SEARCH_AGENT_MODEL, "shopping": sa.RON_SEARCH_SHOPPING_MODEL}
-    assert "amazon.com" in body["shopping_domains"] and len(body["shopping_domains"]) <= 20
+    assert body["shopping_domains"] == []
 
 
 def test_perplexity_agent_api_disabled(monkeypatch):
     recorded: list[dict] = []
     monkeypatch.setattr(search_ep, "PERPLEXITY_API_KEY", "pplx-test")
+    monkeypatch.setattr(search_ep, "XAI_API_KEY", None)
     monkeypatch.setenv("RON_PERPLEXITY_AGENT_API", "0")
     monkeypatch.setattr(search_ep, "stream_agent", fake_stream_agent(recorded))
 
@@ -275,7 +328,7 @@ def test_perplexity_agent_api_disabled(monkeypatch):
             return status_body, parse_sse(stream_resp.text)
 
     status_body, events = asyncio.run(scenario())
-    assert status_body["configured"] == {"brave": True, "perplexity": False}
+    assert status_body["configured"] == {"brave": True, "xai": False, "perplexity": False}
     assert recorded == []
 
     by_name: dict[str, list[dict]] = {}
@@ -290,3 +343,93 @@ def test_perplexity_agent_api_disabled(monkeypatch):
     assert errors["agent"]["code"] == "disabled"
     assert errors["shopping"]["code"] == "disabled"
     assert by_name["done"][0]["duration_ms"] >= 0
+
+
+def test_subagent_tool_streams_online_and_brick_and_mortar_shopping_and_follow_up(monkeypatch):
+    from strands.types._events import ToolStreamEvent
+
+    monkeypatch.setattr(search_ep, "XAI_API_KEY", "xai-test")
+    monkeypatch.setattr(sa.app_config, "XAI_API_KEY", "xai-test")
+
+    class FakeParentAgent:
+        def __init__(self):
+            self.prompts: list[str] = []
+
+        async def stream_async(self, prompt: str):
+            self.prompts.append(prompt)
+            if len(self.prompts) == 1:
+                yield {"reasoningText": "Checking specs and delegating shopping subagent"}
+                yield {"data": "The **Breville Bambino Plus** is our top compact espresso pick [Breville](https://www.breville.com/us/en/products/espresso/bes500.html)."}
+                # Simulate the `subagent` tool streaming shopping findings (online + brick-and-mortar).
+                tool_use = {"name": "subagent", "toolUseId": "sub-1", "input": {"agent_type": "shopping"}}
+                yield ToolStreamEvent(
+                    tool_use,  # type: ignore[arg-type]
+                    {
+                        "data": (
+                            "### Online Retailers\n"
+                            "- [Seattle Coffee Gear — Breville Bambino Plus ($499.95)](https://www.seattlecoffeegear.com/breville-bambino-plus)\n\n"
+                            "### Brick-and-Mortar & Local Stores\n"
+                            "- [Sur La Table Downtown](https://www.surlatable.com/stores/seattle) — 90 Pike St, Seattle, WA 98101 · 4.7/5 stars · (206) 622-0722\n"
+                        )
+                    },
+                )
+            else:
+                yield {"data": f"Follow-up answer for: {prompt}"}
+
+    fake_agent = FakeParentAgent()
+    fake_entry = sa._SearchSessionEntry(fake_agent, "high")  # type: ignore[arg-type]
+    monkeypatch.setattr(
+        sa,
+        "get_or_create_search_session",
+        lambda session_id, level, **kwargs: (fake_agent, fake_entry),
+    )
+
+    async def scenario():
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app_with(brave_client())),
+                                     base_url="http://test") as http:
+            initial = await http.post(
+                "/search/stream",
+                json={"q": "breville bambino plus", "level": "high", "session_id": "sess-42"},
+            )
+            assert initial.status_code == 200
+            initial_events = parse_sse(initial.text)
+
+            follow = await http.post(
+                "/search/stream",
+                json={
+                    "q": "Does it have a 3-way solenoid valve?",
+                    "level": "high",
+                    "session_id": "sess-42",
+                    "follow_up": True,
+                },
+            )
+            assert follow.status_code == 200
+            follow_events = parse_sse(follow.text)
+            return initial_events, follow_events
+
+    initial_events, follow_events = asyncio.run(scenario())
+    by_initial: dict[str, list[dict]] = {}
+    for name, data in initial_events:
+        by_initial.setdefault(name, []).append(data)
+
+    assert by_initial["meta"][0]["session_id"] == "sess-42"
+    assert by_initial["meta"][0]["effort"] == "high"
+    assert by_initial["meta"][0]["provider"] == "xai"
+    assert len(by_initial["section"]) == 5
+    assert "Breville Bambino Plus" in by_initial["agent.delta"][0]["text"]
+    assert by_initial["shopping.delta"]
+    shopping_sources = [ item for batch in by_initial.get("shopping.sources", []) for item in batch["results"] ]
+    kinds = {item["url"]: item.get("kind") for item in shopping_sources}
+    assert kinds.get("https://www.seattlecoffeegear.com/breville-bambino-plus") == "online"
+    assert kinds.get("https://www.surlatable.com/stores/seattle") == "local"
+
+    by_follow: dict[str, list[dict]] = {}
+    for name, data in follow_events:
+        by_follow.setdefault(name, []).append(data)
+
+    # Follow-up skips re-running static Brave sections and continues the same session.
+    assert "section" not in by_follow
+    assert by_follow["meta"][0]["session_id"] == "sess-42"
+    assert by_follow["meta"][0]["follow_up"] is True
+    assert "Follow-up answer for: Does it have a 3-way solenoid valve?" in by_follow["agent.delta"][0]["text"]
+    assert len(fake_agent.prompts) == 2

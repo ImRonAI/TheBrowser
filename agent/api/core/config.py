@@ -101,6 +101,28 @@ LIVE_TOOL_NUDGE_ENABLED = os.getenv("RON_LIVE_TOOL_NUDGE", "1") != "0"
 #: When a Live thread ends with work pending (app closed, signed out, tunnel down, Live failure) the Chat agent
 #: takes the same native session over on the cloud browser. RON_LIVE_TAKEOVER=0 disables the hand-off.
 LIVE_TAKEOVER_ENABLED = os.getenv("RON_LIVE_TAKEOVER", "1") != "0"
+# --- Run stall watchdog / agent respawn (`core/panel_runtime.py`, wired in `endpoints/chat.py`) ---
+#: No-activity window (seconds) before the watchdog cancels the wedged run and respawns a fresh
+#: agent instance on the same native session (ThreadSessionManager restore + a durable
+#: "[recovery]" user turn). 0 disables the watchdog. Tools emit no events while executing, so a
+#: tool call in flight gets the longer PANEL_RUN_TOOL_STALL_SECONDS window instead.
+PANEL_RUN_STALL_SECONDS = float(os.getenv("PANEL_RUN_STALL_SECONDS", "120"))
+#: Silent-tool-execution window (seconds); must exceed the longest bounded silent tool
+#: (song generation, RON_MUSIC_GENERATION_TIMEOUT=420) so it is never a false positive.
+PANEL_RUN_TOOL_STALL_SECONDS = float(os.getenv("PANEL_RUN_TOOL_STALL_SECONDS", "480"))
+#: Consecutive automatic recoveries per session before the run is left failed (recovery_required,
+#: the existing 409 semantics). A run that completes normally resets the count.
+PANEL_RUN_MAX_RECOVERIES = int(os.getenv("PANEL_RUN_MAX_RECOVERIES", "2"))
+# --- Harness builtin plugins on the panel agent (`core/panel_agent.py`) ---
+#: Todos: native todo_write task list kept in agent.state — session-snapshotted, re-injected
+#: before every model call, and restored into the respawned instance after a stall recovery.
+PANEL_TODOS = os.getenv("PANEL_TODOS", "1") != "0"
+#: EnvironmentContext: platform/date/cwd/AGENTS.md injected before each user turn (harness builtin).
+PANEL_ENVIRONMENT_CONTEXT = os.getenv("PANEL_ENVIRONMENT_CONTEXT", "1") != "0"
+#: Optional interventions gate ("ask" | "smart" | natural-language policy | .cedar path), resolved
+#: with strands_harness.resolve_interventions onto Agent(interventions=...). Default off: an
+#: interrupt-based approval gate parks unattended runs.
+PANEL_INTERVENTIONS = os.getenv("PANEL_INTERVENTIONS", "").strip()
 LIVE_TOOL_NUDGE_STALL_SECONDS = float(os.getenv("RON_LIVE_TOOL_NUDGE_STALL_SECONDS", "12"))
 LIVE_TOOL_NUDGE_MAX_PER_TURN = int(os.getenv("RON_LIVE_TOOL_NUDGE_MAX_PER_TURN", "2"))
 #: Rolling take kept in memory per Live session for ``music_save`` (48 kHz stereo PCM16 = 192 KB/s;
@@ -204,23 +226,20 @@ RON_A2A_AGENTS = os.getenv("RON_A2A_AGENTS", "")
 RON_TOOL_REPAIR_TIMEOUT_S = int(os.getenv("RON_TOOL_REPAIR_TIMEOUT_S", "900"))
 
 # --- Browser search (`endpoints/search.py`, `core/search_agent.py`) ---
-#: Every search runs the Perplexity Agent API with preset=<level> and this model
-#: override. Must be a full provider/model id from GET /v1/models.
-RON_SEARCH_AGENT_MODEL = os.getenv("RON_SEARCH_AGENT_MODEL", "openai/gpt-6.1-sol")
-#: Shopping section model: no preset; tools restricted to web_search (domain-
-#: filtered), fetch_url and image_search.
-RON_SEARCH_SHOPPING_MODEL = os.getenv("RON_SEARCH_SHOPPING_MODEL", "openai/gpt-6-luna")
+#: Model provider for the Strands Harness search agent and its shopping subagent (default: xAI).
+RON_SEARCH_PROVIDER = os.getenv("RON_SEARCH_PROVIDER", "xai").strip().lower() or "xai"
+#: Search agent model id (default: Grok 4.7 on xAI).
+RON_SEARCH_AGENT_MODEL = os.getenv("RON_SEARCH_AGENT_MODEL", "grok-4.7")
+#: Shopping subagent model id (default: Grok 4.7 on xAI).
+RON_SEARCH_SHOPPING_MODEL = os.getenv("RON_SEARCH_SHOPPING_MODEL", "grok-4.7")
 #: Default search level when the client omits one (see search_agent.SEARCH_LEVELS).
 RON_SEARCH_DEFAULT_LEVEL = os.getenv("RON_SEARCH_DEFAULT_LEVEL", "low")
-#: Domains the shopping agent's web_search is restricted to (Agent API caps
-#: search_domain_filter at 20 entries).
+#: Optional domain allowlist; defaults to [] (unrestricted online + brick-and-mortar search).
 RON_SEARCH_SHOPPING_DOMAINS = [
     d.strip().lower()
-    for d in os.getenv(
-        "RON_SEARCH_SHOPPING_DOMAINS",
-        "amazon.com,target.com,walmart.com,kohls.com,macys.com,ebay.com,etsy.com,"
-        "bestbuy.com,nordstrom.com,zappos.com,asos.com,gap.com,uniqlo.com,hm.com,"
-        "nike.com,adidas.com,wayfair.com,sephora.com,ulta.com,lego.com",
-    ).split(",")
+    for d in os.getenv("RON_SEARCH_SHOPPING_DOMAINS", "").split(",")
     if d.strip()
-][:20]
+]
+#: Directory for persistent Strands Harness search sessions (SnapshotSessionManager + offloaded context).
+SEARCH_SESSIONS_DIR = SESSION_STORAGE_DIR / "search-sessions"
+SEARCH_SESSIONS_DIR.mkdir(parents=True, exist_ok=True)

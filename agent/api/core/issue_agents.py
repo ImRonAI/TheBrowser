@@ -97,6 +97,28 @@ def issue_tools(service: ProjectService, issue: dict) -> list:
         return await service.context(scope.issue_id)
 
     @tool
+    async def add_workflow_to_description(version: int, title: str, steps: list[dict[str, Any]],
+                                          connections: list[dict[str, Any]] | None = None) -> dict:
+        """Append a flowchart to the end of this issue's description as a workflow block the user can edit.
+
+        Use it when a process, decision flow or hand-off for this issue reads better as a diagram. Pass the
+        issue's latest version (read_issue). Steps and connections take the same shapes as render_workflow:
+        steps [{"id", "label", "kind", "description", "content", "footer"}] with kind one of start, end, step,
+        decision, delay, subprocess, manual, automation, io, document, data; connections
+        [{"source", "target", "type": "animated" | "temporary", "label"}] (omit to chain the steps in order).
+        """
+        from agent.api.core.render_ui_tool import workflow_block_html, workflow_graph
+
+        clean_title = title.strip()[:120]
+        if not clean_title:
+            raise ValueError("title must name the workflow")
+        block = workflow_block_html(clean_title, workflow_graph(steps, connections))
+        current = await read_issue()
+        if current["version"] != version:
+            raise ValueError("Issue changed; reread before adding a workflow")
+        return await scoped.update(version, {"description": (current.get("description") or "") + block})
+
+    @tool
     async def link_issue(target_id: str, type: str = "relates") -> dict:
         """Add a relationship from this issue to an accessible issue in the same project."""
         from agent.api.endpoints.projects import LinkCreate
@@ -130,7 +152,8 @@ def issue_tools(service: ProjectService, issue: dict) -> list:
                    "url": source_url, "images": [{"url": url} for url in images]}
         return await scoped.update(version, {"work_products": [*current.get("work_products", []), product]})
 
-    return [read_issue, update_issue, edit_issue, create_child, read_issue_context, link_issue, save_work_product]
+    return [read_issue, update_issue, edit_issue, create_child, read_issue_context, link_issue, save_work_product,
+            add_workflow_to_description]
 
 
 @dataclass
@@ -252,6 +275,7 @@ class IssueAgentRuntime:
                     "Use list_learned_skills to discover this issue agent's taught workflows and use_skill to execute their ordered SOPs. "
                     "You may edit this issue and create backlog children; only humans may change status or complete it. "
                     "Use save_work_product to persist deliverables and search results with nested image previews; explain edits, child creation and relationships. "
+                    "When a process or decision flow helps, draw it into the description with add_workflow_to_description. "
                     "Respect version conflicts; reread before retrying. "
                     "This conversation is private to the current workspace identity. Unsaved UI drafts are not available. "
                     f"Your issue ID is {issue['id']}."

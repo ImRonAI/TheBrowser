@@ -16,6 +16,8 @@ DRY=0; [ "${1:-}" = "--dry-run" ] && DRY=1
 PSQL=(psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -X -q)
 
 "${PSQL[@]}" -c "create table if not exists public.ron_migrations (name text primary key, applied_at timestamptz not null default now());" >/dev/null
+# The ledger is for this script only (owner connection); keep it off the Data API (017_ron_migrations_lockdown.sql).
+"${PSQL[@]}" -c "alter table public.ron_migrations enable row level security; revoke all on public.ron_migrations from anon, authenticated;" >/dev/null
 
 # Seed the ledger with migrations whose objects already exist (pre-ledger deploys).
 "${PSQL[@]}" <<'SQL' >/dev/null

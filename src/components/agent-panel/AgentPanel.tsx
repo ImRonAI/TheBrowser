@@ -597,9 +597,10 @@ export function InterruptForm({ interrupts, onSubmit }: {
   </form>
 }
 
-type UiActionHandler = (viewId: string, action: unknown, payload: unknown) => void
+export type UiActionHandler = (viewId: string, action: unknown, payload: unknown) => void
 
-function MessageBubble({ message, status, onUiAction, superseded }: { message: PanelMessage; status: RunStatus; onUiAction: UiActionHandler; superseded: ReadonlySet<string> }) {
+/** One panel message (Agent Panel, Build, and Ask Ron's writing chats). */
+export function MessageBubble({ message, status, onUiAction, superseded }: { message: PanelMessage; status: RunStatus; onUiAction: UiActionHandler; superseded: ReadonlySet<string> }) {
   // Nested output of a chain tool (`think` for Perplexity, the tool fixer's `repair`) renders as a
   // chain-of-thought block; every other part renders flat.
   const items = useMemo(() => groupThinkParts(message.parts, status === 'running'), [message.parts, status])

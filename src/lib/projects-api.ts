@@ -28,7 +28,8 @@ export function createProjectsRequest(
       const detail = data?.detail
       const message = typeof detail === 'string' ? detail : Array.isArray(detail)
         ? detail.map((item: { msg: string }) => item.msg).join('; ') : `Project request failed (${response.status})`
-      throw new Error(message)
+      // `status` lets callers tell a version conflict (409) from other failures.
+      throw Object.assign(new Error(message), { status: response.status })
     }
     if (data === null) throw new Error('No response was confirmed. Reload before retrying.')
     return data as T
@@ -38,7 +39,7 @@ export function createProjectsRequest(
 export async function allProjectPages<T>(request: ProjectsRequest, path: string): Promise<T[]> {
   const rows: T[] = []
   for (;;) {
-    const page = await request<T[]>(`${path}?offset=${rows.length}&limit=200`)
+    const page = await request<T[]>(`${path}${path.includes('?') ? '&' : '?'}offset=${rows.length}&limit=200`)
     rows.push(...page)
     if (page.length < 200) return rows
   }

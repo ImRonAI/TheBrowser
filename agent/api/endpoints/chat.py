@@ -294,7 +294,7 @@ class ChatRequest(BaseModel):
     user_id: Identifier = "default"
     message: str = ""
     attachments: list[ArticleAttachment] = Field(default_factory=list, max_length=3)
-    destination: Literal["panel", "search", "build"] = "panel"
+    destination: Literal["panel", "search", "build", "document"] = "panel"
     browser_context: dict[str, Any] | None = None
     model: str = ""
     provider: str = ""
@@ -382,6 +382,12 @@ async def _create_runtime_agent(*, user_id, session_id, selection, options, runt
             "panel": "",
             "search": "\nYou are Search Agent. Research the user's question, verify claims with search tools, and cite original sources.",
             "build": "\nYou are Build Agent. Turn the user's request and reference material into working implementations; inspect before editing and validate your work.",
+            "document": "\nYou are Document Agent. You are Ron working inside one page of a project's documentation in Ron Projects, not in the Agent Panel. "
+                        "Each request names the project and the page and includes the page's current content. Your reply is the draft the user "
+                        "reviews and then inserts into the page or uses to overwrite it, so every word you write goes into the page: reply with "
+                        "only the page content in Markdown, never announce or narrate your research, and add no preamble, questions or commentary. When the topic needs facts you are not sure of, research it first with brave_web_search, "
+                        "brave_news_search or brave_answer, and cite what you used as Markdown links. When the user gives feedback on a draft, "
+                        "write the complete revised draft again.",
         }[selection.get("destination", "panel")],
         extra_tools=[], reasoning_effort=selection.get("reasoning_effort"),
         options=options, runtime_options=runtime_options,
@@ -391,7 +397,12 @@ async def _create_runtime_agent(*, user_id, session_id, selection, options, runt
 
 
 def create_runtime_manager() -> PanelRuntimeManager:
-    return PanelRuntimeManager(factory=_create_runtime_agent)
+    return PanelRuntimeManager(
+        factory=_create_runtime_agent,
+        stall_seconds=app_config.PANEL_RUN_STALL_SECONDS,
+        tool_stall_seconds=app_config.PANEL_RUN_TOOL_STALL_SECONDS,
+        max_recoveries=app_config.PANEL_RUN_MAX_RECOVERIES,
+    )
 
 
 def _manager(request: Request) -> PanelRuntimeManager:
