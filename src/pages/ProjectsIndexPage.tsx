@@ -4,7 +4,7 @@ import { useProjectsStore } from '@/stores/projectsStore'
 import { ProjectTypeBadge } from '@/components/projects/badges'
 import { CreateProjectDialog } from '@/components/projects/dialogs'
 import { ProjectsSyncStatus } from '@/components/projects/ProjectsSyncStatus'
-import { Button } from '@catalyst/button'
+import { Button } from '@/components/ui/button'
 import { PageBackground } from '@/components/shared/PageBackground'
 import { cn } from '@/utils/cn'
 
@@ -92,8 +92,8 @@ export function ProjectsIndexPage() {
                   <List className="w-4 h-4" />
                 </button>
               </div>
-              <Button color="indigo" onClick={() => setShowCreate(true)}>
-                <Plus data-slot="icon" />
+              <Button type="button" className="rounded-full" onClick={() => setShowCreate(true)}>
+                <Plus />
                 New Project
               </Button>
             </div>

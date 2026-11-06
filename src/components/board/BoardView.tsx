@@ -1,19 +1,23 @@
 import { useState } from 'react'
 import { motion, AnimatePresence, LayoutGroup } from 'framer-motion'
 import { KanbanBoard } from './KanbanBoard'
-import { CalendarView } from './CalendarView'
+import { IssueCalendar } from '@/components/calendar/IssueCalendar'
+import { IssueDrawer } from '@/components/projects/IssueDrawer'
+import { useProjectsStore } from '@/stores/projectsStore'
+import type { CalendarMode } from '@/lib/calendar'
 import { ListView } from './ListView'
 import { GanttView } from './GanttView'
 
 type ViewMode = 'kanban' | 'calendar' | 'list' | 'gantt'
-type CalendarMode = 'quarter' | 'month' | 'week' | 'day'
 
 // Sophisticated easing
 const EASE = [0.16, 1, 0.3, 1] as const
 
 export function BoardView() {
   const [viewMode, setViewMode] = useState<ViewMode>('kanban')
-  const [calendarMode, setCalendarMode] = useState<CalendarMode>('week')
+  const [calendarMode, setCalendarMode] = useState<CalendarMode>('month')
+  const { issues } = useProjectsStore()
+  const [selectedIssueId, setSelectedIssueId] = useState<string | null>(null)
 
   return (
     <div className="h-full flex flex-col">
@@ -69,7 +73,7 @@ export function BoardView() {
                 exit={{ opacity: 0, scale: 1.02 }}
                 transition={{ duration: 0.5, ease: EASE }}
               >
-                <CalendarView mode={calendarMode} />
+                <IssueCalendar issues={issues} onIssueSelect={setSelectedIssueId} mode={calendarMode} onModeChange={setCalendarMode} className="h-full" />
               </motion.div>
             )}
             {viewMode === 'list' && (
@@ -99,6 +103,7 @@ export function BoardView() {
           </AnimatePresence>
         </LayoutGroup>
       </div>
+      {selectedIssueId && <IssueDrawer issueId={selectedIssueId} onClose={() => setSelectedIssueId(null)} />}
     </div>
   )
 }

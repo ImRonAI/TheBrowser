@@ -13,7 +13,24 @@ import {
   ISSUE_TYPE_CONFIG,
 } from '@/types/projects'
 import { cn } from '@/utils/cn'
-import { X, FolderKanban, CheckSquare } from 'lucide-react'
+import * as SelectPrimitive from '@radix-ui/react-select'
+import { Select, SelectContent } from '@/components/ui/select'
+import {
+  X,
+  FolderKanban,
+  CheckSquare,
+  Check,
+  ChevronDown,
+  CodeXml,
+  BriefcaseBusiness,
+  Rocket,
+  GraduationCap,
+  FlaskConical,
+  Database,
+  Target,
+  Lightbulb,
+  type LucideIcon,
+} from 'lucide-react'
 import { fromLocalDateTime } from '@/lib/project-issue-utils'
 import { ProjectFieldInput } from './ProjectFieldInput'
 import { AssistField } from '@/components/shared/TextAssist'
@@ -72,19 +89,17 @@ export function CreateProjectDialog({ isOpen, onClose }: CreateProjectDialogProp
       
       <div className="min-h-0 overflow-y-auto p-4 sm:p-6 space-y-5">
         {error && <p role="alert" className="text-rose-500">{error}</p>}
-        {/* Project Name */}
-        <FormField label="Project Name">
-          <input
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="e.g., Website Redesign"
-            autoFocus
-            className={inputClasses}
-          />
-        </FormField>
-
-        {/* Key & Type Row */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        {/* Name & Key Row */}
+        <div className="grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_7.5rem] gap-4">
+          <FormField label="Project Name">
+            <input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="e.g., Website Redesign"
+              autoFocus
+              className={inputClasses}
+            />
+          </FormField>
           <FormField label="Key (optional)">
             <input
               value={key}
@@ -93,20 +108,12 @@ export function CreateProjectDialog({ isOpen, onClose }: CreateProjectDialogProp
               className={inputClasses}
             />
           </FormField>
-          <FormField label="Project Type">
-            <select
-              value={type}
-              onChange={(e) => setType(e.target.value as ProjectTypeKey)}
-              className={selectClasses}
-            >
-              {Object.values(PROJECT_TYPE_SCHEMES).map((scheme) => (
-                <option key={scheme.key} value={scheme.key}>
-                  {scheme.label}
-                </option>
-              ))}
-            </select>
-          </FormField>
         </div>
+
+        {/* Project Type */}
+        <FormField label="Project Type">
+          <ProjectTypeSelect value={type} onChange={setType} />
+        </FormField>
 
         {/* Summary */}
         <FormField label="Summary">
@@ -603,6 +610,111 @@ const inputClasses = cn(
   "focus:outline-none focus:border-indigo-400 dark:focus:border-indigo-600",
   "transition-colors"
 )
+
+const PROJECT_TYPE_ICONS: Record<ProjectTypeKey, LucideIcon> = {
+  'software-development': CodeXml,
+  'work-operations': BriefcaseBusiness,
+  founder: Rocket,
+  academic: GraduationCap,
+  research: FlaskConical,
+  'data-accrual': Database,
+  'personal-goals': Target,
+  'product-discovery': Lightbulb,
+}
+
+function ProjectTypeSelect({ value, onChange }: { value: ProjectTypeKey; onChange: (value: ProjectTypeKey) => void }) {
+  const selected = PROJECT_TYPE_SCHEMES[value]
+  const SelectedIcon = PROJECT_TYPE_ICONS[value]
+
+  return (
+    <Select value={value} onValueChange={(next) => onChange(next as ProjectTypeKey)}>
+      <SelectPrimitive.Trigger
+        aria-label="Project type"
+        className={cn(
+          "group flex w-full items-center gap-3 px-3 py-2.5 rounded-xl text-left",
+          "bg-surface-0 dark:bg-surface-900",
+          "border border-surface-200 dark:border-surface-800",
+          "hover:border-surface-300 dark:hover:border-surface-700",
+          "focus:outline-none focus-visible:border-indigo-400 dark:focus-visible:border-indigo-600",
+          "focus-visible:ring-4 focus-visible:ring-indigo-500/10",
+          "data-[state=open]:border-indigo-400 dark:data-[state=open]:border-indigo-600",
+          "data-[state=open]:ring-4 data-[state=open]:ring-indigo-500/10",
+          "transition-[border-color,box-shadow] cursor-pointer"
+        )}
+      >
+        <span className={cn(
+          "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg",
+          "bg-indigo-500/10 dark:bg-indigo-500/20",
+          "text-indigo-600 dark:text-indigo-400"
+        )}>
+          <SelectedIcon className="h-[18px] w-[18px]" />
+        </span>
+        <span className="flex min-w-0 flex-1 flex-col">
+          <span className="truncate text-body-sm font-medium text-ink dark:text-ink-inverse">
+            <SelectPrimitive.Value>{selected.label}</SelectPrimitive.Value>
+          </span>
+          <span className="truncate text-xs text-ink-muted dark:text-ink-inverse-muted">
+            {selected.description}
+          </span>
+        </span>
+        <SelectPrimitive.Icon asChild>
+          <ChevronDown className={cn(
+            "h-4 w-4 shrink-0 text-ink-muted dark:text-ink-inverse-muted",
+            "transition-transform duration-200 group-data-[state=open]:rotate-180"
+          )} />
+        </SelectPrimitive.Icon>
+      </SelectPrimitive.Trigger>
+
+      <SelectContent
+        position="popper"
+        sideOffset={6}
+        className={cn(
+          "z-[230] w-[var(--radix-select-trigger-width)] rounded-2xl",
+          "bg-surface-0 dark:bg-surface-900 text-ink dark:text-ink-inverse",
+          "border-surface-200 dark:border-surface-800",
+          "shadow-bold dark:shadow-dark-bold"
+        )}
+      >
+        {Object.values(PROJECT_TYPE_SCHEMES).map((scheme) => {
+          const Icon = PROJECT_TYPE_ICONS[scheme.key]
+          return (
+            <SelectPrimitive.Item
+              key={scheme.key}
+              value={scheme.key}
+              className={cn(
+                "group relative flex w-full cursor-pointer select-none items-center gap-3",
+                "rounded-xl py-1.5 pl-2 pr-9 outline-none transition-colors",
+                "data-[highlighted]:bg-surface-200/60 dark:data-[highlighted]:bg-surface-800",
+                "data-[state=checked]:bg-indigo-500/[0.07] dark:data-[state=checked]:bg-indigo-500/10"
+              )}
+            >
+              <span className={cn(
+                "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-colors",
+                "bg-surface-100 text-ink-secondary dark:bg-surface-800 dark:text-ink-inverse-secondary",
+                "group-data-[highlighted]:bg-surface-0 dark:group-data-[highlighted]:bg-surface-900",
+                "group-data-[state=checked]:bg-indigo-500/15 group-data-[state=checked]:text-indigo-600",
+                "dark:group-data-[state=checked]:bg-indigo-500/20 dark:group-data-[state=checked]:text-indigo-400"
+              )}>
+                <Icon className="h-4 w-4" />
+              </span>
+              <span className="flex min-w-0 flex-col">
+                <span className="text-body-sm font-medium text-ink dark:text-ink-inverse">
+                  <SelectPrimitive.ItemText>{scheme.label}</SelectPrimitive.ItemText>
+                </span>
+                <span className="text-xs leading-snug text-ink-muted dark:text-ink-inverse-muted">
+                  {scheme.description}
+                </span>
+              </span>
+              <SelectPrimitive.ItemIndicator className="absolute right-3 top-1/2 -translate-y-1/2 text-indigo-600 dark:text-indigo-400">
+                <Check className="h-4 w-4" />
+              </SelectPrimitive.ItemIndicator>
+            </SelectPrimitive.Item>
+          )
+        })}
+      </SelectContent>
+    </Select>
+  )
+}
 
 const selectClasses = cn(
   "w-full px-3 py-2.5 rounded-xl",
