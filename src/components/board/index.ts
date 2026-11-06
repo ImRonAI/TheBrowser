@@ -1,6 +1,5 @@
 export { BoardView } from './BoardView'
 export { KanbanBoard } from './KanbanBoard'
-export { CalendarView } from './CalendarView'
 export { TaskCard } from './TaskCard'
 
 // Task Detail Components

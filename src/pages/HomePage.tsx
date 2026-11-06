@@ -11,7 +11,8 @@ import { RichAnswerCard } from '@/components/home/RichAnswerCard'
 import { StoryCard, STORY_CARD_HEIGHT, type StoryCardSize } from '@/components/home/StoryCard'
 import { FavoriteLinks } from '@/components/home/FavoriteLinks'
 import { useNavigationStore } from '@/stores/navigationStore'
-import { KanbanBoard, CalendarView } from '@/components/board'
+import { KanbanBoard } from '@/components/board'
+import { CalendarPage } from '@/pages/CalendarPage'
 import { ErrorBoundary } from '@/components/ui/ErrorBoundary'
 import { BuildWorkbenchPage } from '@/components/build'
 import { SuperAgentInterface } from '@/components/superagent/SuperAgentInterface'
@@ -29,14 +30,12 @@ import videoData from '../../data/video.json'
 import umData from '../../data/um.json'
 import localData from '../../data/local.json'
 
-type CalendarMode = 'day' | 'week' | 'month' | 'quarter'
 export function HomePage() {
   const activeTab = useNavigationStore((state) => state.activeTab)
-  const [calendarMode, setCalendarMode] = useState<CalendarMode>('week')
   return <div className="h-full overflow-auto bg-surface-0 text-ink dark:bg-surface-900 dark:text-ink-inverse">
     {activeTab === 'discover' && <ErrorBoundary componentName="Discover"><DiscoverContent /></ErrorBoundary>}
     {activeTab === 'execute' && <ErrorBoundary componentName="KanbanBoard"><KanbanBoard /></ErrorBoundary>}
-    {activeTab === 'calendar' && <CalendarView mode={calendarMode} onModeChange={setCalendarMode} />}
+    {activeTab === 'calendar' && <ErrorBoundary componentName="Calendar"><CalendarPage /></ErrorBoundary>}
     {activeTab === 'vibe' && <ErrorBoundary componentName="SuperAgentInterface"><SuperAgentInterface /></ErrorBoundary>}
     {activeTab === 'build' && <BuildWorkbenchPage />}
   </div>

@@ -3,7 +3,10 @@ import { Plus, FolderKanban, Filter, X, Search, ChevronDown } from 'lucide-react
 import { useAuthStore } from '@/stores/authStore'
 import { useNavigationStore } from '@/stores/navigationStore'
 import { useTaskStore } from '@/stores/taskStore'
-import { KanbanBoard, CalendarView } from '@/components/board'
+import { KanbanBoard } from '@/components/board'
+import { IssueCalendar } from '@/components/calendar/IssueCalendar'
+import { IssueDrawer } from '@/components/projects/IssueDrawer'
+import { useProjectsStore } from '@/stores/projectsStore'
 import { TaskDetailView } from '@/components/board/task-detail'
 import { ErrorBoundary } from '@/components/ui/ErrorBoundary'
 import {
@@ -24,7 +27,8 @@ export function ExecutePage() {
   const { setActiveTab } = useNavigationStore()
   const { tasks, updateTask } = useTaskStore()
   const [activeView, setActiveView] = useState<'kanban' | 'calendar' | 'gantt' | 'list'>('kanban')
-  const [calendarMode, setCalendarMode] = useState<'day' | 'week' | 'month' | 'quarter'>('week')
+  const { issues: projectIssues, userId: projectsUserId, initialize: initializeProjects } = useProjectsStore()
+  const [calendarIssueId, setCalendarIssueId] = useState<string | null>(null)
   
   // Filter states
   const [projectFilter, setProjectFilter] = useState('all')
@@ -45,6 +49,10 @@ export function ExecutePage() {
   useEffect(() => {
     setActiveTab('execute')
   }, [setActiveTab])
+
+  useEffect(() => {
+    if (activeView === 'calendar' && projectsUserId) void initializeProjects()
+  }, [activeView, projectsUserId, initializeProjects])
 
   const projectOptions = useMemo(() => {
     const map = new Map<string, string>()
@@ -418,8 +426,9 @@ export function ExecutePage() {
         )}
 
         {activeView === 'calendar' && (
-          <CalendarView mode={calendarMode} onModeChange={setCalendarMode} />
+          <IssueCalendar issues={projectIssues} onIssueSelect={setCalendarIssueId} className="h-[780px]" />
         )}
+        {calendarIssueId && <IssueDrawer issueId={calendarIssueId} onClose={() => setCalendarIssueId(null)} />}
 
         {activeView === 'gantt' && (
           <ExecuteGanttView tasks={filteredTasks} onTaskClick={setSelectedTask} />
