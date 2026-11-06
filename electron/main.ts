@@ -830,6 +830,12 @@ async function createWindow() {
   }
   mainWindow = win
   attachChromeShortcuts(win.webContents)
+  // window.open / target=_blank from the browser chrome itself (links in project pages, issue
+  // descriptions, citations): a new app tab, never a detached BrowserWindow. Only web pages open.
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    if (/^https?:\/\//i.test(url)) tabsManager.switch(tabsManager.create(undefined, url).id)
+    return { action: 'deny' }
+  })
 
   const allowedPermissions = new Set([
     'media',

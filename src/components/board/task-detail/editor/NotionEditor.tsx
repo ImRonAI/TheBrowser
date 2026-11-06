@@ -91,8 +91,9 @@ export function NotionEditor({
       TaskList,
       TaskItem.configure({ nested: true }),
       Underline,
-      Link.configure({ 
-        openOnClick: false,
+      // Clicking a link opens it (Tiptap's window.open, target _blank); Electron turns that into a new app tab.
+      Link.configure({
+        openOnClick: true,
         HTMLAttributes: {
             class: 'cursor-pointer',
         },
