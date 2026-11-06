@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { createPortal } from 'react-dom'
 import type { Editor } from '@tiptap/react'
 import { nanoid } from 'nanoid'
-import { Check, CornerDownRight, Loader2, MousePointerClick, Replace, RotateCcw, Sparkles, Square, Target, X } from 'lucide-react'
+import { CornerDownRight, Loader2, Replace, RotateCcw, Sparkles, Square, Target, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Message, MessageContent } from '@/components/ai-elements/message'
 import { MessageResponse } from '@/components/ai-elements/response'
@@ -11,7 +10,7 @@ import { MessageBubble } from '@/components/agent-panel/AgentPanel'
 import { WorkflowDiagram } from '@/components/workflow/WorkflowCanvas'
 import { AssistField } from '@/components/shared/TextAssist'
 import { documentContent, hasDraft, unwrapMarkdown, type DocNode } from '@/lib/document-ron'
-import { PLACEMENT_KEY, describeTarget, insertionTarget, placementPlugin } from '@/lib/document-placement'
+import { insertionTarget } from '@/lib/document-placement'
 import { draftParts, type DraftTurn } from '@/lib/ron-draft'
 import type { RonSegment } from '@/lib/ron-run'
 import { workflowOutline } from '@/lib/workflow'
@@ -34,15 +33,6 @@ const noUiAction = () => {}
 const composerClass = 'relative rounded-2xl border px-4 pt-3 pb-2.5 transition-all duration-200 bg-surface-0 dark:bg-surface-850/90 border-surface-200 dark:border-surface-700/80 shadow-[0_4px_20px_-4px_rgb(26_25_23/0.06)] dark:shadow-[0_8px_24px_-6px_rgb(0_0_0/0.35)] focus-within:border-accent/50 focus-within:shadow-[0_0_0_3px_rgb(169_83_46/0.12),0_8px_24px_-6px_rgb(26_25_23/0.12)] dark:focus-within:border-accent-light/50'
 const composerInput = 'w-full min-w-0 resize-none bg-transparent py-1 text-[14px] leading-relaxed placeholder:text-ink-muted/60 outline-none disabled:opacity-60 min-h-[52px] max-h-40'
 const sendClass = 'shrink-0 rounded-xl bg-ink dark:bg-ink-inverse text-white dark:text-surface-900 px-3.5 h-8 text-xs font-semibold shadow-sm transition-all hover:opacity-90 disabled:opacity-30'
-
-function placementMarker(): HTMLElement {
-  const marker = document.createElement('div')
-  marker.contentEditable = 'false'
-  marker.setAttribute('data-ron-placement', '')
-  marker.className = 'not-prose pointer-events-none my-2 flex select-none items-center gap-2 rounded-lg border-2 border-dashed border-accent/60 bg-accent/5 px-3 py-2 text-xs font-semibold text-accent dark:border-accent-light/60 dark:text-accent-light'
-  marker.textContent = 'Ron’s draft goes here'
-  return marker
-}
 
 /** The draft Ron wrote: Markdown and drawn workflows, as the panel renders an answer. */
 function DraftView({ segments, streaming }: { segments: RonSegment[]; streaming: boolean }) {
@@ -98,7 +88,7 @@ function TurnView({ turn }: { turn: DraftTurn }) {
 /**
  * Ask Ron to write, as a temporary chat built from the Agent Panel's own components: the user's
  * request, Ron's tracing (tools, reasoning) in an accordion, and the draft. The draft only reaches the
- * editor when the user chooses Insert (pick the spot; nothing is overwritten) or Overwrite; either one
+ * editor when the user chooses Insert (at the cursor; nothing is overwritten) or Overwrite; either one
  * ends the chat (`onApplied`) for good. Try again sends feedback in the same conversation.
  */
 export function RonDraftChat({ agent, editor, noun, suggestions, initialGoal = false, onApplied, onClose, disabled, headerExtra, idleNote }: {
@@ -118,9 +108,8 @@ export function RonDraftChat({ agent, editor, noun, suggestions, initialGoal = f
 }) {
   const [prompt, setPrompt] = useState('')
   const [goal, setGoal] = useState(initialGoal)
-  const [stage, setStage] = useState<'review' | 'placing' | 'feedback'>('review')
+  const [stage, setStage] = useState<'review' | 'feedback'>('review')
   const [feedback, setFeedback] = useState('')
-  const [spot, setSpot] = useState('')
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const feedbackRef = useRef<HTMLTextAreaElement>(null)
   const endRef = useRef<HTMLDivElement>(null)
@@ -134,22 +123,6 @@ export function RonDraftChat({ agent, editor, noun, suggestions, initialGoal = f
   useEffect(() => { if (!started) inputRef.current?.focus() }, [started])
   useEffect(() => { if (stage === 'feedback') feedbackRef.current?.focus() }, [stage])
   useEffect(() => { endRef.current?.scrollIntoView({ block: 'nearest' }) }, [agent.turns.length, drafted, stage])
-
-  // Choosing where the draft goes: a marker in the editor follows the caret until the user places it.
-  useEffect(() => {
-    if (stage !== 'placing' || !editor || editor.isDestroyed) return
-    editor.registerPlugin(placementPlugin(placementMarker))
-    const update = () => setSpot(describeTarget(insertionTarget(editor.state.doc, editor.state.selection.to)))
-    update()
-    editor.on('transaction', update)
-    const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') setStage('review') }
-    window.addEventListener('keydown', onKey)
-    return () => {
-      editor.off('transaction', update)
-      window.removeEventListener('keydown', onKey)
-      if (!editor.isDestroyed) editor.unregisterPlugin(PLACEMENT_KEY)
-    }
-  }, [stage, editor])
 
   const send = (text = prompt) => {
     const ask = text.trim()
@@ -170,17 +143,17 @@ export function RonDraftChat({ agent, editor, noun, suggestions, initialGoal = f
     if (!markdown) return []
     return documentContent(latestSegments, (text) => markdown.parse(text) as DocNode, () => nanoid(10))
   }
-  const place = () => {
+  /** At the editor's cursor (it keeps its selection while the user is in this chat). */
+  const insert = () => {
     const content = blocks()
-    if (!editor || !content.length) return
+    if (!editor || editor.isDestroyed || !content.length) return
     const target = insertionTarget(editor.state.doc, editor.state.selection.to)
-    editor.unregisterPlugin(PLACEMENT_KEY)
     editor.chain().focus().insertContentAt(target.replace ?? target.at, content).scrollIntoView().run()
     onApplied('inserted')
   }
   const overwrite = () => {
     const content = blocks()
-    if (!editor || !content.length) return
+    if (!editor || editor.isDestroyed || !content.length) return
     editor.chain().focus().setContent({ type: 'doc', content }).run()
     onApplied('overwritten')
   }
@@ -257,16 +230,10 @@ export function RonDraftChat({ agent, editor, noun, suggestions, initialGoal = f
 
         {drafted && stage === 'review' && (
           <div className="flex flex-wrap items-center gap-2 px-1">
-            <Button type="button" className="gap-1.5 rounded-full" onClick={() => { setStage('placing'); editor?.commands.focus() }} disabled={disabled || !editor}><CornerDownRight className="size-4" />Insert</Button>
+            <Button type="button" className="gap-1.5 rounded-full" onClick={insert} disabled={disabled || !editor}><CornerDownRight className="size-4" />Insert at cursor</Button>
             <Button type="button" variant="outline" className="gap-1.5 rounded-full" onClick={overwrite} disabled={disabled || !editor}><Replace className="size-4" />Overwrite</Button>
             <Button type="button" variant="outline" className="gap-1.5 rounded-full" onClick={() => setStage('feedback')} disabled={disabled}><RotateCcw className="size-4" />Try again</Button>
           </div>
-        )}
-
-        {drafted && stage === 'placing' && (
-          <p role="status" className="flex items-center gap-2 px-1 text-sm text-ink-secondary dark:text-ink-inverse-secondary">
-            <MousePointerClick className="size-4 text-accent dark:text-accent-light" />Click in the {noun} where Ron’s draft should go, then choose Place here.
-          </p>
         )}
 
         {started && !agent.running && stage === 'feedback' && (
@@ -299,19 +266,6 @@ export function RonDraftChat({ agent, editor, noun, suggestions, initialGoal = f
         )}
       </div>
 
-      {stage === 'placing' && drafted && createPortal(
-        <div role="dialog" aria-label="Choose where Ron’s draft goes"
-          className="fixed bottom-6 left-1/2 z-[60] flex w-[min(640px,calc(100vw-2rem))] -translate-x-1/2 items-center gap-3 rounded-2xl border border-surface-200 bg-surface-0/95 px-4 py-3 shadow-lg backdrop-blur dark:border-surface-700 dark:bg-surface-900/95">
-          <MousePointerClick className="size-5 shrink-0 text-accent dark:text-accent-light" />
-          <div className="min-w-0 flex-1">
-            <p className="text-sm font-semibold text-ink dark:text-ink-inverse">Click in the {noun} where it should go</p>
-            <p className="truncate text-xs text-ink-muted dark:text-ink-inverse-muted" aria-live="polite">{spot}</p>
-          </div>
-          <Button type="button" variant="ghost" className="rounded-full" onMouseDown={(event) => event.preventDefault()} onClick={() => setStage('review')}>Cancel</Button>
-          <Button type="button" className="gap-1.5 rounded-full" onMouseDown={(event) => event.preventDefault()} onClick={place}><Check className="size-4" />Place here</Button>
-        </div>,
-        document.body,
-      )}
     </section>
   )
 }
