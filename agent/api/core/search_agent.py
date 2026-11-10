@@ -6,9 +6,11 @@ Built exclusively on the native ``strands_harness`` configuration system:
 - Every config is normalized with ``define_harness_agent_config``, converted to factory arguments
   with ``harness_agent_kwargs_from_config(config, base_dir=REPO_ROOT)``, and instantiated via
   ``create_harness()``.
-- Both the Search Agent and the Shopping Subagent default to xAI ``grok-4.7`` (``RonXAIModel``)
-  with progressive reasoning effort per research level:
-  ``fast -> low``, ``low -> low``, ``medium -> medium``, ``high -> high``, ``xhigh -> xhigh``.
+- The first answer to a query is Brave Answers itself (``BraveAnswersClient.stream``), forwarded as
+  ``agent.*`` events with its citations; no model of Ron's is involved.
+- The Search Agent (follow-up conversation) and the Shopping agent default to GLM-5.3-Flash on
+  NVIDIA NIM (``nim/z-ai/glm-5.3-flash``) with Brave tools only, and progressive reasoning effort
+  per research level mapped onto the efforts the model accepts (``resolve_search_effort``).
 - The Search Agent delegates shopping and store discovery to its native ``subagent`` tool
   (``strands_harness.tools.subagent.make_subagent`` with the ``"shopping"`` ``Preset``), whose
   builder calls ``create_harness()`` to find both online retailer product links and local
@@ -43,7 +45,12 @@ from strands_harness import (
 from strands_harness.tools.subagent import AgentSpec, Choice, Fixed, Preset, make_subagent
 
 from agent.api.core import config as app_config
-from agent.api.core.panel_agent import PROVIDERS, build_model, provider_api_key, xai_reasoning_efforts
+from agent.api.core.brave_answers_tool import answers_client
+from agent.api.core.brave_search import BraveSearchError
+from agent.api.core.panel_agent import (
+    NIM_REASONING_EFFORTS_BY_MODEL, PROVIDERS, build_model, mistral_reasoning_efforts, provider_api_key,
+    xai_reasoning_efforts,
+)
 from agent.api.core.xai_model import XAIStatePruner
 
 REPO_ROOT = app_config.REPO_ROOT
@@ -61,8 +68,8 @@ logger = logging.getLogger(__name__)
 SEARCH_LEVELS = ("fast", "low", "medium", "high", "xhigh")
 SearchLevel = Literal["fast", "low", "medium", "high", "xhigh"]
 
-#: Progressive reasoning effort mapped to each search level for Grok 4.7
-#: (Grok 4.7 supports "low", "medium", "high", "xhigh" and rejects "none").
+#: Progressive reasoning effort wanted at each search level; ``resolve_search_effort`` maps it onto
+#: the efforts the configured model accepts (GLM-5.3-Flash: "low", "high", "max").
 LEVEL_REASONING_EFFORT: dict[SearchLevel, str] = {
     "fast": "low",
     "low": "low",
@@ -141,14 +148,18 @@ def resolve_search_effort(
     desired = LEVEL_REASONING_EFFORT.get(level, config_effort or "medium")  # type: ignore[arg-type]
     if desired in ("auto", "off", "none", ""):
         desired = LEVEL_REASONING_EFFORT.get(level, "low")  # type: ignore[arg-type]
-    supported = xai_reasoning_efforts(model_id) if provider == "xai" else ()
+    supported = {
+        "xai": xai_reasoning_efforts, "mistral": mistral_reasoning_efforts,
+        "nim": lambda model: NIM_REASONING_EFFORTS_BY_MODEL.get(model, ()),
+    }.get(provider, lambda model: ())(model_id)
     if not supported:
-        return desired
-    if desired in supported:
-        return desired
-    if "low" in supported:
-        return "low"
-    return supported[0]
+        return desired if provider not in PROVIDERS else None
+    # The nearest effort the model accepts, at or above the one wanted.
+    order = ("low", "medium", "high", "xhigh", "max")
+    for candidate in order[order.index(desired):] if desired in order else ():
+        if candidate in supported:
+            return candidate
+    return next((candidate for candidate in reversed(order) if candidate in supported), supported[0])
 
 
 def build_harness_from_config(
@@ -185,9 +196,7 @@ def build_harness_from_config(
     cfg_provider, sep, cfg_model = str(normalized["model"]).partition("/")
     resolved_provider = (provider or (cfg_provider if sep else app_config.RON_SEARCH_PROVIDER)).strip().lower()
     raw_model = model_id or (cfg_model if sep else str(normalized["model"]))
-    if "/" in raw_model and not model_id:
-        _, _, raw_model = raw_model.partition("/")
-    elif "/" in raw_model and model_id:
+    if "/" in raw_model:
         p_prefix, _, m_rest = raw_model.partition("/")
         if p_prefix.lower() in PROVIDERS:
             resolved_provider = p_prefix.lower()
@@ -207,7 +216,8 @@ def build_harness_from_config(
         seen = {getattr(t, "tool_name", None) for t in existing if getattr(t, "tool_name", None)}
         kwargs["tools"] = [*existing, *(t for t in extra_tools if getattr(t, "tool_name", None) not in seen)]
 
-    return create_harness(callback_handler=None, hooks=[XAIStatePruner()], **kwargs)
+    hooks = [XAIStatePruner()] if resolved_provider == "xai" else []
+    return create_harness(callback_handler=None, hooks=hooks, **kwargs)
 
 
 def _location_context_note(location: Any | None, country: str = "US") -> str:
@@ -358,11 +368,15 @@ class _SearchSessionEntry:
 
 
 _SEARCH_SESSIONS: OrderedDict[str, _SearchSessionEntry] = OrderedDict()
+#: The Brave Answers turn of each session (question + answer), which the Search Agent starts from
+#: when the user asks a follow-up.
+_ANSWER_TURNS: OrderedDict[str, list[dict[str, Any]]] = OrderedDict()
 
 
 def clear_search_sessions() -> None:
     """Clear in-memory search sessions (used by tests)."""
     _SEARCH_SESSIONS.clear()
+    _ANSWER_TURNS.clear()
 
 
 def get_search_session(session_id: str) -> Agent | None:
@@ -714,10 +728,18 @@ async def stream_search_session(
     resolved_model_id = model_id or app_config.RON_SEARCH_AGENT_MODEL
     resolved_shopping_model = shopping_model_id or app_config.RON_SEARCH_SHOPPING_MODEL
 
+    if not follow_up:
+        async for event in _stream_answer_and_shopping(
+            q, session_id=session_id, shopping=shopping, country=country, location=location,
+            provider=resolved_provider, shopping_model_id=resolved_shopping_model,
+        ):
+            yield event
+        return
+
     if not search_provider_configured(resolved_provider):
         raise SearchAgentError(
             "not_configured",
-            f"{resolved_provider.upper()}_API_KEY is not set",
+            f"The {resolved_provider} API key is not set",
             status=503,
         )
 
@@ -731,19 +753,15 @@ async def stream_search_session(
         country=country,
     )
     entry.shopping_invoked = False
+    answered = _ANSWER_TURNS.pop(session_id or "ephemeral", None)
+    if answered and not agent.messages:
+        agent.messages.extend(answered)
 
     agent_text_parts: list[str] = []
     shopping_text_parts: list[str] = []
     shopping_streamed_any = False
 
     prompt = q
-    if shopping and not follow_up:
-        prompt = (
-            f"{q}\n\n"
-            "<system-reminder>If this query has any product, retail, gear, buying, or store relevance, "
-            "call your `subagent` tool (`agent_type=\"shopping\"`) so the user receives both online "
-            "retailer links and local brick-and-mortar store options.</system-reminder>"
-        )
 
     try:
         async for raw_event in agent.stream_async(prompt):
@@ -804,43 +822,105 @@ async def stream_search_session(
         }
         return
 
-    # Fallback: if shopping=True on an initial search and the parent did not invoke `subagent`,
-    # run the `create_harness()` shopping subagent directly so the Shopping lane is always populated.
-    if shopping and not follow_up:
-        try:
-            shopping_agent = build_shopping_harness(
-                provider=resolved_provider,
-                model_id=resolved_shopping_model,
-                location=location,
-                country=country,
-            )
-            async for raw_shop_event in shopping_agent.stream_async(q):
-                if not isinstance(raw_shop_event, Mapping):
-                    continue
-                for sub_ev in normalize_strands_chunk(raw_shop_event):
-                    ev_type = sub_ev["type"]
-                    if ev_type == "delta":
-                        shopping_text_parts.append(sub_ev["text"])
-                    yield f"shopping.{ev_type}", {k: v for k, v in sub_ev.items() if k != "type"}
 
-            full_shop_text = "".join(shopping_text_parts)
-            md_shop_sources = extract_markdown_sources(full_shop_text, default_kind="online")
-            if md_shop_sources:
-                yield "shopping.sources", {"results": md_shop_sources}
-                for src in md_shop_sources:
-                    yield "shopping.citation", {"url": src["url"], "title": src["title"]}
-            yield "shopping.done", {
-                "model": f"{resolved_provider}/{resolved_shopping_model}",
-                "incomplete": False,
-            }
-        except Exception as exc:
-            logger.warning("error=<%s> | fallback shopping harness failed", exc)
-            yield "source_error", {
-                "source": "shopping",
-                "code": "upstream",
-                "message": str(exc) or type(exc).__name__,
-                "status": 502,
-            }
+async def _answer_events(q: str, session_id: str | None, country: str) -> AsyncIterator[tuple[str, dict[str, Any]]]:
+    """Brave Answers for ``q`` as ``agent.*`` events: text deltas, its citations, then ``agent.done``."""
+    client = answers_client()
+    text: list[str] = []
+    done: dict[str, Any] = {}
+    usage: dict[str, Any] | None = None
+    try:
+        async for kind, payload in client.stream(q, country=country.lower()):
+            if kind == "text":
+                text.append(payload)
+                yield "agent.delta", {"text": payload}
+            elif kind == "citation":
+                yield "agent.citation", {"url": payload.url, "title": _hostname(payload.url)}
+                yield "agent.sources", {"results": [{
+                    "title": _hostname(payload.url) or payload.url, "url": payload.url,
+                    "snippet": payload.snippet or "", "source": _hostname(payload.url), "kind": "online",
+                }]}
+            elif kind == "usage":
+                usage = payload
+            elif kind == "done":
+                done = payload
+    except BraveSearchError as error:
+        raise SearchAgentError(error.code, str(error), status=error.status) from error
+    if session_id and text:
+        _ANSWER_TURNS[session_id] = [
+            {"role": "user", "content": [{"text": q}]},
+            {"role": "assistant", "content": [{"text": "".join(text)}]},
+        ]
+        while len(_ANSWER_TURNS) > MAX_SEARCH_SESSIONS:
+            _ANSWER_TURNS.popitem(last=False)
+    yield "agent.done", {"model": f"brave/{done.get('model') or client.model}", "usage": usage,
+                         "incomplete": done.get("finish_reason") == "length"}
+
+
+async def _shopping_events(
+    q: str, *, provider: str, model_id: str, location: Any | None, country: str,
+) -> AsyncIterator[tuple[str, dict[str, Any]]]:
+    """The ``create_harness()`` Shopping agent for ``q`` as ``shopping.*`` events."""
+    if not search_provider_configured(provider):
+        raise SearchAgentError("not_configured", f"The {provider} API key is not set", status=503)
+    shopping_agent = build_shopping_harness(provider=provider, model_id=model_id, location=location, country=country)
+    text: list[str] = []
+    async for raw_event in shopping_agent.stream_async(q):
+        if not isinstance(raw_event, Mapping):
+            continue
+        for event in normalize_strands_chunk(raw_event):
+            if event["type"] == "delta":
+                text.append(event["text"])
+            yield f"shopping.{event['type']}", {k: v for k, v in event.items() if k != "type"}
+    sources = extract_markdown_sources("".join(text), default_kind="online")
+    if sources:
+        yield "shopping.sources", {"results": sources}
+        for source in sources:
+            yield "shopping.citation", {"url": source["url"], "title": source["title"]}
+    yield "shopping.done", {"model": f"{provider}/{model_id}", "incomplete": False}
+
+
+async def _stream_answer_and_shopping(
+    q: str, *, session_id: str | None, shopping: bool, country: str, location: Any | None,
+    provider: str, shopping_model_id: str,
+) -> AsyncIterator[tuple[str, dict[str, Any]]]:
+    """A new search: Brave Answers and the Shopping agent run side by side; one failing lane is
+    reported as its own ``source_error`` and never stops the other."""
+    import asyncio
+
+    queue: asyncio.Queue[tuple[str, dict[str, Any]] | None] = asyncio.Queue()
+
+    async def pump(source: str, events: AsyncIterator[tuple[str, dict[str, Any]]]) -> None:
+        try:
+            async for event in events:
+                await queue.put(event)
+        except SearchAgentError as error:
+            await queue.put(("source_error", {"source": source, "code": error.code, "message": str(error),
+                                              "status": error.status}))
+        except Exception as error:
+            logger.warning("source=<%s>, error=<%s> | search lane failed", source, error)
+            await queue.put(("source_error", {"source": source, "code": "upstream",
+                                              "message": str(error) or type(error).__name__, "status": 502}))
+        finally:
+            await queue.put(None)
+
+    lanes = [pump("agent", _answer_events(q, session_id, country))]
+    if shopping:
+        lanes.append(pump("shopping", _shopping_events(q, provider=provider, model_id=shopping_model_id,
+                                                       location=location, country=country)))
+    tasks = [asyncio.create_task(lane) for lane in lanes]
+    try:
+        remaining = len(tasks)
+        while remaining:
+            item = await queue.get()
+            if item is None:
+                remaining -= 1
+            else:
+                yield item
+    finally:
+        for task in tasks:
+            task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
 
 
 # --- Legacy Wire-Format Compatibility Helpers --------------------------------

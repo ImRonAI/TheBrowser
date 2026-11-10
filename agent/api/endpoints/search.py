@@ -1,18 +1,17 @@
-"""Browser search HTTP surface: Brave fan-out + Strands Harness xAI Search Agent & Shopping Subagent.
+"""Browser search HTTP surface: Brave fan-out + Brave Answers + the GLM Search and Shopping agents.
 
-One ``POST /search/stream`` runs one query against Brave verticals and the Strands Harness
-Search Agent (``xai/grok-4.7``) concurrently and merges them onto a single SSE response:
+One ``POST /search/stream`` runs one query and merges every source onto a single SSE response:
 
 - Brave ``web``/``news``/``videos``/``images``/``places`` at per-endpoint maximum counts, each
   isolated (one failing source never blanks the page — same rule as Discover);
-- the Strands Harness Search Agent (built from ``agent/api/configs/search/<level>.json`` via
-  ``create_harness()`` on ``RonXAIModel("grok-4.7")`` with progressive reasoning effort) streamed
-  as ``agent.*`` events;
-- the Shopping Specialist subagent (built from ``agent/api/configs/search/shopping.json`` via
-  ``create_harness()`` and exposed as the Search Agent's ``subagent`` tool) streamed as
-  ``shopping.*`` events with both online retailer and local brick-and-mortar store links.
-- Multi-turn conversational follow-up (``follow_up=True``, ``session_id=<id>``) streams directly
-  from the persisted Search Agent session without re-running the static Brave sections.
+- the answer: Brave Answers itself (``BraveAnswersClient.stream``), forwarded as ``agent.*`` events
+  with its citations;
+- shopping: the Shopping agent (``agent/api/configs/search/shopping.json`` via ``create_harness()``
+  on GLM-5.3-Flash, Brave tools only) streamed as ``shopping.*`` events with online retailer and
+  local brick-and-mortar store links.
+- A follow-up (``follow_up=True``, ``session_id=<id>``) runs the Search agent
+  (``configs/search/<level>.json`` via ``create_harness()`` on GLM-5.3-Flash, Brave tools only),
+  which starts from the answered turn and does not re-run the Brave sections.
 """
 from __future__ import annotations
 
@@ -52,7 +51,8 @@ from agent.api.core.search_agent import (
     stream_agent,
     stream_search_session,
 )
-from agent.api. core import search_agent as _sa_module
+from agent.api.core import search_agent as _sa_module
+from agent.api.core.brave_answers_tool import answers_client
 
 # Discover owns the process-wide BraveClient (one shared token bucket).
 from agent.api.endpoints.discover import get_client as get_brave_client
@@ -79,11 +79,16 @@ def _frame(event: str, data: dict[str, Any]) -> str:
 
 
 def _xai_configured() -> bool:
+    return bool(XAI_API_KEY)
+
+
+def _search_agent_configured() -> bool:
+    """The answer lane (Brave Answers) or the search model provider (follow-ups, shopping) is usable."""
     import os
 
     if os.getenv("RON_SEARCH_AGENT", "1") == "0":
         return False
-    return bool(XAI_API_KEY)
+    return answers_client().configured or search_provider_configured()
 
 
 def _perplexity_configured() -> bool:
@@ -95,7 +100,7 @@ def _perplexity_configured() -> bool:
 def _agent_configured() -> bool:
     if stream_agent is not _sa_module.stream_agent:
         return _perplexity_configured()
-    return _xai_configured() or _perplexity_configured()
+    return _search_agent_configured() or _perplexity_configured()
 
 
 @router.get("/search/status")
@@ -104,6 +109,8 @@ async def search_status(request: Request):
         "configured": {
             "brave": get_brave_client(request).configured,
             "xai": _xai_configured(),
+            "answers": answers_client().configured,
+            "search_provider": search_provider_configured(),
             "perplexity": _perplexity_configured(),
         },
         "provider": RON_SEARCH_PROVIDER,

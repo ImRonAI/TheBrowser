@@ -57,6 +57,34 @@ def brave_client() -> bs.BraveClient:
     return bs.BraveClient("test-key", transport=fake_brave(), limiter=bs.RateLimiter(1000))
 
 
+ANSWERS_SSE = (
+    'data: {"model": "brave", "choices": [{"delta": {"content": "The Bambino Plus "}}]}\n\n'
+    'data: {"model": "brave", "choices": [{"delta": {"content": "heats in 3 seconds."}}]}\n\n'
+    'data: {"model": "brave", "choices": [{"delta": {"content": "<citation>{\\"number\\": 1, \\"url\\": '
+    '\\"https://www.breville.com/bes500\\", \\"snippet\\": \\"ThermoJet heating\\"}</citation>"}}]}\n\n'
+    'data: {"model": "brave", "choices": [{"delta": {}, "finish_reason": "stop"}]}\n\n'
+    'data: [DONE]\n\n'
+)
+
+
+def answers(key: str | None = "answers-key", recorded: list[dict] | None = None) -> bs.BraveAnswersClient:
+    """Brave Answers over a recorded SSE body shaped like the documented chat.completion.chunk stream."""
+    def respond(request: httpx.Request) -> httpx.Response:
+        if recorded is not None:
+            recorded.append(json.loads(request.content))
+        return httpx.Response(200, text=ANSWERS_SSE, headers={"content-type": "text/event-stream"})
+    return bs.BraveAnswersClient(key, transport=httpx.MockTransport(respond), limiter=bs.RateLimiter(1000))
+
+
+@pytest.fixture(autouse=True)
+def _offline_answers(monkeypatch):
+    """No test reaches Brave Answers unless it installs a client."""
+    from agent.api.core import brave_answers_tool
+
+    monkeypatch.setattr(brave_answers_tool, "_CLIENT", answers(None))
+    sa.clear_search_sessions()
+
+
 def parse_sse(text: str) -> list[tuple[str, dict]]:
     events = []
     for chunk in text.split("\n\n"):
@@ -76,7 +104,8 @@ def parse_sse(text: str) -> list[tuple[str, dict]]:
 def test_agent_request_preset_with_model_override():
     request = sa.build_agent_request("best ebikes", "medium")
     assert request["preset"] == "medium" and request["model"] == sa.RON_SEARCH_AGENT_MODEL
-    assert request["provider"] == "xai" and request["effort"] == "medium"
+    # GLM-5.3-Flash accepts low | high | max: medium maps up to high.
+    assert request["provider"] == "nim" and request["effort"] == "high"
     assert request["stream"] is True and request["input"] == "best ebikes"
     tool_types = [tool["type"] for tool in request["tools"]]
     assert tool_types == ["web_search", "image_search", "fetch_url", "subagent"]
@@ -86,7 +115,7 @@ def test_shopping_request_unrestricted_online_and_local_by_default():
     request = sa.build_shopping_request("ebike")
     assert "preset" not in request
     assert request["model"] == sa.RON_SEARCH_SHOPPING_MODEL
-    assert request["provider"] == "xai"
+    assert request["provider"] == "nim"
     tools = {tool["type"]: tool for tool in request["tools"]}
     assert set(tools) == {"web_search", "local_search", "fetch_url", "image_search"}
     # Unrestricted by default so both online retailers and brick-and-mortar stores are returned.
@@ -98,21 +127,24 @@ def test_shopping_request_unrestricted_online_and_local_by_default():
 
 
 def test_native_strands_harness_configs_and_progressive_efforts(monkeypatch, tmp_path):
-    monkeypatch.setenv("XAI_API_KEY", "xai-test-key")
-    monkeypatch.setattr(sa.app_config, "XAI_API_KEY", "xai-test-key")
+    from strands.models.openai import OpenAIModel
 
+    monkeypatch.setattr(sa.app_config, "NVIDIA_NIM_API_KEY", "nvapi-test-key")
+
+    # level -> (config effort, the effort GLM-5.3-Flash is sent: low | high | max)
     expected_efforts = {
-        "fast": "low",
-        "low": "low",
-        "medium": "medium",
-        "high": "high",
-        "xhigh": "xhigh",
+        "fast": ("low", "low"),
+        "low": ("low", "low"),
+        "medium": ("medium", "high"),
+        "high": ("high", "high"),
+        "xhigh": ("xhigh", "max"),
     }
-    for level, expected_effort in expected_efforts.items():
+    for level, (config_effort, expected_effort) in expected_efforts.items():
         cfg = sa.load_search_harness_config(level)
-        assert cfg["model"] == "xai/grok-4.7"
-        assert cfg["effort"] == expected_effort
+        assert cfg["model"] == "nim/z-ai/glm-5.3-flash"
+        assert cfg["effort"] == config_effort
         assert cfg["instructions"] and len(cfg["instructions"]) > 80
+        assert "xAI" not in cfg["instructions"] and "x_search" not in cfg["instructions"]
         assert cfg["agentConfig"] == {"background_tasks": False}
 
         agent = sa.create_search_agent(
@@ -120,8 +152,10 @@ def test_native_strands_harness_configs_and_progressive_efforts(monkeypatch, tmp
             session_id=f"test-{level}",
             session_dir=tmp_path,
         )
-        assert agent.model.config["model_id"] in ("grok-4.7", "xai/grok-4.7")
-        assert agent.model.config.get("reasoning_effort") == expected_effort
+        assert type(agent.model) is OpenAIModel
+        assert agent.model.config["model_id"] == "z-ai/glm-5.3-flash"
+        assert agent.model.config["params"] == {"reasoning_effort": expected_effort}
+        assert not any(name.startswith("x_") or name == "web_search" for name in agent.tool_names)
         assert "subagent" in agent.tool_names
         assert "brave_web_search" in agent.tool_names
         assert "brave_local_search" in agent.tool_names
@@ -129,12 +163,13 @@ def test_native_strands_harness_configs_and_progressive_efforts(monkeypatch, tmp
         assert agent._session_manager is not None
 
     shop_cfg = sa.load_search_harness_config("shopping")
-    assert shop_cfg["model"] == "xai/grok-4.7"
+    assert shop_cfg["model"] == "nim/z-ai/glm-5.3-flash"
+    assert "xAI" not in shop_cfg["instructions"]
     assert shop_cfg["effort"] == "medium"
     assert shop_cfg["session"] is False
     shop_agent = sa.build_shopping_harness(location={"location": "Seattle, WA"}, country="US")
-    assert shop_agent.model.config["model_id"] in ("grok-4.7", "xai/grok-4.7")
-    assert shop_agent.model.config.get("reasoning_effort") == "medium"
+    assert shop_agent.model.config["model_id"] == "z-ai/glm-5.3-flash"
+    assert shop_agent.model.config["params"] == {"reasoning_effort": "high"}
     assert "brave_local_search" in shop_agent.tool_names
     assert "Seattle, WA" in (shop_agent.system_prompt or "")
 
@@ -291,8 +326,12 @@ def test_stream_endpoint_validates_level_and_keys(monkeypatch):
 
 
 def test_search_status(monkeypatch):
+    from agent.api.core import brave_answers_tool
+
     monkeypatch.setattr(search_ep, "PERPLEXITY_API_KEY", "pplx-test")
     monkeypatch.setattr(search_ep, "XAI_API_KEY", "xai-test")
+    monkeypatch.setattr(sa.app_config, "NVIDIA_NIM_API_KEY", "nvapi-test")
+    monkeypatch.setattr(brave_answers_tool, "_CLIENT", answers())
 
     async def scenario():
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app_with(brave_client())),
@@ -302,8 +341,9 @@ def test_search_status(monkeypatch):
             return response.json()
 
     body = asyncio.run(scenario())
-    assert body["configured"] == {"brave": True, "xai": True, "perplexity": True}
-    assert body["provider"] == "xai"
+    assert body["configured"] == {"brave": True, "xai": True, "answers": True, "search_provider": True,
+                                  "perplexity": True}
+    assert body["provider"] == "nim"
     assert body["levels"] == list(sa.SEARCH_LEVELS)
     assert body["reasoning_efforts"] == dict(sa.LEVEL_REASONING_EFFORT)
     assert body["models"] == {"agent": sa.RON_SEARCH_AGENT_MODEL, "shopping": sa.RON_SEARCH_SHOPPING_MODEL}
@@ -328,7 +368,8 @@ def test_perplexity_agent_api_disabled(monkeypatch):
             return status_body, parse_sse(stream_resp.text)
 
     status_body, events = asyncio.run(scenario())
-    assert status_body["configured"] == {"brave": True, "xai": False, "perplexity": False}
+    assert status_body["configured"] == {"brave": True, "xai": False, "answers": False, "search_provider": False,
+                                         "perplexity": False}
     assert recorded == []
 
     by_name: dict[str, list[dict]] = {}
@@ -345,44 +386,54 @@ def test_perplexity_agent_api_disabled(monkeypatch):
     assert by_name["done"][0]["duration_ms"] >= 0
 
 
-def test_subagent_tool_streams_online_and_brick_and_mortar_shopping_and_follow_up(monkeypatch):
+def test_new_search_is_brave_answers_plus_glm_shopping_and_follow_up_is_the_glm_agent(monkeypatch):
     from strands.types._events import ToolStreamEvent
 
-    monkeypatch.setattr(search_ep, "XAI_API_KEY", "xai-test")
-    monkeypatch.setattr(sa.app_config, "XAI_API_KEY", "xai-test")
+    from agent.api.core import brave_answers_tool
 
-    class FakeParentAgent:
+    asked: list[dict] = []
+    monkeypatch.setattr(sa.app_config, "NVIDIA_NIM_API_KEY", "nvapi-test")
+    monkeypatch.setattr(brave_answers_tool, "_CLIENT", answers(recorded=asked))
+
+    SHOPPING_REPORT = (
+        "### Online Retailers\n"
+        "- [Seattle Coffee Gear — Breville Bambino Plus ($499.95)](https://www.seattlecoffeegear.com/breville-bambino-plus)\n\n"
+        "### Brick-and-Mortar & Local Stores\n"
+        "- [Sur La Table Downtown](https://www.surlatable.com/stores/seattle) — 90 Pike St, Seattle, WA 98101 · 4.7/5 stars · (206) 622-0722\n"
+    )
+
+    class FakeShoppingAgent:
+        async def stream_async(self, prompt: str):
+            yield {"data": SHOPPING_REPORT}
+
+    built: list[dict] = []
+
+    def fake_shopping_harness(spec=None, **kwargs):
+        built.append(kwargs)
+        return FakeShoppingAgent()
+
+    monkeypatch.setattr(sa, "build_shopping_harness", fake_shopping_harness)
+
+    class FakeSearchAgent:
         def __init__(self):
             self.prompts: list[str] = []
+            self.messages: list[dict] = []
 
         async def stream_async(self, prompt: str):
             self.prompts.append(prompt)
-            if len(self.prompts) == 1:
-                yield {"reasoningText": "Checking specs and delegating shopping subagent"}
-                yield {"data": "The **Breville Bambino Plus** is our top compact espresso pick [Breville](https://www.breville.com/us/en/products/espresso/bes500.html)."}
-                # Simulate the `subagent` tool streaming shopping findings (online + brick-and-mortar).
-                tool_use = {"name": "subagent", "toolUseId": "sub-1", "input": {"agent_type": "shopping"}}
-                yield ToolStreamEvent(
-                    tool_use,  # type: ignore[arg-type]
-                    {
-                        "data": (
-                            "### Online Retailers\n"
-                            "- [Seattle Coffee Gear — Breville Bambino Plus ($499.95)](https://www.seattlecoffeegear.com/breville-bambino-plus)\n\n"
-                            "### Brick-and-Mortar & Local Stores\n"
-                            "- [Sur La Table Downtown](https://www.surlatable.com/stores/seattle) — 90 Pike St, Seattle, WA 98101 · 4.7/5 stars · (206) 622-0722\n"
-                        )
-                    },
-                )
-            else:
-                yield {"data": f"Follow-up answer for: {prompt}"}
+            yield {"data": f"Follow-up answer for: {prompt}"}
+            tool_use = {"name": "subagent", "toolUseId": "sub-1", "input": {"agent_type": "shopping"}}
+            yield ToolStreamEvent(tool_use, {"data": SHOPPING_REPORT})  # type: ignore[arg-type]
 
-    fake_agent = FakeParentAgent()
+    fake_agent = FakeSearchAgent()
     fake_entry = sa._SearchSessionEntry(fake_agent, "high")  # type: ignore[arg-type]
-    monkeypatch.setattr(
-        sa,
-        "get_or_create_search_session",
-        lambda session_id, level, **kwargs: (fake_agent, fake_entry),
-    )
+    created: list[str] = []
+
+    def fake_session(session_id, level, **kwargs):
+        created.append(session_id)
+        return fake_agent, fake_entry
+
+    monkeypatch.setattr(sa, "get_or_create_search_session", fake_session)
 
     async def scenario():
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app_with(brave_client())),
@@ -393,6 +444,7 @@ def test_subagent_tool_streams_online_and_brick_and_mortar_shopping_and_follow_u
             )
             assert initial.status_code == 200
             initial_events = parse_sse(initial.text)
+            assert created == []  # the model agent is not built for a new search
 
             follow = await http.post(
                 "/search/stream",
@@ -413,12 +465,18 @@ def test_subagent_tool_streams_online_and_brick_and_mortar_shopping_and_follow_u
         by_initial.setdefault(name, []).append(data)
 
     assert by_initial["meta"][0]["session_id"] == "sess-42"
-    assert by_initial["meta"][0]["effort"] == "high"
-    assert by_initial["meta"][0]["provider"] == "xai"
-    assert len(by_initial["section"]) == 5
-    assert "Breville Bambino Plus" in by_initial["agent.delta"][0]["text"]
-    assert by_initial["shopping.delta"]
-    shopping_sources = [ item for batch in by_initial.get("shopping.sources", []) for item in batch["results"] ]
+    assert by_initial["meta"][0]["provider"] == "nim"
+    assert len(by_initial["section"]) == 5 and "source_error" not in by_initial
+    # The answer is the Brave Answers stream itself: the documented body, its text and its citation.
+    assert asked[0]["messages"] == [{"role": "user", "content": "breville bambino plus"}] and asked[0]["stream"] is True
+    assert "".join(e["text"] for e in by_initial["agent.delta"]) == "The Bambino Plus heats in 3 seconds."
+    assert by_initial["agent.citation"] == [{"url": "https://www.breville.com/bes500", "title": "breville.com"}]
+    assert by_initial["agent.sources"][0]["results"][0]["snippet"] == "ThermoJet heating"
+    assert by_initial["agent.done"][0]["model"] == "brave/brave"
+    # Shopping is the GLM shopping agent, run directly.
+    assert built and built[0]["provider"] == "nim" and built[0]["model_id"] == "z-ai/glm-5.3-flash"
+    assert by_initial["shopping.done"][0]["model"] == "nim/z-ai/glm-5.3-flash"
+    shopping_sources = [item for batch in by_initial.get("shopping.sources", []) for item in batch["results"]]
     kinds = {item["url"]: item.get("kind") for item in shopping_sources}
     assert kinds.get("https://www.seattlecoffeegear.com/breville-bambino-plus") == "online"
     assert kinds.get("https://www.surlatable.com/stores/seattle") == "local"
@@ -427,9 +485,43 @@ def test_subagent_tool_streams_online_and_brick_and_mortar_shopping_and_follow_u
     for name, data in follow_events:
         by_follow.setdefault(name, []).append(data)
 
-    # Follow-up skips re-running static Brave sections and continues the same session.
-    assert "section" not in by_follow
-    assert by_follow["meta"][0]["session_id"] == "sess-42"
-    assert by_follow["meta"][0]["follow_up"] is True
+    # A follow-up skips the Brave sections and runs the GLM agent, which starts from the answered turn.
+    assert "section" not in by_follow and created == ["sess-42"]
+    assert by_follow["meta"][0]["session_id"] == "sess-42" and by_follow["meta"][0]["follow_up"] is True
+    assert fake_agent.messages == [
+        {"role": "user", "content": [{"text": "breville bambino plus"}]},
+        {"role": "assistant", "content": [{"text": "The Bambino Plus heats in 3 seconds."}]},
+    ]
+    assert fake_agent.prompts == ["Does it have a 3-way solenoid valve?"]
     assert "Follow-up answer for: Does it have a 3-way solenoid valve?" in by_follow["agent.delta"][0]["text"]
-    assert len(fake_agent.prompts) == 2
+    assert by_follow["agent.done"][0]["model"] == "nim/z-ai/glm-5.3-flash" and by_follow["agent.done"][0]["effort"] == "high"
+    # Its shopping subagent still streams into the shopping lane.
+    assert by_follow["shopping.delta"] and by_follow["shopping.done"][0]["model"] == "nim/z-ai/glm-5.3-flash"
+
+
+def test_a_failing_answer_lane_does_not_stop_shopping(monkeypatch):
+    from agent.api.core import brave_answers_tool
+
+    def refuse(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(429, json={"error": {"code": "RATE_LIMITED", "detail": "slow down"}})
+
+    monkeypatch.setattr(sa.app_config, "NVIDIA_NIM_API_KEY", "nvapi-test")
+    monkeypatch.setattr(brave_answers_tool, "_CLIENT", bs.BraveAnswersClient(
+        "answers-key", transport=httpx.MockTransport(refuse), limiter=bs.RateLimiter(1000)))
+
+    class FakeShoppingAgent:
+        async def stream_async(self, prompt: str):
+            yield {"data": "- [REI](https://www.rei.com/p)"}
+
+    monkeypatch.setattr(sa, "build_shopping_harness", lambda spec=None, **kwargs: FakeShoppingAgent())
+
+    async def scenario():
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app_with(brave_client())),
+                                     base_url="http://test") as http:
+            return parse_sse((await http.post("/search/stream", json={"q": "tents"})).text)
+
+    by_name: dict[str, list[dict]] = {}
+    for name, data in asyncio.run(scenario()):
+        by_name.setdefault(name, []).append(data)
+    assert [(e["source"], e["code"]) for e in by_name["source_error"]] == [("agent", "rate_limited")]
+    assert by_name["shopping.delta"] and by_name["shopping.done"] and by_name["done"]

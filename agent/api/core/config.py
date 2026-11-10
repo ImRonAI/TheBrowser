@@ -259,12 +259,13 @@ RON_A2A_AGENTS = os.getenv("RON_A2A_AGENTS", "")
 RON_TOOL_REPAIR_TIMEOUT_S = int(os.getenv("RON_TOOL_REPAIR_TIMEOUT_S", "900"))
 
 # --- Browser search (`endpoints/search.py`, `core/search_agent.py`) ---
-#: Model provider for the Strands Harness search agent and its shopping subagent (default: xAI).
-RON_SEARCH_PROVIDER = os.getenv("RON_SEARCH_PROVIDER", "xai").strip().lower() or "xai"
-#: Search agent model id (default: Grok 4.7 on xAI).
-RON_SEARCH_AGENT_MODEL = os.getenv("RON_SEARCH_AGENT_MODEL", "grok-4.7")
-#: Shopping subagent model id (default: Grok 4.7 on xAI).
-RON_SEARCH_SHOPPING_MODEL = os.getenv("RON_SEARCH_SHOPPING_MODEL", "grok-4.7")
+#: Model provider for the Strands Harness search agent (follow-up conversation) and the shopping
+#: agent (default: NVIDIA NIM). The first answer to a query is Brave Answers, not this model.
+RON_SEARCH_PROVIDER = os.getenv("RON_SEARCH_PROVIDER", "nim").strip().lower() or "nim"
+#: Search agent model id (default: GLM-5.3-Flash on NIM).
+RON_SEARCH_AGENT_MODEL = os.getenv("RON_SEARCH_AGENT_MODEL", "z-ai/glm-5.3-flash")
+#: Shopping agent model id (default: GLM-5.3-Flash on NIM).
+RON_SEARCH_SHOPPING_MODEL = os.getenv("RON_SEARCH_SHOPPING_MODEL", "z-ai/glm-5.3-flash")
 #: Default search level when the client omits one (see search_agent.SEARCH_LEVELS).
 RON_SEARCH_DEFAULT_LEVEL = os.getenv("RON_SEARCH_DEFAULT_LEVEL", "low")
 #: Optional domain allowlist; defaults to [] (unrestricted online + brick-and-mortar search).
