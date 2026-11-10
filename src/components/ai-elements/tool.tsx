@@ -101,12 +101,12 @@ export const ToolHeader = ({
       )}
       {...props}
     >
-      <div className="flex items-center gap-2">
-        <WrenchIcon className="size-4 text-muted-foreground" />
-        <span className="font-medium text-sm">{title ?? derivedName}</span>
-        {getStatusBadge(state)}
+      <div className="flex min-w-0 items-center gap-2">
+        <WrenchIcon className="size-4 shrink-0 text-muted-foreground" />
+        <span className="min-w-0 truncate font-medium text-sm" title={toolName ?? title ?? derivedName}>{title ?? derivedName}</span>
+        <span className="shrink-0">{getStatusBadge(state)}</span>
       </div>
-      <ChevronDownIcon className="size-4 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
+      <ChevronDownIcon className="size-4 shrink-0 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
     </CollapsibleTrigger>
   );
 };
@@ -153,14 +153,20 @@ export const ToolOutput = ({
     return null;
   }
 
-  let Output = <div>{output as ReactNode}</div>;
+  let Output = output ? <div>{output as ReactNode}</div> : null;
 
-  if (typeof output === "object" && !isValidElement(output)) {
+  if (output && typeof output === "object" && !isValidElement(output)) {
     Output = (
-      <CodeBlock code={JSON.stringify(output, null, 2)} language="json" />
+      <div className="max-h-80 overflow-auto">
+        <CodeBlock code={JSON.stringify(output, null, 2)} language="json" />
+      </div>
     );
-  } else if (typeof output === "string") {
-    Output = <CodeBlock code={output} language="json" />;
+  } else if (typeof output === "string" && output) {
+    Output = (
+      <pre className="m-0 max-h-80 overflow-auto whitespace-pre-wrap break-words p-3 font-mono text-xs">
+        {output}
+      </pre>
+    );
   }
 
   return (
@@ -176,7 +182,11 @@ export const ToolOutput = ({
             : "bg-muted/50 text-foreground"
         )}
       >
-        {errorText && <div>{errorText}</div>}
+        {errorText && (
+          <div className="max-h-80 overflow-auto whitespace-pre-wrap break-words p-3">
+            {errorText}
+          </div>
+        )}
         {Output}
       </div>
     </div>

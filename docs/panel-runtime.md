@@ -88,46 +88,81 @@ snapshots but does not supply the runtime journal or reconnect lifecycle.
 
 The manager owns one live agent per user/session and server-side invocation tasks.
 Disconnecting SSE does not cancel execution. Native snapshots plus an application
-journal support restoration; event replay is bounded and process-local. An
-unclean restart reports `recovery_required` instead of automatically repeating
-tools. Run **one manager-owning API worker**; storage and session writes have no
+journal support restoration; event replay is bounded and process-local. The
+session manager saves the native `snapshot_latest` after every message
+(`save_latest_on="message"`), so a run that a restart or shutdown interrupted
+continues in the same run on the first access to the session (see Recovery). Run **one manager-owning API worker**; storage and session writes have no
 cross-process locking.
 
 Ordinary provider/factory failures do not require recovery. Their error is
 included in both SSE and session snapshots, and a subsequent message is allowed.
 Failed native invocations save their completed history before the terminal
 journal entry so reconnect/reload cannot silently discard completed tool work.
-Forced shutdown, an unclean restart, or failure to save that history still
-requires recovery; the renderer displays the underlying error alongside the
-recovery explanation.
+No failure closes a session: `recovery_required` is always `false`, and the next
+message continues on a fresh agent from the saved conversation. The renderer shows a failure as people read it
+(`failureText` in `src/lib/panel-stream.ts`: the serialized exception's
+`message`, or a gRPC provider's own `details = "…"` sentence, such as xAI's
+"…used all available credits…") and keeps the raw payload as `errorDetails`
+behind a *Details* toggle in a height-bounded alert.
 
-### Run stall watchdog and agent respawn
+### Recovery: stalls, timeouts and context overflow (seamless agent respawn)
 
-`PanelRuntimeManager` runs one loop-local watchdog task (started by the first
-`start()`; cancelled in `shutdown()`). Every emitted event refreshes a
-run's activity clock; a run in `starting`/`running` with no events past
-`PANEL_RUN_STALL_SECONDS` (default 120s; `0` disables the watchdog) is
-stalled. A tool call in flight is legitimate silence — tools emit no events
-while executing — so it gets the longer `PANEL_RUN_TOOL_STALL_SECONDS` window
-(default 480s, above the longest bounded silent tool: song generation, 420s).
-Tool ids enter the in-flight set at their deduplicated `tool_input` event and
-leave at `AfterToolCallEvent`.
+Three failures are recovered **inside the same run**, with no `error` envelope, no new run
+and no change to the thread:
 
-On a stall the watchdog hard-cancels the wedged run's task (a wedged agent
-does not heed the cooperative cancel event); the run's `_fail` emits the stall
-as its `error` envelope. Within `PANEL_RUN_MAX_RECOVERIES` (default 2)
-consecutive recoveries it then respawns: the wedged agent instance is evicted
-(bounded best-effort memory flush + cleanup) and a fresh instance is built by
-the same factory on the same `ThreadSessionManager`, so native construction
-restores the committed thread (messages, state, todos, queued steering) and a
-durable `[recovery]` user turn continues the stalled request — restating the
-original user input, warning that the stalled turn was not committed and a tool
-result may have been lost (never replay it). The recovery run is a normal run
-on the same session: the SSE stream continues by sequence, no new event types.
-A run that completes normally resets the recovery budget; when the budget is
-exhausted the run is left `recovery_required` (the existing 409 semantics). A
-run that ignores asyncio cancellation is left to shutdown semantics rather than
-double-booked.
+- **Stall.** `PanelRuntimeManager` runs one loop-local watchdog (started by the first
+  `start()`, cancelled in `shutdown()`). Every emitted event refreshes a run's activity clock;
+  a `starting`/`running` run silent past `PANEL_RUN_STALL_SECONDS` (default 120s; `0`
+  disables the watchdog) is stalled. A tool call in flight gets the longer
+  `PANEL_RUN_TOOL_STALL_SECONDS` (default 480s, above song generation's 420s); tool ids enter
+  the in-flight set at their deduplicated `tool_input` and leave at `AfterToolCallEvent`. The
+  watchdog cancels only the run's current stream attempt (`SessionRun._attempt_task`; a wedged
+  agent does not heed the cooperative cancel event).
+- **Timeout.** The panel agent's `TimeoutRetryStrategy` is the native `ModelRetryStrategy`
+  with its documented `is_retryable` extended to timeouts (`is_model_timeout`: `TimeoutError`,
+  an httpx timeout, or gRPC `DEADLINE_EXCEEDED`, anywhere on the cause chain). A timeout that
+  outlasts those native backoff attempts reaches the runtime.
+- **Context overflow.** The SDK first runs the conversation manager's `reduce_context`
+  (`SummarizingConversationManager`, `preserve_recent_messages=4`, the SDK's own
+  `overflow_protection` floor) and retries; only an overflow it could not reduce reaches the
+  runtime.
+
+Recovery (`SessionRun._respawn`, at most `PANEL_RUN_MAX_RECOVERIES` = 2 consecutive recoveries;
+a completed tool call resets the count): the old
+instance is saved as `snapshot_latest` and disposed (bounded memory flush + cleanup); the same
+factory builds a fresh agent on the same `ThreadSessionManager`, whose construction restores
+it, so it has the same conversation manager, `ContextOffloader`, `ContextInjector` and tools.
+The run continues with `[]` once its input is in the saved conversation; the SDK then answers
+a `toolUse` the old instance never finished with its own "Tool was interrupted." result
+(`Agent._convert_prompt_to_messages`), and the runtime emits that `tool_result` so the live
+tool card closes. The runtime emits one `retry` with `silent: true`, which the renderer uses
+to discard the failed attempt's partial text without drawing a retry line (the
+`XAIStatePruner` overflow retry is silent too). The `ContextInjector` adds a `[recovery]` note
+to every later model call of the run; it is never stored. After an overflow the request's
+browser context is shortened to `RECOVERY_CONTEXT_SHARE` (25%) of the model's real window
+(`count_tokens` + `estimate_utilization`). The respawn runs inside the cancellable attempt, so
+a disposal or factory that hangs is itself recovered. A run that spends the budget, or whose
+startup I/O stays silent for a whole window, fails with that error like any provider error: its
+history is saved, the instance is dropped, and the next message builds a fresh agent on the same
+session. A run that ignores asyncio cancellation is left to shutdown semantics.
+
+**Restart.** A run that was active when the process stopped (crash, or a shutdown that cancelled
+it) keeps its journal entry active. The first access to the session in the next process
+(`GET /sessions/{id}` or `/chat`) continues it under the same `run_id`: a fresh agent restores
+`snapshot_latest`, the run goes on with `[]` (or with its input when that had not been saved
+yet), an unanswered `toolUse` gets the SDK's "Tool was interrupted." result, and a run whose
+answer was already saved is committed without another model call. Restarts count against the
+same budget, which is stored in the journal.
+
+**Context threshold.** `SummarizingConversationManager` compresses before a model call once the
+projected input reaches `PANEL_CONTEXT_COMPRESSION_THRESHOLD` (default `0.87`) of the model's
+real window (the SDK's `proactive_compression={"compression_threshold": …}`).
+
+Model context windows are real: `build_model` sets `context_window_limit` from the provider's
+own metadata (`core/context_windows.py`: xAI `GET /v1/models` `context_length`, Mistral
+`GET /v1/models` `max_context_length`, Gemini `GET /v1beta/models/<id>` `inputTokenLimit`,
+Perplexity `<vendor>/<model>` ids through that vendor). OpenAI and Anthropic publish no window
+field, so the SDK's own table resolves them. A failed fetch is logged and not cached.
 
 Browser context and queued steering are delivered by the SDK's
 `ContextInjector(trigger="everyTurn")` plugin (runtime options), after the complete
@@ -303,6 +338,22 @@ vendored Strands `@tool`:
 | `perplexity_search` | `agent/tools/strands_tools/research/perplexity_search_api.py` (async `@tool`, official `perplexityai` SDK, exposed under this name) | live web search |
 | `tool_catalog` | `panel_tools.create_tool_catalog` | `list` / `search` / `describe` / `load` over the project library, and `load` of a configured MCP server by name (`user_browser` / `cloud_browser`) |
 | `ask_user` | native `ToolContext.interrupt` | pause for user input |
+
+### Agent per chat
+
+`POST /chat` takes `agent: {kind: "ron" | "specialist" | "project", id}` (omitted → Ron;
+`id` is a UUID for the other two, empty for Ron). Like the model it is sent on a
+conversation's first turn and pinned into the immutable session `selection.agent`; a
+different value later is `409`, a non-Ron agent outside `destination="panel"` is `422`.
+`specialist` = one of the caller's stored `harness_agents` rows (signed-in only; unknown
+→ `404`), built by `build_specialist` with the session's model/effort and the runtime's
+`session_manager`, `agent_id`, `callback_handler` and `ContextInjector`; the runtime's
+hooks and `ThreadProjection` are added with `agent.hooks.add_hook` after construction.
+`project` = the panel composition plus `project_agent_prompt`/`project_agent_tools`;
+each request must carry the caller's project credential (`Authorization: Bearer` or
+`X-Ron-Workspace`), which `/chat` verifies with `project_identity` (401/403/404) and
+binds for the session's tools, so the user's own RLS applies. Events, snapshots,
+replay, steering and cancel are unchanged for every agent.
 
 ### Browser target per chat
 

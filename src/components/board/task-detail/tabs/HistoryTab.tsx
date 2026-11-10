@@ -6,14 +6,10 @@
  */
 
 import { useState, useMemo } from 'react'
+import { RenIcon } from '@/components/brand'
 import { motion, AnimatePresence } from 'framer-motion'
 import type { Task, TaskHistoryEvent, TaskHistoryEventType } from '@/pages/types/task'
-import { 
-  Sparkles as SparklesIcon,
-  Clock as ClockIcon,
-  Settings as CogIcon,
-  Plus as PlusIcon
-} from 'lucide-react'
+import { Clock as ClockIcon, Settings as CogIcon, Plus as PlusIcon } from 'lucide-react'
 
 // Sophisticated easing
 const EASE = [0.16, 1, 0.3, 1] as const
@@ -108,11 +104,11 @@ export function HistoryTab({ task }: HistoryTabProps) {
           "
         >
           <div className="flex items-start gap-2">
-            <SparklesIcon className="w-4 h-4 text-accent dark:text-accent-light mt-0.5 flex-shrink-0" />
+            <RenIcon className="w-4 h-4 text-accent dark:text-accent-light mt-0.5 flex-shrink-0" />
             <p className="text-body-xs text-ink-secondary dark:text-ink-inverse-secondary leading-relaxed">
               This task was created {stats.daysActive} days ago, has been reassigned {stats.statusChanges} times, 
               and currently has {task.subtasks.filter(s => s.completed).length}/{task.subtasks.length} subtasks complete.
-              {stats.aiInteractions > 0 && ` Ron has assisted ${stats.aiInteractions} times.`}
+              {stats.aiInteractions > 0 && ` Ren has assisted ${stats.aiInteractions} times.`}
             </p>
           </div>
         </motion.div>
@@ -306,7 +302,7 @@ function ActorBadge({ actor }: { actor: TaskHistoryEvent['actor'] }) {
   const typeConfig = {
     user: { bg: 'bg-accent dark:bg-accent-light', icon: null },
     system: { bg: 'bg-surface-300 dark:bg-surface-600', icon: <CogIcon className="w-2.5 h-2.5" /> },
-    ai: { bg: 'bg-gradient-to-r from-accent to-accent-light', icon: <SparklesIcon className="w-2.5 h-2.5" /> },
+    ai: { bg: 'bg-gradient-to-r from-accent to-accent-light', icon: <RenIcon className="w-2.5 h-2.5" /> },
   }
 
   const config = typeConfig[actor.type]

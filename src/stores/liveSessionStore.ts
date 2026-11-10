@@ -6,7 +6,7 @@ import type { LiveContextTurn } from '../lib/voice-events.ts'
  *
  * Owner claim: one conversation never has two concurrent Live sockets from different views.
  *
- * Recorded turns: used by the **issue** panes only (`IssueRonPane`, `IssueDescriptionRon`:
+ * Recorded turns: used by the **issue** panes only (`IssueRonChat`, `IssueDescriptionRon`:
  * read-only recap + "latest proposal"). The panel's Chat and Live agents share a native Strands
  * thread (`session_id` + `SnapshotSessionManager`) and never bridge history through this store.
  *

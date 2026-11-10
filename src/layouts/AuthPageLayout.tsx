@@ -1,15 +1,21 @@
 import { ReactNode, useState, useEffect } from 'react'
-import { motion } from 'framer-motion'
+import { motion, useReducedMotion } from 'framer-motion'
 import { ContextMenu } from '@/components/shared/ContextMenu'
-import { RonLogo } from '@/components/shared/RonLogo'
+import { Marker, RenWordmark } from '@/components/brand'
 import { AgentUiProvider } from '@/context/AgentUiContext'
+import { BRAND } from '@/lib/brand'
 
 interface AuthPageLayoutProps {
   children: ReactNode
 }
 
-// Sophisticated easing
-const EASE = [0.16, 1, 0.3, 1] as const
+// Ren's house curve (docs/brand.md § Shape and depth: ease-out-expo)
+const EASE = [0.19, 1, 0.22, 1] as const
+
+// "The browser that" + "builds." — the Marker sits under the tagline's last word.
+const TAGLINE_WORDS = BRAND.tagline.split(' ')
+const TAGLINE_LAST = TAGLINE_WORDS[TAGLINE_WORDS.length - 1]
+const TAGLINE_LEAD = TAGLINE_WORDS.slice(0, -1).join(' ')
 
 export function AuthPageLayout({ children }: AuthPageLayoutProps) {
   // ContextMenu (rendered below) calls useAgentUi() and must be inside the
@@ -23,6 +29,7 @@ export function AuthPageLayout({ children }: AuthPageLayoutProps) {
 }
 
 function AuthPageLayoutInner({ children }: AuthPageLayoutProps) {
+  const reduceMotion = useReducedMotion()
   const [contextMenu, setContextMenu] = useState<{
     x: number
     y: number
@@ -52,146 +59,84 @@ function AuthPageLayoutInner({ children }: AuthPageLayoutProps) {
     return () => document.removeEventListener('contextmenu', handleContextMenu)
   }, [])
 
+  const rise = (delay: number) => ({
+    initial: { opacity: 0, y: reduceMotion ? 0 : 18 },
+    animate: { opacity: 1, y: 0 },
+    transition: { duration: 0.7, delay, ease: EASE },
+  })
+
   return (
-    <div className="h-screen w-full bg-surface-50 dark:bg-surface-900 flex relative overflow-hidden">
-      {/* Dramatic geometric background - Light mode */}
-      <div className="absolute inset-0 dark:hidden">
-        {/* Large gradient orb */}
-        <div 
-          className="absolute -top-1/4 -right-1/4 w-[800px] h-[800px] rounded-full"
-          style={{
-            background: 'radial-gradient(circle, rgba(194, 106, 65, 0.08) 0%, transparent 70%)',
-          }}
-        />
-        <div 
-          className="absolute -bottom-1/4 -left-1/4 w-[600px] h-[600px] rounded-full"
-          style={{
-            background: 'radial-gradient(circle, rgba(169, 83, 46, 0.05) 0%, transparent 70%)',
-          }}
-        />
-        {/* Grid pattern */}
-        <div 
-          className="absolute inset-0 opacity-[0.015]"
-          style={{
-            backgroundImage: `
-              linear-gradient(rgba(0,0,0,0.1) 1px, transparent 1px),
-              linear-gradient(90deg, rgba(0,0,0,0.1) 1px, transparent 1px)
-            `,
-            backgroundSize: '64px 64px',
-          }}
-        />
-      </div>
-
-      {/* Dark mode background */}
-      <div className="absolute inset-0 hidden dark:block">
-        {/* Subtle gradient */}
-        <div 
-          className="absolute top-0 right-0 w-[600px] h-[600px]"
-          style={{
-            background: 'radial-gradient(circle at top right, rgba(194, 106, 65, 0.08) 0%, transparent 60%)',
-          }}
-        />
-        <div 
-          className="absolute bottom-0 left-0 w-[500px] h-[500px]"
-          style={{
-            background: 'radial-gradient(circle at bottom left, rgba(169, 83, 46, 0.06) 0%, transparent 60%)',
-          }}
-        />
-        {/* Subtle noise texture */}
-        <div className="absolute inset-0 opacity-20 noise-texture" />
-      </div>
-
-      {/* Left side - Brand statement */}
-      <motion.div 
-        className="hidden lg:flex lg:w-1/2 xl:w-[55%] relative items-center justify-center p-16"
+    // `ron-content`: in the Glass theme the page becomes the see-through content layer and
+    // the paper surfaces below take the blue glass tint (index.css § GLASS THEME).
+    <div className="ron-content relative flex h-screen w-full overflow-hidden bg-surface-0 text-ink dark:bg-surface-900 dark:text-ink-inverse">
+      {/* Poster: the brand moment */}
+      <motion.div
+        className="relative hidden flex-col justify-between overflow-hidden border-r border-surface-200 bg-surface-0 p-12 dark:border-surface-800 dark:bg-surface-900 lg:flex lg:w-1/2 xl:w-[55%] xl:p-16"
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
-        transition={{ duration: 1, ease: EASE }}
+        transition={{ duration: 0.6, ease: EASE }}
       >
-        <div className="flex flex-col items-center justify-center">
-          {/* Geometric Logo Composition */}
-          <div className="relative">
-            {/* Purple accent line - top left */}
-            <motion.div 
-              className="absolute -top-6 left-0 h-[3px] bg-accent dark:bg-accent-light"
-              style={{ width: 80 }}
-              initial={{ scaleX: 0, originX: 0 }}
-              animate={{ scaleX: 1 }}
-              transition={{ duration: 0.7, delay: 0.4, ease: EASE }}
-            />
-            
-            {/* Ron logo — black artwork in light mode, silver emblem in dark mode */}
-            <motion.div
-              className="w-[22rem] xl:w-[28rem]"
-              initial={{ opacity: 0, y: 40 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 1, delay: 0.1, ease: EASE }}
-            >
-              <RonLogo className="w-full h-auto" alt="Ron" />
-            </motion.div>
-            
-            {/* White accent line - bottom right, diagonal from purple */}
-            <motion.div 
-              className="absolute -bottom-8 right-0 h-[3px] bg-white/90 dark:bg-ink-inverse"
-              style={{ width: 80 }}
-              initial={{ scaleX: 0, originX: 1 }}
-              animate={{ scaleX: 1 }}
-              transition={{ duration: 0.7, delay: 0.6, ease: EASE }}
-            />
-          </div>
-          
-          {/* Tagline - Perfectly centered below */}
-          <motion.div 
-            className="mt-12 text-center"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.8, delay: 0.5, ease: EASE }}
-          >
-            <span className="text-xl xl:text-2xl font-sans font-light tracking-wide text-white/80 dark:text-ink-inverse/80">
-              The{' '}
-              <span className="text-accent dark:text-accent-light font-medium">Collaborative</span>
-              {' '}Browser OS
-            </span>
-          </motion.div>
+        <div aria-hidden className="halftone pointer-events-none absolute -right-20 top-[16%] h-[68%] w-[82%]" />
+
+        <div className="relative flex items-center justify-between gap-6">
+          <RenWordmark className="text-[30px] text-ink dark:text-ink-inverse" />
+          <span className="sticker-volt">Local-first</span>
         </div>
+
+        <div className="relative">
+          <motion.h1
+            {...rise(0.1)}
+            className="spray-halo ren-display text-[length:clamp(3.75rem,6.4vw,6.75rem)] text-ink dark:text-ink-inverse"
+          >
+            {TAGLINE_LEAD} <Marker>{TAGLINE_LAST}</Marker>
+          </motion.h1>
+          <motion.p
+            {...rise(0.2)}
+            className="mt-8 max-w-md text-body-lg text-ink-secondary dark:text-ink-inverse-secondary"
+          >
+            Browse, research and build with an agent that works right beside you.
+          </motion.p>
+        </div>
+
+        <motion.p
+          {...rise(0.3)}
+          className="relative font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-ink-secondary dark:text-ink-inverse-muted"
+        >
+          Made for builders and creators
+        </motion.p>
       </motion.div>
 
-      {/* Right side - Auth form */}
-      <div className="flex-1 flex items-start lg:items-center justify-center p-6 lg:p-10 relative z-10 min-h-0 overflow-y-auto">
-        <motion.div 
-          className="w-full max-w-md"
-          initial={{ opacity: 0, x: 24 }}
+      {/* Form side: quiet, one column */}
+      <div className="relative z-10 flex min-h-0 flex-1 items-start justify-center overflow-y-auto bg-surface-0 px-6 py-12 dark:bg-surface-900 sm:px-10 lg:items-center lg:px-14">
+        <motion.div
+          className="w-full max-w-[400px]"
+          initial={{ opacity: 0, x: reduceMotion ? 0 : 16 }}
           animate={{ opacity: 1, x: 0 }}
-          transition={{ duration: 0.8, delay: 0.2, ease: EASE }}
+          transition={{ duration: 0.6, delay: 0.15, ease: EASE }}
         >
-          {/* Logo */}
-          <motion.div 
-            className="mb-12 lg:hidden text-center"
-            initial={{ opacity: 0, y: -16 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, ease: EASE }}
-          >
-            <h1 className="flex justify-center">
-              <RonLogo className="h-24 w-auto" alt="Ron" />
+          {/* Brand header when the poster is hidden (narrow windows) */}
+          <motion.div className="mb-10 space-y-3 lg:hidden" {...rise(0)}>
+            <h1 className="flex">
+              <RenWordmark className="text-[40px] text-ink dark:text-ink-inverse" />
             </h1>
+            <p className="font-display text-lg font-bold tracking-tight text-ink-secondary dark:text-ink-inverse-secondary">
+              {BRAND.tagline}
+            </p>
           </motion.div>
 
-          {/* Form card */}
-          <div className="bg-surface-0 dark:bg-surface-850 rounded-2xl shadow-bold dark:shadow-dark-bold p-8 lg:p-10 border border-surface-200 dark:border-surface-700">
           {children}
-        </div>
 
           {/* Footer */}
-          <motion.p 
-            className="mt-8 text-center text-body-xs text-ink-muted dark:text-ink-inverse-muted"
+          <motion.p
+            className="mt-10 text-[12px] leading-relaxed text-ink-secondary dark:text-ink-inverse-muted"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            transition={{ duration: 0.6, delay: 0.8, ease: EASE }}
+            transition={{ duration: 0.6, delay: 0.6, ease: EASE }}
           >
             By continuing, you agree to our{' '}
-            <a href="#" className="text-accent dark:text-accent-light hover:underline">Terms</a>
+            <a href="#" className="font-medium text-blurple-700 underline-offset-2 hover:underline dark:text-blurple-300">Terms</a>
             {' '}and{' '}
-            <a href="#" className="text-accent dark:text-accent-light hover:underline">Privacy Policy</a>
+            <a href="#" className="font-medium text-blurple-700 underline-offset-2 hover:underline dark:text-blurple-300">Privacy Policy</a>
           </motion.p>
         </motion.div>
       </div>

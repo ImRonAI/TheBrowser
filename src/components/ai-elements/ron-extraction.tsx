@@ -180,7 +180,7 @@ export function RonExtraction({
       >
         <img
           src="/ron-extraction-blob.svg"
-          alt="Ron"
+          alt="Ren"
           className="w-full h-full object-contain"
         />
       </motion.div>
@@ -215,7 +215,7 @@ export function RonExtractionInline({
       >
         <img
           src="/ron-extraction-blob.svg"
-          alt="Ron"
+          alt="Ren"
           className="w-full h-full object-contain"
         />
       </motion.div>

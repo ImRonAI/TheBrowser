@@ -130,3 +130,103 @@ export function debounced<T>(run: (signal: AbortSignal) => Promise<T>, waitMs: n
 export function applySuggestion(_current: string, suggestion: Suggestion): string {
   return suggestion.query
 }
+
+/**
+ * One row of the assist listbox. The spelling correction leads, then Brave's suggestions, so the keyboard reaches the
+ * correction the same way it reaches a suggestion (focus never leaves the field: the field points at the highlighted
+ * row with `aria-activedescendant`).
+ */
+export type AssistOption =
+  | { kind: 'correction'; text: string }
+  | { kind: 'suggestion'; suggestion: Suggestion }
+
+export function assistOptions(correction: string | null, suggestions: readonly Suggestion[]): AssistOption[] {
+  const rows: AssistOption[] = correction ? [{ kind: 'correction', text: correction }] : []
+  for (const suggestion of suggestions) rows.push({ kind: 'suggestion', suggestion })
+  return rows
+}
+
+/** A stable identity for a row, so the highlight stays on the same row when the correction arrives after the suggestions. */
+export function assistOptionKey(option: AssistOption): string {
+  return option.kind === 'correction' ? 'correction' : `suggestion:${option.suggestion.type}:${option.suggestion.query}`
+}
+
+/**
+ * Move the highlight through `count` rows. -1 is the field itself (nothing highlighted): ↓ from the field reaches the
+ * first row, ↓ from the last row returns to the field, ↑ from the field reaches the last row.
+ */
+export function moveHighlight(active: number, delta: number, count: number): number {
+  if (count <= 0) return -1
+  const positions = count + 1
+  const from = Math.min(Math.max(active, -1), count - 1) + 1
+  return ((((from + delta) % positions) + positions) % positions) - 1
+}
+
+export interface AssistKeyContext {
+  /** Rows in the listbox (correction + suggestions). */
+  options: number
+  /** The highlighted row, -1 when none is. */
+  active: number
+  hasSuggestions: boolean
+  /** The field is a textarea, where ↑/↓ move the caret between lines. */
+  multiline: boolean
+  /** The caret sits at the very end of the text with nothing selected. */
+  caretAtEnd: boolean
+}
+
+export type AssistKeyAction = { type: 'move'; delta: 1 | -1 } | { type: 'accept' } | { type: 'dismiss' } | null
+
+/**
+ * What a key does to the assist list. ↑/↓ move the highlight and Enter/Tab accept the highlighted row; Escape closes
+ * the list. In a textarea the arrows stay with the caret until the list is in use: suggestions are showing, a row is
+ * highlighted, or ↓ is pressed at the very end of the text (where it would not move the caret anyway), which is how a
+ * lone spelling correction is reached from a long-form field.
+ */
+export function assistKeyAction(key: string, context: AssistKeyContext): AssistKeyAction {
+  if (context.options <= 0) return null
+  if (key === 'Escape') return { type: 'dismiss' }
+  if (key === 'Enter' || key === 'Tab') return context.active >= 0 && context.active < context.options ? { type: 'accept' } : null
+  if (key !== 'ArrowDown' && key !== 'ArrowUp') return null
+  const listInUse = !context.multiline || context.hasSuggestions || context.active >= 0 || (key === 'ArrowDown' && context.caretAtEnd)
+  return listInUse ? { type: 'move', delta: key === 'ArrowDown' ? 1 : -1 } : null
+}
+
+/** The listbox's id and its rows' ids, derived from the field's assist id. */
+export function assistListboxId(id: string): string {
+  return `${id}-listbox`
+}
+
+export function assistOptionId(id: string, index: number): string {
+  return `${id}-option-${index}`
+}
+
+/** ARIA that ties a field to its assist listbox. */
+export interface AssistFieldAria {
+  role?: 'combobox'
+  'aria-expanded'?: boolean
+  'aria-autocomplete': 'list'
+  'aria-controls'?: string
+  'aria-activedescendant'?: string
+}
+
+/**
+ * ARIA 1.2 combobox props for a single-line field (`combobox`), or, for a field that may be a textarea (whose only
+ * allowed role is textbox), just the properties a textbox supports.
+ */
+export function assistFieldAria(id: string, options: number, active: number, combobox: boolean): AssistFieldAria {
+  const open = options > 0
+  const aria: AssistFieldAria = {
+    'aria-autocomplete': 'list',
+    'aria-controls': open ? assistListboxId(id) : undefined,
+    'aria-activedescendant': open && active >= 0 && active < options ? assistOptionId(id, active) : undefined,
+  }
+  return combobox ? { role: 'combobox', 'aria-expanded': open, ...aria } : aria
+}
+
+/** What a screen reader hears (politely) when the list changes. */
+export function assistAnnouncement(correction: string | null, suggestions: number): string {
+  const parts: string[] = []
+  if (correction) parts.push(`Did you mean ${correction}?`)
+  if (suggestions > 0) parts.push(`${suggestions} suggestion${suggestions === 1 ? '' : 's'}, use the arrow keys to choose.`)
+  return parts.join(' ')
+}

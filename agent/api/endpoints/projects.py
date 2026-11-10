@@ -1,4 +1,6 @@
 """Projects API: verified Supabase identity and one shared mutation path."""
+import json
+from datetime import datetime, timezone
 from typing import Annotated, Any, Literal
 from uuid import UUID
 
@@ -65,6 +67,7 @@ class IssueUpdate(StrictModel):
     rank: float | None = None
     custom_fields: dict[str, Any] | None = None
     work_products: list[dict[str, Any]] | None = None
+    context: list[dict[str, Any]] | None = None
 
 
 class LinkCreate(StrictModel):
@@ -115,6 +118,12 @@ class DocumentUpdate(StrictModel):
     parent_id: UUID | None = None
 
 
+class DocumentSkillPublish(StrictModel):
+    """Whose skill the page becomes: the teaching scope (``user_id`` + ``agent_id``, ``panel`` = Ron)."""
+    user_id: str = Field(min_length=1, max_length=256)
+    agent_id: str = Field(default="panel", min_length=1, max_length=256)
+
+
 @router.get("")
 async def list_projects(identity: Identity, offset: int = Query(0, ge=0), limit: int = Query(200, ge=1, le=500)):
     return await ProjectService(identity).rows("projects", order="id.asc", offset=offset, limit=limit)
@@ -152,6 +161,79 @@ async def list_issues(project_id: UUID, identity: Identity, offset: int = Query(
     return await ProjectService(identity).rows("issues", project_id=f"eq.{project_id}", order="rank.asc,id.asc", offset=offset, limit=limit)
 
 
+#: Rows per activity_log request (Supabase's default PostgREST max-rows) and the most read for one history.
+HISTORY_PAGE = 1000
+HISTORY_MAX_ROWS = 10_000
+
+
+def _epoch_ms(value: Any) -> int | None:
+    try:
+        moment = datetime.fromisoformat(str(value))
+    except ValueError:
+        return None
+    if moment.tzinfo is None:
+        moment = moment.replace(tzinfo=timezone.utc)
+    return int(moment.timestamp() * 1000)
+
+
+def issue_transitions(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Compact the audit trail (oldest first) into per-issue status/estimate/type changes.
+
+    Each `new_value` is the issue row as JSON text (audit_canonical_issue, guest `audit`). An issue's
+    first readable row is its first transition; later rows are kept only when one of the three changed.
+    """
+    last: dict[str, tuple[Any, Any, Any]] = {}
+    transitions = []
+    for row in rows:
+        issue_id = row.get("issue_id")
+        at = _epoch_ms(row.get("timestamp"))
+        if not issue_id or at is None or not row.get("new_value"):
+            continue
+        try:
+            value = json.loads(row["new_value"])
+        except (TypeError, ValueError):
+            continue
+        if not isinstance(value, dict) or not isinstance(value.get("status"), str):
+            continue
+        estimate = value.get("estimate")
+        estimate = float(estimate) if isinstance(estimate, (int, float)) and not isinstance(estimate, bool) else None
+        state = (value["status"], estimate, value.get("type"))
+        if last.get(issue_id) == state:
+            continue
+        last[issue_id] = state
+        transitions.append({"issue_id": issue_id, "at": at, "status": state[0], "estimate": estimate, "type": state[2]})
+    return transitions
+
+
+@router.get("/{project_id}/history")
+async def project_history(project_id: UUID, identity: Identity):
+    """Status/estimate/type transitions of every issue in one project, oldest first, for the dashboard.
+
+    Reads the newest audit rows first so that, when HISTORY_MAX_ROWS binds, the recent window is complete
+    and only the oldest history is dropped (`truncated`, `since` = the oldest row read).
+    """
+    service = ProjectService(identity)
+    if not await service.rows("projects", select="id", id=f"eq.{project_id}"):
+        raise HTTPException(404, "Project not found or not accessible")
+    rows: list[dict[str, Any]] = []
+    truncated = False
+    while True:
+        if len(rows) >= HISTORY_MAX_ROWS:
+            truncated = bool(await service.rows("activity_log", select="id", project_id=f"eq.{project_id}",
+                                                order="timestamp.desc,id.desc", offset=len(rows), limit=1))
+            break
+        # Stop on an empty page, not a short one: the server may cap a page below HISTORY_PAGE.
+        page = await service.rows("activity_log", select="issue_id,timestamp,new_value", project_id=f"eq.{project_id}",
+                                  order="timestamp.desc,id.desc", offset=len(rows),
+                                  limit=min(HISTORY_PAGE, HISTORY_MAX_ROWS - len(rows)))
+        if not page:
+            break
+        rows.extend(page)
+    rows.reverse()
+    return {"project_id": str(project_id), "transitions": issue_transitions(rows), "rows_read": len(rows),
+            "truncated": truncated, "since": _epoch_ms(rows[0]["timestamp"]) if rows else None}
+
+
 @router.post("/issues")
 async def create_issue(body: IssueCreate, identity: Identity):
     return await ProjectService(identity).create_issue(body.model_dump(mode="json"))
@@ -170,17 +252,12 @@ async def update_issue(issue_id: UUID, body: IssueUpdate, identity: Identity):
 
 @router.post("/links")
 async def create_link(body: LinkCreate, identity: Identity):
-    rows = await ProjectService(identity).request("POST", "issue_links", body={**body.model_dump(mode="json"), "created_by": identity.user_id})
-    return rows[0]
+    return await ProjectService(identity).link_issues(body.model_dump(mode="json"))
 
 
 @router.delete("/links/{link_id}")
 async def delete_link(link_id: UUID, identity: Identity):
-    from fastapi import HTTPException
-    rows = await ProjectService(identity).request("DELETE", "issue_links", params={"id": f"eq.{link_id}"})
-    if not rows:
-        raise HTTPException(409, "Relationship changed or access was removed; reload before saving")
-    return {"deleted": True}
+    return await ProjectService(identity).unlink_issues(str(link_id))
 
 
 @router.post("/issues/{issue_id}/events")
@@ -283,6 +360,39 @@ async def delete_document(document_id: UUID, identity: Identity):
     if not rows:
         raise HTTPException(404, "Document not found or not accessible")
     return {"deleted": True}
+
+
+@router.get("/documents/{document_id}/skill")
+async def get_document_skill(document_id: UUID, identity: Identity, user_id: str = Query(min_length=1, max_length=256),
+                             agent_id: str = Query("panel", min_length=1, max_length=256)):
+    """The agent skill this page was published as (``core/document_skills.py``), or ``{"skill": null}``."""
+    from agent.api.core.document_skills import bind_owner, document_skill
+    from agent.api.core.teaching import get_teaching_service
+
+    bind_owner(identity, user_id)
+    try:
+        return {"skill": await document_skill(get_teaching_service(), identity, user_id=user_id, agent_id=agent_id,
+                                              document_id=str(document_id))}
+    except ValueError as error:
+        raise HTTPException(422, str(error)) from error
+
+
+@router.post("/documents/{document_id}/skill")
+async def publish_document_skill(document_id: UUID, body: DocumentSkillPublish, identity: Identity):
+    """Publish (or republish) the page as a native Agent Skill of ``agent_id``, read with the caller's own access.
+
+    Stored with the agent's taught skills, so ``GET /teaching/skills`` and ``use_skill`` find it. 422 lists every
+    unknown reference or missing section; 403 when the credential is another user's.
+    """
+    from agent.api.core.document_skills import bind_owner, publish_document_skill as publish
+    from agent.api.core.teaching import get_teaching_service
+
+    bind_owner(identity, body.user_id)
+    try:
+        return await publish(get_teaching_service(), identity, user_id=body.user_id, agent_id=body.agent_id,
+                             document_id=str(document_id))
+    except ValueError as error:
+        raise HTTPException(422, str(error)) from error
 
 
 class IssueAgentMessage(StrictModel):

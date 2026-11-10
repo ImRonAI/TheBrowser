@@ -146,7 +146,7 @@ export function OpenToChatButtonWithAgent({
 function getAgentDisplayName(agentId: string): string {
   switch (agentId) {
     case 'ron':
-      return 'Ron'
+      return 'Ren'
     case 'researcher':
       return 'Researcher'
     case 'browser':

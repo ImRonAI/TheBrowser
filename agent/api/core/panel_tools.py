@@ -887,6 +887,16 @@ def _install_mcp_client_elicitation() -> None:
     module.MCPClient = factory  # type: ignore[assignment]
 
 
+def installed_http_request() -> AgentTool:
+    """The installed ``strands_tools.http_request`` tool alone (issue/project agents fetch links with it)."""
+    from strands_tools import http_request
+
+    loaded = [t for t in load_tools_from_module(http_request, "http_request") if t.tool_name == "http_request"]
+    if not loaded:
+        raise RuntimeError("strands_tools.http_request did not export a tool named 'http_request'")
+    return loaded[0]
+
+
 def build_core_tools(project_tools_dir: Path) -> list[AgentTool]:
     """The always-registered tool set (minus `tool_catalog`, which needs the catalog).
 

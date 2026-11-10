@@ -305,7 +305,7 @@ class GraphManager:
 
         except Exception as e:
             logger.error(f"Error executing graph {graph_id}: {str(e)}")
-            return {"status": "error", "message": f"Error executing graph: {str(e)}"}
+            return {"status": "error", "message": f"Error executing graph: {str(e)}\n{traceback.format_exc()}"}
 
     def get_graph_status(self, graph_id: str) -> Dict:
         """Get status of a specific graph"""

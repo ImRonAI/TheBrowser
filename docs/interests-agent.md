@@ -1,9 +1,14 @@
 # Interests agent (the bottom-right orb)
 
-Status: **spec / roadmap**. The UI shell exists (`src/components/interests/InterestsWidget.tsx`,
-mounted once in `src/layouts/BrowserLayout.tsx` so it persists across every page). The
-agent behind it does not exist yet. This document pins what it is for and where it plugs in,
-so future slices build one thing instead of five.
+Status: **implemented as the Context Agent** (see AGENTS.md, "Context Agent + the Context widget").
+The orb (`src/components/interests/InterestsWidget.tsx`, mounted once in `src/layouts/BrowserLayout.tsx`)
+shows the Ron logo and opens the Context panel (Interests, Context, Agents, Ask). The agent runs on
+`POST /chat` with `destination="context"` (`agent/api/core/context_agent.py`): it revises the interest
+graph from browsing and saved context (`update_interest_graph`), recommends specialists
+(`recommend_agent`) and, on approval, builds them with `create_harness`. Context items live in the
+user's `context` memory store (`/context/*`) and can be sent to an issue's Context tab
+(`issues.context`, migration 020; files in the `issue-attachments` bucket, migration 019). The rest of
+this document is the original spec; where it differs, the code and AGENTS.md win.
 
 ## Purpose
 

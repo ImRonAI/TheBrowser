@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import {
   CHAIN_TOOLS, PanelReplayOverflow, PanelSSEParser, emptyPanelState, groupThinkParts, hydratePanelSession, parsePanelEvent, readPanelStream, reconcilePanelSession, isBrowserUnavailable, isHitlApproval, repairToolTitle, isNativePart, reducePanelEvent, resolveBrowserSelection, shouldFollowPanel,
+  interruptQuestion, toolDisplayName, toolResultDisplay, toolResultText,
   type NativePart, type PanelEvent, type PanelPart, type ToolPart,
 } from './panel-stream.ts'
 
@@ -57,6 +58,26 @@ test('provider failures remain visible through terminal events and snapshot hydr
     assert.equal(recovery.recoveryRequired, true)
   }
   assert.equal(hydratePanelSession('session', { status: 'failed', error: null }).error, 'Previous agent run failed')
+})
+
+test('a provider status error reads as its own sentence and keeps the raw payload as details', () => {
+  const sentence = 'Your team ae8ce641-0b83-496a-80de-34c54540baab has either used all available credits or reached its monthly spending limit. To continue making API requests, please purchase more credits or raise your spending limit.'
+  // The runtime's wire shape for the xAI failure seen live on 2026-11-09: the SDK-serialized grpc AioRpcError.
+  const error = { type: 'AioRpcError', message: `<AioRpcError of RPC that terminated with:\n\tstatus = StatusCode.PERMISSION_DENIED\n\tdetails = "${sentence}"\n\tdebug_error_string = "PERMISSION_DENIED:${sentence}"\n>` }
+  const live = reducePanelEvent(emptyPanelState('session'), event(1, 'error', { error, recovery_required: false }))
+  for (const state of [live, hydratePanelSession('session', { status: 'failed', error, recovery_required: false })]) {
+    assert.equal(state.error, sentence)
+    assert.match(state.errorDetails!, /"type": "AioRpcError"/)
+    assert.match(state.errorDetails!, /StatusCode\.PERMISSION_DENIED/)
+  }
+  // Already-readable text gets no duplicate details; a failed snapshot reads as its cause and keeps both payloads.
+  assert.equal(reducePanelEvent(emptyPanelState('session'), event(1, 'error', { error: 'Provider failed' })).errorDetails, undefined)
+  const both = reducePanelEvent(emptyPanelState('session'), event(1, 'error', { error: { cause: error, snapshot_error: { type: 'OSError', message: 'disk full' } } }))
+  assert.equal(both.error, sentence)
+  assert.match(both.errorDetails!, /disk full/)
+  const next = reducePanelEvent(live, event(2, 'run_started', { run_id: 'run-2' }))
+  assert.equal(next.error, undefined)
+  assert.equal(next.errorDetails, undefined)
 })
 
 test('malformed envelopes and malformed EOF data fail explicitly', async () => {
@@ -131,6 +152,21 @@ test('retry marks draft text and reasoning discarded without erasing tools or ne
   assert.ok(parts[5].kind === 'text' && !parts[5].discarded)
 })
 
+test('a silent retry (in-run agent respawn) discards the attempt without a visible retry line', () => {
+  const state = [
+    event(1, 'run_started'), event(2, 'text_delta', { data: 'Partial before the stall', model_attempt: 1, cycle: 1 }),
+    event(3, 'retry', { attempt: 2, model_attempt: 1, cycle: 1, reason: 'stall', silent: true }),
+    event(4, 'text_delta', { data: 'Fresh agent answer', model_attempt: 1, cycle: 2 }),
+    event(5, 'run_finished', { status: 'completed', stop_reason: 'end_turn' }),
+  ].reduce(reducePanelEvent, emptyPanelState('session'))
+  const parts = state.messages[0].parts
+  assert.deepEqual(parts.map((part) => part.kind), ['text', 'text'])
+  assert.ok(parts[0].kind === 'text' && parts[0].discarded)
+  assert.ok(parts[1].kind === 'text' && !parts[1].discarded && parts[1].text === 'Fresh agent answer')
+  assert.equal(state.status, 'completed')
+  assert.equal(state.error, undefined)
+})
+
 const previousHistory = [
   { role: 'user', content: [{ text: 'First question' }] },
   { role: 'assistant', content: [{ text: 'First answer' }] },
@@ -149,7 +185,7 @@ test('active PRE-RUN snapshot replays from replay_after, preserves previous answ
   assert.equal(state.needsReplay, true)
   assert.equal(state.messages[1].runId, undefined)
   assert.equal(state.messages[2].runId, 'run')
-  assert.deepEqual(state.configuration, { model: 'grok-test', provider: 'xai', effort: 'high', options: configuration.options })
+  assert.deepEqual(state.configuration, { model: 'grok-test', provider: 'xai', effort: 'high', options: configuration.options, agent: { kind: 'ron', id: '' } })
   const frames = [event(11, 'run_started'), event(12, 'text_delta', { data: 'Second ' }),
     event(13, 'tool_input', { id: 't', name: 'search', input: {} }),
     event(14, 'tool_progress', { id: 't', data: 'Searching' }), event(15, 'text_delta', { data: 'answer' })]
@@ -541,6 +577,58 @@ test('repair chain card title comes from the synthetic repair tool only', () => 
   assert.equal(repairToolTitle({ name: 'repair', finished: true }), 'Repair finished')
   assert.equal(repairToolTitle({ name: 'a2a_send_message', finished: false }), null)
   assert.equal(repairToolTitle({ name: 'shell', finished: false }), null)
+})
+
+test('interruptQuestion reads the ask_user question and nothing else', () => {
+  assert.equal(interruptQuestion({ question: 'Which city?' }), 'Which city?')
+  assert.equal(interruptQuestion({ browser: 'user', tool: 'click', question: 'Reconnect?' }), 'Reconnect?')
+  for (const other of [{ question: '  ' }, { question: 3 }, 'Approve "shell"?', ['question'], null, undefined, {}]) {
+    assert.equal(interruptQuestion(other), null, `rejects ${JSON.stringify(other)}`)
+  }
+})
+
+test('toolDisplayName makes registered tool names readable and names the browser', () => {
+  assert.equal(toolDisplayName('cloud_browser_playwright_browser_snapshot'), 'Cloud browser · Snapshot')
+  assert.equal(toolDisplayName('user_browser_playwright_List_tabs'), 'Browser · List tabs')
+  assert.equal(toolDisplayName('user_browser_playwright_browser_take_screenshot'), 'Browser · Take screenshot')
+  assert.equal(toolDisplayName('user_browser_Click_an_element'), 'Browser · Click an element')
+  assert.equal(toolDisplayName('http_request'), 'HTTP request')
+  assert.equal(toolDisplayName('render_ui'), 'Render UI')
+  assert.equal(toolDisplayName('a2a_send_message'), 'A2A send message')
+  assert.equal(toolDisplayName('mcp_client'), 'MCP client')
+  assert.equal(toolDisplayName('shell'), 'Shell')
+  assert.equal(toolDisplayName('_'), '_')
+})
+
+test('toolResultDisplay splits native result blocks into text, values, images and documents', () => {
+  const png = { image: { format: 'png', source: { bytes: { encoding: 'base64', data: 'iVBORw0KGgo=' } } } }
+  const stored = { image: { format: 'jpeg', source: { bytes: { __bytes_encoded__: true, data: '/9j/4AAQ' } } } }
+  const result = toolResultDisplay([
+    { text: 'Command: ls' }, { text: 'Output: a.txt' }, { json: { count: 2 } }, png, stored,
+    { document: { name: 'report', format: 'pdf', source: { bytes: { encoding: 'base64', data: 'JVBERi0=' } } } },
+    { image: { format: 'tiff', source: { bytes: { encoding: 'base64', data: 'AAAA' } } } },
+  ])
+  assert.equal(result.text, 'Command: ls\nOutput: a.txt')
+  assert.deepEqual(result.values, [{ count: 2 }, { image: { format: 'tiff', source: { bytes: { encoding: 'base64', data: 'AAAA' } } } }])
+  assert.deepEqual(result.images, [
+    { src: 'data:image/png;base64,iVBORw0KGgo=', format: 'png' },
+    { src: 'data:image/jpeg;base64,/9j/4AAQ', format: 'jpeg' },
+  ])
+  assert.deepEqual(result.documents, [{ name: 'report', format: 'pdf' }])
+  assert.deepEqual(toolResultDisplay('plain'), { text: 'plain', values: [], images: [], documents: [] })
+  assert.deepEqual(toolResultDisplay({ ok: true }), { text: '', values: [{ ok: true }], images: [], documents: [] })
+  assert.deepEqual(toolResultDisplay(undefined), { text: '', values: [], images: [], documents: [] })
+})
+
+test('toolResultText reads a result as text instead of its JSON envelope', () => {
+  assert.equal(toolResultText([{ text: 'Error: command not found' }]), 'Error: command not found')
+  assert.equal(toolResultText([{ json: { ok: false } }]), '{\n  "ok": false\n}')
+  assert.equal(toolResultText([
+    { text: 'Saved' },
+    { document: { name: 'notes', format: 'md', source: { bytes: { encoding: 'base64', data: 'IyBh' } } } },
+    { image: { format: 'png', source: { bytes: { encoding: 'base64', data: 'iVBO' } } } },
+  ]), 'Saved\nDocument: notes (md)\n1 image')
+  assert.equal(toolResultText([]), '')
 })
 
 test('native_tool envelopes become NativePart entries: output items once, reasoning steps merged', () => {

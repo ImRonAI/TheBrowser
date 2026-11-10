@@ -416,7 +416,7 @@ export const useAuthStore = create<AuthState>()(
 
         const bridge = window.electron?.auth
         if (!bridge) {
-          set({ isLoading: false, error: { code: 'OAUTH_UNAVAILABLE', message: 'Social sign-in runs in the Ron desktop app.' } })
+          set({ isLoading: false, error: { code: 'OAUTH_UNAVAILABLE', message: 'Social sign-in runs in the Ren desktop app.' } })
           return
         }
 
@@ -443,7 +443,7 @@ export const useAuthStore = create<AuthState>()(
           // already become tabs via setWindowOpenHandler; nothing is handed to the system browser.
           closeSignIn()
           const tabs = window.electron?.tabs
-          if (!tabs) throw new Error('Social sign-in opens in a Ron tab.')
+          if (!tabs) throw new Error('Social sign-in opens in a Ren tab.')
           if (oauthTabId) {
             const previous = oauthTabId
             oauthTabId = null

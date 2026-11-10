@@ -34,7 +34,8 @@ export const useDiscoverFeedStore = create<DiscoverFeedState>()(
         const state = get()
         const now = options.now ?? Date.now()
         if (!options.force && state.requestKey === key && isFresh(state.fetchedAt, now) && state.sections.length) return
-        if (inFlight) return inFlight
+        // A newer request (e.g. the interest graph changed) waits for the running one, then loads.
+        if (inFlight) { await inFlight; return get().load(profile, options) }
         set({ loading: true, error: null })
         inFlight = (async () => {
           try {

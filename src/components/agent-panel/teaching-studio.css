@@ -77,6 +77,7 @@
 .teaching-library li button span { @apply flex-1; }
 .teaching-library li small { @apply text-label text-ink-secondary dark:text-surface-400; }
 .teaching-library article { @apply mt-5; }
+.teaching-library article[aria-current="true"] { @apply -mx-2 rounded-lg bg-accent/10 px-2 py-2 dark:bg-accent-light/10; }
 .teaching-library h3 { @apply text-xs font-semibold; }
 .teaching-files { @apply flex flex-wrap gap-2; }
 .teaching-files button { @apply inline-flex items-center gap-1 break-all text-label text-accent underline underline-offset-4 dark:text-accent-subtle; }

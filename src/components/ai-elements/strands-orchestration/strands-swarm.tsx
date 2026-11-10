@@ -7,6 +7,10 @@
  * - Elegant curved edge routing
  * - Refined shared context display
  * - Smooth agent history trail
+ *
+ * Ren styling: the canvas is transparent and themed by `.ron-workflow`, so it reads on
+ * paper, ink and Glass alike. Panels float on `bg-popover`; volt marks the active agent
+ * and the primary action, never as a glow.
  */
 
 "use client";
@@ -25,6 +29,7 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { motion, AnimatePresence } from "framer-motion";
+import { ArrowRight, ChevronDown, Layers, Play, RotateCcw, ScrollText } from "lucide-react";
 import { useCallback, useState, memo } from "react";
 import { SwarmNodeComponent } from "./strands-node";
 import { SwarmEdgeComponent, EdgeMarkerDefinitions } from "./strands-edge";
@@ -49,6 +54,19 @@ const nodeTypes: NodeTypes = {
 const edgeTypes: EdgeTypes = {
   "swarm-edge": SwarmEdgeComponent,
 };
+
+// Floating canvas panels: frosted by Glass through `bg-popover`.
+const PANEL_CLASS =
+  "rounded-xl border border-surface-200 bg-popover text-ink shadow-float dark:border-surface-800 dark:text-ink-inverse";
+
+const PANEL_LABEL =
+  "font-mono text-[10px] font-medium uppercase tracking-[0.08em] text-ink-muted dark:text-ink-inverse-muted";
+
+const PANEL_HEADER =
+  "flex w-full items-center justify-between gap-3 px-3.5 py-2.5 transition-colors duration-150 ease-out hover:bg-surface-100/70 dark:hover:bg-surface-800/70";
+
+const COUNT_PILL =
+  "inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-surface-100 px-1 font-mono text-[10px] font-medium leading-none tabular-nums text-ink-secondary dark:bg-surface-800 dark:text-ink-inverse-secondary";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Run Transcript Component - Detailed log of agent activity
@@ -103,33 +121,27 @@ const RunTranscript = memo(function RunTranscript({
   if (entries.length === 0) return null;
 
   return (
-    <div className={cn(
-      "bg-slate-900/90 backdrop-blur-md",
-      "rounded-xl border border-slate-700/50",
-      "shadow-2xl overflow-hidden",
-      "max-w-xs",
-      className
-    )}>
+    <div className={cn(PANEL_CLASS, "w-72 max-w-xs overflow-hidden", className)}>
       {/* Header - Collapsible */}
       <button
         onClick={() => setIsExpanded(!isExpanded)}
-        className="w-full flex items-center justify-between gap-3 px-4 py-2.5 hover:bg-slate-800/50 transition-colors"
+        className={PANEL_HEADER}
       >
         <div className="flex items-center gap-2">
-          <TranscriptIcon className="w-4 h-4 text-violet-400" />
-          <span className="text-[11px] font-medium text-slate-400 uppercase tracking-wider">
-            Run Transcript
+          <ScrollText className="h-3.5 w-3.5 text-blurple-600 dark:text-blurple-400" />
+          <span className={PANEL_LABEL}>
+            Run transcript
           </span>
-          <span className="text-[10px] text-slate-500">
-            ({entries.length})
+          <span className={COUNT_PILL}>
+            {entries.length}
           </span>
         </div>
-        <ChevronIcon className={cn(
-          "w-4 h-4 text-slate-500 transition-transform",
+        <ChevronDown className={cn(
+          "h-4 w-4 text-ink-muted transition-transform duration-200 ease-out dark:text-ink-inverse-muted",
           isExpanded && "rotate-180"
         )} />
       </button>
-      
+
       {/* Content */}
       <AnimatePresence>
         {isExpanded && (
@@ -140,49 +152,49 @@ const RunTranscript = memo(function RunTranscript({
             transition={{ duration: 0.2 }}
             className="overflow-hidden"
           >
-            <div className="px-3 pb-3 max-h-48 overflow-y-auto">
+            <div className="max-h-48 overflow-y-auto border-t border-surface-200 px-3.5 py-1 dark:border-surface-800">
               {entries.map((entry, index) => (
                 <motion.div
                   key={index}
-                  initial={{ opacity: 0, x: -8 }}
+                  initial={{ opacity: 0, x: -6 }}
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ delay: index * 0.05 }}
-                  className="flex items-start gap-2 py-1.5 border-b border-slate-800 last:border-0"
+                  className="flex items-start gap-2.5 border-b border-surface-100 py-2 last:border-0 dark:border-surface-800"
                 >
                   {/* Icon */}
                   <div className={cn(
-                    "w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5",
-                    entry.type === 'start' && "bg-emerald-500/20",
-                    entry.type === 'handoff' && "bg-violet-500/20",
-                    entry.type === 'active' && "bg-sky-500/20"
+                    "mt-px flex h-5 w-5 shrink-0 items-center justify-center rounded-full",
+                    entry.type === 'start' && "bg-emerald-50 text-emerald-700 dark:bg-emerald-400/10 dark:text-emerald-400",
+                    entry.type === 'handoff' && "bg-blurple-50 text-blurple-600 dark:bg-blurple-400/15 dark:text-blurple-300",
+                    entry.type === 'active' && "bg-blurple-600 text-white dark:bg-blurple-400 dark:text-ink"
                   )}>
-                    {entry.type === 'start' && <PlaySmallIcon className="w-2.5 h-2.5 text-emerald-400" />}
-                    {entry.type === 'handoff' && <ArrowRightIcon className="w-2.5 h-2.5 text-violet-400" />}
-                    {entry.type === 'active' && <DotIcon className="w-2.5 h-2.5 text-sky-400" />}
+                    {entry.type === 'start' && <Play className="ml-px h-2.5 w-2.5 fill-current" />}
+                    {entry.type === 'handoff' && <ArrowRight className="h-3 w-3" />}
+                    {entry.type === 'active' && <span className="h-1.5 w-1.5 rounded-full bg-current" />}
                   </div>
 
                   {/* Content */}
-                  <div className="flex-1 min-w-0">
+                  <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
                       <span className={cn(
-                        "text-xs font-medium",
-                        entry.type === 'active' ? "text-sky-300" : "text-slate-300"
+                        "truncate text-[12px] font-medium",
+                        entry.type === 'active' ? "text-blurple-700 dark:text-blurple-200" : "text-ink dark:text-ink-inverse"
                       )}>
                         {entry.agent}
                       </span>
                       {entry.type === 'active' && (
-                        <span className="text-[9px] px-1.5 py-0.5 rounded bg-sky-500/20 text-sky-300 uppercase tracking-wider">
+                        <span className="inline-flex h-4 items-center rounded-full bg-blurple-600 px-1.5 font-mono text-[10px] font-semibold uppercase leading-none tracking-[0.08em] text-white dark:bg-blurple-400 dark:text-ink">
                           Active
                         </span>
                       )}
                     </div>
                     {entry.message && (
-                      <p className="text-[10px] text-slate-500 mt-0.5 line-clamp-2">
+                      <p className="mt-0.5 line-clamp-2 text-[11px] leading-snug text-ink-secondary dark:text-ink-inverse-secondary">
                         {entry.message}
                       </p>
                     )}
                     {entry.timestamp && (
-                      <span className="text-[9px] text-slate-600">
+                      <span className="mt-0.5 block font-mono text-[10px] tabular-nums text-ink-muted dark:text-ink-inverse-muted">
                         {new Date(entry.timestamp).toLocaleTimeString()}
                       </span>
                     )}
@@ -216,33 +228,27 @@ const SharedContextCard = memo(function SharedContextCard({
   if (entries.length === 0) return null;
 
   return (
-    <div className={cn(
-      "bg-slate-900/90 backdrop-blur-md",
-      "rounded-xl border border-slate-700/50",
-      "shadow-2xl overflow-hidden",
-      "max-w-xs",
-      className
-    )}>
+    <div className={cn(PANEL_CLASS, "w-64 max-w-xs overflow-hidden", className)}>
       {/* Header - Collapsible */}
       <button
         onClick={() => setIsExpanded(!isExpanded)}
-        className="w-full flex items-center justify-between gap-3 px-4 py-2.5 hover:bg-slate-800/50 transition-colors"
+        className={PANEL_HEADER}
       >
         <div className="flex items-center gap-2">
-          <ContextIcon className="w-4 h-4 text-emerald-400" />
-          <span className="text-[11px] font-medium text-slate-400 uppercase tracking-wider">
+          <Layers className="h-3.5 w-3.5 text-ink-secondary dark:text-ink-inverse-secondary" />
+          <span className={PANEL_LABEL}>
             Context
           </span>
-          <span className="text-[10px] text-slate-500">
-            ({entries.length})
+          <span className={COUNT_PILL}>
+            {entries.length}
           </span>
         </div>
-        <ChevronIcon className={cn(
-          "w-4 h-4 text-slate-500 transition-transform",
+        <ChevronDown className={cn(
+          "h-4 w-4 text-ink-muted transition-transform duration-200 ease-out dark:text-ink-inverse-muted",
           isExpanded && "rotate-180"
         )} />
       </button>
-      
+
       {/* Content */}
       <AnimatePresence>
         {isExpanded && (
@@ -253,19 +259,19 @@ const SharedContextCard = memo(function SharedContextCard({
             transition={{ duration: 0.2 }}
             className="overflow-hidden"
           >
-            <div className="px-3 pb-3 max-h-40 overflow-y-auto">
+            <div className="max-h-40 overflow-y-auto border-t border-surface-200 px-3.5 py-2.5 dark:border-surface-800">
               {entries.map(([nodeId, data]) => (
-                <div key={nodeId} className="mb-2 last:mb-0">
-                  <span className="text-[10px] font-semibold text-violet-400">
+                <div key={nodeId} className="mb-2.5 last:mb-0">
+                  <span className="font-mono text-[11px] font-semibold text-blurple-700 dark:text-blurple-300">
                     {nodeId}
                   </span>
-                  <div className="mt-1 pl-2 border-l border-slate-700/50">
+                  <div className="mt-1 border-l border-surface-200 pl-2.5 dark:border-surface-700">
                     {Object.entries(data).map(([key, value]) => (
-                      <div key={key} className="flex items-start gap-2 py-0.5">
-                        <span className="text-[9px] text-slate-500 font-medium">
+                      <div key={key} className="flex items-baseline gap-2 py-0.5">
+                        <span className="shrink-0 font-mono text-[10px] font-medium text-ink-muted dark:text-ink-inverse-muted">
                           {key}:
                         </span>
-                        <span className="text-[10px] text-slate-400 truncate max-w-[160px]">
+                        <span className="max-w-[160px] truncate text-[11px] text-ink-secondary dark:text-ink-inverse-secondary">
                           {typeof value === 'string' ? value : JSON.stringify(value)}
                         </span>
                       </div>
@@ -292,46 +298,45 @@ interface SwarmStatusBadgeProps {
 
 const SwarmStatusBadge = memo(function SwarmStatusBadge({ state, className }: SwarmStatusBadgeProps) {
   const statusConfig = {
-    created: { label: "Ready", color: "bg-slate-500", pulse: false },
-    running: { label: "Active", color: "bg-violet-500", pulse: true },
-    completed: { label: "Completed", color: "bg-emerald-500", pulse: false },
-    error: { label: "Error", color: "bg-rose-500", pulse: false },
+    created: { label: "Ready", color: "bg-surface-400 dark:bg-surface-500", pulse: false },
+    running: { label: "Active", color: "bg-blurple-600 dark:bg-blurple-400", pulse: true },
+    completed: { label: "Completed", color: "bg-success", pulse: false },
+    error: { label: "Failed", color: "bg-danger", pulse: false },
   }[state.status];
 
   return (
-    <div className={cn(
-      "bg-slate-900/90 backdrop-blur-md",
-      "rounded-xl border border-slate-700/50",
-      "px-4 py-3 shadow-2xl",
-      className
-    )}>
+    <div className={cn(PANEL_CLASS, "min-w-[180px] px-3.5 py-3", className)}>
       {/* Status row */}
-      <div className="flex items-center gap-3 mb-3">
-        <span className={cn(
-          "w-2 h-2 rounded-full",
-          statusConfig.color,
-          statusConfig.pulse && "animate-pulse"
-        )} />
-        <span className="text-sm font-medium text-slate-200">
-          {statusConfig.label}
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <span className={PANEL_LABEL}>Swarm</span>
+        <span className="inline-flex items-center gap-1.5">
+          <span className={cn(
+            "h-1.5 w-1.5 rounded-full",
+            statusConfig.color,
+            // Live: a still halo, never a pulse.
+            statusConfig.pulse && "ring-[3px] ring-blurple-600/15 dark:ring-blurple-400/20"
+          )} />
+          <span className="text-[12px] font-semibold leading-none text-ink dark:text-ink-inverse">
+            {statusConfig.label}
+          </span>
         </span>
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <span className="block text-2xl font-bold text-violet-400">
+      <div className="grid grid-cols-2 divide-x divide-surface-200 dark:divide-surface-800">
+        <div className="pr-3">
+          <span className="block font-mono text-2xl font-semibold leading-tight tabular-nums text-blurple-600 dark:text-blurple-300">
             {state.handoffCount}
           </span>
-          <span className="text-[10px] text-slate-500 uppercase tracking-wider">
+          <span className={PANEL_LABEL}>
             Handoffs
           </span>
         </div>
-        <div>
-          <span className="block text-2xl font-bold text-slate-400">
+        <div className="pl-3">
+          <span className="block font-mono text-2xl font-semibold leading-tight tabular-nums text-ink-secondary dark:text-ink-inverse-secondary">
             {state.maxHandoffs}
           </span>
-          <span className="text-[10px] text-slate-500 uppercase tracking-wider">
+          <span className={PANEL_LABEL}>
             Max
           </span>
         </div>
@@ -360,32 +365,26 @@ const SwarmControlButtons = memo(function SwarmControlButtons({
   className,
 }: SwarmControlButtonsProps) {
   return (
-    <div className={cn(
-      "flex items-center gap-1 p-1.5",
-      "bg-slate-900/90 backdrop-blur-md",
-      "rounded-xl border border-slate-700/50",
-      "shadow-2xl",
-      className
-    )}>
+    <div className={cn(PANEL_CLASS, "flex items-center gap-0.5 rounded-full p-1", className)}>
       <ControlButton
         onClick={onStart}
         disabled={isRunning}
-        title="Start Swarm"
-        className={!isRunning ? "text-violet-400 hover:bg-violet-500/20" : ""}
+        title="Start swarm"
+        className={!isRunning ? "bg-blurple-600 text-white hover:bg-blurple-700 hover:text-white dark:bg-blurple-400 dark:text-ink dark:hover:bg-blurple-300 dark:hover:text-ink" : ""}
       >
-        <PlayIcon className="w-4 h-4" />
+        <Play className="ml-0.5 h-3.5 w-3.5 fill-current" />
       </ControlButton>
 
       <ControlButton
         onClick={onSimulateHandoff}
         disabled={!isRunning}
-        title="Simulate Handoff"
+        title="Simulate handoff"
       >
-        <HandoffIcon className="w-4 h-4" />
+        <ArrowRight className="h-4 w-4" />
       </ControlButton>
 
       <ControlButton onClick={onReset} title="Reset">
-        <ResetIcon className="w-4 h-4" />
+        <RotateCcw className="h-4 w-4" />
       </ControlButton>
     </div>
   );
@@ -405,11 +404,12 @@ function ControlButton({ onClick, disabled, title, children, className }: Contro
       onClick={onClick}
       disabled={disabled}
       title={title}
+      aria-label={title}
       className={cn(
-        "p-2.5 rounded-lg transition-all duration-200",
-        "text-slate-400 hover:text-slate-200",
-        "hover:bg-slate-800",
-        "disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent",
+        "inline-flex h-8 w-8 items-center justify-center rounded-full transition-colors duration-150 ease-out",
+        "text-ink-secondary hover:text-ink dark:text-ink-inverse-secondary dark:hover:text-ink-inverse",
+        "hover:bg-surface-100 dark:hover:bg-surface-800",
+        "disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent",
         className
       )}
     >
@@ -585,7 +585,7 @@ export function StrandsSwarm({
   );
 
   return (
-    <div className={cn("relative w-full h-full bg-slate-950", className)}>
+    <div className={cn("ron-workflow relative w-full h-full", className)}>
       <EdgeMarkerDefinitions />
       
       <ReactFlow
@@ -611,14 +611,17 @@ export function StrandsSwarm({
       >
         <Background
           variant={BackgroundVariant.Dots}
-          color="rgb(51, 65, 85)"
+          color="rgb(var(--ren-ink) / 0.14)"
           gap={24}
           size={1}
         />
-        
+
+        {/* Bottom centre, horizontal: the corners belong to Context and the transcript. */}
         <Controls
           showInteractive={false}
-          className="!rounded-xl !border !border-slate-700/50 !bg-slate-900/90 !backdrop-blur-md !shadow-2xl [&>button]:!bg-transparent [&>button]:!border-0 [&>button:hover]:!bg-slate-800 [&>button]:!text-slate-400"
+          position="bottom-center"
+          orientation="horizontal"
+          className="!overflow-hidden !rounded-lg !border !border-surface-200 !shadow-float dark:!border-surface-800"
         />
 
         {/* Top Left: Status */}
@@ -680,15 +683,6 @@ function _SwarmIcon({ className }: { className?: string }) {
   );
 }
 
-function ContextIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="12" cy="12" r="10" />
-      <path d="M12 16v-4M12 8h.01" />
-    </svg>
-  );
-}
-
 // @ts-ignore - Kept for future use
 function _ChevronRightIcon({ className }: { className?: string }) {
   return (
@@ -698,73 +692,3 @@ function _ChevronRightIcon({ className }: { className?: string }) {
   );
 }
 
-function HandoffIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M5 12h14" />
-      <path d="m12 5 7 7-7 7" />
-    </svg>
-  );
-}
-
-function PlayIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="currentColor">
-      <polygon points="5 3 19 12 5 21 5 3" />
-    </svg>
-  );
-}
-
-function ResetIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
-      <path d="M3 3v5h5" />
-    </svg>
-  );
-}
-
-function ChevronIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <polyline points="6 9 12 15 18 9" />
-    </svg>
-  );
-}
-
-function TranscriptIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-      <polyline points="14 2 14 8 20 8" />
-      <line x1="16" y1="13" x2="8" y2="13" />
-      <line x1="16" y1="17" x2="8" y2="17" />
-      <polyline points="10 9 9 9 8 9" />
-    </svg>
-  );
-}
-
-function PlaySmallIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="currentColor">
-      <polygon points="5 3 19 12 5 21 5 3" />
-    </svg>
-  );
-}
-
-function ArrowRightIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M5 12h14" />
-      <path d="m12 5 7 7-7 7" />
-    </svg>
-  );
-}
-
-function DotIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="currentColor">
-      <circle cx="12" cy="12" r="6" />
-    </svg>
-  );
-}

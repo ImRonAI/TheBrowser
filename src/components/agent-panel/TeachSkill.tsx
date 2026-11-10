@@ -4,6 +4,7 @@ import { LIVE_API_BASE_URL } from '@/pages/types/api'
 import { checkLiveApi, liveSocketUrl } from '@/lib/live-api'
 import { ArrowRight, BookOpen, Camera, CameraOff, CheckCheck, Clock3, FileText, Layers3, Loader2, Maximize2, Mic, MicOff, Minimize2, Monitor, Plus, Radio, Send, Square, X } from 'lucide-react'
 import { usePanelAgentStore } from '@/stores/panelAgentStore'
+import { useSkillLibraryStore } from '@/stores/skillLibraryStore'
 import { acquireScreenCapture } from '@/stores/agentPresenceStore'
 import { useVoiceSettingsStore } from '@/stores/voiceSettingsStore'
 import { useAgentUi } from '@/context/AgentUiContext'
@@ -81,6 +82,8 @@ function TeachingWorkspace({ userId, agentId, apiBaseUrl = LIVE_API_BASE_URL, ch
   const [session, setSession] = useState<TeachingSession | null>(null)
   const [sessions, setSessions] = useState<TeachingSession[]>([])
   const [skills, setSkills] = useState<LearnedSkill[]>([])
+  const [libraryOpen, setLibraryOpen] = useState(false)
+  const [highlight, setHighlight] = useState<string | null>(null)
   const [capture, setCapture] = useState<CaptureState>('idle')
   const captureRef = useRef<CaptureState>('idle')
   captureRef.current = capture
@@ -126,7 +129,7 @@ function TeachingWorkspace({ userId, agentId, apiBaseUrl = LIVE_API_BASE_URL, ch
   const stopping = useRef(false)
   const generation = useRef(0)
   const scope = new URLSearchParams({ user_id: userId, agent_id: agentId }).toString()
-  const agentLabel = agentId.startsWith('issue:') ? 'Task Ron' : agentId === 'build' ? 'Build agent' : agentId === 'search' ? 'Search agent' : 'Ron'
+  const agentLabel = agentId.startsWith('issue:') ? 'Task Ren' : agentId === 'build' ? 'Build agent' : agentId === 'search' ? 'Search agent' : 'Ren'
 
   useEffect(() => {
     if (!open) return
@@ -319,6 +322,26 @@ function TeachingWorkspace({ userId, agentId, apiBaseUrl = LIVE_API_BASE_URL, ch
     ])
     if (mounted.current) { setSessions(history.sessions); setSkills(learned.skills) }
   }, [request, scope])
+
+  // Opening the studio loads its history and skill library.
+  useEffect(() => {
+    if (!open) return
+    void refresh().catch((cause: unknown) => { if (mounted.current) setError(message(cause)) })
+  }, [open, refresh])
+
+  // "Open in Skill library" (e.g. after a page is published as a skill) opens this agent's studio on the library.
+  const libraryRequest = useSkillLibraryStore((state) => state.request)
+  const handledLibrary = useRef(useSkillLibraryStore.getState().request?.nonce ?? 0)
+  useEffect(() => {
+    if (!libraryRequest || libraryRequest.agentId !== agentId || libraryRequest.nonce <= handledLibrary.current) return
+    handledLibrary.current = libraryRequest.nonce
+    setOpen(true); setMinimized(false); setLibraryOpen(true); setHighlight(libraryRequest.skillId)
+  }, [libraryRequest, agentId])
+  useEffect(() => {
+    if (!open || minimized || !libraryOpen) return
+    const target = document.getElementById(highlight ? `teaching-skill-${highlight}` : `${id}-library`)
+    target?.scrollIntoView({ block: 'nearest' })
+  }, [open, minimized, libraryOpen, highlight, skills, id])
 
   const demonstrating = session?.demonstration?.status === 'running'
   useEffect(() => {
@@ -571,15 +594,15 @@ function TeachingWorkspace({ userId, agentId, apiBaseUrl = LIVE_API_BASE_URL, ch
     <button type="button" className="teaching-icon" aria-pressed={cameraOn} aria-label={cameraOn ? 'Turn camera off' : 'Turn camera on'} title={cameraOn ? 'Camera off (removes you from the frame)' : 'Camera on (adds you as a small circle, bottom right)'} disabled={capture !== 'observing'} onClick={() => cameraOn ? stopCamera() : void startCamera().then((outcome) => setPlan((current) => current ? { ...current, camera: outcome } : current))}>{cameraOn ? <Camera size={17} /> : <CameraOff size={17} />}</button>
     <button className="teaching-icon" aria-label="Send commentary" disabled={!note.trim() || !conversing} type="submit"><Send size={17} /></button></div>
     {conversing && !audioSupported && <small className="teaching-meta">Voice commentary unavailable on this observer · typed notes only</small>}
-    {micOn && <small className="teaching-meta">● Microphone on · streaming to Gemini{speaking ? ' · Ron speaking' : heardAudio ? '' : ''}</small>}
+    {micOn && <small className="teaching-meta">● Microphone on · streaming to Gemini{speaking ? ' · Ren speaking' : heardAudio ? '' : ''}</small>}
     {micError && <small role="alert" className="teaching-error">{micError}</small>}
   </form>
 
   return <section className={chrome ? 'relative shrink-0' : 'teaching-launch shrink-0 border-b border-surface-200 dark:border-surface-800'}>
-    <button type="button" aria-expanded={open} aria-label="Teach Ron" title="Teach Ron"
+    <button type="button" aria-expanded={open} aria-label="Teach Ren" title="Teach Ren"
       className={chrome ? 'flex h-8 items-center gap-1.5 rounded-lg px-2 text-[12.5px] font-medium text-ink-secondary transition-colors hover:bg-surface-200/60 hover:text-ink dark:text-ink-inverse-secondary dark:hover:bg-surface-800 dark:hover:text-ink-inverse' : 'teaching-launch-button'}
       onClick={() => { setOpen(true); setMinimized(false) }}>
-      <BookOpen size={chrome ? 16 : 19} strokeWidth={chrome ? 1.75 : 2} />{chrome ? <span className="hidden xl:inline">Teach Ron</span> : <><span><strong>Teach a skill</strong><small>Show Ron how you work</small></span><ArrowRight size={16} /></>}
+      <BookOpen size={chrome ? 16 : 19} strokeWidth={chrome ? 1.75 : 2} />{chrome ? <span className="hidden xl:inline">Teach Ren</span> : <><span><strong>Teach a skill</strong><small>Show Ren how you work</small></span><ArrowRight size={16} /></>}
     </button>
     {open && minimized && <aside className="teaching-dock" style={chrome ? { position: 'absolute', right: 0, top: '100%', width: 320, maxHeight: '70vh', overflowY: 'auto' } : undefined} aria-label="Teaching in progress">
       <div className="teaching-section-heading"><span className="teaching-meta">{capture === 'observing' ? `● Observing${micOn ? ' · mic' : ''}${cameraOn ? ' · camera' : ''}` : capture === 'debriefing' ? `● Debrief${micOn ? ' · mic' : ''}` : 'Teaching draft'} · {elapsedLabel(elapsed)}</span><button className="teaching-icon" aria-label="Expand teaching studio" onClick={() => setMinimized(false)}><Maximize2 size={16} /></button></div>
@@ -587,30 +610,30 @@ function TeachingWorkspace({ userId, agentId, apiBaseUrl = LIVE_API_BASE_URL, ch
       <p className="teaching-dock-entry">{session?.journal.at(-1)?.text || 'Waiting for an observation.'}</p>
       {error && <p role="alert" className="teaching-error">{error}</p>}
       {capture === 'observing' && <>{cameraOn && <video ref={attachCameraPreview} className="teaching-camera-pip teaching-camera-dock" muted playsInline aria-label="Your camera" />}<small className="teaching-meta">Capture continues while minimized. Close stops everything.</small>{commentary}<button className="teaching-button primary" onClick={finishDemo}><Square size={14} />Finish demonstration</button></>}
-      {capture === 'debriefing' && <><small className="teaching-meta">Debrief in progress · Ron is talking it through with you.</small>{commentary}<button className="teaching-button primary" onClick={() => stop(true)}><Square size={14} />End conversation</button></>}
+      {capture === 'debriefing' && <><small className="teaching-meta">Debrief in progress · Ren is talking it through with you.</small>{commentary}<button className="teaching-button primary" onClick={() => stop(true)}><Square size={14} />End conversation</button></>}
     </aside>}
     {open && !minimized && typeof document !== 'undefined' && document.getElementById('ron-teaching-slot') && createPortal(
       <div className="absolute inset-0 z-50 flex pointer-events-none">
-        <section id={id} aria-label="Teach Ron" className="teaching-studio relative ml-auto h-full max-w-full pointer-events-auto" style={{ width: panelWidth }}>
+        <section id={id} aria-label="Teach Ren" className="teaching-studio relative ml-auto h-full max-w-full pointer-events-auto" style={{ width: panelWidth }}>
         <header className="teaching-header"><div className="teaching-mark" aria-hidden="true">R</div><h2 className="teaching-title min-w-0 flex-1">{agentLabel}</h2>
           <div className="teaching-actions"><button className="teaching-icon" aria-label="Minimize teaching studio" onClick={() => setMinimized(true)}><Minimize2 size={19} /></button><button className="teaching-icon" aria-label="Close teaching studio and stop sharing" onClick={close}><X size={20} /></button></div>
         </header>
         <ol className="teaching-stages" aria-label="Teaching stages">{['Brief', 'Demonstrate', 'Review', 'Saved'].map((label, index) => <li key={label} aria-current={stage === index ? 'step' : undefined} data-complete={stage > index}><span>{String(index + 1).padStart(2, '0')}</span>{label}</li>)}</ol>
         <div className="teaching-body">
           {(error || session?.error) && <p role="alert" className="teaching-error">{error || session?.error}</p>}
-          {processing && <div role="status" className="teaching-progress"><Loader2 className="animate-spin" size={19} /><div><strong>{session?.status === 'reviewing' ? 'Analyzing workflow and capabilities' : 'Building the approved skill'}</strong><p>{session?.status === 'reviewing' ? 'Ron is following the Learning a New Skill protocol: organizing the saved observations and determining which existing or new tools, MCP servers, skills, and subagents the workflow needs. Nothing is created until you approve.' : 'Saving the skill, ordered SOP, and reusable capability group.'}</p></div></div>}
+          {processing && <div role="status" className="teaching-progress"><Loader2 className="animate-spin" size={19} /><div><strong>{session?.status === 'reviewing' ? 'Analyzing workflow and capabilities' : 'Building the approved skill'}</strong><p>{session?.status === 'reviewing' ? 'Ren is following the Learning a New Skill protocol: organizing the saved observations and determining which existing or new tools, MCP servers, skills, and subagents the workflow needs. Nothing is created until you approve.' : 'Saving the skill, ordered SOP, and reusable capability group.'}</p></div></div>}
           {session?.status === 'ready' ? <section className="teaching-saved"><CheckCheck size={36} /><p className="teaching-meta">ADDED TO THIS AGENT’S LIBRARY</p><h2>{savedSkill?.name || session.title}</h2><p>{savedSkill?.description || 'Your approved process is saved as a reusable skill.'}</p><div className="teaching-saved-assets"><span><BookOpen size={18} />Skill</span><span><FileText size={18} />Ordered SOP</span>{savedSkill?.tool_group && <span><Layers3 size={18} />{savedSkill.tool_group.members.length} capabilities</span>}</div>
-            {session.demonstration && <div role="status" className="teaching-progress">{session.demonstration.status === 'running' ? <Loader2 className="animate-spin" size={19} /> : <CheckCheck size={19} />}<div><strong>{session.demonstration.status === 'running' ? 'Ron is demonstrating the skill' : `Demonstration ${session.demonstration.status}`}</strong><p>{session.demonstration.status === 'running' ? 'Following the new SOP once with the approved tools, so you can watch it work.' : session.demonstration.result || session.demonstration.evidence || ''}</p></div></div>}
+            {session.demonstration && <div role="status" className="teaching-progress">{session.demonstration.status === 'running' ? <Loader2 className="animate-spin" size={19} /> : <CheckCheck size={19} />}<div><strong>{session.demonstration.status === 'running' ? 'Ren is demonstrating the skill' : `Demonstration ${session.demonstration.status}`}</strong><p>{session.demonstration.status === 'running' ? 'Following the new SOP once with the approved tools, so you can watch it work.' : session.demonstration.result || session.demonstration.evidence || ''}</p></div></div>}
             <button className="teaching-button" onClick={() => { setSession(null); setTitle(''); setObjective(''); setContext(''); setFeedback(''); setError(null); setArtifact(null) }}><Plus size={16} />Teach another skill</button></section>
-          : review ? <section className="teaching-review"><div className="teaching-section-heading"><div><p className="teaching-meta">LEARNING A NEW SKILL / PROCESS DOCUMENT / REVISION {review.revision}</p><h2>Read it before Ron learns it.</h2><p className="teaching-footnote">The document lists the workflow and the capabilities it requires — existing tools, MCP servers, skills, and subagents Ron found, plus anything new or unavailable.</p></div><span className="teaching-meta">{session?.journal.length} evidence entries · {session?.approval?.revision === review.revision ? 'Approved' : 'Not yet published'}</span></div>
+          : review ? <section className="teaching-review"><div className="teaching-section-heading"><div><p className="teaching-meta">LEARNING A NEW SKILL / PROCESS DOCUMENT / REVISION {review.revision}</p><h2>Read it before Ren learns it.</h2><p className="teaching-footnote">The document lists the workflow and the capabilities it requires — existing tools, MCP servers, skills, and subagents Ren found, plus anything new or unavailable.</p></div><span className="teaching-meta">{session?.journal.length} evidence entries · {session?.approval?.revision === review.revision ? 'Approved' : 'Not yet published'}</span></div>
             <iframe title={`Learning a New Skill — process document revision ${review.revision}`} sandbox="" srcDoc={review.html} className="teaching-document" />
-            <div className="teaching-review-controls"><div><label htmlFor={`${id}-feedback`}>Anything to correct?</label><textarea id={`${id}-feedback`} value={feedback} onChange={(event) => setFeedback(event.target.value)} disabled={locked} rows={3} maxLength={10000} placeholder="Describe the change Ron should make to this process…" /><button className="teaching-button" disabled={locked || !feedback.trim()} onClick={() => session && void transition(session.id, 'review', { revision: review.revision, feedback: feedback.trim() })}>Revise process</button>{session?.review_failure && <button className="teaching-button" disabled={locked} onClick={() => void transition(session.id, 'finish')}>Retry process review</button>}</div><div className="teaching-approval"><label><input type="checkbox" checked={approved} disabled={locked} onChange={(event) => setApproved(event.target.checked)} /><span>I have reviewed revision {review.revision} and approve this process.</span></label><button className="teaching-button primary" disabled={locked || !!session?.review_failure || (!approved && session?.approval?.revision !== review.revision)} onClick={() => session && void transition(session.id, 'approve', { revision: review.revision })}>{session?.approval?.revision === review.revision ? 'Retry approved generation' : 'Approve and generate'}<ArrowRight size={16} /></button><p>Creates the skill, SOP, and capability group from this exact revision.</p></div></div>
+            <div className="teaching-review-controls"><div><label htmlFor={`${id}-feedback`}>Anything to correct?</label><textarea id={`${id}-feedback`} value={feedback} onChange={(event) => setFeedback(event.target.value)} disabled={locked} rows={3} maxLength={10000} placeholder="Describe the change Ren should make to this process…" /><button className="teaching-button" disabled={locked || !feedback.trim()} onClick={() => session && void transition(session.id, 'review', { revision: review.revision, feedback: feedback.trim() })}>Revise process</button>{session?.review_failure && <button className="teaching-button" disabled={locked} onClick={() => void transition(session.id, 'finish')}>Retry process review</button>}</div><div className="teaching-approval"><label><input type="checkbox" checked={approved} disabled={locked} onChange={(event) => setApproved(event.target.checked)} /><span>I have reviewed revision {review.revision} and approve this process.</span></label><button className="teaching-button primary" disabled={locked || !!session?.review_failure || (!approved && session?.approval?.revision !== review.revision)} onClick={() => session && void transition(session.id, 'approve', { revision: review.revision })}>{session?.approval?.revision === review.revision ? 'Retry approved generation' : 'Approve and generate'}<ArrowRight size={16} /></button><p>Creates the skill, SOP, and capability group from this exact revision.</p></div></div>
           </section>
           : <><div className="teaching-desk">
             <section className="teaching-brief">
               <label htmlFor={`${id}-title`}>Workflow name</label><input id={`${id}-title`} value={title} maxLength={200} disabled={locked} onChange={(event) => setTitle(event.target.value)} placeholder="e.g. Prepare the weekly report" />
               <label htmlFor={`${id}-outcome`}>Intended outcome</label><textarea id={`${id}-outcome`} value={objective} maxLength={10000} disabled={locked} rows={3} onChange={(event) => setObjective(event.target.value)} placeholder="What should be accomplished? What does success look like?" />
-              <label htmlFor={`${id}-context`}>Context & prerequisites <span className="teaching-optional">optional</span></label><textarea id={`${id}-context`} value={context} maxLength={10000} disabled={locked} rows={2} onChange={(event) => setContext(event.target.value)} placeholder="Accounts, starting conditions, or decisions Ron should know…" />
+              <label htmlFor={`${id}-context`}>Context & prerequisites <span className="teaching-optional">optional</span></label><textarea id={`${id}-context`} value={context} maxLength={10000} disabled={locked} rows={2} onChange={(event) => setContext(event.target.value)} placeholder="Accounts, starting conditions, or decisions Ren should know…" />
               <div className="teaching-capture-actions">
                 {!active && <button className="teaching-button primary" disabled={locked || !backendReady || !title.trim() || !objective.trim()} onClick={() => void start()}><Monitor size={17} />{session?.journal.length ? 'Resume teaching' : 'Start teaching'}<ArrowRight size={16} /></button>}
                 {capture === 'starting' && <button className="teaching-button" onClick={() => { disconnect(); setCapture('idle') }}>Cancel connection</button>}
@@ -627,13 +650,13 @@ function TeachingWorkspace({ userId, agentId, apiBaseUrl = LIVE_API_BASE_URL, ch
                 {cameraOn && <video ref={attachCameraPreview} className="teaching-camera-pip" muted playsInline aria-label="Your camera, a small circle at the bottom right" />}
               </> : <div><Monitor size={38} strokeWidth={1} /></div>}</div>
               {source && active && <p className="teaching-source">{source}{plan ? ` · ${captureSummary({ ...plan, camera: cameraOn ? 'granted' : plan.camera === 'granted' ? 'unavailable' : plan.camera, mic: micOn ? 'granted' : plan.mic === 'granted' ? 'unavailable' : plan.mic })}` : ''}</p>}
-              {plan && active && (plan.camera === 'denied' || plan.mic === 'denied') && <p role="status" className="teaching-capture-status">{plan.camera === 'denied' && plan.mic === 'denied' ? 'Camera and microphone permission denied — screen only. Allow them in system settings and use the toggles to retry.' : plan.camera === 'denied' ? 'Camera permission denied — Ron sees the screen only.' : 'Microphone permission denied — use typed notes or the mic toggle to retry.'}</p>}
-              <p role="status" className="teaching-capture-status">{capture === 'starting' ? 'Waiting for Gemini to confirm observation…' : capture === 'stopping' ? 'Saving the final journal entries…' : capture === 'debriefing' ? 'Sharing has ended. Ron will tell you what he understood, ask his questions, and propose how he will automate it. Correct him out loud or by typing; press End conversation when you are done.' : capture === 'observing' ? 'The browser window is shared. Your camera stays in the corner. Minimize the studio to work.' : session?.journal.length ? 'Recording saved. Prepare the document when you are ready.' : 'The browser window is not being shared.'}</p>
+              {plan && active && (plan.camera === 'denied' || plan.mic === 'denied') && <p role="status" className="teaching-capture-status">{plan.camera === 'denied' && plan.mic === 'denied' ? 'Camera and microphone permission denied — screen only. Allow them in system settings and use the toggles to retry.' : plan.camera === 'denied' ? 'Camera permission denied — Ren sees the screen only.' : 'Microphone permission denied — use typed notes or the mic toggle to retry.'}</p>}
+              <p role="status" className="teaching-capture-status">{capture === 'starting' ? 'Waiting for Gemini to confirm observation…' : capture === 'stopping' ? 'Saving the final journal entries…' : capture === 'debriefing' ? 'Sharing has ended. Ren will tell you what he understood, ask his questions, and propose how he will automate it. Correct him out loud or by typing; press End conversation when you are done.' : capture === 'observing' ? 'The browser window is shared. Your camera stays in the corner. Minimize the studio to work.' : session?.journal.length ? 'Recording saved. Prepare the document when you are ready.' : 'The browser window is not being shared.'}</p>
               {journal}{active && commentary}{transcript && <p className="teaching-transcript">{transcript}</p>}
             </section>
           </div></>}
           <footer className="teaching-library"><details><summary>Teaching history <span>{sessions.length}</span></summary>{sessions.length ? <ul>{sessions.map((saved) => <li key={saved.id}><button disabled={locked} onClick={() => void load(saved.id)}><span>{saved.title}</span><small>{saved.status.replaceAll('_', ' ')}</small><ArrowRight size={14} /></button></li>)}</ul> : <p>No saved teaching sessions yet.</p>}</details>
-            <details><summary>Skill library <span>{skills.length}</span></summary>{skills.length ? skills.map((skill) => <article key={skill.id}><h3>{skill.name}</h3><p>{skill.description}</p><div className="teaching-files">{skill.files.map((path) => <button key={path} disabled={locked} onClick={() => void readFile(skill.id, path)}><FileText size={14} />{path}</button>)}</div></article>) : <p>Approved skills will appear here.</p>}</details>
+            <details id={`${id}-library`} open={libraryOpen} onToggle={(event) => setLibraryOpen(event.currentTarget.open)}><summary>Skill library <span>{skills.length}</span></summary>{skills.length ? skills.map((skill) => <article key={skill.id} id={`teaching-skill-${skill.id}`} aria-current={highlight === skill.id ? 'true' : undefined}><h3>{skill.name}</h3><p>{skill.description}</p><div className="teaching-files">{skill.files.map((path) => <button key={path} disabled={locked} onClick={() => void readFile(skill.id, path)}><FileText size={14} />{path}</button>)}</div></article>) : <p>Approved skills will appear here.</p>}</details>
           </footer>
           {artifact && <section className="teaching-artifact"><div className="teaching-section-heading"><h3>{artifact.path}</h3><button className="teaching-icon" aria-label="Close skill file" onClick={() => setArtifact(null)}><X size={16} /></button></div><pre>{artifact.content}</pre></section>}
         </div>

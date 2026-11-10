@@ -1,0 +1,106 @@
+/* Styles for the "/" blocks (extensions/blocks). Plain-node blocks are styled here; React node views carry
+   their own Tailwind classes. Dark mode follows the app's `.dark` class. */
+
+/* ---- Toggle lists / toggle headings (official Details) ---- */
+.ProseMirror .ron-toggle { @apply my-2 flex items-start gap-1; }
+.ProseMirror .ron-toggle > button {
+  @apply mt-[0.3em] flex h-5 w-5 shrink-0 items-center justify-center rounded-md text-ink-muted transition-colors duration-150 hover:bg-surface-100 hover:text-ink dark:text-ink-inverse-muted dark:hover:bg-surface-850 dark:hover:text-ink-inverse;
+}
+.ProseMirror .ron-toggle > button::before {
+  content: '';
+  @apply block h-0 w-0 border-y-[4.5px] border-l-[7px] border-y-transparent border-l-current transition-transform duration-150 ease-out;
+}
+.ProseMirror .ron-toggle.is-open > button::before { transform: rotate(90deg); }
+.ProseMirror .ron-toggle > div { @apply min-w-0 flex-1; }
+.ProseMirror .ron-toggle summary { @apply block cursor-text list-none font-medium; }
+.ProseMirror .ron-toggle summary::-webkit-details-marker { display: none; }
+.ProseMirror .ron-toggle summary[data-level='1'] { @apply font-display text-[1.6em] font-extrabold leading-tight tracking-[-0.03em]; }
+.ProseMirror .ron-toggle summary[data-level='2'] { @apply font-display text-[1.35em] font-bold leading-snug tracking-[-0.025em]; }
+.ProseMirror .ron-toggle summary[data-level='3'] { @apply font-display text-[1.15em] font-bold tracking-[-0.02em]; }
+.ProseMirror .ron-toggle summary:has(> br.ProseMirror-trailingBreak:only-child)::before {
+  content: 'Toggle';
+  @apply pointer-events-none float-left h-0 text-ink-muted dark:text-ink-inverse-muted;
+}
+.ProseMirror .ron-toggle [data-type='detailsContent'] { @apply mt-1; }
+.ProseMirror .ron-toggle [data-type='detailsContent'] > :first-child { @apply mt-0; }
+.ProseMirror .ron-toggle [data-type='detailsContent'] > :last-child { @apply mb-0; }
+.ProseMirror .ron-toggle [data-type='detailsContent'] > p:only-child:has(> br.ProseMirror-trailingBreak:only-child)::before {
+  content: 'Empty toggle. Click or type inside.';
+  @apply pointer-events-none float-left h-0 text-ink-muted dark:text-ink-inverse-muted;
+}
+
+/* ---- Callouts ---- */
+.ProseMirror .ron-callout-content > [data-node-view-content-react] > :first-child { @apply mt-0; }
+.ProseMirror .ron-callout-content > [data-node-view-content-react] > :last-child { @apply mb-0; }
+.ProseMirror .ron-callout-content > [data-node-view-content-react] > p:only-child:has(> br.ProseMirror-trailingBreak:only-child)::before {
+  content: 'Type something…';
+  @apply pointer-events-none float-left h-0 text-ink-muted dark:text-ink-inverse-muted;
+}
+
+/* ---- Cards ---- */
+.ProseMirror .ron-card-content > [data-node-view-content-react] > :first-child { @apply mt-0; }
+.ProseMirror .ron-card-content > [data-node-view-content-react] > :last-child { @apply mb-0; }
+.ProseMirror [data-card-title] { @apply mb-1 pr-8 font-display text-[1.2em] font-bold leading-snug tracking-[-0.02em] text-ink dark:text-ink-inverse; }
+.ProseMirror [data-card-title]:has(> br.ProseMirror-trailingBreak:only-child)::before {
+  content: 'Card title';
+  @apply pointer-events-none float-left h-0 text-ink-muted dark:text-ink-inverse-muted;
+}
+.ProseMirror .ron-card-content > [data-node-view-content-react] > p:nth-child(2):last-child:has(> br.ProseMirror-trailingBreak:only-child)::before {
+  content: 'Fill in the details…';
+  @apply pointer-events-none float-left h-0 text-ink-muted dark:text-ink-inverse-muted;
+}
+
+/* ---- Columns ---- */
+.ProseMirror .ron-columns { container-type: inline-size; }
+.ProseMirror .ron-columns-grid > [data-node-view-content-react] {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  gap: 1rem;
+}
+@container (max-width: 520px) {
+  .ProseMirror .ron-columns-grid > [data-node-view-content-react] { grid-auto-flow: row; }
+}
+.ProseMirror [data-type='column'] { @apply min-w-0 rounded-lg px-2 py-1 outline outline-1 outline-transparent transition-[outline-color]; }
+.ProseMirror[contenteditable='true'] [data-type='column'] { @apply outline-dashed outline-surface-200 dark:outline-surface-800; }
+.ProseMirror[contenteditable='true'] [data-type='column']:hover,
+.ProseMirror[contenteditable='true'] [data-type='column']:focus-within { @apply outline-surface-300 dark:outline-surface-700; }
+.ProseMirror [data-type='column'] > :first-child { @apply mt-0; }
+.ProseMirror [data-type='column'] > :last-child { @apply mb-0; }
+.ProseMirror[contenteditable='true'] [data-type='column'] > p:only-child:has(> br.ProseMirror-trailingBreak:only-child)::before {
+  content: 'Column';
+  @apply pointer-events-none float-left h-0 text-ink-muted dark:text-ink-inverse-muted;
+}
+
+/* ---- YouTube (official node: plain iframe, made responsive) ---- */
+.ProseMirror div[data-youtube-video] { @apply my-4; }
+.ProseMirror div[data-youtube-video] iframe { @apply block aspect-video h-auto w-full rounded-xl border-0 bg-surface-950; }
+.ProseMirror div[data-youtube-video].ProseMirror-selectednode iframe { @apply ring-2 ring-blurple-600 dark:ring-blurple-400; }
+
+/* ---- Images (official node + core ResizableNodeView) ---- */
+.ProseMirror img.ron-image { @apply my-0 h-auto max-w-full rounded-lg; }
+.ProseMirror [data-resize-container][data-node='image'] { @apply my-4 max-w-full; }
+.ProseMirror [data-resize-container][data-node='image'] [data-resize-wrapper] { @apply max-w-full; }
+.ProseMirror [data-resize-container].ProseMirror-selectednode img { @apply ring-2 ring-blurple-600 dark:ring-blurple-400; }
+.ProseMirror [data-resize-handle] {
+  @apply z-[1] h-2.5 w-2.5 rounded-[3px] border border-blurple-600 bg-surface-0 opacity-0 shadow-sm transition-opacity duration-150 dark:border-blurple-400 dark:bg-surface-900;
+}
+.ProseMirror [data-resize-container]:hover [data-resize-handle],
+.ProseMirror [data-resize-container][data-resize-state='true'] [data-resize-handle] { @apply opacity-100; }
+.ProseMirror [data-resize-handle='top-left'] { @apply -translate-x-1/2 -translate-y-1/2 cursor-nwse-resize; }
+.ProseMirror [data-resize-handle='top-right'] { @apply -translate-y-1/2 translate-x-1/2 cursor-nesw-resize; }
+.ProseMirror [data-resize-handle='bottom-left'] { @apply -translate-x-1/2 translate-y-1/2 cursor-nesw-resize; }
+.ProseMirror [data-resize-handle='bottom-right'] { @apply translate-x-1/2 translate-y-1/2 cursor-nwse-resize; }
+.ProseMirror [data-resize-handle='top'], .ProseMirror [data-resize-handle='bottom'] { @apply h-1.5 w-auto cursor-ns-resize; }
+.ProseMirror [data-resize-handle='left'], .ProseMirror [data-resize-handle='right'] { @apply h-auto w-1.5 cursor-ew-resize; }
+
+/* ---- Equations (official KaTeX nodes) ---- */
+.ProseMirror .tiptap-mathematics-render[data-type='block-math'] { @apply my-4 overflow-x-auto rounded-lg px-3 py-2 text-center; }
+.ProseMirror .tiptap-mathematics-render[data-type='inline-math'] { @apply rounded px-0.5; }
+.ProseMirror .tiptap-mathematics-render--editable { @apply cursor-pointer transition-colors duration-150 hover:bg-surface-100 dark:hover:bg-surface-850; }
+.ProseMirror .tiptap-mathematics-render.ProseMirror-selectednode { @apply bg-blurple-600/10 ring-2 ring-blurple-600/60 dark:bg-blurple-400/15 dark:ring-blurple-400/60; }
+.ProseMirror .block-math-error, .ProseMirror .inline-math-error { @apply font-mono text-[0.9em] text-red-600 dark:text-red-400; }
+
+/* ---- Highlights (official multicolor Highlight): a volt highlighter when no color is set ---- */
+.ProseMirror mark { @apply rounded-[3px] bg-blurple-200/70 px-[1px] text-inherit dark:bg-blurple-400/30; }
+.ProseMirror mark[data-color] { color: inherit; }

@@ -5,6 +5,7 @@ import { TabBar, useTabSync } from '@/components/chrome/TabBar'
 import { AgentPanel } from '@/components/agent-panel/AgentPanel'
 import { MusicSidePanel } from '@/components/agent-panel/MusicSidePanel'
 import { ScreenVisionOverlay } from '@/components/agent-panel/ScreenVisionOverlay'
+import { ContextBridge } from '@/components/interests/ContextBridge'
 import { InterestMenuSync } from '@/components/interests/InterestMenuSync'
 import { InterestsWidget } from '@/components/interests/InterestsWidget'
 import { RepairBridge } from '@/components/agent-panel/RepairBridge'
@@ -105,8 +106,10 @@ function BrowserLayoutContent({ children }: BrowserLayoutProps) {
     }
     openPanel()
     // Already open: the panel's own open-effect will not run again, so focus directly.
+    // The composer's label reads "Message Ren" since the rename; "Message Ron" is kept so focus
+    // still lands whichever label the panel ships with.
     window.setTimeout(() => {
-      const composer = document.querySelector<HTMLTextAreaElement>('section textarea[aria-label="Message Ron"], section textarea[aria-label="Steer the active run"]')
+      const composer = document.querySelector<HTMLTextAreaElement>('section textarea[aria-label="Message Ren"], section textarea[aria-label="Message Ren"], section textarea[aria-label="Steer the active run"]')
       composer?.focus()
     }, 320)
   }
@@ -206,9 +209,9 @@ function BrowserLayoutContent({ children }: BrowserLayoutProps) {
     <div className={cn(
       'flex h-screen overflow-hidden text-ink dark:text-ink-inverse',
       'ron-chrome',
-      'selection:bg-accent/15 dark:selection:bg-accent-light/25',
+      'selection:bg-blurple-600/20 dark:selection:bg-blurple-400/30',
     )}>
-      {/* Browser Tool Glow Effect - persists across entire app */}
+      {/* Agent activity frame (volt hairline) - persists across entire app */}
       <BrowserGlowBorder />
 
       {/* Persistent left sidebar: search, destinations, tabs (⌘\ to toggle) */}
@@ -216,13 +219,16 @@ function BrowserLayoutContent({ children }: BrowserLayoutProps) {
 
       <div className="flex min-w-0 flex-1 flex-col">
         {/* Browser chrome: toolbar, plus the tab strip while the sidebar is closed */}
-        <div ref={chromeRef} className="ron-toolbar relative z-[100] flex-shrink-0 border-b border-surface-200/80 dark:border-surface-800">
+        <div ref={chromeRef} className="ron-toolbar relative z-[100] flex-shrink-0 border-b border-surface-200 dark:border-surface-800">
           <ChromeToolbar />
           {!isSidebarOpen && <TabBar />}
         </div>
 
-        {/* Main Content Area (`ron-content`: the Glass theme's see-through content layer) */}
-        <div className="ron-content relative flex-1 overflow-hidden bg-surface-0 dark:bg-surface-900">
+        {/* Main Content Area (`ron-content`: the Glass theme's see-through content layer). `overflow-clip`, not
+            `-hidden`: a hidden box can still be scrolled by focus()/scrollIntoView, which shifted the page and the
+            panel up under the toolbar with no way back; a clipped box cannot be scrolled at all. A clipped box is
+            not a scroll container, so `min-h-0` is required: without it the flex item grows to its content. */}
+        <div className="ron-content relative min-h-0 flex-1 overflow-clip bg-surface-0 dark:bg-surface-900">
           {/* React content - hidden when WebContentsView is showing external websites */}
           {!isExternalMode && (
             <motion.div
@@ -247,6 +253,7 @@ function BrowserLayoutContent({ children }: BrowserLayoutProps) {
           <ScreenVisionOverlay />
 
           <InterestMenuSync />
+          <ContextBridge />
           <InterestsWidget />
           {/* Native repair surface bridge: mirrors the current investigation into Electron's WebContentsView. */}
           <RepairBridge />

@@ -106,6 +106,20 @@ async def list_skills(user_id: str, agent_id: str):
         raise HTTPException(422, str(error)) from error
 
 
+@router.get("/references")
+async def list_references(user_id: str, agent_id: str = "panel"):
+    """What a skill page can reference with ``@``: tools, MCP servers, this agent's skills and Ron's A2A agent.
+
+    Pages and the user's specialists/project agents come from their own APIs (renderer).
+    """
+    from agent.api.core.document_skills import reference_catalog
+
+    try:
+        return await reference_catalog(get_teaching_service(), user_id, agent_id)
+    except ValueError as error:
+        raise HTTPException(422, str(error)) from error
+
+
 @router.get("/skills/{skill_id}/files")
 async def read_file(skill_id: str, path: str, user_id: str, agent_id: str):
     try:

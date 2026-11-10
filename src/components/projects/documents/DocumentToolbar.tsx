@@ -1,9 +1,7 @@
 import { useState, type ReactNode } from 'react'
+import { RenIcon } from '@/components/brand'
 import { useEditorState, type Editor } from '@tiptap/react'
-import {
-  Bold, ChevronDown, Code, CodeSquare, Heading1, Heading2, Heading3, Italic, Link2, List, ListChecks, ListOrdered,
-  Minus, Pilcrow, Plus, Quote, Redo2, Sparkles, Strikethrough, Table, Underline, Undo2, Workflow,
-} from 'lucide-react'
+import { Bold, ChevronDown, Code, CodeSquare, Heading1, Heading2, Heading3, Italic, Link2, List, ListChecks, ListOrdered, Minus, Pilcrow, Plus, Quote, Redo2, Strikethrough, Table, Underline, Undo2, Workflow } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger,
@@ -117,9 +115,9 @@ function EditorToolbar({ editor, onAskRon }: { editor: Editor; onAskRon?: () => 
       </DropdownMenu>
 
       {onAskRon && (
-        <Button type="button" variant="ghost" size="sm" onClick={onAskRon} title="Ask Ron to write or draw a workflow"
+        <Button type="button" variant="ghost" size="sm" onClick={onAskRon} title="Ask Ren to write or draw a workflow"
           className="ml-auto h-8 gap-1.5 rounded-full px-3 text-[13px] font-medium text-accent hover:bg-accent/10 hover:text-accent dark:text-accent-light dark:hover:bg-accent-light/10">
-          <Sparkles className="!size-4" />Ask Ron
+          <RenIcon className="!size-4" />Ask Ren
         </Button>
       )}
     </div>

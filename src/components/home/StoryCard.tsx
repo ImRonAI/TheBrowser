@@ -1,21 +1,29 @@
 import { useState } from 'react'
 import { motion, useReducedMotion } from 'framer-motion'
-import { ArrowRight, Play } from 'lucide-react'
+import { ArrowRight, Play, Plus } from 'lucide-react'
 import { cn } from '@/utils/cn'
 import type { Story } from '@/lib/articles'
 import type { StickerHue } from '@/lib/story-animations'
 
 /**
- * Topic kicker tint. The 2026 redesign is editorial: one neutral kicker for every
- * topic, with a hairline swatch keyed to the topic so slots stay distinguishable
- * without a rainbow.
+ * Topic accents. Ren is ink and volt, so every topic hue resolves to a shade of volt (no rainbow,
+ * no orange): a small swatch beside the kicker keeps slots distinguishable, and the same shade
+ * paints the typographic poster a story shows when it has no image.
  */
-const KICKER_SWATCH: Record<StickerHue, string> = {
-  amber: 'bg-[#B98A4E]',
-  rose: 'bg-[#A86A62]',
-  emerald: 'bg-[#6F8A73]',
-  sky: 'bg-[#6C8296]',
-  violet: 'bg-[#86768F]',
+const HUE_SWATCH: Record<StickerHue, string> = {
+  amber: 'bg-blurple-300',
+  rose: 'bg-blurple-400',
+  emerald: 'bg-blurple-500',
+  sky: 'bg-blurple-600 dark:bg-blurple-400',
+  violet: 'bg-blurple-800 dark:bg-blurple-200',
+}
+
+const HUE_POSTER: Record<StickerHue, string> = {
+  amber: 'bg-blurple-100 text-blurple-700 dark:bg-blurple-950 dark:text-blurple-300',
+  rose: 'bg-blurple-200 text-blurple-800 dark:bg-blurple-900 dark:text-blurple-200',
+  emerald: 'bg-blurple-500 text-white',
+  sky: 'bg-blurple-600 text-white dark:bg-blurple-400 dark:text-ink',
+  violet: 'bg-blurple-900 text-blurple-200 dark:bg-blurple-200 dark:text-blurple-900',
 }
 
 /**
@@ -38,13 +46,21 @@ export interface StoryCardProps {
   /** Defaults to `featured ? 'featured' : 'compact'`. */
   size?: StoryCardSize
   onRead: () => void
+  /** Save the story to the user's Ren context (Context widget). */
+  onAddContext?: () => void
+  /** Set while an add to context is in flight (e.g. "Adding to your context…"): the Context button waits. */
+  addContextBusy?: string | null
   /** Deterministic resting tilt in degrees; the caller derives it via `cardTilt(story.url)`. Kept as data; cards rest level. */
   tilt: number
   /** Kicker hue; the caller derives it via `stickerHue(story.topic)`. */
   hue: StickerHue
 }
 
-export function StoryCard({ story, featured, size = featured ? 'featured' : 'compact', onRead, tilt, hue }: StoryCardProps) {
+/**
+ * An editorial tile: the image bleeds to the card's edge, a mono kicker and byline frame a heavy
+ * display headline. Hover lifts the card a pixel, scales the image and underlines the headline.
+ */
+export function StoryCard({ story, featured, size = featured ? 'featured' : 'compact', onRead, onAddContext, addContextBusy, tilt, hue }: StoryCardProps) {
   const reduced = useReducedMotion() ?? false
   const [imageBroken, setImageBroken] = useState(false)
   const [faviconBroken, setFaviconBroken] = useState(false)
@@ -54,28 +70,44 @@ export function StoryCard({ story, featured, size = featured ? 'featured' : 'com
 
   return (
     <motion.div
-      whileHover={reduced ? undefined : { y: -2 }}
+      whileHover={reduced ? undefined : { y: -1 }}
       transition={{ type: 'spring', stiffness: 380, damping: 30 }}
       data-tilt={tilt}
-      className="h-full"
+      className="group/card relative h-full"
     >
+      {onAddContext && (
+        <button
+          type="button"
+          onClick={onAddContext}
+          disabled={Boolean(addContextBusy)}
+          aria-label={`Add to Ren context: ${story.title}`}
+          title={addContextBusy || 'Add to Ren context'}
+          className={cn(
+            'absolute left-2 top-2 z-10 inline-flex h-7 items-center gap-1 rounded-full bg-ink/80 pl-2 pr-2.5 text-[12px] font-semibold text-white opacity-0 backdrop-blur-sm transition-[opacity,background-color] duration-150 ease-out hover:bg-ink focus-visible:opacity-100 group-hover/card:opacity-100',
+            addContextBusy && 'cursor-wait bg-ink/50 hover:bg-ink/50',
+          )}
+        >
+          <Plus className="h-3.5 w-3.5" strokeWidth={2.5} />
+          Context
+        </button>
+      )}
       <button
         type="button"
         onClick={onRead}
         aria-label={`Read: ${story.title}`}
         className={cn(
-          'group relative flex w-full items-stretch gap-4 rounded-xl border p-3 text-left transition-[border-color,box-shadow] duration-300',
-          'border-surface-200/80 bg-surface-0 hover:border-surface-300 hover:shadow-[0_10px_28px_-14px_rgb(26_25_23/0.22)]',
-          'dark:border-surface-800 dark:bg-surface-900 dark:hover:border-surface-700 dark:hover:shadow-[0_10px_28px_-14px_rgb(0_0_0/0.6)]',
+          'group relative flex w-full items-stretch overflow-hidden rounded-xl border text-left transition-colors duration-200 ease-out',
+          'border-surface-200 bg-surface-0 hover:border-surface-300',
+          'dark:border-surface-800 dark:bg-surface-900 dark:hover:border-surface-700',
           STORY_CARD_HEIGHT[size],
-          companion && 'xl:flex-col xl:gap-3',
+          companion && 'xl:flex-col',
         )}
       >
         <div
           className={cn(
-            'relative shrink-0 overflow-hidden rounded-lg bg-surface-100 dark:bg-surface-800',
+            'relative shrink-0 overflow-hidden bg-surface-100 dark:bg-surface-850',
             featured ? 'w-[46%]' : 'w-[112px]',
-            companion && 'xl:h-[108px] xl:w-full',
+            companion && 'xl:h-[112px] xl:w-full',
           )}
         >
           {showImage ? (
@@ -84,30 +116,32 @@ export function StoryCard({ story, featured, size = featured ? 'featured' : 'com
               alt=""
               loading={featured ? 'eager' : 'lazy'}
               onError={() => setImageBroken(true)}
-              className="h-full w-full object-cover transition-transform duration-700 ease-smooth motion-safe:group-hover:scale-[1.03]"
+              className="h-full w-full object-cover transition-transform duration-500 ease-out motion-safe:group-hover:scale-[1.02]"
             />
           ) : (
-            <div className="flex h-full items-center justify-center bg-gradient-to-br from-surface-50 to-surface-200 dark:from-surface-850 dark:to-surface-800">
-              <span className="font-display text-4xl italic text-ink-muted/70 dark:text-ink-inverse-muted/70">{story.topic.charAt(0)}</span>
+            <div className={cn('flex h-full items-end p-3', HUE_POSTER[hue])}>
+              <span className={cn('font-display font-extrabold leading-[0.8] tracking-[-0.05em]', featured ? 'text-[5.5rem]' : 'text-5xl')}>
+                {story.topic.charAt(0)}
+              </span>
             </div>
           )}
           {story.kind === 'video' && (
-            <span className="absolute bottom-1.5 right-1.5 inline-flex h-6 w-6 items-center justify-center rounded-full bg-black/60 text-white">
-              <Play size={11} fill="currentColor" />
+            <span className="absolute bottom-2 right-2 inline-flex h-7 w-7 items-center justify-center rounded-full bg-ink/80 text-white backdrop-blur-sm">
+              <Play className="h-3 w-3 translate-x-px" fill="currentColor" />
             </span>
           )}
         </div>
 
-        <div className="flex min-w-0 flex-1 flex-col py-0.5">
-          <p className="flex items-center gap-1.5 text-[10.5px] font-medium uppercase tracking-[0.14em] text-ink-muted dark:text-ink-inverse-muted">
-            <span aria-hidden className={cn('h-2.5 w-[3px] flex-shrink-0 rounded-full', KICKER_SWATCH[hue])} />
+        <div className={cn('flex min-w-0 flex-1 flex-col', featured ? 'p-5' : 'px-4 py-3', companion && 'xl:py-3.5')}>
+          <p className="flex items-center gap-2 font-mono text-[11px] font-medium uppercase leading-4 tracking-[0.08em] text-ink-secondary dark:text-ink-inverse-secondary">
+            <span aria-hidden className={cn('h-2 w-2 shrink-0 rounded-[2px]', HUE_SWATCH[hue])} />
             <span className="truncate">{story.topic}</span>
           </p>
           <h3
             className={cn(
-              'mt-1.5 font-display font-normal leading-[1.14] tracking-[-0.01em] text-ink dark:text-ink-inverse',
-              featured ? 'line-clamp-3 text-[1.75rem] lg:text-[1.95rem]' : 'line-clamp-2 text-[16.5px]',
-              companion && 'xl:text-[17.5px]',
+              'font-display font-bold tracking-[-0.02em] text-ink decoration-blurple-600 decoration-2 underline-offset-[0.18em] group-hover:underline dark:text-ink-inverse dark:decoration-blurple-400',
+              featured ? 'mt-3 line-clamp-3 text-[1.625rem] leading-[1.06] lg:text-[1.875rem]' : 'mt-1.5 line-clamp-2 text-[16px] leading-[1.18]',
+              companion && 'xl:text-[17px]',
             )}
           >
             {story.title}
@@ -115,15 +149,15 @@ export function StoryCard({ story, featured, size = featured ? 'featured' : 'com
           {story.description && (
             <p
               className={cn(
-                'mt-1.5 text-[12.5px] leading-relaxed text-ink-muted dark:text-ink-inverse-muted',
-                featured ? 'line-clamp-3' : 'line-clamp-1',
+                'text-[13px] leading-relaxed text-ink-secondary dark:text-ink-inverse-secondary',
+                featured ? 'mt-3 line-clamp-3' : 'mt-1 line-clamp-1',
                 companion && 'xl:line-clamp-1',
               )}
             >
               {story.description}
             </p>
           )}
-          <span className="mt-auto flex items-center gap-1.5 pt-1.5 text-[11.5px] text-ink-muted dark:text-ink-inverse-muted">
+          <span className="mt-auto flex items-center gap-1.5 pt-2 font-mono text-[11px] uppercase leading-4 tracking-[0.08em] text-ink-muted dark:text-ink-inverse-muted">
             {showFavicon && (
               <img
                 src={story.favicon}
@@ -135,8 +169,8 @@ export function StoryCard({ story, featured, size = featured ? 'featured' : 'com
             <span className="truncate">{story.source}</span>
             {story.age && <span aria-hidden>·</span>}
             {story.age && <span className="shrink-0">{story.age}</span>}
-            <span className="ml-auto inline-flex flex-shrink-0 items-center gap-1 font-medium text-ink-secondary transition-colors group-hover:text-accent dark:text-ink-inverse-secondary dark:group-hover:text-accent-light">
-              {featured && 'Read'} <ArrowRight size={12} className="transition-transform group-hover:translate-x-0.5" />
+            <span className="ml-auto inline-flex flex-shrink-0 items-center gap-1 font-sans text-[12px] font-semibold normal-case tracking-normal text-ink transition-colors duration-150 group-hover:text-blurple-600 dark:text-ink-inverse dark:group-hover:text-blurple-400">
+              {featured && 'Read'} <ArrowRight className="h-3.5 w-3.5 transition-transform duration-200 ease-out motion-safe:group-hover:translate-x-0.5" />
             </span>
           </span>
         </div>

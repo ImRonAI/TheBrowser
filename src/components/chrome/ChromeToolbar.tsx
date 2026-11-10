@@ -1,4 +1,5 @@
-import { ArrowLeft, ArrowRight, Home, RotateCcw, PanelLeft, Plus, Sparkles } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Home, RotateCcw, PanelLeft, Plus } from 'lucide-react'
+import { RenIcon } from '@/components/brand'
 import { UrlBar } from './UrlBar'
 import { UserMenu } from './UserMenu'
 import { ThemeToggle } from './ThemeToggle'
@@ -11,7 +12,8 @@ import { TeachSkill } from '@/components/agent-panel/TeachSkill'
 import { useAuthStore } from '@/stores/authStore'
 import { MOD_KEY } from '@/lib/shortcuts'
 
-// Quiet 32px icon button used across the chrome.
+// Quiet 32px icon button used across the chrome. Hover is a translucent ink wash, so it reads on
+// the paper chrome, the ink chrome and the Glass shell alike.
 export function ChromeIconButton({
   onClick,
   label,
@@ -38,11 +40,11 @@ export function ChromeIconButton({
       aria-pressed={pressed}
       title={title ?? label}
       className={cn(
-        'flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg transition-colors duration-150',
-        'text-ink-secondary hover:bg-surface-200/60 hover:text-ink active:bg-surface-200',
-        'dark:text-ink-inverse-secondary dark:hover:bg-surface-800 dark:hover:text-ink-inverse dark:active:bg-surface-700',
-        'disabled:pointer-events-none disabled:opacity-30',
-        pressed && 'bg-surface-200/60 text-ink dark:bg-surface-800 dark:text-ink-inverse',
+        'flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg transition-colors duration-150 ease-out',
+        'text-ink-secondary hover:bg-ink/[0.06] hover:text-ink active:bg-ink/[0.1]',
+        'dark:text-ink-inverse-secondary dark:hover:bg-ink-inverse/[0.07] dark:hover:text-ink-inverse dark:active:bg-ink-inverse/[0.11]',
+        'disabled:pointer-events-none disabled:opacity-40',
+        pressed && 'bg-ink/[0.07] text-ink dark:bg-ink-inverse/[0.09] dark:text-ink-inverse',
         className,
       )}
     >
@@ -51,7 +53,7 @@ export function ChromeIconButton({
   )
 }
 
-const ICON = 'h-[17px] w-[17px]'
+const ICON = 'h-4 w-4'
 const STROKE = 1.75
 
 export function ChromeToolbar() {
@@ -140,7 +142,7 @@ export function ChromeToolbar() {
         >
           <PanelLeft className={ICON} strokeWidth={STROKE} />
         </ChromeIconButton>
-        <div className="mx-1 h-4 w-px bg-surface-300/70 dark:bg-surface-700" aria-hidden />
+        <div className="mx-1.5 h-4 w-px bg-surface-300 dark:bg-surface-700" aria-hidden />
         <ChromeIconButton onClick={handleBack} label="Go back" disabled={!canGoBack}>
           <ArrowLeft className={ICON} strokeWidth={STROKE} />
         </ChromeIconButton>
@@ -164,34 +166,29 @@ export function ChromeToolbar() {
 
       {/* Right side actions */}
       <div className="flex items-center gap-1 no-drag">
-        <ChromeIconButton onClick={handleNewTab} label="New Tab" title="New tab">
+        <ChromeIconButton onClick={handleNewTab} label="New tab">
           <Plus className={ICON} strokeWidth={STROKE} />
         </ChromeIconButton>
         <ThemeToggle />
         <TeachSkill key={user} userId={user} agentId="panel" chrome />
 
-        {/* Agent Panel Trigger — the one filled control in the chrome */}
+        {/* Agent Panel trigger — the chrome's one volt control. Pressed (panel open) it turns ink. */}
         <button
           type="button"
           onClick={togglePanel}
           aria-label="Open Agent Panel"
           aria-pressed={isPanelOpen}
-          title={`Ask Ron  ${MOD_KEY}J`}
+          title={`Ask Ren  ${MOD_KEY}J`}
           className={cn(
-            'ml-1 flex h-8 items-center gap-1.5 rounded-lg pl-2.5 pr-2 text-[12.5px] font-medium transition-colors duration-150',
+            'ml-1 flex h-8 items-center gap-1.5 rounded-lg pl-2.5 pr-1.5 text-[13px] font-semibold tracking-[-0.01em] transition-colors duration-150 ease-out',
             isPanelOpen
-              ? 'bg-ink text-surface-0 hover:bg-ink/90 dark:bg-ink-inverse dark:text-surface-900 dark:hover:bg-ink-inverse/90'
-              : 'border border-surface-200 bg-surface-0 text-ink hover:border-surface-300 dark:border-surface-700 dark:bg-surface-800 dark:text-ink-inverse dark:hover:border-surface-600',
+              ? 'bg-ink text-white hover:bg-surface-800 dark:bg-ink-inverse dark:text-ink dark:hover:bg-white'
+              : 'bg-blurple-600 text-white hover:bg-blurple-700 active:bg-blurple-800 dark:bg-blurple-400 dark:text-ink dark:hover:bg-blurple-300',
           )}
         >
-          <Sparkles className={cn('h-3.5 w-3.5', isPanelOpen ? '' : 'text-accent dark:text-accent-light')} strokeWidth={2} />
-          <span>Ask Ron</span>
-          <kbd
-            className={cn(
-              'ml-0.5 rounded px-1 text-[10px] font-medium leading-4',
-              isPanelOpen ? 'bg-white/15 dark:bg-black/10' : 'bg-surface-100 text-ink-muted dark:bg-surface-700 dark:text-ink-inverse-muted',
-            )}
-          >
+          <RenIcon className="h-3.5 w-3.5" strokeWidth={2.25} aria-hidden />
+          <span>Ask Ren</span>
+          <kbd className="ml-0.5 rounded-[5px] bg-white/15 px-1 font-mono text-[10px] font-medium leading-4 text-white dark:bg-ink/10 dark:text-ink">
             {MOD_KEY}J
           </kbd>
         </button>

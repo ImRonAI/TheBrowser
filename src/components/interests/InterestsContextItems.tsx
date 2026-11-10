@@ -1,5 +1,5 @@
-import { SparklesIcon } from '@heroicons/react/24/outline'
 import { useMemo } from 'react'
+import { RenIcon } from '@/components/brand'
 import { useAgentUi } from '@/context/AgentUiContext'
 import { buildInterestMenu } from '@/lib/interest-menu'
 import {
@@ -10,7 +10,8 @@ import {
   DropdownMenuSubContent,
   DropdownMenuSubTrigger,
 } from '@/components/ui/dropdown-menu'
-import { useInterestDiscoveryStore } from '@/stores/interestDiscoveryStore'
+import { useContextAgentStore } from '@/stores/contextAgentStore'
+import { agentsForInterest, useInterestDiscoveryStore } from '@/stores/interestDiscoveryStore'
 import { useInterestsStore } from '@/stores/interestsStore'
 
 interface InterestsContextItemsProps {
@@ -21,8 +22,12 @@ export function InterestsContextItems({ onClose }: InterestsContextItemsProps) {
   const nodes = useInterestsStore((state) => state.nodes)
   const setExpanded = useInterestsStore((state) => state.setExpanded)
   const selectInterest = useInterestDiscoveryStore((state) => state.selectInterest)
+  const storiesByLabel = useInterestDiscoveryStore((state) => state.storiesByLabel)
+  const recommendations = useContextAgentStore((state) => state.recommendations)
+  const agents = useContextAgentStore((state) => state.agents)
   const { sendToAgentPanel } = useAgentUi()
-  const menu = useMemo(() => buildInterestMenu(nodes), [nodes])
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- agentsForInterest reads the context store; recompute when it changes
+  const menu = useMemo(() => buildInterestMenu(nodes, { storiesByLabel, agentsFor: agentsForInterest }), [nodes, storiesByLabel, recommendations, agents])
 
   if (menu.interests.length === 0) return null
 
@@ -31,7 +36,7 @@ export function InterestsContextItems({ onClose }: InterestsContextItemsProps) {
       <div className="my-1.5 h-px mx-2 bg-gradient-to-r from-transparent via-black/10 dark:via-white/10 to-transparent" />
       <DropdownMenuSub>
         <DropdownMenuSubTrigger className="w-full px-3 py-2.5 mx-0 flex items-center gap-3 text-left">
-          <SparklesIcon className="w-4 h-4 text-royal dark:text-royal-light" />
+          <RenIcon className="w-4 h-4 text-royal dark:text-royal-light" />
           <span className="text-sm font-raleway font-raleway-bold text-royal dark:text-royal-light">
             Your Interests
           </span>
@@ -82,7 +87,7 @@ export function InterestsContextItems({ onClose }: InterestsContextItemsProps) {
                   key={agent.id}
                   onSelect={() => {
                     sendToAgentPanel(
-                      `Use the ${agent.name} agent for ${agent.interestLabel}. ${agent.description}`,
+                      `Use my specialist agent "${agent.name}" (find it with list_harness_agents, then a2a_send_message) for ${agent.interestLabel}. ${agent.description}`,
                     )
                     onClose()
                   }}

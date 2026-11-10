@@ -1,6 +1,6 @@
 import type { Issue } from '../types/projects.ts'
 
-const editable = ['title', 'description', 'type', 'parentId', 'status', 'priority', 'estimate', 'assignees', 'labels', 'startDate', 'endDate', 'dueDate', 'customFields'] as const
+const editable = ['title', 'description', 'type', 'parentId', 'status', 'priority', 'estimate', 'assignees', 'labels', 'startDate', 'endDate', 'dueDate', 'customFields', 'context'] as const
 export function issueDraftPatch(base: Issue, draft: Issue): Partial<Issue> {
   const patch: Record<string, unknown> = {}
   for (const key of editable) {

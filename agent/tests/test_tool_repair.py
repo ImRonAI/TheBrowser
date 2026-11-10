@@ -852,7 +852,7 @@ def test_fixer_defaults_to_gpt_6_1_sol_at_max_effort_with_harness_builtins(monke
         assert not names & {"editor", "environment", "mcp_client", "http_request", "subagent", "web_fetch"}
         # The panel A2A server is not a fixer peer (isolation): no a2a tools unless RON_TOOL_REPAIR_A2A_AGENTS lists one.
         assert not names & {"a2a_send_message", "a2a_discover_agent"}
-        assert fixer.name == "Ron Tool Fixer"
+        assert fixer.name == "Ren Tool Fixer"
     finally:
         fixer.cleanup()
 

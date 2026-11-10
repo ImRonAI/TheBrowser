@@ -77,6 +77,12 @@ const electronAPI = {
       ipcRenderer.on('interests:action', handler)
       return () => ipcRenderer.removeListener('interests:action', handler)
     },
+    // "Add to Ron context" from a page's context menu (selection, link, image, video, page, screenshot).
+    onContextAdd: (callback: (payload: unknown) => void) => {
+      const handler = (_: unknown, payload: unknown) => callback(payload)
+      ipcRenderer.on('context:add', handler)
+      return () => ipcRenderer.removeListener('context:add', handler)
+    },
     // Native repair surface (electron/repair-surface.ts): the shell mirrors the current
     // investigation in; the surface's decisions come back here and the shell calls the API.
     setRepairSurface: (state: unknown) => ipcRenderer.invoke('repair-surface:update', state),

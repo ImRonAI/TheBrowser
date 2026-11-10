@@ -7,7 +7,7 @@ const tool = (id: string, name: string, input: unknown = {}) =>
   ({ kind: 'tool' as const, key: id, id, name, path: [], input, progress: [], finished: true, status: 'success' })
 const text = (key: string, value: string) => ({ kind: 'text' as const, key, path: [], text: value })
 
-test('tracing holds research, reasoning and narration; the draft is what Ron wrote after its last research call', () => {
+test('tracing holds research, reasoning and narration; the draft is what Ren wrote after its last research call', () => {
   const workflow = tool('w1', 'render_workflow', { title: 'Release', steps: [{ id: 'a', label: 'Build' }, { id: 'b', label: 'Ship' }] })
   const message: PanelMessage = { id: 'm', role: 'assistant', parts: [
     { kind: 'reasoning', key: 'r1', path: [], text: 'Need sources' },

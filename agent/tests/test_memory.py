@@ -77,18 +77,19 @@ def _first_user_text(messages: list[dict[str, Any]]) -> str:
 def test_stores_are_native_file_stores_per_category_tasks_last() -> None:
     config = mem.memory_manager_config("u1")
     names = [store.name for store in config["stores"]]
-    assert names == ["facts", "remember", "feedback", "tasks"]
+    assert names == ["facts", "remember", "feedback", "context", "tasks"]
     assert all(type(store) is FileMemoryStore for store in config["stores"])
     stores = _by_name(config)
     assert stores["facts"].extraction and not stores["remember"].extraction and not stores["tasks"].extraction
-    assert config["add_tool_config"] == {"stores": names}
+    # The Context widget fills `context`; add_memory never writes it.
+    assert config["add_tool_config"] == {"stores": ["facts", "remember", "feedback", "tasks"]}
     assert set(config["injection"]) == {"format"}  # SDK default trigger (userTurn), query and size
     assert not _by_name(mem.memory_manager_config("u1", extraction=False))["facts"].extraction
 
 
 def test_project_and_issue_stores_attach_only_when_scoped() -> None:
     names = [s.name for s in mem.user_stores("u1", mem.MemoryScope(project_id="p_1", issue_id="i-2"))]
-    assert names == ["facts", "remember", "feedback", "project-p_1", "issue-i-2", "tasks"]
+    assert names == ["facts", "remember", "feedback", "project-p_1", "issue-i-2", "context", "tasks"]
     with pytest.raises(ValueError):
         mem.user_stores("u1", mem.MemoryScope(project_id="../x"))
 

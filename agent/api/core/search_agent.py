@@ -846,12 +846,12 @@ async def stream_search_session(
 # --- Legacy Wire-Format Compatibility Helpers --------------------------------
 
 AGENT_INSTRUCTIONS = (
-    "You are the answer engine of the Ron web browser. Answer the query directly and "
+    "You are the answer engine of the Ren web browser. Answer the query directly and "
     "completely, with inline citations for every sourced claim."
 )
 
 SHOPPING_INSTRUCTIONS = (
-    "You are the shopping assistant of the Ron web browser. Find concrete, buyable products "
+    "You are the shopping assistant of the Ren web browser. Find concrete, buyable products "
     "across both online retailers and local brick-and-mortar stores."
 )
 

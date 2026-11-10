@@ -39,10 +39,21 @@ This subclass:
    never carries stale state even if a snapshot predates the pruning hook.
 3. **Maps ``input_too_large``/``too long for this model's context window`` to
    ``ContextWindowOverflowException``** so the SDK summarizes and retries.
-4. **Fills the context-window table** for ``grok-4.7`` (500k per docs.x.ai/docs/models)
-   so proactive compression (``proactive_compression=True`` on the panel agent's
-   ``SummarizingConversationManager``) uses the real limit.
-5. **Streams structured ``{"xai": payload}`` native tool events** for xAI
+4. **Keeps per-call context out of the state blob.** The SDK marks the trailing blocks of the
+   last user message that injection middleware (``ContextInjector``, memory injection) adds for
+   one call only as ``dynamic_trailing_blocks`` (``strands/event_loop/streaming.py``). The
+   vended adapter appended them to the chat and serialized that chat into the blob, so every
+   model call of a tool loop stored another copy of the injected browser context (2026-11-07:
+   three 360,442-character copies in one blob, 552,995 tokens > grok-4.7's 500,000). The blob
+   is captured from the durable messages only; the model still sees the injected text.
+5. **Drops the blob on overflow** (``XAIStatePruner``, native ``AfterModelCallEvent.retry``):
+   the newest blob replays the whole xAI conversation and overrides any reduction the
+   conversation manager makes to ``agent.messages``, so on ``ContextWindowOverflowException``
+   it is removed and the call is retried from the durable messages, which the
+   ``SummarizingConversationManager`` can then reduce.
+   The model's real context window comes from xAI's own ``GET /v1/models`` ``context_length``
+   (``context_windows.py``), not a table.
+6. **Streams structured ``{"xai": payload}`` native tool events** for xAI
    ``web_search`` (``search_results``), ``x_search`` (``x_search_results``), and
    image search / image understanding / image generation (``image_search_results``)
    without polluting the assistant text stream.
@@ -58,7 +69,7 @@ from collections.abc import AsyncGenerator
 from typing import Any, cast
 from urllib.parse import unquote, urlsplit
 
-from strands.hooks import HookProvider, HookRegistry, MessageAddedEvent
+from strands.hooks import AfterModelCallEvent, HookProvider, HookRegistry, MessageAddedEvent
 from strands.types.content import ContentBlock, Message, Messages, SystemContentBlock
 from strands.types.exceptions import ContextWindowOverflowException
 from strands.types.streaming import StreamEvent
@@ -67,15 +78,11 @@ from strands_xai import xAIModel
 from strands_xai import xai as _xai
 from typing_extensions import override
 
+from agent.api.core.media_capabilities import cached_tool_result_images, has_tool_result_images, load_capability
+
 logger = logging.getLogger(__name__)
 
 _BASE_XAI_STREAM = _xai.xAIModel.stream
-
-#: Context windows missing from strands_xai 0.6.1's ``_CONTEXT_WINDOW_LIMITS``.
-#: https://docs.x.ai/docs/models — grok-4.7 shares grok-4.6's 500k window.
-EXTRA_CONTEXT_WINDOW_LIMITS: dict[str, int] = {
-    "grok-4.7": 500_000,
-}
 
 #: xAI overflow phrasings the community adapter does not recognise.
 OVERFLOW_PHRASES: tuple[str, ...] = (
@@ -113,13 +120,6 @@ _X_STATUS_RE = re.compile(r"^https?://(?:www\.)?(?:x|twitter)\.com/([^/]+)/statu
 _X_PROFILE_RE = re.compile(r"^https?://(?:www\.)?(?:x|twitter)\.com/([^/?#]+)", re.IGNORECASE)
 _MARKDOWN_IMAGE_RE = re.compile(r"!\[([^\]]*)\]\(\s*([^\s)]+)\s*\)")
 
-
-def _install_context_limits() -> None:
-    for model_id, limit in EXTRA_CONTEXT_WINDOW_LIMITS.items():
-        _xai._CONTEXT_WINDOW_LIMITS.setdefault(model_id, limit)
-
-
-_install_context_limits()
 
 
 def is_xai_state_block(block: ContentBlock | dict[str, Any]) -> bool:
@@ -183,10 +183,23 @@ def without_superseded_xai_state(messages: Messages) -> Messages:
 
 
 class XAIStatePruner(HookProvider):
-    """Keep only the newest xAI encrypted-state blob in ``agent.messages``."""
+    """Keep only the newest xAI encrypted-state blob in ``agent.messages``; drop it on overflow."""
 
     def register_hooks(self, registry: HookRegistry, **kwargs: Any) -> None:
         registry.add_callback(MessageAddedEvent, self._on_message_added)
+        registry.add_callback(AfterModelCallEvent, self._on_after_model_call)
+
+    def _on_after_model_call(self, event: AfterModelCallEvent) -> None:
+        """On overflow, retry from the durable messages: the blob would replay the full history again."""
+        if event.retry or not isinstance(event.exception, ContextWindowOverflowException):
+            return
+        positions = _state_positions(event.agent.messages)
+        for i, j in reversed(positions):
+            del event.agent.messages[i]["content"][j]
+        if positions:
+            logger.warning("removed=<%d> | xAI state blob overflowed the context window; retrying from the "
+                           "durable messages", len(positions))
+            event.retry = True
 
     def _on_message_added(self, event: MessageAddedEvent) -> None:
         message: Message = event.message
@@ -684,8 +697,37 @@ class _XAINativeToolTracker:
         return events
 
 
+#: "Supported image file types: jpg/jpeg or png" (https://docs.x.ai/docs/guides/image-understanding).
+XAI_IMAGE_FORMATS = frozenset({"png", "jpeg", "jpg"})
+
+
 class RonXAIModel(xAIModel):
     """``xAIModel`` whose requests carry one state blob, whose overflows are recoverable, and whose native tools stream as cards."""
+
+    @override
+    def _split_user_content(self, contents: list[Any]) -> tuple[list[tuple[str, str]], list[Any]]:
+        """Vended split, plus a tool result's images as the next user message, for models that read images.
+
+        ``strands_xai`` keeps only a tool result's text/json and ``xai_sdk.chat.tool_result`` takes a string,
+        so the images follow the tool messages as ``image()`` parts of the user message the vended
+        ``_append_messages_to_chat`` appends after them: the SDK's own pattern for OpenAI chat
+        (``strands/models/openai.py`` ``_split_tool_message_images``). Each result names how many follow.
+        """
+        tool_results, user_parts = super()._split_user_content(contents)
+        results = [content["toolResult"] for content in contents if "toolResult" in content]
+        images = [[item for item in result["content"] if "image" in item and item["image"]["format"] in XAI_IMAGE_FORMATS]
+                  for result in results]
+        if not any(images) or not cached_tool_result_images("xai", self.config["model_id"].removeprefix("xai/")):
+            return tool_results, user_parts
+        parts: list[Any] = []
+        for index, found in enumerate(images):
+            if not found:
+                continue
+            tool_use_id, text = tool_results[index]
+            note = f"[{len(found)} image(s) from this tool result follow in the next user message]"
+            tool_results[index] = (tool_use_id, f"{text}\n{note}" if text else note)
+            parts.extend(self._format_image_content(item) for item in found)
+        return tool_results, [*parts, *user_parts]
 
     async def _stream_with_native_tools(
         self,
@@ -819,6 +861,15 @@ class RonXAIModel(xAIModel):
             needs_xai_state = server_tool_calls or has_encrypted_reasoning
 
             if final_response and needs_xai_state:
+                # The blob is durable history: capture it without the blocks the SDK marks as
+                # per-call (dynamic_trailing_blocks), which the model saw but must never persist.
+                dynamic = kwargs.get("dynamic_trailing_blocks", 0)
+                if dynamic and messages:
+                    last = messages[-1]
+                    chat = self._build_chat(client, tool_specs, tool_choice)
+                    self._append_messages_to_chat(
+                        chat, [*messages[:-1], {**last, "content": list(last["content"])[:-dynamic]}],
+                        resolved_system_prompt)
                 xai_state = self._capture_xai_state(chat, final_response)
                 if xai_state:
                     state_json = json.dumps({"messages": xai_state})
@@ -862,6 +913,8 @@ class RonXAIModel(xAIModel):
         system_prompt_content: list[SystemContentBlock] | None = None,
         **kwargs: Any,
     ) -> AsyncGenerator[StreamEvent, None]:
+        if has_tool_result_images(messages):
+            await load_capability("xai", self.config["model_id"].removeprefix("xai/"))
         trimmed = without_superseded_xai_state(messages)
         if trimmed is not messages:
             logger.debug("messages=<%d> | stripped superseded xAI state before request", len(messages))

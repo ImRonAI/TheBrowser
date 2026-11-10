@@ -8,6 +8,10 @@
  * - Parallel batch execution visualization
  * - Real-time status updates
  * - Execution order tracking
+ *
+ * Ren styling: a transparent canvas themed by `.ron-workflow` (React Flow's own
+ * variables mapped to Ren tokens per theme), ink dots, and floating panels on
+ * `bg-popover` so Glass frosts them. Volt marks progress and the primary action.
  */
 
 "use client";
@@ -27,6 +31,16 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { motion } from "framer-motion";
+import {
+  Check,
+  ChevronRight,
+  ListOrdered,
+  LoaderCircle,
+  Pause,
+  Play,
+  RotateCcw,
+  StepForward,
+} from "lucide-react";
 import { useCallback, useMemo, useState, memo } from "react";
 import { GraphNodeComponent } from "./strands-node";
 import { GraphEdgeComponent, EdgeMarkerDefinitions, PendingEdge } from "./strands-edge";
@@ -51,6 +65,16 @@ const edgeTypes: EdgeTypes = {
   "pending": PendingEdge,
 };
 
+// Floating canvas panels: frosted by Glass through `bg-popover`.
+const PANEL_CLASS =
+  "rounded-xl border border-surface-200 bg-popover text-ink shadow-float dark:border-surface-800 dark:text-ink-inverse";
+
+const PANEL_LABEL =
+  "font-mono text-[10px] font-medium uppercase tracking-[0.08em] text-ink-muted dark:text-ink-inverse-muted";
+
+const CONTROL_BUTTON =
+  "inline-flex h-8 w-8 items-center justify-center rounded-full transition-colors duration-150 ease-out";
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Execution Timeline Component
 // ─────────────────────────────────────────────────────────────────────────────
@@ -71,40 +95,41 @@ const ExecutionTimeline = memo(function ExecutionTimeline({
   if (executionOrder.length === 0) return null;
 
   return (
-    <div className={cn(
-      "bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm",
-      "rounded-lg border border-slate-200 dark:border-slate-700",
-      "p-3 shadow-lg",
-      className
-    )}>
-      <div className="flex items-center gap-2 mb-2">
-        <TimelineIcon className="w-4 h-4 text-slate-500" />
-        <span className="text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider">
-          Execution Order
+    <div className={cn(PANEL_CLASS, "max-w-[640px] px-3 py-2.5", className)}>
+      <div className="mb-2 flex items-center gap-1.5">
+        <ListOrdered className="h-3.5 w-3.5 text-ink-muted dark:text-ink-inverse-muted" />
+        <span className={PANEL_LABEL}>
+          Execution order
         </span>
       </div>
-      <div className="flex items-center gap-1.5 flex-wrap">
+      <div className="flex flex-wrap items-center gap-1">
         {executionOrder.map((nodeId, index) => {
           const isCompleted = completedNodes.includes(nodeId);
           const isCurrent = currentNodes.includes(nodeId);
-          
+
           return (
-            <div key={nodeId} className="flex items-center gap-1.5">
+            <div key={nodeId} className="flex items-center gap-1">
               {index > 0 && (
-                <ChevronRightIcon className="w-3 h-3 text-slate-300 dark:text-slate-600" />
+                <ChevronRight className="h-3 w-3 text-surface-300 dark:text-surface-600" />
               )}
               <motion.span
-                initial={{ opacity: 0, scale: 0.8 }}
-                animate={{ opacity: 1, scale: 1 }}
+                initial={{ opacity: 0, y: 2 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.18, ease: "easeOut" }}
                 className={cn(
-                  "px-2 py-0.5 rounded text-[10px] font-medium",
+                  "inline-flex h-6 items-center gap-1 rounded-full px-2 font-mono text-[11px] font-medium",
                   isCompleted
-                    ? "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300"
+                    ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-400/10 dark:text-emerald-400"
                     : isCurrent
-                    ? "bg-sky-100 dark:bg-sky-900/30 text-sky-700 dark:text-sky-300 animate-pulse"
-                    : "bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400"
+                    ? "bg-blurple-50 text-blurple-700 dark:bg-blurple-400/15 dark:text-blurple-200"
+                    : "bg-surface-100 text-ink-secondary dark:bg-surface-800 dark:text-ink-inverse-secondary"
                 )}
               >
+                {isCompleted ? (
+                  <Check className="h-3 w-3 shrink-0" />
+                ) : isCurrent ? (
+                  <LoaderCircle className="h-3 w-3 shrink-0 motion-safe:animate-spin" />
+                ) : null}
                 {nodeId}
               </motion.span>
             </div>
@@ -135,62 +160,60 @@ const GraphStats = memo(function GraphStats({ state, className }: GraphStatsProp
     created: "Ready",
     running: "Running",
     completed: "Completed",
-    error: "Error",
+    error: "Failed",
     paused: "Paused",
   }[state.status];
 
   const statusColor = {
-    created: "bg-slate-500",
-    running: "bg-sky-500",
-    completed: "bg-emerald-500",
-    error: "bg-rose-500",
-    paused: "bg-amber-500",
+    created: "bg-surface-400 dark:bg-surface-500",
+    running: "bg-blurple-600 dark:bg-blurple-400",
+    completed: "bg-success",
+    error: "bg-danger",
+    paused: "bg-warning",
   }[state.status];
 
   return (
-    <div className={cn(
-      "bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm",
-      "rounded-lg border border-slate-200 dark:border-slate-700",
-      "p-3 shadow-lg min-w-[180px]",
-      className
-    )}>
+    <div className={cn(PANEL_CLASS, "min-w-[200px] p-3", className)}>
       {/* Status */}
-      <div className="flex items-center gap-2 mb-3">
-        <span className={cn("w-2 h-2 rounded-full", statusColor)} />
-        <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-          {statusLabel}
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <span className={PANEL_LABEL}>Graph</span>
+        <span className="inline-flex items-center gap-1.5">
+          <span className={cn("h-1.5 w-1.5 rounded-full", statusColor)} />
+          <span className="text-[12px] font-semibold leading-none text-ink dark:text-ink-inverse">
+            {statusLabel}
+          </span>
         </span>
       </div>
 
       {/* Progress bar */}
-      <div className="h-1.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden mb-3">
+      <div className="mb-3 h-1 overflow-hidden rounded-full bg-surface-100 dark:bg-surface-800">
         <motion.div
           initial={{ width: 0 }}
           animate={{ width: `${progress}%` }}
           transition={{ duration: 0.5 }}
-          className="h-full bg-emerald-500 rounded-full"
+          className="h-full rounded-full bg-blurple-600 dark:bg-blurple-400"
         />
       </div>
 
       {/* Stats grid */}
-      <div className="grid grid-cols-3 gap-2 text-center">
-        <div>
-          <span className="block text-lg font-bold text-emerald-600 dark:text-emerald-400">
+      <div className="grid grid-cols-3 divide-x divide-surface-200 text-center dark:divide-surface-800">
+        <div className="px-1">
+          <span className="block font-mono text-lg font-semibold leading-tight tabular-nums text-emerald-700 dark:text-emerald-400">
             {completedCount}
           </span>
-          <span className="text-[9px] text-slate-500 uppercase tracking-wider">Done</span>
+          <span className={PANEL_LABEL}>Done</span>
         </div>
-        <div>
-          <span className="block text-lg font-bold text-sky-600 dark:text-sky-400">
+        <div className="px-1">
+          <span className="block font-mono text-lg font-semibold leading-tight tabular-nums text-blurple-600 dark:text-blurple-300">
             {pendingCount}
           </span>
-          <span className="text-[9px] text-slate-500 uppercase tracking-wider">Pending</span>
+          <span className={PANEL_LABEL}>Pending</span>
         </div>
-        <div>
-          <span className="block text-lg font-bold text-rose-600 dark:text-rose-400">
+        <div className="px-1">
+          <span className="block font-mono text-lg font-semibold leading-tight tabular-nums text-red-700 dark:text-red-400">
             {failedCount}
           </span>
-          <span className="text-[9px] text-slate-500 uppercase tracking-wider">Failed</span>
+          <span className={PANEL_LABEL}>Failed</span>
         </div>
       </div>
     </div>
@@ -221,26 +244,21 @@ const GraphControls = memo(function GraphControls({
   className,
 }: GraphControlsProps) {
   return (
-    <div className={cn(
-      "flex items-center gap-1 p-1",
-      "bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm",
-      "rounded-lg border border-slate-200 dark:border-slate-700",
-      "shadow-lg",
-      className
-    )}>
-      {/* Play/Pause */}
+    <div className={cn(PANEL_CLASS, "flex items-center gap-0.5 rounded-full p-1", className)}>
+      {/* Play/Pause: the primary action, solid volt */}
       <button
         onClick={isRunning && !isPaused ? onPause : onPlay}
         className={cn(
-          "p-2 rounded-md transition-colors",
-          "hover:bg-slate-100 dark:hover:bg-slate-800"
+          CONTROL_BUTTON,
+          "bg-blurple-600 text-white hover:bg-blurple-700 dark:bg-blurple-400 dark:text-ink dark:hover:bg-blurple-300"
         )}
         title={isRunning && !isPaused ? "Pause" : "Play"}
+        aria-label={isRunning && !isPaused ? "Pause" : "Play"}
       >
         {isRunning && !isPaused ? (
-          <PauseIcon className="w-4 h-4 text-slate-700 dark:text-slate-300" />
+          <Pause className="h-3.5 w-3.5 fill-current" />
         ) : (
-          <PlayIcon className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+          <Play className="ml-0.5 h-3.5 w-3.5 fill-current" />
         )}
       </button>
 
@@ -248,24 +266,26 @@ const GraphControls = memo(function GraphControls({
       <button
         onClick={onStepForward}
         className={cn(
-          "p-2 rounded-md transition-colors",
-          "hover:bg-slate-100 dark:hover:bg-slate-800"
+          CONTROL_BUTTON,
+          "text-ink-secondary hover:bg-surface-100 hover:text-ink dark:text-ink-inverse-secondary dark:hover:bg-surface-800 dark:hover:text-ink-inverse"
         )}
-        title="Step Forward"
+        title="Step forward"
+        aria-label="Step forward"
       >
-        <StepForwardIcon className="w-4 h-4 text-slate-700 dark:text-slate-300" />
+        <StepForward className="h-4 w-4" />
       </button>
 
       {/* Reset */}
       <button
         onClick={onReset}
         className={cn(
-          "p-2 rounded-md transition-colors",
-          "hover:bg-slate-100 dark:hover:bg-slate-800"
+          CONTROL_BUTTON,
+          "text-ink-secondary hover:bg-surface-100 hover:text-ink dark:text-ink-inverse-secondary dark:hover:bg-surface-800 dark:hover:text-ink-inverse"
         )}
         title="Reset"
+        aria-label="Reset"
       >
-        <ResetIcon className="w-4 h-4 text-slate-700 dark:text-slate-300" />
+        <RotateCcw className="h-4 w-4" />
       </button>
     </div>
   );
@@ -442,7 +462,7 @@ export function StrandsGraph({
   );
 
   return (
-    <div className={cn("relative w-full h-full", className)}>
+    <div className={cn("ron-workflow relative w-full h-full", className)}>
       <EdgeMarkerDefinitions />
       
       <ReactFlow
@@ -466,14 +486,14 @@ export function StrandsGraph({
         proOptions={{ hideAttribution: true }}
       >
         <Background
-          color="var(--slate-200)"
+          color="rgb(var(--ren-ink) / 0.14)"
           gap={20}
           size={1}
         />
-        
+
         <Controls
           showInteractive={interactive}
-          className="!rounded-lg !border !border-slate-200 dark:!border-slate-700 !bg-white/90 dark:!bg-slate-900/90 !backdrop-blur-sm !shadow-lg"
+          className="!overflow-hidden !rounded-lg !border !border-surface-200 !shadow-float dark:!border-surface-800"
         />
 
         {/* Top Left: Stats */}
@@ -511,59 +531,3 @@ export function StrandsGraph({
     </div>
   );
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Icons
-// ─────────────────────────────────────────────────────────────────────────────
-
-function TimelineIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
-    </svg>
-  );
-}
-
-function ChevronRightIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <polyline points="9 18 15 12 9 6" />
-    </svg>
-  );
-}
-
-function PlayIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="currentColor">
-      <polygon points="5 3 19 12 5 21 5 3" />
-    </svg>
-  );
-}
-
-function PauseIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="currentColor">
-      <rect x="6" y="4" width="4" height="16" />
-      <rect x="14" y="4" width="4" height="16" />
-    </svg>
-  );
-}
-
-function StepForwardIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="currentColor">
-      <polygon points="5 4 15 12 5 20 5 4" />
-      <rect x="17" y="4" width="2" height="16" />
-    </svg>
-  );
-}
-
-function ResetIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
-      <path d="M3 3v5h5" />
-    </svg>
-  );
-}
-

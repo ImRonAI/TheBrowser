@@ -539,7 +539,7 @@ export function RonTab({ task }: RonTabProps) {
             <RonIcon className="w-4 h-4 text-ink-inverse" />
           </div>
           <span className="text-body-md font-semibold text-ink-inverse font-display">
-            Ron
+            Ren
           </span>
         </div>
 

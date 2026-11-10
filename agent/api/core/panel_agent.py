@@ -53,10 +53,10 @@ from pathlib import Path
 from collections.abc import Sequence
 from typing import Any, Literal
 
+from strands import ModelRetryStrategy
 from strands.agent.agent import Agent
 from strands.experimental import config_to_agent
 from strands.hooks import HookProvider
-from strands.models.gemini import GeminiModel
 from strands.tools import ToolProvider
 from strands.tools.mcp import MCPClient
 from strands.types.tools import AgentTool, ToolContext
@@ -66,7 +66,10 @@ from agent.api.core.config import DEFAULT_MEMORY_MODEL
 from agent.api.core.config import (
     GEMINI_DEFAULT_MODEL,
     MISTRAL_DEFAULT_MODEL,
+    NIM_DEFAULT_MODEL,
+    NVIDIA_NIM_BASE_URL,
     PANEL_ENVIRONMENT_CONTEXT,
+    PANEL_CONTEXT_COMPRESSION_THRESHOLD,
     PANEL_INTERVENTIONS,
     PANEL_TODOS,
     PERPLEXITY_API_BASE_URL,
@@ -88,6 +91,7 @@ from agent.api.core.panel_browser import (
     server_name,
 )
 from agent.api.core.memory import MEMORY_DIRECTIVE, MemoryScope, live_memory_tools, memory_manager_config
+from agent.api.core.panel_runtime import is_model_timeout
 from agent.api.core.panel_storage import ThreadSessionManager, get_user_session_storage, thread_agent_id
 from agent.api.core.tool_observation import ToolObservation, trace_attributes
 from agent.api.core.panel_tools import (
@@ -98,8 +102,10 @@ from agent.api.core.panel_tools import (
 
 logger = logging.getLogger(__name__)
 
-ProviderName = Literal["perplexity", "xai", "mistral", "gemini", "openai", "anthropic"]
+ProviderName = Literal["nim", "perplexity", "xai", "mistral", "gemini", "openai", "anthropic"]
+#: Order is preference: the first configured provider is the default (``default_selection``).
 PROVIDERS: tuple[ProviderName, ...] = (
+    "nim",
     "perplexity",
     "xai",
     "mistral",
@@ -225,7 +231,7 @@ NATIVE_PROVIDER_CAPABILITIES = {
         },
     },
     "gemini": {
-        "adapter": "strands.models.gemini.GeminiModel",
+        "adapter": "agent.api.core.gemini_model.RonGeminiModel (strands GeminiModel + tool-result images as FunctionResponse.parts on Gemini 3)",
         "hosted_tools_configurable": GEMINI_HOSTED_TOOLS,
         "hosted_tools_default": GEMINI_HOSTED_TOOLS_DEFAULT,
         "env": "GEMINI_HOSTED_TOOLS",
@@ -282,6 +288,10 @@ def _hosted_tool_names(env_name: str, allowed: tuple[str, ...], default: tuple[s
 #: treats ``xhigh`` as ``high``, so it is not offered there. grok-4.20-multi-agent
 #: repurposes effort as agent count, and grok-build / grok-4.20-0309 snapshots
 #: reject the parameter outright, so those return no efforts. Longest prefix wins.
+#: ``reasoning_effort`` values of the NIM chat-completions reference for each model
+#: (https://docs.api.nvidia.com/nim/reference/z-ai-glm-5-3-flash-infer); unlisted ids take none.
+NIM_REASONING_EFFORTS_BY_MODEL: dict[str, tuple[str, ...]] = {"z-ai/glm-5.3-flash": ("low", "high", "max")}
+
 XAI_REASONING_EFFORTS_BY_MODEL: dict[str, tuple[str, ...]] = {
     # grok-4.7: docs "grok-4.7, grok-4.6 and grok-4.5 support reasoning_effort ...
     # xhigh is available on grok-4.6 and later"; live 2026-10-09: none -> "This model
@@ -417,6 +427,7 @@ def provider_api_key(provider: ProviderName) -> str | None:
         key_name = f"{provider.upper()}_API_KEY"
         return os.getenv(key_name) or getattr(app_config, key_name, None)
     return {
+        "nim": app_config.NVIDIA_NIM_API_KEY,
         "mistral": app_config.MISTRAL_API_KEY,
         "xai": app_config.XAI_API_KEY,
         "gemini": app_config.GEMINI_API_KEY,
@@ -434,6 +445,7 @@ def provider_default_model(provider: ProviderName) -> str:
             or fallback
         )
     return {
+        "nim": NIM_DEFAULT_MODEL,
         "perplexity": PERPLEXITY_DEFAULT_MODEL,
         "mistral": MISTRAL_DEFAULT_MODEL,
         "xai": XAI_DEFAULT_MODEL,
@@ -441,8 +453,21 @@ def provider_default_model(provider: ProviderName) -> str:
     }[provider]
 
 
+def chat_providers() -> tuple[ProviderName, ...]:
+    """Providers offered to chat agents (``RON_CHAT_PROVIDERS``): the model picker, defaults and takeover runs.
+
+    A comma list of ``PROVIDERS`` ids, kept in ``PROVIDERS`` (preference) order; unset or empty means every
+    provider, an unknown id is an error. Live (``/bidi``) is not chat: it uses ``GEMINI_API_KEY`` either way.
+    """
+    names = {name.strip().lower() for name in os.getenv("RON_CHAT_PROVIDERS", "").split(",") if name.strip()}
+    unknown = sorted(names.difference(PROVIDERS))
+    if unknown:
+        raise ValueError(f"RON_CHAT_PROVIDERS supports only {', '.join(PROVIDERS)}; got {', '.join(unknown)}")
+    return tuple(name for name in PROVIDERS if not names or name in names)
+
+
 def configured_providers() -> list[ProviderName]:
-    return [name for name in PROVIDERS if provider_api_key(name)]
+    return [name for name in chat_providers() if provider_api_key(name)]
 
 
 def infer_provider(model_id: str) -> ProviderName | None:
@@ -599,8 +624,41 @@ def build_model(
 ) -> Any:
     """Construct the SDK (or community) model instance for ``provider``.
 
-    Server-side tools stay on the model object, not on ``Agent.tools``.
+    Server-side tools stay on the model object, not on ``Agent.tools``. ``context_window_limit``
+    is the model's real window from its provider's own metadata (``context_windows``) when the
+    provider publishes one; otherwise the SDK's own resolution applies.
     """
+    from agent.api.core.context_windows import provider_context_window
+
+    model = _provider_model(provider, model_id, reasoning_effort, hosted_tools=hosted_tools)
+    window = provider_context_window(provider, model_id)
+    if window:
+        model.update_config(context_window_limit=window)
+    return model
+
+
+def _provider_model(
+    provider: ProviderName,
+    model_id: str,
+    reasoning_effort: str | None,
+    *, hosted_tools: bool,
+) -> Any:
+    if provider == "nim":
+        if not provider_api_key("nim"):
+            raise ValueError("NVIDIA_NIM_API_KEY is not configured.")
+        from strands.models.openai import OpenAIModel
+
+        supported = NIM_REASONING_EFFORTS_BY_MODEL.get(model_id, ())
+        if reasoning_effort and reasoning_effort not in supported:
+            raise ValueError(f"{model_id} does not accept reasoning_effort={reasoning_effort!r}; "
+                             + (f"supported: {', '.join(supported)}" if supported else "no efforts are documented"))
+        # The SDK's OpenAI chat-completions model against NIM's OpenAI-compatible endpoint.
+        return OpenAIModel(
+            client_args={"api_key": provider_api_key("nim"), "base_url": NVIDIA_NIM_BASE_URL},
+            model_id=model_id,
+            **({"params": {"reasoning_effort": reasoning_effort}} if reasoning_effort else {}),
+        )
+
     if provider == "openai":
         client_args = _native_client_args(provider)
         from strands.models.openai_responses import OpenAIResponsesModel
@@ -737,10 +795,16 @@ def build_model(
             # google-genai ThinkingLevel enum values are upper-case (MINIMAL/LOW/MEDIUM/HIGH).
             thinking["thinking_level"] = reasoning_effort.upper()
 
-        return GeminiModel(
+        from agent.api.core.gemini_model import RonGeminiModel
+
+        gemini_tools = gemini_hosted_tools() if hosted_tools else []
+        if model_id.startswith("gemma"):
+            # Gemma on the Gemini API answers 400 "Url Context as tool is not enabled for this model".
+            gemini_tools = [item for item in gemini_tools if item.url_context is None]
+        return RonGeminiModel(
             client_args={"api_key": provider_api_key("gemini")},
             model_id=model_id,
-            gemini_tools=gemini_hosted_tools() if hosted_tools else [],
+            gemini_tools=gemini_tools,
             params={
                 # Gemini rejects built-in tools combined with function calling
                 # unless this is set (400 INVALID_ARGUMENT). The adapter honours
@@ -916,6 +980,14 @@ def user_memory_tools(user_id: str, agent_scope: str = "panel", scope: MemorySco
     return live_memory_tools(user_id, scope, extra_stores=[get_teaching_service().get_memory_store(user_id, agent_scope)])
 
 
+class TimeoutRetryStrategy(ModelRetryStrategy):
+    """Native backoff retries for provider timeouts as well as throttles (the documented
+    ``is_retryable`` extension point, strands/event_loop/_retry.py)."""
+
+    def is_retryable(self, exception: Exception) -> bool:
+        return super().is_retryable(exception) or is_model_timeout(exception)
+
+
 def create_panel_agent(
     *,
     provider: ProviderName,
@@ -937,7 +1009,7 @@ def create_panel_agent(
     values win; hooks/plugins are appended to application hooks/plugins. User
     options are only the five documented configuration fields above.
     """
-    from strands import Agent, ModelRetryStrategy, tool
+    from strands import Agent, tool
     from strands.agent.conversation_manager import SlidingWindowConversationManager, SummarizingConversationManager
     from strands.agent.conversation_manager.summarizing_conversation_manager import DEFAULT_SUMMARIZATION_PROMPT
     from strands.vended_plugins.context_offloader import ContextOffloader
@@ -969,7 +1041,7 @@ def create_panel_agent(
         raise ValueError("goal must be text or an application validator")
     # Perplexity stream stalls are surfaced as throttles by the adapter; a short
     # first backoff keeps the visible pause brief. Other providers keep native 4s.
-    retry = ModelRetryStrategy(
+    retry = TimeoutRetryStrategy(
         max_attempts=_env_integer("PANEL_RETRY_MAX_ATTEMPTS", 6, minimum=1),
         initial_delay=_env_integer("PANEL_RETRY_INITIAL_DELAY", 1 if provider == "perplexity" else 4),
         max_delay=_env_integer("PANEL_RETRY_MAX_DELAY", 240),
@@ -995,9 +1067,10 @@ def create_panel_agent(
     )
     from agent.api.core.threads import ThreadProjection
     hooks = [*hooks, BrowserAvailabilityHook(selected_browser), ToolObservation()]
-    if agent_scope != "document":
+    if agent_scope not in ("document", "context"):
         # Mirrors this thread into Supabase (threads/thread_messages) on every message change; guests skipped.
-        # Document Agent conversations belong to their page (document_conversations), not the thread list.
+        # Document Agent conversations belong to their page (document_conversations), not the thread list;
+        # the Context Agent's conversation belongs to the Context widget.
         hooks.append(ThreadProjection(user_id=user_id, session_id=session_id, destination=agent_scope, agent="chat", browser=selected_browser))
     if provider == "xai":
         # strands_xai appends the whole encrypted protobuf history to every assistant turn and
@@ -1067,7 +1140,12 @@ def create_panel_agent(
         from strands_harness.plugins import EnvironmentContext, Todos
         if PANEL_TODOS:
             plugins.append(Todos())
-        if PANEL_ENVIRONMENT_CONTEXT:
+        if PANEL_ENVIRONMENT_CONTEXT and agent_scope != "build":
+            # Not for the Build Agent: EnvironmentContext probes `pwd` and reads AGENTS.md through agent.sandbox
+            # (strands_harness/plugins/environment.py `_gather`), and the default NotASandboxLocalEnvironment
+            # resolves both against os.getcwd() (strands/sandbox/not_a_sandbox_local_environment.py), which is the
+            # Ron repository: it would hand Ron's own AGENTS.md to the agent as its project's. The Build Agent's
+            # prompt names its workspace instead (core/build_workspace.py).
             plugins.append(EnvironmentContext())
         if repair_config.enabled:
             # userTurn note "<tool> was repaired and is active", once per live session (agent.state).
@@ -1127,7 +1205,7 @@ def create_panel_agent(
             # (summarizing_conversation_manager.py). No session manager here — the SDK swaps this
             # agent's messages for the summary call, and a shared session would persist that swap.
             # The summary is written back onto the panel agent, which keeps this thread's session.
-            # proactive_compression=True is the SDK default threshold (0.7).
+            # proactive_compression's native compression_threshold: compress at 87% of the model's window.
             # https://strandsagents.com/docs/user-guide/sdk/agents/conversation-management/index.md
             summarizer = Agent(
                 model=panel_model,
@@ -1135,9 +1213,13 @@ def create_panel_agent(
                 callback_handler=None,
                 load_tools_from_directory=False,
             )
+            # preserve_recent_messages=4 is the SDK's own overflow floor (``overflow_protection``
+            # preset, _context_manager/presets.py); the default 10 left a single tool-heavy turn
+            # unsummarizable ("Cannot summarize: insufficient messages for summarization").
             kwargs["conversation_manager"] = SummarizingConversationManager(
                 summarization_agent=summarizer,
-                proactive_compression=True,
+                preserve_recent_messages=4,
+                proactive_compression={"compression_threshold": PANEL_CONTEXT_COMPRESSION_THRESHOLD},
             )
         kwargs.update(runtime)
         kwargs["plugins"] = [*plugins, *runtime.get("plugins", [])]
@@ -1233,6 +1315,15 @@ def list_provider_models(provider: ProviderName) -> list[dict[str, str]]:
     if provider == "perplexity":
         raise RuntimeError("Perplexity catalogue is listed asynchronously in the chat endpoint.")
 
+    if provider == "nim":
+        if not provider_api_key("nim"):
+            return []
+        from openai import OpenAI
+
+        with OpenAI(api_key=provider_api_key("nim"), base_url=NVIDIA_NIM_BASE_URL) as client:
+            return [{"id": item.id, "owned_by": getattr(item, "owned_by", None) or "nvidia", "provider": "nim"}
+                    for item in client.models.list()]
+
     if provider in ("openai", "anthropic"):
         if not provider_api_key(provider):
             return []
@@ -1284,7 +1375,7 @@ def list_provider_models(provider: ProviderName) -> list[dict[str, str]]:
         for item in client.models.list():
             model_id = _strip_model_prefix(getattr(item, "name", "") or "")
             actions = getattr(item, "supported_actions", None) or []
-            if not model_id.startswith("gemini"):
+            if not model_id.startswith(("gemini", "gemma")):
                 continue
             if actions and "generateContent" not in actions:
                 continue

@@ -79,14 +79,22 @@ function NewsRow({ item, index }: { item: DiscoverItem; index: number }) {
   )
 }
 
-export function NewsResults({ state, onRetry }: { state: SearchRunState; onRetry?: () => void }) {
+export function NewsResults({ state, onRetry, onOpenWeb }: { state: SearchRunState; onRetry?: () => void; onOpenWeb?: () => void }) {
   const [shown, setShown] = useState(PAGE)
   const section = state.sections.news
   if (!section) return <div className="max-w-[680px]"><RowSkeleton rows={6} /></div>
   if (section.status === 'error') return <div className="max-w-[680px]"><SourceErrorNotice error={{ source: 'brave', ...section.error! }} onRetry={onRetry} /></div>
 
   const items = sectionItems(state, 'news')
-  if (!items.length) return <EmptyState title="No news found" hint="This topic may be out of the current news cycle" />
+  if (!items.length) {
+    return (
+      <EmptyState
+        title="No news found"
+        hint="This topic may be out of the current news cycle"
+        action={onOpenWeb ? { label: 'See web results', onClick: onOpenWeb } : undefined}
+      />
+    )
+  }
   const [lead, ...rest] = items
   return (
     <div className="max-w-[720px]">

@@ -125,7 +125,7 @@ export function AgentUiProvider({ children }: { children: ReactNode }) {
     useArticleDraftStore.getState().setDestination('panel')
     setAskRonSelectedText(selectedText)
     setAskRonSourceUrl(sourceUrl)
-    setAskRonThinkingText('Choose what Ron should do')
+    setAskRonThinkingText('Choose what Ren should do')
     setAskRonOptions([...ASK_RON_OPTIONS])
     setAskRonStepState('options')
     openPanel()

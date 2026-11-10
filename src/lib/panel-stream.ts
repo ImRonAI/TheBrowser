@@ -23,6 +23,8 @@ export interface PanelConfiguration {
   provider: string
   effort: string
   options: Partial<RuntimeOptions> & Record<string, unknown>
+  /** Who this conversation is with (`selection.agent`): Ron, a saved specialist or a project agent. */
+  agent?: { kind: 'ron' | 'specialist' | 'project'; id: string }
 }
 export interface ToolPart {
   kind: 'tool'
@@ -134,7 +136,9 @@ export interface PanelState {
   repairProposal?: RepairProposal
   repair?: RepairInvestigation
   checkpoint?: unknown
+  /** What failed, as people read it (`failureText`); `errorDetails` keeps the raw payload when it says more. */
   error?: string
+  errorDetails?: string
   stopReason?: string
   model?: string
   provider?: string
@@ -175,10 +179,98 @@ export function isHitlApproval(reason: unknown): boolean {
   return typeof reason === 'string' && reason.startsWith('Approve "')
 }
 
+/** The question an interrupt asks (`ask_user` raises `{question}`), or null when its reason has none. */
+export function interruptQuestion(reason: unknown): string | null {
+  const { question } = record(reason)
+  return typeof question === 'string' && question.trim() ? question : null
+}
+
 /** Title for the Repair chain card (`repair:<rev>`): the fixer's A2A progress. */
 export function repairToolTitle(part: { name: string; finished: boolean }): string | null {
   if (part.name !== 'repair') return null
   return part.finished ? 'Repair finished' : 'Repairing…'
+}
+
+const NAME_ACRONYMS: Record<string, string> = {
+  a2a: 'A2A', api: 'API', cdp: 'CDP', css: 'CSS', html: 'HTML', http: 'HTTP', https: 'HTTPS', id: 'ID', json: 'JSON',
+  jsx: 'JSX', mcp: 'MCP', pdf: 'PDF', sop: 'SOP', sql: 'SQL', ui: 'UI', url: 'URL',
+}
+
+/** Browser tools arrive prefixed by target and server, e.g. `cloud_browser_playwright_browser_snapshot`. */
+const BROWSER_TOOL_NAME = /^(user|cloud)_browser_(?:(?:playwright|electron|cdp)_)?(?:browser_)?(.+)$/
+
+function readableName(name: string): string {
+  const text = name.split(/[_\s-]+/).filter(Boolean).map((word) => NAME_ACRONYMS[word.toLowerCase()] ?? word).join(' ')
+  return text ? text.charAt(0).toUpperCase() + text.slice(1) : name
+}
+
+/** A tool's registered name as people read it: `http_request` is "HTTP request", a browser tool says which browser. */
+export function toolDisplayName(name: string): string {
+  const browser = BROWSER_TOOL_NAME.exec(name)
+  if (browser) return `${browser[1] === 'cloud' ? 'Cloud browser' : 'Browser'} · ${readableName(browser[2])}`
+  return readableName(name)
+}
+
+/** A native tool result (`ToolResultContent`: text | json | image | document) split for display. */
+export interface ToolResultDisplay {
+  /** Every text block, in order. */
+  text: string
+  /** JSON blocks, and any block this view does not know. */
+  values: unknown[]
+  /** Image blocks as data URLs. */
+  images: { src: string; format: string }[]
+  /** Document blocks by name; their bytes are not shown. */
+  documents: { name: string; format: string }[]
+}
+
+/** The SDK's `ImageFormat`. */
+const RESULT_IMAGE_FORMATS = new Set(['png', 'jpeg', 'gif', 'webp'])
+
+/** Base64 of serialized bytes: the runtime's `{encoding: 'base64', data}` or a stored session's `{__bytes_encoded__: true, data}`. */
+function base64Bytes(value: unknown): string | null {
+  const bytes = record(value)
+  if (typeof bytes.data !== 'string' || !bytes.data) return null
+  return bytes.encoding === 'base64' || bytes.__bytes_encoded__ === true ? bytes.data : null
+}
+
+/** A tool part's `output` (the runtime forwards the native result `content` verbatim) as text, values, images and documents. */
+export function toolResultDisplay(output: unknown): ToolResultDisplay {
+  const display: ToolResultDisplay = { text: '', values: [], images: [], documents: [] }
+  if (output === undefined || output === null) return display
+  if (typeof output === 'string') return { ...display, text: output }
+  if (!Array.isArray(output)) return { ...display, values: [output] }
+  const texts: string[] = []
+  for (const block of output) {
+    if (typeof block === 'string') { texts.push(block); continue }
+    const entry = record(block)
+    if (typeof entry.text === 'string') { texts.push(entry.text); continue }
+    if ('json' in entry) { display.values.push(entry.json); continue }
+    const image = record(entry.image)
+    const data = base64Bytes(record(image.source).bytes)
+    if (data && typeof image.format === 'string' && RESULT_IMAGE_FORMATS.has(image.format)) {
+      display.images.push({ src: `data:image/${image.format};base64,${data}`, format: image.format })
+      continue
+    }
+    const document = record(entry.document)
+    if (Object.keys(document).length) {
+      display.documents.push({ name: typeof document.name === 'string' && document.name ? document.name : 'Document',
+        format: typeof document.format === 'string' ? document.format : '' })
+      continue
+    }
+    display.values.push(block)
+  }
+  display.text = texts.join('\n')
+  return display
+}
+
+/** A tool result as plain text: its text, then its JSON values, documents and images as lines. */
+export function toolResultText(output: unknown): string {
+  const display = toolResultDisplay(output)
+  const lines = display.text ? [display.text] : []
+  for (const value of display.values) lines.push(displayValue(value))
+  for (const document of display.documents) lines.push(`Document: ${document.name}${document.format ? ` (${document.format})` : ''}`)
+  if (display.images.length) lines.push(display.images.length === 1 ? '1 image' : `${display.images.length} images`)
+  return lines.join('\n')
 }
 
 export function emptyPanelState(sessionId: string): PanelState {
@@ -197,6 +289,31 @@ export function displayValue(value: unknown): string {
   if (typeof value === 'string') return value
   if (value === undefined) return ''
   return JSON.stringify(value, null, 2)
+}
+
+/** A gRPC status error's own sentence inside its repr (`… details = "Your team … spending limit." …`). */
+const GRPC_DETAILS = /\bdetails = "((?:[^"\\]|\\.)*)"/
+
+/** A run failure as people read it. The runtime sends the SDK's serialized exception (`{type, message}`, or
+ * `{cause, snapshot_error}` when the snapshot failed too); a gRPC provider's message is the whole `AioRpcError` repr,
+ * whose `details` field is the provider's own sentence ("…used all available credits…"). */
+export function failureText(error: unknown): string {
+  if (typeof error === 'string') {
+    const details = GRPC_DETAILS.exec(error)
+    return (details ? details[1].replace(/\\(.)/g, '$1') : error).trim()
+  }
+  const fields = record(error)
+  for (const value of [fields.message, fields.detail]) {
+    if (typeof value === 'string' && value.trim()) return failureText(value)
+  }
+  if (fields.cause !== undefined) return failureText(fields.cause)
+  return displayValue(error)
+}
+
+/** The raw failure payload, kept only when it says more than `failureText`. */
+function failureDetails(error: unknown, text: string): string | undefined {
+  const raw = displayValue(error).trim()
+  return raw && raw !== text ? raw : undefined
 }
 
 function record(value: unknown): Record<string, unknown> {
@@ -371,7 +488,7 @@ export function reducePanelEvent(state: PanelState, event: PanelEvent): PanelSta
   let next: PanelState = { ...state, sequence: event.sequence, latestSequence: Math.max(state.latestSequence ?? 0, event.sequence) }
   const root = event.node_path.length === 0
   if (root && event.type === 'run_started') {
-    next = { ...next, runId: event.run_id, status: 'running', error: undefined,
+    next = { ...next, runId: event.run_id, status: 'running', error: undefined, errorDetails: undefined,
       stopReason: undefined, interrupts: [], checkpoint: undefined,
       configurationLocked: true, followPending: false,
       model: typeof event.model_id === 'string' ? event.model_id : state.model,
@@ -397,7 +514,8 @@ export function reducePanelEvent(state: PanelState, event: PanelEvent): PanelSta
   if (root && event.type === 'checkpoint') next.checkpoint = event.checkpoint
   if (root && event.type === 'error') {
     next.status = 'error'
-    next.error = displayValue(event.error) || 'Agent run failed'
+    next.error = failureText(event.error) || 'Agent run failed'
+    next.errorDetails = failureDetails(event.error, next.error)
     if (record(event.error).code === 'recovery_required' || event.recovery_required === true) {
       next.recoveryRequired = true
       next.error = `${next.error}\n\n${recoveryMessage}`
@@ -490,6 +608,11 @@ export function reducePanelEvent(state: PanelState, event: PanelEvent): PanelSta
           parts[i] = { ...part, discarded: true }
         }
       }
+      // An in-run recovery (agent respawn, overflow hook retry) drops the attempt without a visible line.
+      if (event.silent === true) {
+        messages[index] = { ...messages[index], parts }
+        return { ...next, messages }
+      }
       text = `Retry${event.attempt === undefined ? '' : ` ${displayValue(event.attempt)}`}: ${displayValue(event.reason) || 'Trying again'}`
       if (event.delay !== undefined) text += ` · delay ${displayValue(event.delay)}s`
     } else if (event.type === 'interrupt') text = `Input requested · ${displayValue(event.interrupts)}`
@@ -498,7 +621,7 @@ export function reducePanelEvent(state: PanelState, event: PanelEvent): PanelSta
     else if (event.type === 'steering_accepted') text = `Steering accepted · ${text}`
     else if (event.type === 'steering_applied') text = `Steering applied · ${text}`
     else if (event.type === 'tool_repair_proposed') text = `Repair proposed · ${displayValue(event.tool)} keeps failing (${displayValue(event.count)}× ${displayValue(event.exception_class) || 'error'})`
-    else if (event.type === 'tool_repair_investigating') text = `Investigating · ${displayValue(event.tool)} failed (${displayValue(event.count)}× ${displayValue(event.exception_class) || 'error'}); Ron's fixer is reproducing it in isolation`
+    else if (event.type === 'tool_repair_investigating') text = `Investigating · ${displayValue(event.tool)} failed (${displayValue(event.count)}× ${displayValue(event.exception_class) || 'error'}); Ren's fixer is reproducing it in isolation`
     else if (event.type === 'tool_repair_approval') text = `Repair ready for your approval · ${displayValue(event.tool)} revision ${displayValue(event.rev)}`
     else if (event.type === 'tool_repair_ready') text = `Repair ${displayValue(event.status)} · ${displayValue(event.tool)} revision ${displayValue(event.rev)}`
     parts.push({ kind: event.type === 'retry' ? 'retry' : 'activity', key, path: event.node_path, text })
@@ -522,13 +645,19 @@ export function hydratePanelSession(sessionId: string, value: unknown): PanelSta
   const selection = record(snapshot.selection)
   state.model = typeof selection.model_id === 'string' ? selection.model_id : undefined
   state.provider = typeof selection.provider === 'string' ? selection.provider : undefined
+  const agent = record(selection.agent)
   if (state.model && state.provider) state.configuration = { model: state.model, provider: state.provider,
-    effort: typeof selection.reasoning_effort === 'string' ? selection.reasoning_effort : '', options: record(snapshot.options) }
+    effort: typeof selection.reasoning_effort === 'string' ? selection.reasoning_effort : '', options: record(snapshot.options),
+    agent: (agent.kind === 'specialist' || agent.kind === 'project') && typeof agent.id === 'string' && agent.id
+      ? { kind: agent.kind, id: agent.id } : { kind: 'ron', id: '' } }
   state.interrupts = interruptsFrom(snapshot.interrupts ?? snapshot.pending_interrupts)
   state.checkpoint = snapshot.checkpoint
   state.stopReason = typeof record(snapshot.result).stop_reason === 'string' ? String(record(snapshot.result).stop_reason) : undefined
-  const failure = snapshot.error == null ? '' : displayValue(snapshot.error)
-  if (state.status === 'error') state.error = failure || 'Previous agent run failed'
+  const failure = snapshot.error == null ? '' : failureText(snapshot.error)
+  if (state.status === 'error') {
+    state.error = failure || 'Previous agent run failed'
+    if (snapshot.error != null) state.errorDetails = failureDetails(snapshot.error, failure)
+  }
   state.recoveryRequired = snapshot.recovery_required === true
   if (state.recoveryRequired) { state.status = 'error'; state.error = failure ? `${failure}\n\n${recoveryMessage}` : recoveryMessage }
   const sdkMessages = Array.isArray(snapshot.messages) ? snapshot.messages : []

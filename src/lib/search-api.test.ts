@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-const { DEFAULT_SEARCH_LEVEL, LEVEL_INFO, SearchApiError, applySearchEvent, beginFollowUpState, initialRunState, levelLabel, mergedImages,
-  mergedWebResults, parseSseBlock, sectionItems, streamSearch } = await import('./search-api.ts')
+const { CANCELLED_ANSWER_MESSAGE, CANCELLED_SECTION_MESSAGE, DEFAULT_SEARCH_LEVEL, LEVEL_INFO, PLACES_RESULT_COUNT, SECTION_KINDS,
+  SearchApiError, applySearchEvent, beginFollowUpState, initialRunState, levelLabel, mergedImages, mergedWebResults, parseSseBlock,
+  placesRefreshRequest, searchRunKey, sectionItems, settleCancelledRun, streamSearch } = await import('./search-api.ts')
 type FeedSection = import('./discover-feed.ts').FeedSection
 type SearchEvent = import('./search-api.ts').SearchEvent
 type SearchRunState = import('./search-api.ts').SearchRunState
@@ -243,4 +244,69 @@ test('beginFollowUpState archives the completed turn and preserves sessionId, se
   assert.equal(afterFollowUp.turns.length, 1)
   assert.equal(afterFollowUp.agent.text, 'The Profitec heats up faster.')
   assert.equal(afterFollowUp.agent.status, 'done')
+})
+
+test('settleCancelledRun keeps partial text as a finished answer and closes every lane and missing section', () => {
+  const stopped = run([
+    { event: 'meta', data: { q: 'ebikes', level: 'low', model: 'm', shopping_model: 's', country: 'US' } },
+    { event: 'section', data: section('web', [{ url: 'https://a.com' }]) },
+    { event: 'agent.reasoning', data: { text: 'looking' } },
+    { event: 'agent.delta', data: { text: 'Partial answer' } },
+    { event: 'shopping.reasoning', data: { text: 'browsing shops' } },
+  ])
+  assert.equal(stopped.agent.status, 'streaming')
+  assert.equal(stopped.shopping.status, 'streaming')
+
+  const settled = settleCancelledRun(stopped)
+  assert.equal(settled.agent.status, 'done')
+  assert.equal(settled.agent.text, 'Partial answer')
+  assert.equal(settled.agent.error, null)
+  assert.equal(settled.shopping.status, 'error')
+  assert.deepEqual(settled.shopping.error, { source: 'shopping', code: 'cancelled', message: CANCELLED_ANSWER_MESSAGE })
+  // The section that arrived is untouched; every other one becomes a cancelled error instead of a skeleton.
+  assert.equal(settled.sections.web?.status, 'ok')
+  for (const kind of SECTION_KINDS.filter((kind) => kind !== 'web')) {
+    assert.equal(settled.sections[kind]?.status, 'error', kind)
+    assert.equal(settled.sections[kind]?.q, 'ebikes')
+    assert.deepEqual(settled.sections[kind]?.error, { code: 'cancelled', message: CANCELLED_SECTION_MESSAGE })
+  }
+})
+
+test('settleCancelledRun leaves finished lanes alone and settles only the agent lane of a follow-up', () => {
+  const finished = run([
+    { event: 'meta', data: { q: 'ebikes', level: 'low', model: 'm', shopping_model: 's', country: 'US' } },
+    { event: 'agent.delta', data: { text: 'First answer' } },
+    { event: 'agent.done', data: { usage: null, model: 'm' } },
+    { event: 'source_error', data: { source: 'shopping', code: 'upstream', message: 'boom' } },
+  ])
+  const followUp = beginFollowUpState(finished, 'And cargo bikes?')
+  const settled = settleCancelledRun(followUp, 'follow-up')
+  assert.equal(settled.agent.status, 'error')
+  assert.equal(settled.agent.error?.code, 'cancelled')
+  assert.equal(settled.turns.length, 1)
+  assert.equal(settled.shopping.error?.code, 'upstream')
+  // A follow-up never streams Brave sections, so none are invented for it.
+  assert.deepEqual(settled.sections, finished.sections)
+
+  const untouched = settleCancelledRun(finished)
+  assert.equal(untouched.agent.status, 'done')
+  assert.equal(untouched.shopping.error?.code, 'upstream')
+})
+
+test('searchRunKey identifies a run by level and query', () => {
+  assert.equal(searchRunKey('ebikes', 'low'), searchRunKey('ebikes', 'low'))
+  assert.notEqual(searchRunKey('ebikes', 'low'), searchRunKey('ebikes', 'high'))
+  assert.notEqual(searchRunKey('ebikes', 'low'), searchRunKey('e-bikes', 'low'))
+})
+
+test('placesRefreshRequest asks /discover/feed for only the Places section at the search count', () => {
+  assert.deepEqual(placesRefreshRequest('coffee', { country: 'GB', location: ' Shoreditch, London ' }), {
+    sections: [{ kind: 'places', q: 'coffee', count: PLACES_RESULT_COUNT }],
+    location: { location: 'Shoreditch, London' },
+    country: 'GB',
+  })
+  assert.deepEqual(placesRefreshRequest('coffee', { country: 'US', location: null }), {
+    sections: [{ kind: 'places', q: 'coffee', count: PLACES_RESULT_COUNT }],
+    country: 'US',
+  })
 })

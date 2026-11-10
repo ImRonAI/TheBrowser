@@ -52,7 +52,7 @@ export const WORKFLOW_STEP_KINDS: { kind: WorkflowStepKind; label: string; hint:
   { kind: 'step', label: 'Step', hint: 'Something that needs to happen, with details', group: 'Work' },
   { kind: 'subprocess', label: 'Subprocess', hint: 'A process defined elsewhere (another workflow or runbook)', group: 'Work' },
   { kind: 'manual', label: 'Manual task', hint: 'Done by a person by hand', group: 'Work' },
-  { kind: 'automation', label: 'Automation', hint: 'Done by a system, script or Ron', group: 'Work' },
+  { kind: 'automation', label: 'Automation', hint: 'Done by a system, script or Ren', group: 'Work' },
   { kind: 'io', label: 'Input / output', hint: 'Information coming in or going out: a form, an email, a request', group: 'Information' },
   { kind: 'document', label: 'Document', hint: 'A document or report that is produced or read', group: 'Information' },
   { kind: 'data', label: 'Data store', hint: 'A database, spreadsheet or system of record', group: 'Information' },

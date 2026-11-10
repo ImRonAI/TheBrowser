@@ -221,7 +221,7 @@ async def render_workflow(title: str, steps: list[dict[str, Any]], connections: 
             "start" / "end" (rounded terminators: the trigger and the finish), "step" (a card for work with
             details), "decision" (diamond: a question; label its outgoing arrows, e.g. "Yes" / "No"),
             "delay" (waiting on someone, a date or a timer), "subprocess" (a process defined elsewhere),
-            "manual" (done by a person by hand), "automation" (done by a system, script or Ron),
+            "manual" (done by a person by hand), "automation" (done by a system, script or Ren),
             "io" (input or output: a form, an email, a request), "document" (a document or report),
             "data" (a database, spreadsheet or system of record). Without a kind, a step with no incoming
             arrow is drawn as a start, one with no outgoing arrow as an end, anything else as a step.

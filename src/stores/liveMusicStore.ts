@@ -81,8 +81,8 @@ export function musicCaption(store: Pick<LiveMusicStore, 'liveStatus' | 'availab
   if (store.liveStatus === 'connecting') return 'Connecting Live…'
   if (!store.available) return 'This Live session has no music tools (RON_LIVE_MUSIC=0)'
   if (store.music.error) return `Music error: ${store.music.error}`
-  if (!store.music.connected) return 'Ask Ron for some music'
+  if (!store.music.connected) return 'Ask Ren for some music'
   if (store.music.playback === 'paused') return 'Paused'
-  if (store.music.playback === 'stopped') return 'Stopped · ask Ron to play'
+  if (store.music.playback === 'stopped') return 'Stopped · ask Ren to play'
   return store.playing ? 'Live from Lyria RealTime' : 'Generating…'
 }

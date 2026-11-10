@@ -1,16 +1,19 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
-// Ron 2026 type system: Inter (UI) + Newsreader (editorial display), both variable.
+// Ren type system (docs/brand.md): Inter (UI) + Bricolage Grotesque (display: opsz, wdth, wght), both variable,
+// JetBrains Mono for code and tag labels.
 import '@fontsource-variable/inter/opsz.css'
-import '@fontsource-variable/newsreader/opsz.css'
-import '@fontsource-variable/newsreader/opsz-italic.css'
+import '@fontsource-variable/bricolage-grotesque/standard.css'
 import '@fontsource/jetbrains-mono/400.css'
 import '@fontsource/jetbrains-mono/500.css'
+import '@fontsource/jetbrains-mono/600.css'
 import { App } from './App'
+import { OpeningSequenceGate } from './components/brand/OpeningSequence'
 import './index.css'
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <App />
+    <OpeningSequenceGate />
   </React.StrictMode>,
 )

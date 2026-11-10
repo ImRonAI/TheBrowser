@@ -31,7 +31,7 @@ def _require_loopback(request: Request) -> None:
 
 def _signed_in(identity: ProjectIdentity) -> None:
     if identity.guest:
-        raise HTTPException(401, "Sign in to Ron to use the music deck (guest sessions cannot).")
+        raise HTTPException(401, "Sign in to Ren to use the music deck (guest sessions cannot).")
 
 
 def _session_for(agent_id: str, identity: ProjectIdentity) -> live_music.LiveMusicSession:
@@ -140,7 +140,7 @@ async def songs(request: Request, identity: Identity) -> dict:
 async def delete_song(request: Request, song_id: str, identity: Identity) -> dict:
     _require_loopback(request)
     if identity.guest:
-        raise HTTPException(401, "Sign in to Ron to manage saved music.")
+        raise HTTPException(401, "Sign in to Ren to manage saved music.")
     try:
         deleted = await live_music.delete_song(identity.user_id, song_id)
     except live_music.SignInRequired as error:

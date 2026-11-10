@@ -1,20 +1,32 @@
-import { useState, type ReactNode } from 'react'
-import { SparklesIcon } from 'lucide-react'
-import type { Suggestion } from '@/lib/text-assist'
+import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react'
+import { CornerDownLeft, Search, SpellCheck } from 'lucide-react'
+import {
+  assistAnnouncement, assistFieldAria, assistKeyAction, assistListboxId, assistOptionId, assistOptionKey,
+  type AssistFieldAria, type Suggestion,
+} from '@/lib/text-assist'
+import { revealDelta } from '@/lib/tab-strip'
 import { useTextAssist, type TextAssistState, type UseTextAssistOptions } from '@/hooks/useTextAssist'
 import { cn } from '@/utils/cn'
+
+/** What `AssistField` hands its field: the key handler, focus tracking and the ARIA that ties the field to its suggestions. */
+export type AssistFieldProps = {
+  onKeyDown: (event: React.KeyboardEvent) => void
+  onFocus: () => void
+  onBlur: () => void
+} & AssistFieldAria
 
 /**
  * Wrap any controlled `<input>`/`<textarea>` with Brave assist. The child is rendered via a
  * function that receives the key handler and focus/blur callbacks to spread onto the element, so
  * the field keeps its own `value`/`onChange`. Picking a suggestion or correction calls `onChange`
  * with the replacement text. Defaults to spellcheck only (long-form fields); pass
- * `suggest` for query-like fields.
+ * `suggest` for query-like fields. The field also receives `aria-autocomplete`, `aria-controls` and
+ * `aria-activedescendant` (properties a textarea may carry too), so a screen reader follows the highlight.
  */
 export function AssistField({ value, onChange, children, placement = 'below', className, ...options }: {
   value: string
   onChange: (text: string) => void
-  children: (field: { onKeyDown: (event: React.KeyboardEvent) => void; onFocus: () => void; onBlur: () => void }) => ReactNode
+  children: (field: AssistFieldProps) => ReactNode
   placement?: 'above' | 'below'
   className?: string
 } & UseTextAssistOptions) {
@@ -28,6 +40,7 @@ export function AssistField({ value, onChange, children, placement = 'below', cl
       onKeyDown: (event) => { handleAssistKey(event, assist, apply) },
       onFocus: () => setFocused(true),
       onBlur: () => setFocused(false),
+      ...assistComboboxProps(assist, false),
     })}
     {focused && <TextAssist assist={assist} placement={placement} onPick={apply} onCorrect={apply} />}
   </div>
@@ -51,28 +64,31 @@ export function TextAssist({ assist, onPick, onCorrect, placement = 'below', cla
   const { suggestions, correction, active, setActive, pick } = assist
   if (!suggestions.length && !correction) return null
   return <div role="group" aria-label="Text assist"
-    className={cn('absolute left-0 right-0 z-[80] overflow-hidden rounded-xl border border-surface-200 bg-white text-xs shadow-lg dark:border-surface-700 dark:bg-surface-900',
+    className={cn('absolute left-0 right-0 z-[80] overflow-hidden rounded-xl border border-border bg-popover text-[13px] text-popover-foreground shadow-float',
       placement === 'below' ? 'top-full mt-1.5' : 'bottom-full mb-1.5', className)}>
     {correction && <button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => onCorrect(correction)}
-      className="flex w-full items-center gap-2 border-b border-surface-100 px-3 py-2 text-left hover:bg-indigo-50 dark:border-surface-800 dark:hover:bg-surface-800"
+      className="flex w-full items-center gap-2 border-b border-border px-3 py-2 text-left transition-colors duration-150 hover:bg-muted focus-visible:ring-inset focus-visible:ring-offset-0"
       aria-label={`Replace with corrected spelling: ${correction}`}>
-      <span className="text-ink-muted dark:text-ink-inverse-muted">Did you mean</span>
-      <span className="font-semibold text-indigo-700 dark:text-indigo-300">{correction}</span>
+      <SpellCheck className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
+      <span className="text-muted-foreground">Did you mean</span>
+      <span className="min-w-0 truncate font-semibold text-blurple-700 dark:text-blurple-300">{correction}</span>
     </button>}
     {suggestions.length > 0 && <ul role="listbox" aria-label="Suggestions" className="max-h-72 overflow-y-auto p-1">
       {suggestions.map((suggestion, index) => <li key={`${suggestion.type}:${suggestion.query}`} role="option" aria-selected={active === index}>
         <button type="button" onMouseDown={(event) => event.preventDefault()} onMouseEnter={() => setActive(index)}
           onClick={() => onPick(pick(suggestion), suggestion)}
-          className={cn('flex w-full items-center gap-2 rounded-lg px-3 text-left', compact ? 'py-1.5' : 'py-2',
-            active === index ? 'bg-indigo-50 dark:bg-surface-800' : 'hover:bg-surface-50 dark:hover:bg-surface-850')}>
+          className={cn('group/suggestion flex w-full items-center gap-2.5 rounded-lg px-2.5 text-left transition-colors duration-100',
+            compact ? 'min-h-8 py-1' : 'min-h-9 py-1.5',
+            active === index ? 'bg-muted text-foreground' : 'hover:bg-muted/60')}>
           {suggestion.img
-            ? <img src={suggestion.img} alt="" className="size-6 shrink-0 rounded object-cover" />
-            : <SparklesIcon className="size-3.5 shrink-0 text-ink-muted dark:text-ink-inverse-muted" aria-hidden />}
+            ? <img src={suggestion.img} alt="" className="size-6 shrink-0 rounded-md object-cover" />
+            : <Search className="size-3.5 shrink-0 text-muted-foreground" strokeWidth={2} aria-hidden />}
           <span className="min-w-0 flex-1">
             <span className="block truncate">{suggestion.title ?? suggestion.query}</span>
-            {suggestion.description && <span className="block truncate text-ink-muted dark:text-ink-inverse-muted">{suggestion.description}</span>}
+            {suggestion.description && <span className="block truncate text-[12px] text-muted-foreground">{suggestion.description}</span>}
           </span>
-          {suggestion.type !== 'query' && <span className="shrink-0 rounded-full border border-surface-200 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-ink-muted dark:border-surface-700 dark:text-ink-inverse-muted">{suggestion.type}</span>}
+          {suggestion.type !== 'query' && <span className="shrink-0 rounded-full border border-border px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-[0.08em] text-muted-foreground">{suggestion.type}</span>}
+          {active === index && <CornerDownLeft className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />}
         </button>
       </li>)}
     </ul>}
@@ -85,7 +101,7 @@ export function TextAssist({ assist, onPick, onCorrect, placement = 'below', cla
  */
 export function handleAssistKey(event: React.KeyboardEvent, assist: TextAssistState, onPick: (text: string, suggestion: Suggestion) => void): boolean {
   if (!assist.suggestions.length) {
-    if (event.key === 'Escape' && assist.correction) { assist.dismiss(); return true }
+    if (event.key === 'Escape' && assist.correction) { event.preventDefault(); assist.dismiss(); return true }
     return false
   }
   if (event.key === 'ArrowDown') { event.preventDefault(); assist.move(1); return true }

@@ -32,7 +32,7 @@ TAKEOVER_PROMPT = (
     "with a short summary of what was completed and anything the user still needs to do. Do not "
     "start new research or tasks from memory or earlier threads; the user is not present to steer. "
     "This run is unattended: nobody can approve a request, so never call ask_user and never retry a "
-    "tool that has failed -- report the failure in your summary instead (Ron's fixer investigates "
+    "tool that has failed -- report the failure in your summary instead (Ren's fixer investigates "
     "failures on its own and the user decides later in the panel)."
 )
 

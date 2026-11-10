@@ -92,7 +92,7 @@ export function ContextMenu({ x, y, isOpen, onClose, selectedText }: ContextMenu
     if (selectedText) {
       try {
         await navigator.clipboard.writeText(selectedText)
-        showFeedback('Copied!')
+        showFeedback('Copied')
         setTimeout(onClose, 300)
       } catch (err) {
         console.error('Failed to copy:', err)
@@ -108,7 +108,7 @@ export function ContextMenu({ x, y, isOpen, onClose, selectedText }: ContextMenu
       try {
         // Wrap in backticks for markdown code
         await navigator.clipboard.writeText(`\`${selectedText}\``)
-        showFeedback('Copied as Markdown!')
+        showFeedback('Copied as Markdown')
         setTimeout(onClose, 300)
       } catch (err) {
         console.error('Failed to copy:', err)
@@ -125,7 +125,7 @@ export function ContextMenu({ x, y, isOpen, onClose, selectedText }: ContextMenu
         await navigator.clipboard.writeText(selectedText)
         // Execute cut command to remove selected text
         document.execCommand('cut')
-        showFeedback('Cut!')
+        showFeedback('Cut')
         setTimeout(onClose, 300)
       } catch (err) {
         console.error('Failed to cut:', err)
@@ -149,12 +149,12 @@ export function ContextMenu({ x, y, isOpen, onClose, selectedText }: ContextMenu
         activeElement.selectionStart = activeElement.selectionEnd = start + text.length
         // Trigger input event for React
         activeElement.dispatchEvent(new Event('input', { bubbles: true }))
-        showFeedback('Pasted!')
+        showFeedback('Pasted')
         setTimeout(onClose, 300)
       } else {
         // Try execCommand for contenteditable elements
         document.execCommand('insertText', false, text)
-        showFeedback('Pasted!')
+        showFeedback('Pasted')
         setTimeout(onClose, 300)
       }
     } catch (err) {
@@ -207,7 +207,7 @@ export function ContextMenu({ x, y, isOpen, onClose, selectedText }: ContextMenu
           {showAskRonUI ? (
             <motion.div
               data-chrome-overlay="true"
-              className="fixed z-[9999] w-[320px] max-w-[calc(100vw-20px)] shadow-[0_18px_48px_-18px_rgb(26_25_23/0.28)] rounded-xl"
+              className="fixed z-[9999] w-[320px] max-w-[calc(100vw-20px)] rounded-xl shadow-float"
               style={{
                 left: `${adjustedPosition.x}px`,
                 top: `${adjustedPosition.y}px`,
@@ -271,7 +271,7 @@ export function ContextMenu({ x, y, isOpen, onClose, selectedText }: ContextMenu
                 ref={menuRef}
                 sideOffset={0}
                 align="start"
-                className="fixed z-[9999] min-w-[232px] overflow-hidden rounded-xl border border-surface-200 bg-surface-0 p-1 shadow-[0_18px_48px_-18px_rgb(26_25_23/0.28)] dark:border-surface-700 dark:bg-surface-850"
+                className="fixed z-[9999] min-w-[232px] overflow-hidden rounded-xl border-border p-1 data-[state=open]:shadow-float"
               >
                 {/* Feedback toast */}
                 <AnimatePresence>
@@ -280,9 +280,9 @@ export function ContextMenu({ x, y, isOpen, onClose, selectedText }: ContextMenu
                       initial={{ opacity: 0, y: -10 }}
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0 }}
-                      className="absolute inset-x-0 top-0 flex items-center justify-center gap-2 bg-surface-100 px-3 py-1.5 text-xs font-medium text-ink dark:bg-surface-800 dark:text-ink-inverse"
+                      className="absolute inset-x-0 top-0 z-10 flex h-8 items-center justify-center gap-2 bg-muted px-3 text-[12px] font-medium text-foreground"
                     >
-                      <CheckIcon className="w-3.5 h-3.5" />
+                      <CheckIcon className="h-3.5 w-3.5 text-success" />
                       {copiedFeedback}
                     </motion.div>
                   )}
@@ -295,7 +295,7 @@ export function ContextMenu({ x, y, isOpen, onClose, selectedText }: ContextMenu
                       icon={<ClipboardDocumentIcon className="w-4 h-4" />}
                       label="Copy"
                       onSelect={handleCopy}
-                      shortcut="⌘C"
+                      shortcut={`${MOD_KEY}C`}
                     />
                     <MenuAction
                       icon={<ClipboardIcon className="w-4 h-4" />}
@@ -306,7 +306,7 @@ export function ContextMenu({ x, y, isOpen, onClose, selectedText }: ContextMenu
                       icon={<ScissorsIcon className="w-4 h-4" />}
                       label="Cut"
                       onSelect={handleCut}
-                      shortcut="⌘X"
+                      shortcut={`${MOD_KEY}X`}
                     />
                   </>
                 )}
@@ -315,25 +315,25 @@ export function ContextMenu({ x, y, isOpen, onClose, selectedText }: ContextMenu
                   icon={<ClipboardIcon className="w-4 h-4" />}
                   label="Paste"
                   onSelect={handlePaste}
-                  shortcut="⌘V"
+                  shortcut={`${MOD_KEY}V`}
                 />
 
                 {/* Separator */}
-                <div className="mx-1 my-1 h-px bg-surface-200 dark:bg-surface-700" />
+                <div className="-mx-1 my-1 h-px bg-border" />
 
-                {/* Ask Ron - special highlight */}
+                {/* Ask Ren - the menu's one volt action */}
                 <DropdownMenuItem
                   onSelect={(event) => {
                     event.preventDefault()
                     handleAskRon()
                   }}
-                  className="group flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-left transition-colors duration-150 hover:bg-ember-50 focus:bg-ember-50 dark:hover:bg-ember-950/60 dark:focus:bg-ember-950/60"
+                  className="group flex h-8 w-full items-center gap-2.5 rounded-lg px-2.5 py-0 text-left transition-colors duration-150 hover:bg-blurple-50 focus:bg-blurple-50 dark:hover:bg-blurple-950/60 dark:focus:bg-blurple-950/60"
                 >
-                  <ChatBubbleLeftIcon className="h-4 w-4 flex-shrink-0 text-accent dark:text-accent-light" />
-                  <span className="text-[13px] font-medium text-ink dark:text-ink-inverse">
-                    Ask Ron
+                  <ChatBubbleLeftIcon className="h-4 w-4 flex-shrink-0 text-volt" />
+                  <span className="text-[13px] font-semibold text-popover-foreground">
+                    Ask Ren
                   </span>
-                  <span className="ml-auto text-[11px] text-ink-muted dark:text-ink-inverse-muted">
+                  <span className="ml-auto font-mono text-[11px] text-muted-foreground">
                     {selectedText ? 'with selection · ' : ''}{MOD_KEY}J
                   </span>
                 </DropdownMenuItem>
@@ -361,16 +361,16 @@ function MenuAction({ icon, label, onSelect, shortcut }: MenuActionProps) {
         event.preventDefault()
         void onSelect()
       }}
-      className="flex w-full items-center gap-3 rounded-lg px-2.5 py-1.5 text-left transition-colors duration-150 hover:bg-surface-100 focus:bg-surface-100 dark:hover:bg-surface-800 dark:focus:bg-surface-800"
+      className="flex h-8 w-full items-center gap-2.5 rounded-lg px-2.5 py-0 text-left transition-colors duration-150 hover:bg-muted focus:bg-muted"
     >
-      <span className="flex-shrink-0 text-ink-muted dark:text-ink-inverse-muted">
+      <span className="flex-shrink-0 text-muted-foreground">
         {icon}
       </span>
-      <span className="flex-1 text-[13px] text-ink dark:text-ink-inverse">
+      <span className="flex-1 text-[13px] text-popover-foreground">
         {label}
       </span>
       {shortcut && (
-        <span className="text-[11px] text-ink-muted dark:text-ink-inverse-muted">
+        <span className="font-mono text-[11px] text-muted-foreground">
           {shortcut}
         </span>
       )}

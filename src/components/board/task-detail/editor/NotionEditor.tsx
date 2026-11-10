@@ -8,7 +8,6 @@ import { Table } from '@tiptap/extension-table'
 import TableRow from '@tiptap/extension-table-row'
 import TableCell from '@tiptap/extension-table-cell'
 import TableHeader from '@tiptap/extension-table-header'
-import Mention from '@tiptap/extension-mention'
 import TaskList from '@tiptap/extension-task-list'
 import TaskItem from '@tiptap/extension-task-item'
 import Underline from '@tiptap/extension-underline'
@@ -18,6 +17,8 @@ import { common, createLowlight } from 'lowlight'
 import { SlashCommand, suggestionOptions } from './extensions/slash-command'
 import { FileAttachmentExtension } from './extensions/FileAttachmentExtension'
 import { AskRonExtension } from './extensions/AskRonExtension'
+import { BLOCK_EXTENSIONS } from './extensions/blocks'
+import { ReferenceMention } from './extensions/ReferenceMention'
 import { 
   Bold, 
   Italic, 
@@ -33,7 +34,6 @@ interface NotionEditorProps {
   onChange: (content: string) => void
   onSave?: () => void
   placeholder?: string
-  users?: { id: string; name: string }[]
   readOnly?: boolean
   canonical?: boolean
   onAskRon?: (goal: boolean) => void
@@ -43,20 +43,22 @@ interface NotionEditorProps {
   onEditor?: (editor: Editor | null) => void
   /** Replaces the default classes of the editable area. */
   editorClassName?: string
+  /** A read-only rendering sized to its content: no minimum height and no editing hints. */
+  preview?: boolean
 }
 
 export function NotionEditor({ 
   content, 
   onChange, 
   onSave, 
-  placeholder = 'Type / for commands...', 
-  users = [],
+  placeholder = 'Type / for commands...',
   readOnly = false,
   canonical = false,
   onAskRon,
   extensions = [],
   onEditor,
   editorClassName = 'prose prose-lg dark:prose-invert max-w-none focus:outline-none min-h-[200px] p-6',
+  preview = false,
 }: NotionEditorProps) {
   
   const editor = useEditor({
@@ -80,14 +82,8 @@ export function NotionEditor({
       TableRow,
       TableHeader,
       TableCell,
-      Mention.configure({
-        suggestion: {
-           items: ({ query }) => {
-             return users.filter(user => user.name.toLowerCase().startsWith(query.toLowerCase())).slice(0, 5)
-           },
-           // Basic render for now for mentions, can enhance later
-        }
-      }),
+      // `@` references: pages, tools, agents, MCP servers and skills.
+      ReferenceMention,
       TaskList,
       TaskItem.configure({ nested: true }),
       Underline,
@@ -107,6 +103,8 @@ export function NotionEditor({
           suggestionOptions.items(args).filter((item) => item.id !== 'upload' && (!!onAskRon || !['ask-ron', 'goal'].includes(item.id))) } : suggestionOptions,
       }),
       ...(!canonical ? [FileAttachmentExtension, AskRonExtension] : []),
+      // The "/" menu's blocks (embeds, media, layout, equations, issue/chat/page references).
+      ...BLOCK_EXTENSIONS,
       ...extensions,
     ],
     content,
@@ -189,11 +187,11 @@ export function NotionEditor({
         </BubbleMenu>
       )}
 
-      <div className="relative min-h-[300px]">
+      <div className={preview ? 'relative' : 'relative min-h-[300px]'}>
         <EditorContent editor={editor} />
         
         {/* Helper Hint */}
-        <div className="
+        {!preview && <div className="
            absolute bottom-4 right-4 
            flex items-center gap-3 
            opacity-0 group-hover/editor:opacity-100 transition-opacity duration-300
@@ -205,7 +203,7 @@ export function NotionEditor({
              <span className="flex items-center gap-1.5 text-[10px] text-ink-muted dark:text-ink-inverse-muted font-medium bg-surface-100/50 dark:bg-surface-800/50 px-2 py-1 rounded-md">
                 <kbd>Cmd+S</kbd> to save
             </span>
-        </div>
+        </div>}
       </div>
     </div>
   )

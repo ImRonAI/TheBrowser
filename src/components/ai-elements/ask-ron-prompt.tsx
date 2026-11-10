@@ -255,7 +255,7 @@ export function AskRonPrompt({
               onKeyDown={(e) => { field.onKeyDown(e); handleKeyDown(e) }}
               onFocus={field.onFocus}
               onBlur={field.onBlur}
-              placeholder="Tell Ron what you want to do with this text..."
+              placeholder="Tell Ren what you want to do with this text..."
               disabled={isSubmitting}
               rows={3}
               className={cn(

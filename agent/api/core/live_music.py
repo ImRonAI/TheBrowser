@@ -448,7 +448,7 @@ def owner_uuid(user_id: str) -> str:
     try:
         return str(uuid.UUID(user_id))
     except (TypeError, ValueError):
-        raise SignInRequired("Sign in to Ron to save music (guest sessions cannot store takes).") from None
+        raise SignInRequired("Sign in to Ren to save music (guest sessions cannot store takes).") from None
 
 
 async def supabase_client() -> Any:
@@ -459,7 +459,7 @@ async def supabase_client() -> Any:
 
     url, key = os.getenv("SUPABASE_URL", ""), os.getenv("SUPABASE_SERVICE_ROLE_KEY", "")
     if not url or not key:
-        raise RuntimeError("Saving music needs SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY on the Ron API host.")
+        raise RuntimeError("Saving music needs SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY on the Ren API host.")
     # The default storage timeout is 20 s; a multi-minute WAV from the VPS needs the generation budget.
     return await acreate_client(url, key, AsyncClientOptions(storage_client_timeout=int(config.MUSIC_GENERATION_TIMEOUT)))
 

@@ -7,6 +7,9 @@ import threading
 import time
 from unittest.mock import AsyncMock, Mock
 
+import grpc
+import grpc.aio
+import httpx
 import pytest
 from strands import Agent, tool
 from pydantic import BaseModel
@@ -22,8 +25,9 @@ from strands.storage import InMemoryStorage
 from strands.telemetry.metrics import EventLoopMetrics
 from strands.vended_plugins.goal import GoalLoop
 
+from agent.api.core.panel_agent import TimeoutRetryStrategy
 from agent.api.core.panel_runtime import (
-    STEERING_STATE_KEY, PanelRuntimeManager, ReplayOverflow, RuntimeConflict, _wire,
+    STEERING_STATE_KEY, PanelRuntimeManager, ReplayOverflow, RuntimeConflict, _wire, is_model_timeout,
 )
 
 
@@ -385,16 +389,24 @@ class OverflowOnce(OfflineModel):
             yield event
 
 
-def test_context_overflow_reopens_the_same_session():
+def _injected_text(model, call=-1):
+    return "".join(block.get("text", "") for block in model.calls[call][-1]["content"])
+
+
+def test_context_overflow_respawns_seamlessly_on_the_same_session():
     async def scenario():
         agents = []
         model = OverflowOnce()
         factory = factory_for(model, constructed=agents, conversation_manager=NullConversationManager())
         manager = manager_for(factory)
-        session = await manager.start("u", "overflow-session", "remember this")
+        reference = "page text " * 100_000  # ~1 MB of browser context, far past a quarter of the window
+        session = await manager.start("u", "overflow-session", "remember this", request_context=reference)
+        run_id = session.run_id
         events = await finished(session)
-        assert session.status == "completed"
+        assert session.status == "completed" and session.run_id == run_id
         assert events[-1]["status"] == "completed"
+        assert not [event for event in events if event["type"] == "error"]
+        assert [event.get("silent") for event in events if event["type"] == "retry"] == [True]
         assert len(agents) == 2
         assert agents[0] is not agents[1]
         assert agents[1]._session_manager is session.session_manager
@@ -409,6 +421,13 @@ def test_context_overflow_reopens_the_same_session():
             for message in agents[1].messages if message["role"] == "assistant"
             for block in message["content"]
         )
+        # The fresh instance's call carries the recovery note and the context cut to fit the window.
+        injected = _injected_text(model)
+        assert "[recovery]" in injected and "context window" in injected
+        assert "[reference context shortened to fit]" in injected
+        assert len(injected) < len(reference) // 2
+        # Neither is stored in the conversation.
+        assert "[recovery]" not in json.dumps(agents[1].messages)
         await manager.shutdown()
 
     asyncio.run(scenario())
@@ -584,8 +603,9 @@ def test_forced_shutdown_has_terminal_status_and_cleans_provider():
         cleanup = agents[0].cleanup = Mock()
         await manager.shutdown()
         assert session.task.done()
-        assert session.status == "cancelled"
-        assert session.recovery_required
+        # The journal keeps the run active so the next process continues it.
+        assert session.status == "running" and not session.recovery_required
+        assert json.loads(await session.storage.read(session.key))["status"] == "running"
         cleanup.assert_called_once()
         await manager.shutdown()
         cleanup.assert_called_once()
@@ -593,27 +613,67 @@ def test_forced_shutdown_has_terminal_status_and_cleans_provider():
     asyncio.run(scenario())
 
 
-def test_unclean_restart_restores_committed_snapshot_not_incomplete_latest():
+def test_restart_continues_the_interrupted_run_from_the_latest_snapshot():
+    async def scenario():
+        entered = asyncio.Event()
+
+        @tool
+        async def probe() -> str:
+            """A tool that is running when the process stops."""
+            entered.set()
+            await asyncio.Event().wait()
+            return "unreachable"
+
+        users = {}
+        storage_factory = lambda user: users.setdefault(user, InMemoryStorage())
+        first_model = OfflineModel(tools=("probe",))
+        manager = PanelRuntimeManager(factory=factory_for(first_model, tools=[probe]), storage_factory=storage_factory,
+                                      shutdown_timeout=0.05)
+        session = await manager.start("u", "crash", "first", selection={"model_id": "offline"})
+        await asyncio.wait_for(entered.wait(), 3)
+        run_id = session.run_id
+        await manager.shutdown()
+
+        agents = []
+        second_model = OfflineModel()
+        second = PanelRuntimeManager(factory=factory_for(second_model, tools=[probe], constructed=agents),
+                                     storage_factory=storage_factory)
+        restored = await second.get("u", "crash")
+        assert restored.active and restored.run_id == run_id and not restored.recovery_required
+        events = await finished(restored)
+        assert events[-1]["status"] == "completed" and not any(e["type"] == "error" for e in events)
+        assert [e for e in events if e["type"] == "retry"][0]["silent"] is True
+        # The fresh agent restored the saved conversation: the user message is not sent twice and the
+        # tool call the first process never answered is closed by the SDK, not run again.
+        sent = second_model.calls[0]
+        assert [b["text"] for m in sent for b in m["content"] if "text" in b and m["role"] == "user"][0] == "first"
+        assert [b.get("text") for m in sent for b in m["content"]].count("first") == 1
+        results = [b["toolResult"] for m in sent for b in m["content"] if "toolResult" in b]
+        assert results[0]["content"] == [{"text": "Tool was interrupted."}]
+        assert "[recovery] The server restarted" in json.dumps(sent)
+        assert len(agents) == 1 and restored.messages[-1]["role"] == "assistant"
+        again = await second.start("u", "crash", "next")
+        assert (await finished(again, again.replay_after))[-1]["status"] == "completed"
+        await second.shutdown()
+
+    asyncio.run(scenario())
+
+
+def test_a_session_locked_by_an_older_runtime_opens_again():
     async def scenario():
         manager = manager_for(factory_for(OfflineModel()))
-        session = await manager.start("u", "crash", "first")
+        session = await manager.start("u", "locked", "first")
         await session.wait()
-        baseline = copy.deepcopy(session.messages)
-        # Simulate a crash journal and a newer, uncommitted native latest snapshot.
-        session.agent.messages.append({"role": "user", "content": [{"text": "uncommitted"}]})
-        await session.session_manager.save_snapshot(session.agent, is_latest=True)
-        session.status = "running"
+        session.recovery_required, session.status = True, "cancelled"
         async with session._lock:
             await session._persist()
-        cursor = session.sequence
         second = PanelRuntimeManager(factory=manager.factory, storage_factory=manager.storage_factory)
-        restored = await second.get("u", "crash")
-        assert restored.messages == baseline
-        assert restored.recovery_required
-        assert restored.status == "failed"
-        assert restored.sequence == cursor + 1
-        with pytest.raises(RuntimeConflict, match="recovery"):
-            await second.start("u", "crash", "do not repeat")
+        restored = await second.get("u", "locked")
+        assert not restored.recovery_required and not restored.active
+        assert [m["role"] for m in restored.messages] == ["user", "assistant"]
+        again = await second.start("u", "locked", "continue")
+        assert (await finished(again, again.replay_after))[-1]["status"] == "completed"
+        assert len(again.messages) == 4
         await manager.shutdown()
         await second.shutdown()
 
@@ -642,7 +702,7 @@ def test_native_background_cancel_on_shutdown():
         await asyncio.wait_for(manager.shutdown(), 3)
         await asyncio.wait_for(stopped.wait(), 1)
         assert session.task.done()
-        assert session.status == "cancelled"
+        assert session.status != "completed" and not session.recovery_required
 
     asyncio.run(scenario())
 
@@ -849,8 +909,8 @@ def test_token_stream_never_writes_storage_and_baseline_precedes_model():
 
         class Tokens(OfflineModel):
             async def stream(self, messages, *args, **kwargs):
-                assert writes[-1][1]["status"] == "running"
-                assert writes[-1][1]["snapshot_id"]
+                journal = [data for key, data in writes if key.startswith("panel-runtime/")][-1]
+                assert journal["status"] == "running" and journal["snapshot_id"]
                 before = len(writes)
                 yield {"messageStart": {"role": "assistant"}}
                 for _ in range(400):
@@ -866,11 +926,11 @@ def test_token_stream_never_writes_storage_and_baseline_precedes_model():
         await asyncio.wait_for(entered.wait(), 3)
         assert len([e for e in session._history if e["type"] == "text_delta"]) == 400
         assert session._retained_bytes == sum(session._event_sizes)
-        # Initial journal, immutable baseline, latest baseline, running journal.
-        assert len(writes) == 4
+        # Initial journal, immutable baseline, latest baseline, running journal, then the native
+        # snapshot_latest for the user message (save_latest_on="message").
+        assert len(writes) == 5 and "snapshot_latest" in writes[-1][0]
         release.set()
         await session.wait()
-        assert len(writes) == 7
         assert "immutable_history" in writes[-3][0]
         assert "snapshot_latest" in writes[-2][0]
         assert writes[-1][1]["status"] == "completed"
@@ -1232,7 +1292,7 @@ async def _until(predicate, timeout=20.0):
         await asyncio.sleep(0.05)
 
 
-def test_stall_watchdog_respawns_fresh_agent_on_same_session():
+def test_stall_watchdog_respawns_fresh_agent_in_the_same_run():
     async def scenario():
         agents = []
         wedged = OfflineModel(release=asyncio.Event())  # never releases: silent stream
@@ -1240,35 +1300,181 @@ def test_stall_watchdog_respawns_fresh_agent_on_same_session():
         manager = manager_for(_respawn_factory([wedged, healthy], agents),
                               stall_seconds=1.0, tool_stall_seconds=1.0, max_recoveries=2)
         session = await manager.start("u", "s", "do the research", selection={"model_id": "offline"})
+        run_id = session.run_id
         await _until(lambda: session.status == "completed")
-        assert session.recovery_required is False
-        # A fresh agent instance was constructed on the same session.
+        assert session.recovery_required is False and session.run_id == run_id
+        # A fresh agent instance was constructed on the same session and continued the turn.
         assert len(agents) == 2 and agents[0] is not agents[1]
-        # The wedged run failed with the stall reason; the recovery run restates the request.
         events = [event async for event in session.events(0)]
-        errors = [e for e in events if e["type"] == "error"]
-        assert len(errors) == 1 and "Run stalled" in str(errors[0]["error"]), errors
-        assert "[recovery]" in session.input and "do the research" in session.input
-        # The completed recovery run resets the consecutive-stall budget.
-        assert session._recoveries == 0
+        assert not [e for e in events if e["type"] == "error"], events
+        assert [e["type"] for e in events].count("run_started") == 1
+        assert session.input == "do the research"
+        prompts = [m for m in healthy.calls[-1] if m["role"] == "user"]
+        assert len(prompts) == 1 and prompts[0]["content"][0]["text"] == "do the research"
+        assert "[recovery]" in _injected_text(healthy) and "Run stalled" in _injected_text(healthy)
+        assert "Tool was interrupted" not in _injected_text(healthy)  # no tool was cut off
         await manager.shutdown()
 
     asyncio.run(scenario())
 
 
-def test_stall_recovery_budget_exhausts_to_recovery_required():
+def test_stalled_tool_is_closed_and_the_turn_continues_on_a_fresh_agent():
+    async def scenario():
+        @tool
+        async def hang() -> str:
+            await asyncio.Event().wait()
+            return "never"
+
+        agents = []
+        first, second = OfflineModel(tools=("hang",)), OfflineModel()
+        manager = manager_for(_respawn_factory([first, second], agents, tools=(hang,)),
+                              stall_seconds=1.0, tool_stall_seconds=1.0, max_recoveries=2)
+        session = await manager.start("u", "s", "use the tool", selection={"model_id": "offline"})
+        events = await finished(session)
+        assert session.status == "completed" and len(agents) == 2
+        assert not [e for e in events if e["type"] == "error"]
+        closed = [e for e in events if e["type"] == "tool_result" and e["id"] == "call-0"]
+        assert closed and closed[0]["status"] == "error"
+        # The SDK closed the unanswered toolUse natively before the fresh agent's model call.
+        results = [b["toolResult"] for m in second.calls[-1] for b in m["content"] if "toolResult" in b]
+        assert results == [{"toolUseId": "call-0", "status": "error", "content": [{"text": "Tool was interrupted."}]}]
+        assert "Tool was interrupted" in _injected_text(second)
+        await manager.shutdown()
+
+    asyncio.run(scenario())
+
+
+class TimesOutOnce(OfflineModel):
+    async def stream(self, messages, tool_specs=None, system_prompt=None, **kwargs):
+        if not self.calls:
+            self.calls.append(copy.deepcopy(messages))
+            request = httpx.Request("POST", "https://api.example.test/v1/responses")
+            try:
+                raise httpx.ReadTimeout("timed out", request=request)
+            except httpx.ReadTimeout as timeout:
+                raise RuntimeError("provider call failed") from timeout
+        async for event in super().stream(messages, tool_specs=tool_specs, system_prompt=system_prompt, **kwargs):
+            yield event
+
+
+def test_model_timeout_respawns_on_the_same_session():
     async def scenario():
         agents = []
-        wedged = [OfflineModel(release=asyncio.Event()) for _ in range(3)]
-        manager = manager_for(_respawn_factory(wedged, agents),
+        model = TimesOutOnce()
+        manager = manager_for(factory_for(model, constructed=agents))
+        session = await manager.start("u", "s", "slow provider")
+        events = await finished(session)
+        assert session.status == "completed" and len(agents) == 2
+        assert not [e for e in events if e["type"] == "error"]
+        assert "timed out" in _injected_text(model)
+        await manager.shutdown()
+
+    asyncio.run(scenario())
+
+
+def test_timeouts_are_recognised_through_the_cause_chain():
+    request = httpx.Request("GET", "https://api.example.test")
+    try:
+        raise RuntimeError("APITimeoutError") from httpx.ConnectTimeout("slow", request=request)
+    except RuntimeError as wrapped:
+        assert is_model_timeout(wrapped)
+    deadline = grpc.aio.AioRpcError(grpc.StatusCode.DEADLINE_EXCEEDED, grpc.aio.Metadata(), grpc.aio.Metadata(), "late")
+    assert is_model_timeout(deadline)
+    assert is_model_timeout(TimeoutError())
+    assert not is_model_timeout(ValueError("bad request"))
+    assert not is_model_timeout(
+        grpc.aio.AioRpcError(grpc.StatusCode.INVALID_ARGUMENT, grpc.aio.Metadata(), grpc.aio.Metadata(), "bad"))
+    strategy = TimeoutRetryStrategy()
+    assert strategy.is_retryable(deadline) and strategy.is_retryable(ModelThrottledException("slow down"))
+    assert not strategy.is_retryable(ValueError("bad request"))
+
+
+def test_stall_recovery_budget_spent_fails_the_run_and_keeps_the_session_open():
+    async def scenario():
+        agents = []
+        models = [*(OfflineModel(release=asyncio.Event()) for _ in range(3)), OfflineModel()]
+        manager = manager_for(_respawn_factory(models, agents),
                               stall_seconds=0.5, tool_stall_seconds=0.5, max_recoveries=2)
         session = await manager.start("u", "s", "hang forever", selection={"model_id": "offline"})
-        await _until(lambda: session.recovery_required and not session.active)
-        # Initial run plus two respawns; the third stall is left failed.
-        assert len(agents) == 3
-        assert session.status in ("failed", "cancelled")
-        with pytest.raises(RuntimeConflict, match="recovery"):
-            await manager.start("u", "s", "try again")
+        await _until(lambda: not session.active)
+        # Initial run plus two respawns; the third stall fails the run with the stall as its error.
+        assert len(agents) == 3 and session.status == "cancelled" and not session.recovery_required
+        assert "Run stalled" in session.error and session.agent is None
+        again = await manager.start("u", "s", "try again")
+        events = await finished(again, again.replay_after)
+        assert events[-1]["status"] == "completed" and len(agents) == 4
+        # The fresh agent continued the same conversation.
+        assert [b["text"] for m in models[3].calls[0] for b in m["content"] if "text" in b] == ["hang forever", "try again"]
+        await manager.shutdown()
+
+    asyncio.run(scenario())
+
+
+def test_a_message_sent_long_after_the_previous_run_is_not_cancelled_at_startup():
+    async def scenario():
+        construct = asyncio.Event()
+        build = factory_for(OfflineModel())
+
+        async def factory(**kwargs):
+            await construct.wait()
+            return await build(**kwargs)
+
+        manager = manager_for(factory, stall_seconds=1.0, tool_stall_seconds=1.0)
+        session = await manager.start("u", "s", "go", selection={"model_id": "offline"})
+        # The previous activity is older than the stall window when the run is admitted.
+        assert time.monotonic() - session._last_event_at < 0.5
+        session._last_event_at -= 0.6
+        await asyncio.sleep(0.6)
+        construct.set()
+        events = await finished(session)
+        assert events[-1]["status"] == "completed" and not any(e["type"] == "error" for e in events)
+        await manager.shutdown()
+
+    asyncio.run(scenario())
+
+
+def test_recovery_budget_counts_consecutive_recoveries_only():
+    async def scenario():
+        agents, calls = [], []
+
+        @tool
+        def step() -> str:
+            """A tool that completes."""
+            calls.append(1)
+            return "done"
+
+        class Scripted(OfflineModel):
+            """Asks for the tool until the conversation holds ``want`` results; hangs on call ``hang_on``."""
+            async def stream(self, messages, *args, **kwargs):
+                self.calls.append(1)
+                if len(self.calls) == self.hang_on:
+                    await asyncio.Event().wait()
+                results = sum("toolResult" in b for m in messages for b in m["content"])
+                yield {"messageStart": {"role": "assistant"}}
+                if results < self.want:
+                    yield {"contentBlockStart": {"contentBlockIndex": 0,
+                        "start": {"toolUse": {"toolUseId": f"call-{results}", "name": "step"}}}}
+                    yield {"contentBlockDelta": {"contentBlockIndex": 0, "delta": {"toolUse": {"input": "{}"}}}}
+                    yield {"contentBlockStop": {"contentBlockIndex": 0}}
+                    yield {"messageStop": {"stopReason": "tool_use"}}
+                else:
+                    yield {"contentBlockDelta": {"contentBlockIndex": 0, "delta": {"text": "answer"}}}
+                    yield {"contentBlockStop": {"contentBlockIndex": 0}}
+                    yield {"messageStop": {"stopReason": "end_turn"}}
+
+        def model(want, hang_on):
+            instance = Scripted()
+            instance.want, instance.hang_on = want, hang_on
+            return instance
+
+        # Two instances each complete a tool call and then stall; the budget is one recovery.
+        models = [model(1, 2), model(2, 2), model(2, None)]
+        manager = manager_for(_respawn_factory(models, agents, tools=(step,)),
+                              stall_seconds=0.5, tool_stall_seconds=0.5, max_recoveries=1)
+        session = await manager.start("u", "s", "work", selection={"model_id": "offline"})
+        await _until(lambda: not session.active)
+        assert session.status == "completed", session.error
+        assert len(agents) == 3 and len(calls) == 2
         await manager.shutdown()
 
     asyncio.run(scenario())
@@ -1285,7 +1491,7 @@ def test_stall_watchdog_disabled_leaves_run_alone():
         assert session.active and session.status == "running"
         assert len(agents) == 1
         await manager.shutdown()  # close() force-cancels the wedged run
-        assert session.recovery_required is True
+        assert session.recovery_required is False
 
     asyncio.run(scenario())
 

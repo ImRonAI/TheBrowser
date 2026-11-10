@@ -1,6 +1,9 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { API_BASE_URL } from '@/lib/api-base'
-import { applySuggestion, assistable, createAssistClient, debounced, type AssistOptions, type Suggestion } from '@/lib/text-assist'
+import {
+  applySuggestion, assistable, assistOptionKey, assistOptions as listOptions, createAssistClient, debounced, moveHighlight,
+  type AssistOption, type AssistOptions, type Suggestion,
+} from '@/lib/text-assist'
 
 /**
  * Brave Suggest + Spellcheck for one free-text field.
@@ -24,12 +27,16 @@ export interface UseTextAssistOptions extends AssistOptions {
 }
 
 export interface TextAssistState {
+  /** Unique per field: the assist listbox and its rows derive their element ids from it. */
+  id: string
   suggestions: Suggestion[]
   correction: string | null
-  /** Highlighted suggestion index for keyboard navigation (-1 = none). */
+  /** The listbox rows: the correction (when there is one) first, then the suggestions. */
+  options: AssistOption[]
+  /** Highlighted row in `options` for keyboard navigation (-1 = none). */
   active: number
   setActive: (index: number) => void
-  /** Move the highlight; returns the new index. */
+  /** Move the highlight through `options`; returns the new index. */
   move: (delta: number) => number
   /** Text to put in the field when the user picks a suggestion. */
   pick: (suggestion: Suggestion) => string
@@ -39,12 +46,19 @@ export interface TextAssistState {
 
 const client = createAssistClient(API_BASE_URL)
 
-export function useTextAssist(value: string, options: UseTextAssistOptions = {}): TextAssistState {
+export function useTextAssist(value: string, settings: UseTextAssistOptions = {}): TextAssistState {
   const { suggest = true, spellcheck = true, suggestDelayMs = 180, spellcheckDelayMs = 700, skip, enabled = true,
-    count, rich, country, lang } = options
+    count, rich, country, lang } = settings
+  const id = `assist${useId().replace(/[^\w-]/g, '')}`
   const [suggestions, setSuggestions] = useState<Suggestion[]>([])
   const [correction, setCorrection] = useState<string | null>(null)
-  const [active, setActive] = useState(-1)
+  // The highlight follows a row, not a position: the correction usually lands after the suggestions and leads the list.
+  const [activeKey, setActiveKey] = useState<string | null>(null)
+  const options = useMemo(() => listOptions(correction, suggestions), [correction, suggestions])
+  const active = activeKey === null ? -1 : options.findIndex((option) => assistOptionKey(option) === activeKey)
+  const setActive = useCallback((index: number) => {
+    setActiveKey(index >= 0 && index < options.length ? assistOptionKey(options[index]) : null)
+  }, [options])
   const forValue = useRef('')
   const assistOptions = useMemo<AssistOptions>(() => ({ count, rich, country, lang }), [count, rich, country, lang])
 
@@ -53,7 +67,7 @@ export function useTextAssist(value: string, options: UseTextAssistOptions = {})
 
   useEffect(() => {
     forValue.current = value
-    setActive(-1)
+    setActiveKey(null)
     const wanted = enabled && assistable(value) && !(skip?.(value) ?? false)
     if (!wanted) {
       suggestRun.dispose(); spellRun.dispose()
@@ -69,14 +83,13 @@ export function useTextAssist(value: string, options: UseTextAssistOptions = {})
 
   useEffect(() => () => { suggestRun.dispose(); spellRun.dispose() }, [suggestRun, spellRun])
 
-  const dismiss = useCallback(() => { suggestRun.dispose(); spellRun.dispose(); setSuggestions([]); setCorrection(null); setActive(-1) }, [suggestRun, spellRun])
+  const dismiss = useCallback(() => { suggestRun.dispose(); spellRun.dispose(); setSuggestions([]); setCorrection(null); setActiveKey(null) }, [suggestRun, spellRun])
   const move = useCallback((delta: number) => {
-    if (!suggestions.length) return -1
-    const next = ((active + delta) % (suggestions.length + 1) + (suggestions.length + 1)) % (suggestions.length + 1) - 1
+    const next = moveHighlight(active, delta, options.length)
     setActive(next)
     return next
-  }, [active, suggestions.length])
+  }, [active, options.length, setActive])
   const pick = useCallback((suggestion: Suggestion) => applySuggestion(forValue.current, suggestion), [])
 
-  return { suggestions, correction, active, setActive, move, pick, dismiss }
+  return { id, suggestions, correction, options, active, setActive, move, pick, dismiss }
 }

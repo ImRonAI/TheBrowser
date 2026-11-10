@@ -9,22 +9,27 @@
  *   (Answer / Web / News / Images / Videos / Places / Shopping).
  * - The Web tab ranks by provenance — Consensus (agent ∩ Brave), Agent picks, then
  *   the breadth of Brave — as truncated two-line rows beside an "At a glance" rail.
- * - One ember accent throughout; no per-lens tinting.
+ * - One volt accent throughout; no per-lens tinting.
  *
  * Route: ron://search?q=<query>&level=<fast|low|medium|high|xhigh>
  */
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
-import { SearchX } from 'lucide-react'
+import { Plus, RotateCw, SearchX } from 'lucide-react'
 import { useSearchResultsStore } from '@/stores/searchResultsStore'
-import { getDiscoverProfile } from '@/stores/discoverProfileStore'
+import { getDiscoverProfile, useDiscoverProfile, useDiscoverProfileStore } from '@/stores/discoverProfileStore'
 import {
+  SEARCH_LEVELS,
+  levelLabel,
   mergedImages,
   mergedWebResults,
+  searchRunKey,
   sectionItems,
   type SearchLevel,
 } from '@/lib/search-api'
-import { cn } from '@/utils/cn'
+import { buildSearchRonUrl } from '@/components/chrome/UrlBar'
+import { searchMarkdown } from '@/lib/context-api'
+import { useContextAgentStore } from '@/stores/contextAgentStore'
 import { SearchBackdrop } from '@/components/search/SearchBackdrop'
 import { SearchHeader } from '@/components/search/SearchHeader'
 import { LensBar, lensPanelId, lensTabId, type LensState } from '@/components/search/LensBar'
@@ -49,9 +54,17 @@ const PANEL_KEY: Record<SearchTab, string> = {
 }
 
 export function SearchResultsPage({ query, level, onBack }: SearchResultsPageProps) {
-  const { run, isRunning, followUpLoading, startedAt, fatal, start, sendFollowUp, cancel } = useSearchResultsStore()
+  const { run, isRunning, followUpLoading, startedAt, fatal, start, sendFollowUp, refreshPlaces, cancel } = useSearchResultsStore()
   const [activeTab, setActiveTab] = useState<SearchTab>('agent')
   const reduced = useReducedMotion()
+  const addContext = useContextAgentStore((state) => state.addContext)
+  const contextBusy = useContextAgentStore((state) => state.busy)
+  const profileLocation = useDiscoverProfile().location
+  const saveSearch = () => void addContext({
+    kind: 'search', title: query,
+    text: searchMarkdown({ query, turns: run.turns, answer: run.agent.text, citations: run.agent.citations,
+      results: mergedWebResults(run).slice(0, 10) }),
+  })
 
   const fire = useCallback(() => {
     const profile = getDiscoverProfile()
@@ -72,9 +85,38 @@ export function SearchResultsPage({ query, level, onBack }: SearchResultsPagePro
     [sendFollowUp],
   )
 
+  // The run lives in the store, not the page: coming back to this tab shows it as it is
+  // (finished, or still streaming) instead of searching again. Only a new query or level,
+  // or a run that never got going (fatal), starts one.
   useEffect(() => {
-    fire()
-  }, [fire])
+    const stored = useSearchResultsStore.getState()
+    if (stored.runKey !== searchRunKey(query, level) || stored.fatal) fire()
+  }, [fire, query, level])
+
+  /** Switch tabs from inside a panel and keep keyboard focus on the tab row. */
+  const openTab = useCallback((tab: SearchTab) => {
+    setActiveTab(tab)
+    document.getElementById(lensTabId(tab))?.focus()
+  }, [])
+  const openWeb = useCallback(() => openTab('web'), [openTab])
+
+  const levelIndex = SEARCH_LEVELS.indexOf(level)
+  const deeperLevel: SearchLevel | undefined = levelIndex >= 0 ? SEARCH_LEVELS[levelIndex + 1] : undefined
+  const searchDeeper = deeperLevel && window.electron?.browser?.navigate
+    ? {
+        label: `Search deeper (${levelLabel(deeperLevel)})`,
+        onClick: () => {
+          window.electron.browser.navigate(buildSearchRonUrl(query, deeperLevel))
+            .catch((error: unknown) => console.error('Search deeper failed:', error))
+        },
+      }
+    : null
+
+  const updatePlacesLocation = useCallback((location: string) => {
+    useDiscoverProfileStore.getState().setOverride('location', location)
+    const profile = getDiscoverProfile()
+    void refreshPlaces(query, { country: profile.country, location: profile.location })
+  }, [query, refreshPlaces])
 
   const hue = tabHue(activeTab)
 
@@ -136,9 +178,22 @@ export function SearchResultsPage({ query, level, onBack }: SearchResultsPagePro
         onRefresh={fire}
       />
 
+      <div className="relative z-10 mx-auto flex max-w-6xl px-6 pt-5 sm:px-10">
+        <button
+          type="button"
+          onClick={saveSearch}
+          disabled={(isRunning && !run.agent.text) || Boolean(contextBusy)}
+          title="Save this search, its answer and top results to Ren’s context"
+          className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-surface-200 bg-surface-0 px-3 text-[12.5px] font-medium text-ink-secondary transition-colors duration-150 hover:border-surface-300 hover:text-ink disabled:pointer-events-none disabled:opacity-40 dark:border-surface-800 dark:bg-surface-900 dark:text-ink-inverse-secondary dark:hover:border-surface-700 dark:hover:text-ink-inverse"
+        >
+          <Plus className="h-4 w-4" strokeWidth={1.75} aria-hidden />
+          Add search to Ren context
+        </button>
+      </div>
+
       <LensBar active={activeTab} onChange={setActiveTab} lenses={lenses} />
 
-      <main className="relative z-10 mx-auto max-w-6xl px-6 pb-24 pt-7 sm:px-10">
+      <main className="relative z-10 mx-auto max-w-6xl px-6 pb-24 pt-8 sm:px-10">
         {fatal ? (
           <motion.div
             initial={{ opacity: 0, y: 12 }}
@@ -146,19 +201,20 @@ export function SearchResultsPage({ query, level, onBack }: SearchResultsPagePro
             className="mx-auto flex max-w-md flex-col items-center py-24 text-center"
             role="alert"
           >
-            <SearchX className="h-7 w-7 text-ink-muted dark:text-ink-inverse-muted" strokeWidth={1.5} />
-            <p className="mt-4 font-display text-2xl text-ink dark:text-ink-inverse">Search couldn’t run</p>
-            <p className="mt-1.5 text-[13.5px] text-ink-muted dark:text-ink-inverse-muted">{fatal.message}</p>
-            <span className="mt-2 rounded bg-surface-100 px-2 py-0.5 font-mono text-[10px] uppercase text-ink-muted dark:bg-surface-800 dark:text-ink-inverse-muted">
+            <span aria-hidden className="flex h-10 w-10 items-center justify-center rounded-xl bg-red-50 text-danger dark:bg-red-950/40">
+              <SearchX className="h-5 w-5" strokeWidth={1.75} />
+            </span>
+            <p className="mt-4 font-display text-xl font-bold tracking-[-0.02em] text-ink dark:text-ink-inverse">Search couldn’t run</p>
+            <p className="mt-1.5 text-[13.5px] leading-relaxed text-ink-secondary dark:text-ink-inverse-secondary">{fatal.message}</p>
+            <span className="mt-3 inline-flex h-6 items-center rounded-full bg-surface-100 px-2.5 font-mono text-[11px] uppercase tracking-[0.08em] text-ink-secondary dark:bg-surface-850 dark:text-ink-inverse-secondary">
               {fatal.code}
             </span>
             <button
+              type="button"
               onClick={fire}
-              className={cn(
-                'mt-6 h-9 rounded-lg px-4 text-[13px] font-medium transition-colors',
-                'bg-ink text-surface-0 hover:bg-ink/85 dark:bg-ink-inverse dark:text-surface-900 dark:hover:bg-ink-inverse/85',
-              )}
+              className="mt-6 inline-flex h-9 items-center gap-1.5 rounded-lg bg-blurple-600 px-3.5 text-[13px] font-semibold text-white transition-colors duration-150 hover:bg-blurple-700 active:bg-blurple-800 dark:bg-blurple-400 dark:text-ink dark:hover:bg-blurple-300"
             >
+              <RotateCw className="h-4 w-4" strokeWidth={1.75} aria-hidden />
               Try again
             </button>
           </motion.div>
@@ -189,9 +245,19 @@ export function SearchResultsPage({ query, level, onBack }: SearchResultsPagePro
                   followUpLoading={followUpLoading}
                 />
               )}
-              {activeTab === 'web' && <WebResults state={run} hue={hue} onRetry={fire} onOpenAnswer={() => setActiveTab('agent')} />}
-              {activeTab === 'local' && <LocalResults state={run} hue={hue} onRetry={fire} />}
-              {activeTab === 'news' && <NewsResults state={run} onRetry={fire} />}
+              {activeTab === 'web' && (
+                <WebResults state={run} hue={hue} onRetry={fire} onOpenAnswer={() => openTab('agent')} deeper={searchDeeper} />
+              )}
+              {activeTab === 'local' && (
+                <LocalResults
+                  state={run}
+                  hue={hue}
+                  onRetry={fire}
+                  location={profileLocation}
+                  onLocationChange={updatePlacesLocation}
+                />
+              )}
+              {activeTab === 'news' && <NewsResults state={run} onRetry={fire} onOpenWeb={openWeb} />}
               {activeTab === 'images' && <ImageMasonry state={run} hue={hue} onRetry={fire} />}
               {activeTab === 'videos' && <VideoResults state={run} onRetry={fire} />}
               {activeTab === 'shopping' && (
@@ -200,6 +266,7 @@ export function SearchResultsPage({ query, level, onBack }: SearchResultsPagePro
                   places={sectionItems(run, 'places')}
                   hue={hue}
                   onRetry={fire}
+                  onOpenWeb={openWeb}
                 />
               )}
             </motion.div>

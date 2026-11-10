@@ -204,7 +204,7 @@ export function SourceCard({
               onSendToRon()
             }}
             className="p-2 rounded-lg bg-teal-500/20 hover:bg-teal-500/30 transition-colors"
-            title="Send to Ron"
+            title="Send to Ren"
           >
             <ChatBubbleLeftRightIcon className="w-4 h-4 text-teal-400" />
           </button>

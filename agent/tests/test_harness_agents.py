@@ -199,3 +199,71 @@ def test_stored_specialist_answers_over_native_a2a(table, echo_config, monkeypat
         server.should_exit = True
         thread.join(timeout=10)
         asyncio.run(host.aclose())
+
+
+def test_panel_session_talks_to_a_stored_specialist_directly(table, echo_config, monkeypatch):
+    """Agent picker: /chat with agent={kind: specialist} runs the stored harness agent as the session's agent."""
+    from strands.models import Model
+
+    from agent.api.core import harness_agents, threads
+    from agent.api.endpoints import chat
+    from agent.tests.test_panel_api import events, offline_api
+
+    class PanelModel(Model):
+        """The session's model (the picker's model step), not the config's echo module."""
+
+        def __init__(self):
+            self.prompts: list[str] = []
+
+        def get_config(self):
+            return {"model_id": "panel-picked"}
+
+        def update_config(self, **kwargs):
+            pass
+
+        async def structured_output(self, *args, **kwargs):
+            raise NotImplementedError
+            yield
+
+        async def stream(self, messages, tool_specs=None, system_prompt=None, **kwargs):
+            self.prompts.append(system_prompt or "")
+            text = "".join(block.get("text", "") for block in messages[-1]["content"])
+            yield {"messageStart": {"role": "assistant"}}
+            yield {"contentBlockDelta": {"contentBlockIndex": 0, "delta": {"text": f"specialist on {len(messages)} messages: {text}"}}}
+            yield {"contentBlockStop": {"contentBlockIndex": 0}}
+            yield {"messageStop": {"stopReason": "end_turn"}}
+
+    created = asyncio.run(create_harness_tools(OWNER, table=table, host=HarnessA2AHost(table))[0](config=echo_config))
+    model, built, projected = PanelModel(), [], []
+
+    async def current_table():
+        return table
+
+    def build_model(provider, model_id, effort=None, **kwargs):
+        built.append((provider, model_id, effort))
+        return model
+
+    async def flush(self):
+        projected.append((self.session_id, self.destination, len(self._messages or [])))
+
+    monkeypatch.setattr(harness_agents, "harness_table", current_table)
+    monkeypatch.setattr(chat, "build_model", build_model)
+    monkeypatch.setattr(threads.ThreadProjection, "flush", flush)
+
+    async def scenario():
+        async with offline_api(monkeypatch) as (client, manager, builds, agents, shell, threads_):
+            body = {"session_id": "specialist-direct", "user_id": OWNER, "provider": "openai", "model": "offline",
+                    "reasoning_effort": "high", "message": "brief me", "agent": {"kind": "specialist", "id": created["id"]}}
+            first = [event for event in events(await client.post("/chat", json=body)) if event["type"] == "text_delta"]
+            assert "specialist on 1 messages: brief me" in "".join(event["data"] for event in first)
+            assert builds == [], "the panel composition is not built for a specialist"
+            assert built == [("openai", "offline", "high")]
+            assert "Echo the task." in model.prompts[0], "the specialist's own instructions"
+            second = [event for event in events(await client.post("/chat", json={**body, "message": "and next"})) if event["type"] == "text_delta"]
+            assert "specialist on 3 messages: and next" in "".join(event["data"] for event in second), "same native session"
+            snapshot = (await client.get(f"/sessions/specialist-direct?user_id={OWNER}")).json()
+            assert snapshot["selection"]["agent"] == {"kind": "specialist", "id": created["id"]}
+            assert any(item[:2] == ("specialist-direct", "panel") for item in projected), "listed under Threads"
+            missing = await client.post("/chat", json={**body, "session_id": "other", "agent": {"kind": "specialist", "id": str(uuid.uuid4())}})
+            assert missing.status_code == 404
+    asyncio.run(scenario())

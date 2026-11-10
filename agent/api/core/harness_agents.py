@@ -56,7 +56,7 @@ def owner_uuid(user_id: str) -> str:
     try:
         return str(UUID(user_id))
     except (TypeError, ValueError):
-        raise SignInRequired("Sign in to Ron to save and recall specialist agents (guest sessions cannot store them).") from None
+        raise SignInRequired("Sign in to Ren to save and recall specialist agents (guest sessions cannot store them).") from None
 
 
 async def harness_table(httpx_client: httpx.AsyncClient | None = None) -> Any:
@@ -65,7 +65,7 @@ async def harness_table(httpx_client: httpx.AsyncClient | None = None) -> Any:
 
     url, key = os.getenv("SUPABASE_URL", ""), os.getenv("SUPABASE_SERVICE_ROLE_KEY", "")
     if not url or not key:
-        raise RuntimeError("Stored agents need SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY on the Ron API host.")
+        raise RuntimeError("Stored agents need SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY on the Ren API host.")
     options = AsyncClientOptions(httpx_client=httpx_client) if httpx_client is not None else None
     return (await acreate_client(url, key, options)).table(TABLE)
 
@@ -76,8 +76,14 @@ def agent_url(agent_id: str) -> str:
     return f"{panel_a2a_url()}/agents/{agent_id}"
 
 
-def build_specialist(config: dict[str, Any], owner_id: str, *, connect_mcp: bool = True) -> Any:
-    """``create_harness`` from a stored portable config (see the module docstring for what Ron adds)."""
+def build_specialist(config: dict[str, Any], owner_id: str, *, connect_mcp: bool = True, model: Any = None,
+                     plugins: list[Any] | None = None, **agent_kwargs: Any) -> Any:
+    """``create_harness`` from a stored portable config (see the module docstring for what Ron adds).
+
+    ``model`` (a built ``Model``) overrides the config's model; ``plugins`` are added as consumer plugins and
+    ``agent_kwargs`` go to ``Agent`` (the Agent Panel passes its session's ``agent_id``, ``session_manager`` and
+    ``callback_handler`` here when the user talks to the specialist directly).
+    """
     from agent.api.core import config as app_config
     from agent.api.core.a2a_tools import a2a_tools
     from agent.api.core.brave_tools import brave_tools
@@ -92,14 +98,37 @@ def build_specialist(config: dict[str, Any], owner_id: str, *, connect_mcp: bool
            "mcpServers": {name: value for name, value in servers.items() if name not in browsers} if connect_mcp else {}}
     kwargs = harness_agent_kwargs_from_config(run, base_dir=PROJECT_TOOLS_DIR)
     provider, _, model_id = str(config["model"]).partition("/")
-    if provider in PROVIDERS and model_id and not config.get("modelModule"):
+    if model is not None:
+        kwargs["model"] = model
+    elif provider in PROVIDERS and model_id and not config.get("modelModule"):
         kwargs["model"] = build_model(provider, model_id)  # type: ignore[arg-type]
     clients = [browser_client_factory(browsers[name])() for name in servers if name in browsers] if connect_mcp else []
     existing = list(kwargs.get("tools", []))
     seen_names = {getattr(t, "tool_name", None) for t in existing if getattr(t, "tool_name", None)}
     extra_brave = [t for t in brave_tools() if t.tool_name not in seen_names]
-    kwargs["tools"] = [*existing, *clients, *extra_brave, *a2a_tools()]
-    return harness_factory(callback_handler=None, **kwargs)
+    kwargs["tools"] = [*existing, *clients, *extra_brave, *a2a_tools(), *context_search_tools(owner_id)]
+    if plugins:
+        kwargs["plugins"] = [*(kwargs.get("plugins") or []), *plugins]
+    return harness_factory(**{"callback_handler": None, **kwargs, **agent_kwargs})
+
+
+def context_search_tools(owner_id: str) -> list[AgentTool]:
+    """Read-only ``search_context`` over the owner's Context widget items (Markdown files).
+
+    Native ``MemoryManager`` tools over the same ``FileMemoryStore`` the panel's memory registers; named
+    apart from the harness's own ``search_memory`` (its per-agent memory dir).
+    """
+    from strands.memory import MemoryManager
+
+    from agent.api.core.context_agent import context_store
+
+    manager = MemoryManager(
+        stores=[context_store(owner_id)], add_tool_config=False, injection=False,
+        search_tool_config={"name": "search_context", "description": (
+            "Search the context your user collected for you (pages, articles, highlights, chat threads, "
+            "project documents as Markdown, screenshots and recordings by title). Returns full Markdown entries.")},
+    )
+    return manager.tools
 
 
 class HarnessA2AHost:
@@ -183,11 +212,11 @@ def create_harness_tools(user_id: str, *, table: Any = None, host: HarnessA2AHos
 
         The config is the harness's own agent definition (camelCase JSON; omitted keys take the harness
         defaults): name, description (its A2A agent card), instructions, model ("<provider>/<model>":
-        Ron's providers perplexity/, xai/, mistral/, gemini/, openai/, anthropic/, or a harness
-        string such as bedrock/... or google/...; omitted = Ron's default provider),
+        Ren's providers perplexity/, xai/, mistral/, gemini/, openai/, anthropic/, or a harness
+        string such as bedrock/... or google/...; omitted = Ren's default provider),
         effort, tools (library tools as {"module": "./<path from tool_catalog describe>",
         "export": "<tool name>"}), skills (Agent Skill paths from list_learned_skills), mcpServers
-        (user_browser / cloud_browser for Ron's browser, or {"url": "https://..."} servers),
+        (user_browser / cloud_browser for Ren's browser, or {"url": "https://..."} servers),
         builtinTools, builtinPlugins and memory. The specialist is saved to the user's account and
         served over A2A at the returned a2a_url: delegate with a2a_send_message(message_text=...,
         target_agent_url=a2a_url), now or in any later session (list_harness_agents recalls it).
@@ -232,5 +261,5 @@ def create_harness_tools(user_id: str, *, table: Any = None, host: HarnessA2AHos
     return [create_harness, list_harness_agents]
 
 
-__all__ = ["HarnessA2AHost", "SignInRequired", "agent_url", "build_specialist", "create_harness_tools",
+__all__ = ["HarnessA2AHost", "SignInRequired", "agent_url", "build_specialist", "context_search_tools", "create_harness_tools",
            "harness_a2a_host", "harness_table", "owner_uuid"]

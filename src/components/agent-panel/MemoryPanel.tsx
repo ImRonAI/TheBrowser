@@ -121,7 +121,7 @@ export function MemoryPanel({ userId, onClose }: { userId: string; onClose: () =
       {adding
         ? <div className="mt-2 space-y-1.5 px-1">
             <Input aria-label="Subject" placeholder="Subject (e.g. Coffee order)" value={subject} onChange={(event) => setSubject(event.target.value)} className="h-8 text-xs" />
-            <Textarea aria-label="Memory" placeholder="What Ron should remember" value={body} onChange={(event) => setBody(event.target.value)} rows={3} className="text-xs" />
+            <Textarea aria-label="Memory" placeholder="What Ren should remember" value={body} onChange={(event) => setBody(event.target.value)} rows={3} className="text-xs" />
             <div className="flex gap-1">
               <Button type="button" size="sm" disabled={busy} onClick={() => void add()}>Save to {label(active)}</Button>
               <Button type="button" size="sm" variant="ghost" onClick={() => setAdding(false)}>Cancel</Button>

@@ -34,7 +34,7 @@ export interface Person {
 }
 
 /** Ron, the built-in agent. A fixed UUID so it fits the uuid[] assignees column. Mirrors RON_ASSIGNEE_ID in agent/api/core/projects.py. */
-export const RON_ASSIGNEE: Person = { id: '004d28ef-3a52-540d-96ea-ff0627040b8e', name: 'Ron (agent)', initials: 'R' }
+export const RON_ASSIGNEE: Person = { id: '004d28ef-3a52-540d-96ea-ff0627040b8e', name: 'Ren (agent)', initials: 'R' }
 
 export interface ProjectTypeScheme {
   key: ProjectTypeKey
@@ -72,6 +72,8 @@ export interface Issue {
   version: number
   customFields: Record<string, unknown>
   workProducts: Record<string, unknown>[]
+  /** The issue's Context section (`issues.context`): entries sent from the Context widget. */
+  context: Record<string, unknown>[]
   projectId: string
   type: IssueTypeKey
   parentId?: string | null

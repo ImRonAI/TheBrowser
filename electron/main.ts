@@ -1,4 +1,5 @@
-import { app, BrowserWindow, clipboard, desktopCapturer, dialog, ipcMain, Menu, NativeImage, nativeTheme, session, shell, systemPreferences, WebContentsView } from 'electron'
+import { app, BrowserWindow, clipboard, desktopCapturer, dialog, ipcMain, Menu, NativeImage, nativeImage, nativeTheme, session, shell, systemPreferences, WebContentsView } from 'electron'
+import { existsSync } from 'node:fs'
 import { createServer, type Server } from 'node:http'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -79,6 +80,13 @@ function sendInterestAction(action: InterestAction): void {
   mainWindow?.webContents.send('interests:action', action)
 }
 
+/** An item the user chose to add to their Ren context from a page's context menu. */
+type ContextAddPayload = { kind: 'selection' | 'link' | 'image' | 'video' | 'screenshot'; title: string; url: string; text?: string }
+
+function sendContextAdd(payload: ContextAddPayload): void {
+  mainWindow?.webContents.send('context:add', payload)
+}
+
 let mainWindow: BrowserWindow | null = null
 let currentTheme: 'light' | 'dark' | 'glass' | 'system' = 'light'
 let isAgentPanelOpen = false
@@ -136,7 +144,7 @@ function updateWebContentsViewBounds(): void {
  * Global chrome shortcuts. They must work while a website (a WebContentsView)
  * has keyboard focus, where the renderer never sees the keydown, so they are
  * read from `before-input-event` on the shell and on every tab view:
- *   ⌘/Ctrl+J  Ask Ron (with the page selection when there is one)
+ *   ⌘/Ctrl+J  Ask Ren (with the page selection when there is one)
  *   ⌘/Ctrl+K  Search (opens the sidebar and focuses its search field)
  *   ⌘/Ctrl+\  Toggle the sidebar
  *   ⌘/Ctrl+L  Focus the address bar
@@ -210,7 +218,7 @@ function attachPageContextMenu(tab: TabRecord): void {
         const x = Math.round(bounds.x + mouse.x)
         const y = Math.round(bounds.y + mouse.y)
         Menu.buildFromTemplate([{
-          label: 'Ask Ron about selection',
+          label: 'Ask Ren about selection',
           click: () => {
             if (view.webContents.isDestroyed() || tabsManager.activeTabId !== tab.id ||
                 view.webContents.getURL() !== sourceUrl) return
@@ -250,8 +258,19 @@ function attachPageContextMenu(tab: TabRecord): void {
       })
     }
     template.push({ type: 'separator' })
+    // "Add to Ren context": the shell renderer saves the item (POST /context/items) and tells the Context Agent.
+    const pageUrl = tab.url || view.webContents.getURL()
+    const pageTitle = tab.title || view.webContents.getTitle()
+    const contextItems: Electron.MenuItemConstructorOptions[] = []
+    if (selection) contextItems.push({ label: 'Highlighted text', click: () => sendContextAdd({ kind: 'selection', title: pageTitle, text: selection, url: pageUrl }) })
+    if (params.linkURL && /^https?:/i.test(params.linkURL)) contextItems.push({ label: 'Link', click: () => sendContextAdd({ kind: 'link', title: params.linkText?.trim() || params.linkURL, url: params.linkURL }) })
+    if (params.mediaType === 'image' && /^https?:/i.test(params.srcURL)) contextItems.push({ label: 'Image', click: () => sendContextAdd({ kind: 'image', title: params.titleText?.trim() || params.altText?.trim() || `Image from ${pageTitle}`, url: params.srcURL, text: `Image on ${pageUrl}` }) })
+    if (params.mediaType === 'video' && /^https?:/i.test(params.srcURL || pageUrl)) contextItems.push({ label: 'Video', click: () => sendContextAdd({ kind: 'video', title: `Video from ${pageTitle}`, url: /^https?:/i.test(params.srcURL) ? params.srcURL : pageUrl, text: `Video on ${pageUrl}` }) })
+    if (/^https?:/i.test(pageUrl)) contextItems.push({ label: 'This page', click: () => sendContextAdd({ kind: 'link', title: pageTitle, url: pageUrl }) })
+    contextItems.push({ label: 'Screenshot of this page', click: () => sendContextAdd({ kind: 'screenshot', title: pageTitle, url: pageUrl }) })
+    template.push({ label: 'Add to Ren context', submenu: contextItems })
     template.push({
-      label: 'Ask Ron?',
+      label: 'Ask Ren',
       click: () => {
         const bounds = calculateWebContentsViewBounds()
         mainWindow?.webContents.send('agent:ask-ron', {
@@ -463,7 +482,7 @@ class TabsManager {
         try { tab.title = new URL(url).searchParams.get('title') || 'Article' }
         catch { tab.title = 'Article' }
       }
-      else tab.title = 'Ron'
+      else tab.title = 'Ren'
 
       this.emitTabsUpdated()
       mainWindow?.webContents.send('browser:external-mode', false)
@@ -802,7 +821,7 @@ async function createWindow() {
   creatingMainWindow = true
   try {
     win = new BrowserWindow({
-      title: 'Ron Browser',
+      title: 'Ren',
       width: 1400,
       height: 900,
       minWidth: 800,
@@ -814,15 +833,18 @@ async function createWindow() {
       trafficLightPosition: { x: 16, y: 15 },
       transparent: true,
       backgroundColor: '#00000000',
-      // No `vibrancy` here: the Glass theme mounts native Liquid Glass via
-      // electron-liquid-glass, and vibrancy on top of it renders blurry
-      // (see electron/window-material.ts). The renderer's `set-theme` call
-      // picks the material once the page has loaded.
+      // No `vibrancy` here: the renderer's `set-theme` call picks the material once the
+      // page has loaded (Glass: setVibrancy, see electron/window-material.ts). Keep the
+      // material active when the window loses focus, or the glass turns into an opaque
+      // grey every time another app is in front.
+      visualEffectState: 'active',
       webPreferences: {
         preload: join(__dirname, 'preload.js'),
         nodeIntegration: false,
         contextIsolation: true,
-        sandbox: true
+        sandbox: true,
+        // Chromium's built-in PDF viewer is an internal plugin; without this a PDF embed block renders blank.
+        plugins: true
       }
     })
   } finally {
@@ -835,6 +857,16 @@ async function createWindow() {
   win.webContents.setWindowOpenHandler(({ url }) => {
     if (/^https?:\/\//i.test(url)) tabsManager.switch(tabsManager.create(undefined, url).id)
     return { action: 'deny' }
+  })
+  // Electron security checklist §13 (limit navigation): the chrome window only ever shows the app. A frame in
+  // it that tries to take over the window (an unsandboxed PDF viewer frame whose link serves a page, a
+  // `target=_top` link) is refused; a web link opens as an app tab instead, as window.open does above.
+  win.webContents.on('will-navigate', (event) => {
+    let url: URL
+    try { url = new URL(event.url) } catch { event.preventDefault(); return }
+    if (url.protocol === 'file:' || url.origin === process.env.ELECTRON_RENDERER_URL) return
+    event.preventDefault()
+    if (url.protocol === 'https:' || url.protocol === 'http:') tabsManager.switch(tabsManager.create(undefined, url.href).id)
   })
 
   const allowedPermissions = new Set([
@@ -916,9 +948,9 @@ async function createWindow() {
         const sources = await desktopCapturer.getSources({ types: ['screen', 'window'], thumbnailSize: { width: 0, height: 0 } })
         if (!sources.length || win.isDestroyed()) { callback({}); return }
         const choice = await dialog.showMessageBox(win, {
-          type: 'question', title: 'Teach Ron a skill',
-          message: 'Choose what to share with the agent',
-          detail: 'The selected screen or window is sent to Gemini while you demonstrate the workflow.',
+          type: 'question', title: 'Share your screen with Ren',
+          message: 'Choose what to share with Ren',
+          detail: 'Ren sees the selected screen or window only while you share it (a live session, a lesson or a screen recording).',
           buttons: ['Cancel', ...sources.map((source) => source.name)],
           cancelId: 0, defaultId: 0, noLink: true,
         })
@@ -970,7 +1002,18 @@ function openMainWindow(): Promise<void> {
   return openingMainWindow
 }
 
-app.whenReady().then(() => openMainWindow())
+/** The Ren mark in the macOS Dock: dev and `npm run start` run the stock Electron bundle, whose icon is Electron's. */
+function setDockIcon() {
+  if (process.platform !== 'darwin' || !app.dock) return
+  const file = [join(app.getAppPath(), 'public', 'ren-app-icon.png'), join(__dirname, '../renderer/ren-app-icon.png')]
+    .find((candidate) => existsSync(candidate))
+  if (file) app.dock.setIcon(nativeImage.createFromPath(file))
+}
+
+app.whenReady().then(() => {
+  setDockIcon()
+  return openMainWindow()
+})
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()
@@ -998,7 +1041,7 @@ ipcMain.handle('auth:oauth-redirect', async (event) => {
       return
     }
     response.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' })
-      .end('<!doctype html><meta charset="utf-8"><title>Ron</title><p style="font:16px system-ui;margin:3rem">Sign-in finished. Returning to Ron.</p>')
+      .end('<!doctype html><meta charset="utf-8"><title>Ren</title><p style="font:16px system-ui;margin:3rem">Sign-in finished. Returning to Ren.</p>')
     server.close()
     if (oauthServer === server) oauthServer = null
     if (mainWindow && !mainWindow.isDestroyed()) {

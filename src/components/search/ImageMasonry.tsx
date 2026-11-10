@@ -3,6 +3,7 @@
  * Agent API's own image_search_results. Agent finds carry a small ember dot.
  * Hover reveals the caption (title + dimensions); clicking opens the source page.
  */
+import { useState } from 'react'
 import { motion, useReducedMotion } from 'framer-motion'
 import { mergedImages, type MergedImage, type SearchRunState } from '@/lib/search-api'
 import { EmptyState, MasonrySkeleton, SourceErrorNotice } from './primitives'
@@ -10,6 +11,11 @@ import { openResult } from './open-result'
 
 function Tile({ image, index }: { image: MergedImage; index: number }) {
   const reduced = useReducedMotion()
+  const [broken, setBroken] = useState(false)
+  // Hotlink-blocked or expired third-party images drop out instead of showing a broken box.
+  if (broken) return null
+  // Known dimensions reserve the tile's box before the lazy image loads, so the columns do not reflow.
+  const sized = Boolean(image.width && image.height && image.width > 0 && image.height > 0)
   return (
     <motion.button
       type="button"
@@ -24,7 +30,10 @@ function Tile({ image, index }: { image: MergedImage; index: number }) {
         src={image.url}
         alt={image.title || ''}
         loading="lazy"
-        className="w-full object-cover transition-transform duration-500 ease-smooth motion-safe:group-hover:scale-[1.03]"
+        width={sized ? image.width! : undefined}
+        height={sized ? image.height! : undefined}
+        onError={() => setBroken(true)}
+        className="h-auto w-full object-cover transition-transform duration-500 ease-smooth motion-safe:group-hover:scale-[1.03]"
       />
       {image.origin === 'agent' && (
         <span className="absolute left-2 top-2 h-2 w-2 rounded-full bg-accent ring-2 ring-white/80 dark:bg-accent-light dark:ring-black/40" title="Agent find" aria-label="Agent find" role="img" />

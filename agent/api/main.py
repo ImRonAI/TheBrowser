@@ -17,6 +17,7 @@ from agent.api.core.panel_storage import get_panel_storage
 from agent.api.core.tool_observation import setup_evals_exporter
 from agent.api.endpoints import chat
 from agent.api.endpoints import articles
+from agent.api.endpoints import attachments as attachment_endpoints
 from agent.api.endpoints import projects
 from agent.api.endpoints import discover
 from agent.api.endpoints import search
@@ -25,6 +26,8 @@ from agent.api.endpoints import memory
 from agent.api.endpoints import teaching, teaching_observe
 from agent.api.endpoints import tool_repairs
 from agent.api.endpoints import music
+from agent.api.endpoints import context as context_endpoints
+from agent.api.endpoints import build as build_endpoints
 from agent.api.core.harness_agents import harness_a2a_host
 from agent.api.core.teaching import get_teaching_service, mcp_app as skills_mcp_app
 
@@ -85,7 +88,7 @@ async def lifespan(app: FastAPI):
                         # Native A2AServer constructs a metadata agent for its card.
                         # Actual contexts each own a fresh core tool set.
                         tools_factory=lambda context: [] if context == "__agent_card__" else build_core_tools(chat.PROJECT_TOOLS_DIR),
-                        name="Ron", description="Ron browser agent with core tools",
+                        name="Ren", description="Ren browser agent with core tools",
                         system_prompt=chat.AGENT_SYSTEM_PROMPT,
                     )
                     integration = await asyncio.to_thread(
@@ -139,6 +142,7 @@ app.add_middleware(
 
 app.include_router(chat.router, tags=["chat"])
 app.include_router(articles.router, tags=["articles"])
+app.include_router(attachment_endpoints.router, tags=["attachments"])
 app.include_router(projects.router, tags=["projects"])
 app.include_router(discover.router, tags=["discover"])
 app.include_router(search.router, tags=["search"])
@@ -148,6 +152,9 @@ app.include_router(teaching.router, tags=["teaching"])
 app.include_router(teaching_observe.router, tags=["teaching"])
 app.include_router(tool_repairs.router, tags=["tool-repairs"])
 app.include_router(music.router, tags=["music"])
+app.include_router(context_endpoints.router, tags=["context"])
+# Build Agent workbench (files, git, preview of the Build destination's workspace); loopback-only.
+app.include_router(build_endpoints.router, tags=["build"])
 app.mount("/skills/mcp", skills_mcp_app)
 # Stored harness specialists over native A2A (<PANEL_A2A_URL>/agents/<id>). Mounted before the
 # lifespan's /a2a mount so this prefix wins; loopback-only like /a2a (never on the ngrok allowlist).
@@ -164,7 +171,7 @@ async def health_check():
 
 @app.get("/config")
 async def get_config():
-    from agent.api.core.panel_agent import PROVIDERS, NATIVE_PROVIDER_CAPABILITIES, configured_providers, provider_api_key
+    from agent.api.core.panel_agent import NATIVE_PROVIDER_CAPABILITIES, chat_providers, configured_providers, provider_api_key
 
     ready = configured_providers()
     return {
@@ -182,7 +189,8 @@ async def get_config():
             "tool_execution": ["concurrent", "sequential"],
             "a2a": getattr(app.state, "panel_a2a", None) is not None,
         },
-        "providers": {provider: bool(provider_api_key(provider)) for provider in PROVIDERS},
+        # Key presence for the providers offered to chat; one outside RON_CHAT_PROVIDERS is absent, so the picker hides it.
+        "providers": {provider: bool(provider_api_key(provider)) for provider in chat_providers()},
         "provider_capabilities": NATIVE_PROVIDER_CAPABILITIES,
         "runtime": {"sdk": "strands", "session_settings_immutable": True, "server_owned_tasks": True},
     }

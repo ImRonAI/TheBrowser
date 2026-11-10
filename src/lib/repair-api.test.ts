@@ -56,7 +56,7 @@ test('notifications fire once per state transition and never for routine progres
   const investigating: RepairInvestigation = { tool: 'flaky', rev: 'r1', state: 'investigating', demonstrations: [] }
   assert.equal(repairNotification(undefined, investigating), null)
   const approval: RepairInvestigation = { ...investigating, state: 'approval', status: 'verified' }
-  assert.deepEqual(repairNotification(investigating, approval), { title: 'Repair ready: flaky', body: 'Ron verified a fix in isolation. Open Ron to review and approve it.' })
+  assert.deepEqual(repairNotification(investigating, approval), { title: 'Repair ready: flaky', body: 'Ren verified a fix in isolation. Open Ren to review and approve it.' })
   assert.equal(repairNotification(approval, approval), null)
   const applied: RepairInvestigation = { ...approval, state: 'done', status: 'active', applied: true }
   assert.equal(repairNotification(approval, applied)?.title, 'Repair applied: flaky')

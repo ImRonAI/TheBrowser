@@ -18,7 +18,7 @@ export interface MemoryEntry { store: string; key: string; content: string }
 
 type Session = { user: { id: string }; access_token: string } | null
 
-export const SIGN_IN_MESSAGE = 'Sign in to Ron to see and edit what it remembers.'
+export const SIGN_IN_MESSAGE = 'Sign in to Ren to see and edit what it remembers.'
 
 export function memoryHeaders(userId: string, session: Session): Record<string, string> {
   if (!session || session.user.id !== userId) throw new Error(SIGN_IN_MESSAGE)
@@ -77,6 +77,6 @@ export function composeEntry(subject: string, body: string): string {
   const heading = subject.trim()
   if (!heading) throw new Error('Give the memory a subject.')
   const text = body.trim()
-  if (!text) throw new Error('Write what Ron should remember.')
+  if (!text) throw new Error('Write what Ren should remember.')
   return `# ${heading}\n${text}`
 }

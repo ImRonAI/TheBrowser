@@ -1,5 +1,5 @@
 import { Menu, MenuButton, MenuItem, MenuItems } from '@headlessui/react'
-import { Check, Monitor, Moon, Sun, type LucideIcon } from 'lucide-react'
+import { Monitor, Moon, Sun, type LucideIcon } from 'lucide-react'
 import { useTheme } from '@/hooks/useTheme'
 import { THEME_OPTIONS, type ThemeName } from '@/lib/theme'
 import { cn } from '@/utils/cn'
@@ -22,16 +22,17 @@ const ICONS: Record<ThemeName, LucideIcon | typeof GlassIcon> = {
 }
 
 const HINTS: Record<ThemeName, string> = {
-  light: 'Warm paper',
-  dark: 'Graphite',
-  glass: 'Translucent shell over your desktop',
-  system: 'Follow macOS appearance',
+  light: 'Crisp paper, ink type',
+  dark: 'Blue-black ink, easy on the eyes',
+  glass: 'Blue glass over your desktop. Websites stay opaque.',
+  system: 'Follows your system appearance',
 }
 
 /**
- * Appearance menu in the toolbar: Light, Dark, Glass and System. Glass makes the
- * browser shell (sidebar, toolbar, tab strip, panels, Ron's own pages) translucent
- * over native macOS Liquid Glass (vibrancy before macOS 26); websites stay opaque.
+ * Appearance control in the toolbar: Light, Dark, Glass and System, laid out as a segmented
+ * control inside the menu (same menu, radio items and keyboard handling as before). Glass makes
+ * the browser shell (sidebar, toolbar, tab strip, panels, Ren's own pages) translucent over native
+ * macOS Liquid Glass (vibrancy before macOS 26); websites stay opaque.
  */
 export function ThemeToggle() {
   const { theme, setTheme } = useTheme()
@@ -44,46 +45,50 @@ export function ThemeToggle() {
         aria-label={label}
         title={label}
         className={cn(
-          'flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg transition-colors duration-150',
-          'text-ink-secondary hover:bg-surface-200/60 hover:text-ink data-[open]:bg-surface-200/60 data-[open]:text-ink',
-          'dark:text-ink-inverse-secondary dark:hover:bg-surface-800 dark:hover:text-ink-inverse dark:data-[open]:bg-surface-800 dark:data-[open]:text-ink-inverse',
+          'flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg transition-colors duration-150 ease-out',
+          'text-ink-secondary hover:bg-ink/[0.06] hover:text-ink data-[open]:bg-ink/[0.07] data-[open]:text-ink',
+          'dark:text-ink-inverse-secondary dark:hover:bg-ink-inverse/[0.07] dark:hover:text-ink-inverse dark:data-[open]:bg-ink-inverse/[0.09] dark:data-[open]:text-ink-inverse',
         )}
       >
-        <Current className="h-[17px] w-[17px]" strokeWidth={1.75} />
+        <Current className="h-4 w-4" strokeWidth={1.75} />
       </MenuButton>
       <MenuItems
         transition
         anchor={{ to: 'bottom end', gap: 8 }}
         className={cn(
-          'z-[9999] w-60 origin-top-right rounded-xl p-1 ron-popover',
-          'border border-surface-200 bg-surface-0 dark:border-surface-700 dark:bg-surface-850',
-          'shadow-[0_18px_48px_-18px_rgb(26_25_23/0.28)] focus:outline-none',
-          'transition duration-150 ease-smooth data-[closed]:-translate-y-1 data-[closed]:scale-[0.98] data-[closed]:opacity-0',
+          'z-[9999] w-[324px] origin-top-right rounded-xl border border-border bg-popover p-2 text-popover-foreground shadow-float focus:outline-none',
+          'transition duration-150 ease-out data-[closed]:-translate-y-1 data-[closed]:scale-[0.98] data-[closed]:opacity-0',
         )}
       >
-        <p className="px-2.5 pb-1 pt-1.5 text-[11px] font-medium text-ink-muted dark:text-ink-inverse-muted">Appearance</p>
-        {THEME_OPTIONS.map((option) => {
-          const Icon = ICONS[option.id]
-          const active = theme === option.id
-          return (
-            <MenuItem key={option.id}>
-              <button
-                type="button"
-                onClick={() => setTheme(option.id)}
-                aria-checked={active}
-                role="menuitemradio"
-                className="flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-left transition-colors data-[focus]:bg-surface-100 dark:data-[focus]:bg-surface-800"
-              >
-                <Icon className="h-4 w-4 flex-shrink-0 text-ink-secondary dark:text-ink-inverse-secondary" strokeWidth={1.75} />
-                <span className="min-w-0 flex-1">
-                  <span className="block text-[13px] font-medium text-ink dark:text-ink-inverse">{option.label}</span>
-                  <span className="block truncate text-[11.5px] text-ink-muted dark:text-ink-inverse-muted">{HINTS[option.id]}</span>
-                </span>
-                {active && <Check className="h-3.5 w-3.5 flex-shrink-0 text-accent dark:text-accent-light" strokeWidth={2.5} />}
-              </button>
-            </MenuItem>
-          )
-        })}
+        <p className="px-1 pb-2 pt-0.5 font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground">Appearance</p>
+        <div className="flex gap-0.5 rounded-full bg-surface-100 p-0.5 dark:bg-surface-950/60">
+          {THEME_OPTIONS.map((option) => {
+            const Icon = ICONS[option.id]
+            const active = theme === option.id
+            return (
+              <MenuItem key={option.id}>
+                <button
+                  type="button"
+                  onClick={() => setTheme(option.id)}
+                  aria-checked={active}
+                  role="menuitemradio"
+                  title={HINTS[option.id]}
+                  className={cn(
+                    'flex h-8 min-w-0 flex-1 items-center justify-center gap-1 rounded-full px-1.5 text-[12px] font-medium transition-colors duration-150 ease-out',
+                    active
+                      ? 'bg-surface-0 text-ink shadow-sm dark:bg-surface-700 dark:text-ink-inverse'
+                      : 'text-ink-secondary data-[focus]:bg-surface-0/70 data-[focus]:text-ink dark:text-ink-inverse-secondary dark:data-[focus]:bg-surface-700/60 dark:data-[focus]:text-ink-inverse',
+                    'data-[focus]:ring-2 data-[focus]:ring-inset data-[focus]:ring-blurple-600/60 dark:data-[focus]:ring-blurple-400/60',
+                  )}
+                >
+                  <Icon className={cn('h-3.5 w-3.5 flex-shrink-0', active && 'text-volt')} strokeWidth={1.75} />
+                  <span className="truncate">{option.label}</span>
+                </button>
+              </MenuItem>
+            )
+          })}
+        </div>
+        <p className="px-1 pb-0.5 pt-2 text-[12px] leading-snug text-muted-foreground">{HINTS[theme]}</p>
       </MenuItems>
     </Menu>
   )

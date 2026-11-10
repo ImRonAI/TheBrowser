@@ -1,105 +1,22 @@
 import { memo } from 'react'
-import { motion } from 'framer-motion'
-
 
 /**
- * PageBackground — SuperAgent-grade ambient effects
+ * PageBackground: the quiet texture behind full-page surfaces (Execute, Projects).
  *
- * Provides NeuralGridBackground + AmbientBreathingGlow matching the
- * SuperAgentInterface aesthetic for all full-page surfaces.
+ * A static, colourless dot grid that fades out down the page. It never moves and never takes a
+ * colour (docs/brand.md: no decorative pulsing; volt is the only colour). In Glass it is absent:
+ * there the desktop showing through the window is the texture.
  */
-
-// ─────────────────────────────────────────────────────────────────────────────
-// NeuralGridBackground — same as SuperAgentInterface
-// ─────────────────────────────────────────────────────────────────────────────
-
-const NeuralGridBackground = memo(function NeuralGridBackground() {
+export const PageBackground = memo(function PageBackground() {
   return (
-    <div className="absolute inset-0 pointer-events-none overflow-hidden">
-      {/* Light mode grid */}
-      <div className="dark:hidden">
-        <div
-          className="absolute top-0 right-0 w-[600px] h-[600px] bg-[radial-gradient(circle_at_top_right,rgba(194,106,65,0.04)_0%,transparent_50%)]"
-        />
-        <div
-          className="absolute bottom-0 left-0 w-[500px] h-[500px] bg-[radial-gradient(circle_at_bottom_left,rgba(169,83,46,0.03)_0%,transparent_50%)]"
-        />
-        <div
-          className="absolute inset-0 opacity-[0.02] bg-[linear-gradient(rgba(0,0,0,0.1)_1px,transparent_1px),linear-gradient(90deg,rgba(0,0,0,0.1)_1px,transparent_1px)] bg-[length:48px_48px]"
-        />
-      </div>
-
-      {/* Dark mode — Neural grid dots */}
-      <div className="hidden dark:block">
-        <svg className="w-full h-full opacity-[0.06]">
-          {Array.from({ length: 100 }).map((_, i) => (
-            <circle
-              key={i}
-              cx={`${(i % 10) * 10 + 5}%`}
-              cy={`${Math.floor(i / 10) * 10 + 5}%`}
-              r={1.5}
-              className="fill-violet-400"
-              style={{
-                opacity: 0.3,
-              }}
-            />
-          ))}
-        </svg>
-      </div>
-    </div>
+    <div
+      aria-hidden
+      className={[
+        'pointer-events-none absolute inset-0 [html.glass_&]:hidden',
+        'bg-[radial-gradient(rgb(11_12_23/0.075)_1px,transparent_1.2px)] bg-[length:22px_22px]',
+        'dark:bg-[radial-gradient(rgb(255_255_255/0.055)_1px,transparent_1.2px)]',
+        '[mask-image:linear-gradient(to_bottom,black,transparent_520px)]',
+      ].join(' ')}
+    />
   )
 })
-
-// ─────────────────────────────────────────────────────────────────────────────
-// AmbientBreathingGlow — same as SuperAgentInterface
-// ─────────────────────────────────────────────────────────────────────────────
-
-const AmbientBreathingGlow = memo(function AmbientBreathingGlow() {
-  return (
-    <div className="absolute inset-0 pointer-events-none overflow-hidden hidden dark:block">
-      {/* Core glow */}
-      <motion.div
-        className="absolute top-1/4 right-1/4 w-[600px] h-[400px]"
-        animate={{ scale: [1, 1.05, 1], opacity: [0.06, 0.09, 0.06] }}
-        transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
-        style={{
-          background: 'radial-gradient(ellipse, rgba(194,106,65,0.12), transparent 70%)',
-          filter: 'blur(80px)'
-        }}
-      />
-      {/* Middle ring */}
-      <motion.div
-        className="absolute bottom-1/4 left-1/4 w-[500px] h-[500px]"
-        animate={{ scale: [1, 1.03, 1], opacity: [0.04, 0.07, 0.04] }}
-        transition={{ duration: 5, repeat: Infinity, ease: "easeInOut", delay: 0.5 }}
-        style={{
-          background: 'radial-gradient(ellipse, rgba(169,83,46,0.08), transparent 70%)',
-          filter: 'blur(100px)'
-        }}
-      />
-      {/* Outer haze */}
-      <motion.div
-        className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[1000px] h-[600px]"
-        animate={{ scale: [1, 1.02, 1], opacity: [0.02, 0.04, 0.02] }}
-        transition={{ duration: 6, repeat: Infinity, ease: "easeInOut", delay: 1 }}
-        style={{
-          background: 'radial-gradient(ellipse, rgba(194,106,65,0.06), transparent 70%)',
-          filter: 'blur(120px)'
-        }}
-      />
-    </div>
-  )
-})
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Main export
-// ─────────────────────────────────────────────────────────────────────────────
-
-export function PageBackground() {
-  return (
-    <>
-      <NeuralGridBackground />
-      <AmbientBreathingGlow />
-    </>
-  )
-}

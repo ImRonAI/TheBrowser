@@ -11,7 +11,7 @@ import { RonDraftChat, type DraftAgent } from './RonDraftChat'
 
 const SUGGESTIONS = ['Draft this page from its title', 'Add a workflow of the process', 'Summarize this page', 'Turn this into action items']
 
-const failure = (cause: unknown) => (cause instanceof Error ? cause.message : 'Ron could not be reached.')
+const failure = (cause: unknown) => (cause instanceof Error ? cause.message : 'Ren could not be reached.')
 
 /** Where the Document Agent's conversation is saved: with its page (`document_conversations`). */
 export interface PageConversations {
@@ -42,7 +42,7 @@ function useDocumentAgent(editor: Editor | null, target: () => RonWritingTarget,
         let conversation: DocumentConversation | null = null
         if (conversations) {
           const pageId = conversations.documentId ?? await conversations.ensureDocumentId()
-          if (!pageId) throw new Error('This page could not be saved, so Ron’s conversation could not be saved with it.')
+          if (!pageId) throw new Error('This page could not be saved, so Ren’s conversation could not be saved with it.')
           conversation = await createDocumentConversation(conversations.request, pageId, ask, goal)
         }
         session.current = { sessionId: conversation?.sessionId ?? ronSessionId('doc', nanoid(12)), conversation }

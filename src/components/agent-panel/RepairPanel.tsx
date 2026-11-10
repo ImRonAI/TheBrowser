@@ -29,7 +29,7 @@ export function repairHeadline(repair: RepairInvestigation): string {
   if (repair.declined || repair.status === 'declined') return `${repair.tool}: repair declined`
   if (repair.status === 'cancelled') return `${repair.tool}: investigation cancelled`
   if (repair.status === 'blocked') return `${repair.tool}: repair blocked — no isolated environment`
-  if (repair.status === 'needs_maintainer') return `${repair.tool}: the defect is in Ron, not the tool`
+  if (repair.status === 'needs_maintainer') return `${repair.tool}: the defect is in Ren, not the tool`
   if (repair.status === 'not_reproducible') return `${repair.tool}: the failure did not reproduce`
   if (repair.status === 'verified') return `${repair.tool}: repair verified but not applied`
   return `${repair.tool}: repair ${repair.status ?? 'failed'}`
@@ -38,14 +38,14 @@ export function repairHeadline(repair: RepairInvestigation): string {
 function description(repair: RepairInvestigation): string {
   const applied = Boolean(repair.applied) || repair.status === 'active'
   const parts = [repair.summary || (repair.state === 'investigating'
-    ? "Ron's fixer is reproducing the failure in an isolated copy of Ron; nothing changes until you approve."
+    ? "Ren's fixer is reproducing the failure in an isolated copy of Ren; nothing changes until you approve."
     : 'No summary was produced.')]
   if (repair.sandbox) parts.push(`Sandbox: ${repair.sandbox}.`)
   if (repair.repairKind === 'adapter') parts.push('Repair kind: adapter (wraps the tool for your account; shared code untouched).')
   if (repair.repairKind === 'server') parts.push('Repair kind: browser server (your browser server restarts on the repaired copy when applied).')
   if (repair.status === 'needs_maintainer') parts.push('The proposed patch and test are stored in the revision manifest; it is never applied automatically.')
   if (repair.status === 'blocked') parts.push('Docker was not available on the API host, so the repair could not be verified. Nothing can be applied.')
-  if (applied) parts.push('Ron calls the tool again before saying it is fixed.')
+  if (applied) parts.push('Ren calls the tool again before saying it is fixed.')
   return parts.join(' ')
 }
 
@@ -98,7 +98,7 @@ export function RepairPanel(props: RepairPanelProps) {
         </div>
       </div>
       <div className="mt-2 flex flex-wrap justify-end gap-2">
-        {onOpen && <button type="button" className={smallButton} onClick={onOpen}>Open in Ron</button>}
+        {onOpen && <button type="button" className={smallButton} onClick={onOpen}>Open in Ren</button>}
         <Actions {...props} />
       </div>
     </div>

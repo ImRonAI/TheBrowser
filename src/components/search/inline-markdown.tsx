@@ -32,7 +32,7 @@ export function InlineMarkdown({ text, className }: { text: string; className?: 
     <span className={className}>
       {parts.map((part, index) =>
         part.bold ? (
-          <strong key={index} className="font-medium text-ink dark:text-ink-inverse">
+          <strong key={index} className="font-semibold text-ink dark:text-ink-inverse">
             {part.text}
           </strong>
         ) : (

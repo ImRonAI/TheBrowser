@@ -7,7 +7,7 @@ import { useNavigationStore } from '@/stores/navigationStore'
 import { useSearchStore } from '@/stores/searchStore'
 import { useTabStore } from '@/stores/tabStore'
 import { articleDraftKey, useArticleDraftStore } from '@/stores/articleDraftStore'
-import { AGENT_LABELS, type AgentDestination, type ArticleAttachment } from '@/lib/articles'
+import { AGENT_LABELS, ARTICLE_DESTINATIONS, type AgentDestination, type ArticleAttachment } from '@/lib/articles'
 
 function showDestination(url: string, title: string) {
   const tabs = useTabStore.getState()
@@ -51,7 +51,7 @@ export function InterestsActionMenu({ article, onAttached, disabled }: { article
     <OpenInTrigger><button type="button" disabled={disabled} className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-3 py-2 text-xs font-semibold text-white hover:bg-indigo-700 disabled:opacity-50"><MessageSquare size={14} />Attach to<ChevronDown size={12} /></button></OpenInTrigger>
     <OpenInContent className="z-[300]">
       <OpenInLabel>Choose a destination · nothing is sent automatically</OpenInLabel>
-      {(Object.keys(AGENT_LABELS) as AgentDestination[]).map((destination) => <OpenInItem key={destination} onSelect={() => attach(destination)}>{AGENT_LABELS[destination]}</OpenInItem>)}
+      {ARTICLE_DESTINATIONS.map((destination) => <OpenInItem key={destination} onSelect={() => attach(destination)}>{AGENT_LABELS[destination]}</OpenInItem>)}
     </OpenInContent>
   </OpenIn>{error && <p role="alert" className="basis-full text-xs text-red-600 dark:text-red-400">{error}</p>}</>
 }

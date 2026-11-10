@@ -12,6 +12,8 @@ import { PROJECT_TYPE_SCHEMES, ROOT_ISSUE_TYPES, STANDARD_HIERARCHY, type Issue,
 export const projectsRequestFor = (userId: string) => createProjectsRequest(projectEndpoint(userId, API_BASE_URL), getSession, userId)
 const store = createProjectsStore(projectsRequestFor)
 export const useProjectsStore = () => useStore(store)
+/** The current state outside render (e.g. the newest issue version after an await). */
+export const getProjectsState = () => store.getState()
 
 // Never hydrate the old shared demo cache into an authenticated account.
 try { localStorage.removeItem('projects-storage') } catch { /* Storage may be disabled. */ }

@@ -20,7 +20,6 @@ from strands_xai import xai as _xai
 from agent.api.core import config as app_config
 from agent.api.core import panel_agent
 from agent.api.core.xai_model import (
-    EXTRA_CONTEXT_WINDOW_LIMITS,
     RonXAIModel,
     XAIStatePruner,
     is_xai_state_block,
@@ -129,12 +128,6 @@ async def test_stream_sends_single_state_blob_and_maps_input_too_large(monkeypat
     with pytest.raises(ContextWindowOverflowException, match="input_too_large"):
         async for _ in model.stream(history):
             pass
-
-
-def test_grok_4_7_context_window_is_registered():
-    assert EXTRA_CONTEXT_WINDOW_LIMITS["grok-4.7"] == 500_000
-    assert _xai._resolve_context_window_limit("grok-4.7") == 500_000
-    assert _xai._resolve_context_window_limit("xai/grok-4.7") == 500_000
 
 
 class _StubFunction:
@@ -363,3 +356,69 @@ async def test_native_web_search_x_search_and_image_results_stream_without_text_
             "title": "SpaceX Starship on pad",
         }
     ]
+
+
+@pytest.mark.asyncio
+async def test_state_blob_excludes_the_per_call_context_the_model_saw(monkeypatch):
+    """The blob is durable history; ContextInjector text arrives as dynamic_trailing_blocks."""
+    monkeypatch.setattr(app_config, "XAI_API_KEY", "xai-test")
+    monkeypatch.setattr(panel_agent, "XAI_NATIVE_TOOLS_ENABLED", False)
+    model = panel_agent.build_model("xai", "grok-4.7")
+
+    class _Response:
+        content, citations, inline_citations, encrypted_content, usage = "done", None, None, "enc", None
+
+    class _Chat:
+        def __init__(self) -> None:
+            self.messages: list[Any] = []
+
+        async def stream(self):
+            yield _Response(), _StubChunk(content="done")
+
+    sent: list[list[Any]] = []
+
+    def append(chat, messages, system_prompt):
+        chat.messages = [block.get("text") for message in messages for block in message["content"]]
+        sent.append(chat.messages)
+
+    monkeypatch.setattr(model, "_get_client", lambda: object())
+    monkeypatch.setattr(model, "_build_chat", lambda client, tool_specs=None, tool_choice=None: _Chat())
+    monkeypatch.setattr(model, "_append_messages_to_chat", append)
+    monkeypatch.setattr(model, "_capture_xai_state", lambda chat, response: [*chat.messages, response.content])
+
+    messages = [{"role": "user", "content": [{"text": "question"}, {"text": "BROWSER CONTEXT"}]}]
+    events = [e async for e in model.stream(messages, dynamic_trailing_blocks=1)]
+
+    assert sent[0] == ["question", "BROWSER CONTEXT"]  # the model saw the context
+    blob = next(e["contentBlockDelta"]["delta"]["reasoningContent"]["redactedContent"] for e in events
+                if "redactedContent" in e.get("contentBlockDelta", {}).get("delta", {}).get("reasoningContent", {}))
+    payload = blob.decode()[len(_xai.XAI_STATE_MARKER):-len(_xai.XAI_STATE_MARKER_END)]
+    assert json.loads(base64.b64decode(payload))["messages"] == ["question", "done"]
+
+
+def test_pruner_drops_the_blob_and_retries_when_it_overflows():
+    class FakeAgent:
+        def __init__(self) -> None:
+            self.messages = [block for turn in range(1, 3) for block in _turn(turn)]
+            prune_superseded_xai_state(self.messages)
+
+    class FakeEvent:
+        def __init__(self, agent: FakeAgent, exception: Exception | None) -> None:
+            self.agent, self.exception, self.retry = agent, exception, False
+
+    pruner = XAIStatePruner()
+    agent = FakeAgent()
+    other = FakeEvent(agent, RuntimeError("unavailable"))
+    pruner._on_after_model_call(other)  # noqa: SLF001
+    assert other.retry is False and any(is_xai_state_block(b) for m in agent.messages for b in m["content"])
+
+    overflow = FakeEvent(agent, ContextWindowOverflowException("input_too_large"))
+    pruner._on_after_model_call(overflow)  # noqa: SLF001
+    assert overflow.retry is True
+    assert not any(is_xai_state_block(b) for m in agent.messages for b in m["content"])
+    assert [b["text"] for m in agent.messages for b in m["content"] if "text" in b] == [
+        "question 1", "answer 1", "question 2", "answer 2"]
+
+    again = FakeEvent(agent, ContextWindowOverflowException("input_too_large"))
+    pruner._on_after_model_call(again)  # noqa: SLF001
+    assert again.retry is False  # nothing left to drop: the conversation manager takes over

@@ -10,5 +10,7 @@ if lsof -nP -iTCP:"$API_PORT" -sTCP:LISTEN >/dev/null 2>&1; then
   echo "Port $API_PORT is already in use. Stop the other process or run npm run electron:dev (it frees the dev ports first)." >&2
   exit 1
 fi
-echo "Ron API listening on http://127.0.0.1:$API_PORT" >&2
+# Loopback by default, like electron:dev: /chat, /a2a, /build … run host shell tools.
+export API_HOST="${API_HOST:-127.0.0.1}"
+echo "Ron API listening on http://$API_HOST:$API_PORT" >&2
 exec ./venv/bin/python agent/api/main.py

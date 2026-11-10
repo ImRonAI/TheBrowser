@@ -86,12 +86,12 @@ export function pickSurfaceInvestigation(entries: RepairInvestigation[]): Repair
 /** What a native notification says for a state transition; `null` when nothing should be announced. */
 export function repairNotification(previous: RepairInvestigation | undefined, next: RepairInvestigation): { title: string; body: string } | null {
   if (previous && previous.rev === next.rev && previous.state === next.state && previous.status === next.status) return null
-  if (next.state === 'approval') return { title: `Repair ready: ${next.tool}`, body: 'Ron verified a fix in isolation. Open Ron to review and approve it.' }
+  if (next.state === 'approval') return { title: `Repair ready: ${next.tool}`, body: 'Ren verified a fix in isolation. Open Ren to review and approve it.' }
   if (next.state === 'done') {
     if (next.applied) return { title: `Repair applied: ${next.tool}`, body: 'The repaired tool is active for your account.' }
     if (next.status === 'blocked') return { title: `Repair blocked: ${next.tool}`, body: 'No isolated environment was available; nothing was changed.' }
     if (next.status === 'failed' || next.status === 'not_reproducible' || next.status === 'needs_maintainer') {
-      return { title: `Repair not applied: ${next.tool}`, body: next.summary?.slice(0, 160) || 'Ron could not verify a fix.' }
+      return { title: `Repair not applied: ${next.tool}`, body: next.summary?.slice(0, 160) || 'Ren could not verify a fix.' }
     }
   }
   return null

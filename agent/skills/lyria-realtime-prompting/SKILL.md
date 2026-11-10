@@ -2,7 +2,7 @@
 name: lyria-realtime-prompting
 description: "How to prompt and steer Lyria RealTime, the live music stream behind the music_* tools: weighted prompt structure, genre/instrument/mood vocabularies, blending, cross-fading, and which config changes need a context reset. Activate before the first music_set_weighted_prompts call and whenever the user asks to change the music."
 license: Apache-2.0
-compatibility: Ron Live agent (BidiAgent) with the music_* tools; instrumental output only.
+compatibility: Ren Live agent (BidiAgent) with the music_* tools; instrumental output only.
 metadata:
   source: https://ai.google.dev/gemini-api/docs/lyria-prompt-guide#realtime-prompting
   model: models/lyria-realtime-exp

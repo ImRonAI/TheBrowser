@@ -10,6 +10,10 @@
  * - Status visualization with subtle animations
  * - Model provider badges
  * - Expandable details panel
+ *
+ * Ren styling: a paper card with hairline border and mono labels. The active node
+ * (running / handing off) takes the volt border and a volt status label; status is
+ * always spelled out, never colour alone.
  */
 
 "use client";
@@ -17,6 +21,7 @@
 import { cn } from "@/lib/utils";
 import { Handle, Position, type NodeProps } from "@xyflow/react";
 import { motion, AnimatePresence } from "framer-motion";
+import { LoaderCircle } from "lucide-react";
 import { useState, memo } from "react";
 import type {
   AgentConfig,
@@ -31,61 +36,75 @@ import type {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const STATUS_CONFIG: Record<AgentStatus, {
-  bg: string;
+  /** Status word in the card's mono label row. */
+  label: string;
+  /** Card border (volt marks the active node). */
   border: string;
-  iconBg: string;
-  iconColor: string;
-  glow?: string;
+  /** Status icon tile. */
+  tile: string;
+  /** Status label colour (AA on the card in every theme). */
+  text: string;
+  /** Hairline halo around the active node (no glow). */
+  ring?: string;
 }> = {
   idle: {
-    bg: "bg-slate-800/80",
-    border: "border-slate-600/50",
-    iconBg: "bg-slate-700",
-    iconColor: "text-slate-400",
+    label: "Idle",
+    border: "border-surface-200 dark:border-surface-800",
+    tile: "bg-surface-100 text-ink-muted dark:bg-surface-850 dark:text-ink-inverse-muted",
+    text: "text-ink-muted dark:text-ink-inverse-muted",
   },
   pending: {
-    bg: "bg-slate-800/80",
-    border: "border-amber-500/50",
-    iconBg: "bg-amber-500/20",
-    iconColor: "text-amber-400",
+    label: "Waiting",
+    border: "border-dashed border-surface-300 dark:border-surface-700",
+    tile: "bg-surface-100 text-ink-secondary dark:bg-surface-850 dark:text-ink-inverse-secondary",
+    text: "text-ink-secondary dark:text-ink-inverse-secondary",
   },
   running: {
-    bg: "bg-slate-800/90",
-    border: "border-sky-500/60",
-    iconBg: "bg-sky-500/20",
-    iconColor: "text-sky-400",
-    glow: "shadow-[0_0_24px_-4px_rgba(14,165,233,0.4)]",
+    label: "Running",
+    border: "border-blurple-600 dark:border-blurple-400",
+    tile: "bg-blurple-50 text-blurple-600 dark:bg-blurple-400/15 dark:text-blurple-300",
+    text: "text-blurple-600 dark:text-blurple-400",
+    ring: "ring-[3px] ring-blurple-600/10 dark:ring-blurple-400/15",
   },
   completed: {
-    bg: "bg-slate-800/80",
-    border: "border-emerald-500/50",
-    iconBg: "bg-emerald-500/20",
-    iconColor: "text-emerald-400",
+    label: "Done",
+    border: "border-surface-200 dark:border-surface-800",
+    tile: "bg-emerald-50 text-emerald-700 dark:bg-emerald-400/10 dark:text-emerald-400",
+    text: "text-emerald-700 dark:text-emerald-400",
   },
   error: {
-    bg: "bg-slate-800/80",
-    border: "border-rose-500/50",
-    iconBg: "bg-rose-500/20",
-    iconColor: "text-rose-400",
+    label: "Failed",
+    border: "border-red-300 dark:border-red-900",
+    tile: "bg-red-50 text-danger dark:bg-red-950/40",
+    text: "text-red-700 dark:text-red-400",
   },
   handoff: {
-    bg: "bg-slate-800/90",
-    border: "border-violet-500/60",
-    iconBg: "bg-violet-500/20",
-    iconColor: "text-violet-400",
-    glow: "shadow-[0_0_24px_-4px_rgba(194,106,65,0.4)]",
+    label: "Handing off",
+    border: "border-blurple-600 dark:border-blurple-400",
+    tile: "bg-blurple-600 text-white dark:bg-blurple-400 dark:text-ink",
+    text: "text-blurple-600 dark:text-blurple-400",
+    ring: "ring-[3px] ring-blurple-600/10 dark:ring-blurple-400/15",
   },
 };
 
+// Provider dots: varying shades of volt plus ink, so a mixed graph reads at a glance.
 const MODEL_COLORS: Record<string, string> = {
-  bedrock: "bg-orange-500",
-  anthropic: "bg-amber-500",
-  openai: "bg-emerald-500",
-  ollama: "bg-blue-500",
-  github: "bg-slate-400",
-  env: "bg-purple-500",
-  parent: "bg-slate-500",
+  bedrock: "bg-blurple-600 dark:bg-blurple-400",
+  anthropic: "bg-blurple-400 dark:bg-blurple-300",
+  openai: "bg-blurple-800 dark:bg-blurple-200",
+  ollama: "bg-blurple-300 dark:bg-blurple-600",
+  github: "bg-ink dark:bg-ink-inverse",
+  env: "bg-blurple-950 dark:bg-blurple-100",
+  parent: "bg-surface-400 dark:bg-surface-500",
 };
+
+const HANDLE_CLASS =
+  "!h-2 !w-2 !rounded-full !border !border-surface-300 !bg-surface-0 dark:!border-surface-600 dark:!bg-surface-900 hover:!border-blurple-500 !transition-colors";
+
+const SECTION_LABEL =
+  "font-mono text-[10px] font-medium uppercase tracking-[0.08em] text-ink-muted dark:text-ink-inverse-muted";
+
+const CHIP = "inline-flex h-5 items-center rounded-full px-2 font-mono text-[10px] font-medium";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // StrandsNode Component
@@ -116,23 +135,22 @@ export const StrandsNodeComponent = memo(function StrandsNodeComponent({
 
   return (
     <motion.div
-      initial={{ opacity: 0, scale: 0.95 }}
-      animate={{ opacity: 1, scale: 1 }}
-      transition={{ type: "spring", stiffness: 300, damping: 25 }}
+      initial={{ opacity: 0, y: 4 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.2, ease: "easeOut" }}
       className={cn(
-        "relative w-[220px]",
-        "rounded-xl border backdrop-blur-sm",
-        "transition-all duration-300",
-        config.bg,
+        "relative w-[220px] rounded-xl border bg-surface-0 dark:bg-surface-900",
+        "text-ink dark:text-ink-inverse",
+        "transition-[border-color,box-shadow] duration-200 ease-out",
         config.border,
-        config.glow,
-        isSelected && "ring-2 ring-offset-2 ring-offset-slate-900 ring-violet-500"
+        config.ring,
+        isSelected && "ring-2 ring-blurple-600/70 ring-offset-2 ring-offset-surface-0 dark:ring-blurple-400/70 dark:ring-offset-surface-900"
       )}
     >
-      {/* Entry Point Badge */}
+      {/* Entry Point Badge: a solid ink pill on the card's top edge */}
       {isEntryPoint && (
-        <div className="absolute -top-2.5 left-1/2 -translate-x-1/2 z-10">
-          <span className="px-2 py-0.5 text-[9px] font-bold uppercase tracking-widest bg-violet-500 text-white rounded-md shadow-lg">
+        <div className="absolute -top-2.5 left-3 z-10">
+          <span className="inline-flex h-5 items-center rounded-full bg-ink px-2 font-mono text-[10px] font-semibold uppercase tracking-[0.08em] text-white dark:bg-ink-inverse dark:text-ink">
             Entry
           </span>
         </div>
@@ -143,91 +161,101 @@ export const StrandsNodeComponent = memo(function StrandsNodeComponent({
         type="target"
         position={Position.Top}
         id="top"
-        className="!w-2.5 !h-2.5 !rounded-full !border-2 !bg-slate-700 !border-slate-500 hover:!border-violet-400 !transition-colors"
+        className={HANDLE_CLASS}
       />
       <Handle
         type="target"
         position={Position.Left}
         id="left"
-        className="!w-2.5 !h-2.5 !rounded-full !border-2 !bg-slate-700 !border-slate-500 hover:!border-violet-400 !transition-colors"
+        className={HANDLE_CLASS}
       />
       <Handle
         type="source"
         position={Position.Bottom}
         id="bottom"
-        className="!w-2.5 !h-2.5 !rounded-full !border-2 !bg-slate-700 !border-slate-500 hover:!border-violet-400 !transition-colors"
+        className={HANDLE_CLASS}
       />
       <Handle
         type="source"
         position={Position.Right}
         id="right"
-        className="!w-2.5 !h-2.5 !rounded-full !border-2 !bg-slate-700 !border-slate-500 hover:!border-violet-400 !transition-colors"
+        className={HANDLE_CLASS}
       />
 
       {/* Main Card Content */}
       <button
         onClick={() => setIsExpanded(!isExpanded)}
-        className="w-full text-left p-3 hover:bg-white/[0.02] transition-colors rounded-t-xl"
+        className={cn(
+          "w-full p-3 text-left transition-colors duration-150 ease-out",
+          "hover:bg-surface-50 dark:hover:bg-surface-850",
+          isExpanded ? "rounded-t-xl" : "rounded-xl"
+        )}
       >
-        <div className="flex items-start gap-3">
+        <div className="flex items-start gap-2.5">
           {/* Status Icon */}
           <div className={cn(
-            "w-8 h-8 flex items-center justify-center rounded-lg flex-shrink-0",
-            config.iconBg
+            "flex h-7 w-7 shrink-0 items-center justify-center rounded-lg",
+            config.tile
           )}>
             {status === "running" ? (
-              <LoadingSpinner className={cn("w-4 h-4", config.iconColor)} />
+              <LoaderCircle className="h-3.5 w-3.5 motion-safe:animate-spin" />
             ) : status === "handoff" ? (
-              <HandoffIcon className={cn("w-4 h-4", config.iconColor)} />
+              <HandoffIcon className="h-3.5 w-3.5" />
             ) : status === "completed" ? (
-              <CheckIcon className={cn("w-4 h-4", config.iconColor)} />
+              <CheckIcon className="h-3.5 w-3.5" />
             ) : status === "error" ? (
-              <XIcon className={cn("w-4 h-4", config.iconColor)} />
+              <XIcon className="h-3.5 w-3.5" />
             ) : (
-              <CircleIcon className={cn("w-4 h-4", config.iconColor)} />
+              <CircleIcon className="h-3.5 w-3.5" />
             )}
           </div>
 
           {/* Agent Info */}
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2">
-              <h3 className="font-semibold text-sm text-slate-100 truncate">
-                {agent.name}
-              </h3>
+          <div className="min-w-0 flex-1">
+            <div className="flex h-4 items-center gap-1.5">
+              <span className={cn(
+                "font-mono text-[10px] font-medium uppercase leading-none tracking-[0.08em]",
+                config.text
+              )}>
+                {config.label}
+              </span>
               {agent.priority && agent.priority >= 4 && (
-                <span className="px-1.5 py-0.5 text-[9px] font-bold bg-violet-500 text-white rounded">
+                <span className="inline-flex h-4 items-center rounded border border-surface-200 px-1 font-mono text-[10px] font-semibold leading-none tabular-nums text-ink-secondary dark:border-surface-700 dark:text-ink-inverse-secondary">
                   P{agent.priority}
                 </span>
               )}
             </div>
-            
+            <h3 className="mt-1 truncate font-display text-[14px] font-semibold leading-snug tracking-[-0.01em] text-ink dark:text-ink-inverse">
+              {agent.name}
+            </h3>
+
             {agent.description && (
-              <p className="text-[11px] text-slate-400 mt-0.5 line-clamp-1">
+              <p className="mt-0.5 line-clamp-1 text-[12px] leading-snug text-ink-secondary dark:text-ink-inverse-secondary">
                 {agent.description}
               </p>
-            )}
-
-            {/* Model Badge */}
-            {agent.modelProvider && (
-              <div className="flex items-center gap-1.5 mt-2">
-                <span className={cn(
-                  "w-1.5 h-1.5 rounded-full",
-                  MODEL_COLORS[agent.modelProvider] || "bg-slate-500"
-                )} />
-                <span className="text-[9px] font-medium text-slate-500 uppercase tracking-wide">
-                  {agent.modelProvider}
-                  {agent.modelId && ` · ${agent.modelId.split("-").slice(-2).join("-").toUpperCase()}`}
-                </span>
-              </div>
             )}
           </div>
 
           {/* Expand Icon */}
           <ChevronIcon className={cn(
-            "w-4 h-4 text-slate-500 transition-transform flex-shrink-0",
+            "h-4 w-4 shrink-0 text-ink-muted transition-transform duration-200 ease-out dark:text-ink-inverse-muted",
             isExpanded && "rotate-180"
           )} />
         </div>
+
+        {/* Model Badge */}
+        {agent.modelProvider && (
+          <div className="mt-2.5 flex items-center gap-1.5 border-t border-surface-100 pt-2 dark:border-surface-800">
+            <span className={cn(
+              "h-1.5 w-1.5 shrink-0 rounded-full",
+              MODEL_COLORS[agent.modelProvider] || "bg-surface-400 dark:bg-surface-500"
+            )} />
+            <span className="truncate font-mono text-[10px] font-medium uppercase tracking-[0.08em] text-ink-muted dark:text-ink-inverse-muted">
+              {agent.modelProvider}
+              {agent.modelId && ` · ${agent.modelId.split("-").slice(-2).join("-").toUpperCase()}`}
+            </span>
+          </div>
+        )}
       </button>
 
       {/* Expanded Details */}
@@ -238,26 +266,26 @@ export const StrandsNodeComponent = memo(function StrandsNodeComponent({
             animate={{ height: "auto", opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
             transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
-            className="overflow-hidden border-t border-slate-700/50"
+            className="overflow-hidden border-t border-surface-200 dark:border-surface-800"
           >
-            <div className="p-3 space-y-3">
+            <div className="space-y-3 p-3">
               {/* Tools */}
               {agent.tools && agent.tools.length > 0 && (
                 <div>
-                  <span className="text-[9px] font-semibold text-slate-500 uppercase tracking-wider">
+                  <span className={SECTION_LABEL}>
                     Tools
                   </span>
-                  <div className="flex flex-wrap gap-1 mt-1">
+                  <div className="mt-1.5 flex flex-wrap gap-1">
                     {agent.tools.slice(0, 3).map((tool) => (
                       <span
                         key={tool}
-                        className="px-1.5 py-0.5 text-[9px] font-medium bg-slate-700/50 text-slate-300 rounded"
+                        className={cn(CHIP, "bg-surface-100 text-ink-secondary dark:bg-surface-850 dark:text-ink-inverse-secondary")}
                       >
                         {tool}
                       </span>
                     ))}
                     {agent.tools.length > 3 && (
-                      <span className="px-1.5 py-0.5 text-[9px] font-medium text-slate-500">
+                      <span className={cn(CHIP, "px-1 tabular-nums text-ink-muted dark:text-ink-inverse-muted")}>
                         +{agent.tools.length - 3}
                       </span>
                     )}
@@ -268,14 +296,14 @@ export const StrandsNodeComponent = memo(function StrandsNodeComponent({
               {/* Dependencies */}
               {dependencies.length > 0 && (
                 <div>
-                  <span className="text-[9px] font-semibold text-slate-500 uppercase tracking-wider">
-                    Depends On
+                  <span className={SECTION_LABEL}>
+                    Depends on
                   </span>
-                  <div className="flex flex-wrap gap-1 mt-1">
+                  <div className="mt-1.5 flex flex-wrap gap-1">
                     {dependencies.map((dep) => (
                       <span
                         key={dep}
-                        className="px-1.5 py-0.5 text-[9px] font-medium bg-sky-500/20 text-sky-300 rounded"
+                        className={cn(CHIP, "border border-surface-200 text-ink-secondary dark:border-surface-700 dark:text-ink-inverse-secondary")}
                       >
                         {dep}
                       </span>
@@ -287,14 +315,14 @@ export const StrandsNodeComponent = memo(function StrandsNodeComponent({
               {/* Can Handoff To */}
               {canHandoffTo.length > 0 && (
                 <div>
-                  <span className="text-[9px] font-semibold text-slate-500 uppercase tracking-wider">
-                    Can Handoff To
+                  <span className={SECTION_LABEL}>
+                    Can hand off to
                   </span>
-                  <div className="flex flex-wrap gap-1 mt-1">
+                  <div className="mt-1.5 flex flex-wrap gap-1">
                     {canHandoffTo.map((target) => (
                       <span
                         key={target}
-                        className="px-1.5 py-0.5 text-[9px] font-medium bg-violet-500/20 text-violet-300 rounded"
+                        className={cn(CHIP, "bg-blurple-50 text-blurple-700 dark:bg-blurple-400/15 dark:text-blurple-200")}
                       >
                         {target}
                       </span>
@@ -306,16 +334,16 @@ export const StrandsNodeComponent = memo(function StrandsNodeComponent({
               {/* Result */}
               {result && (
                 <div>
-                  <span className="text-[9px] font-semibold text-slate-500 uppercase tracking-wider">
+                  <span className={SECTION_LABEL}>
                     Result
                   </span>
                   <div className={cn(
-                    "mt-1 p-2 rounded-lg text-[10px] font-mono",
+                    "mt-1.5 rounded-lg border p-2 font-mono text-[11px] leading-snug",
                     result.status === "success"
-                      ? "bg-emerald-500/10 text-emerald-300 border border-emerald-500/20"
-                      : "bg-rose-500/10 text-rose-300 border border-rose-500/20"
+                      ? "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-400/20 dark:bg-emerald-400/10 dark:text-emerald-300"
+                      : "border-red-200 bg-red-50 text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300"
                   )}>
-                    <p className="line-clamp-2">{result.content}</p>
+                    <p className="line-clamp-2 text-[11px] leading-snug text-current">{result.content}</p>
                   </div>
                 </div>
               )}
@@ -365,26 +393,6 @@ export function SwarmNodeComponent({ data }: SwarmNodeProps) {
 // ─────────────────────────────────────────────────────────────────────────────
 // Icons
 // ─────────────────────────────────────────────────────────────────────────────
-
-function LoadingSpinner({ className }: { className?: string }) {
-  return (
-    <svg className={cn("animate-spin", className)} viewBox="0 0 24 24" fill="none">
-      <circle
-        className="opacity-25"
-        cx="12"
-        cy="12"
-        r="10"
-        stroke="currentColor"
-        strokeWidth="4"
-      />
-      <path
-        className="opacity-75"
-        fill="currentColor"
-        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-      />
-    </svg>
-  );
-}
 
 function ChevronIcon({ className }: { className?: string }) {
   return (

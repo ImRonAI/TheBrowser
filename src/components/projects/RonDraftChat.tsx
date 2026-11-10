@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { RenIcon } from '@/components/brand'
 import type { Editor } from '@tiptap/react'
 import { nanoid } from 'nanoid'
-import { CornerDownRight, Loader2, Replace, RotateCcw, Sparkles, Square, Target, X } from 'lucide-react'
+import { CornerDownRight, Loader2, Replace, RotateCcw, Square, Target, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Message, MessageContent } from '@/components/ai-elements/message'
 import { MessageResponse } from '@/components/ai-elements/response'
@@ -67,7 +68,7 @@ function TurnView({ turn }: { turn: DraftTurn }) {
       {(tracing.length > 0 || (running && !hasDraft(segments))) && (
         <ChainOfThought open={open} onOpenChange={setOpen} className="rounded-xl border border-surface-200 px-3 py-2 dark:border-surface-700">
           <ChainOfThoughtHeader>
-            {running ? (hasDraft(segments) ? 'Ron is writing…' : 'Ron is working…') : `Ron’s work · ${steps} ${steps === 1 ? 'step' : 'steps'}`}
+            {running ? (hasDraft(segments) ? 'Ren is writing…' : 'Ren is working…') : `Ren’s work · ${steps} ${steps === 1 ? 'step' : 'steps'}`}
           </ChainOfThoughtHeader>
           <ChainOfThoughtContent>
             {tracing.length
@@ -78,9 +79,9 @@ function TurnView({ turn }: { turn: DraftTurn }) {
       )}
       {hasDraft(segments) && <DraftView segments={segments} streaming={running} />}
       {!running && !hasDraft(segments) && turn.status !== 'error' && (
-        <p role="status" className="px-1 text-sm text-ink-muted dark:text-ink-inverse-muted">{turn.status === 'cancelled' ? 'Stopped before Ron wrote a draft.' : 'Ron did not write a draft.'}</p>
+        <p role="status" className="px-1 text-sm text-ink-muted dark:text-ink-inverse-muted">{turn.status === 'cancelled' ? 'Stopped before Ren wrote a draft.' : 'Ren did not write a draft.'}</p>
       )}
-      {turn.status === 'error' && <p role="alert" className="px-1 text-sm text-danger">{turn.error || 'Ron could not finish this request.'}</p>}
+      {turn.status === 'error' && <p role="alert" className="px-1 text-sm text-danger">{turn.error || 'Ren could not finish this request.'}</p>}
     </div>
   )
 }
@@ -159,28 +160,28 @@ export function RonDraftChat({ agent, editor, noun, suggestions, initialGoal = f
   }
 
   return (
-    <section aria-label="Ask Ron to write" className="not-prose rounded-2xl border border-surface-200 bg-surface-0 shadow-subtle dark:border-surface-700 dark:bg-surface-900 dark:shadow-dark-subtle">
+    <section aria-label="Ask Ren to write" className="not-prose rounded-2xl border border-surface-200 bg-surface-0 shadow-subtle dark:border-surface-700 dark:bg-surface-900 dark:shadow-dark-subtle">
       <header className="flex items-center gap-2 border-b border-surface-200/80 px-3 py-2 dark:border-surface-800">
-        <span className="flex size-7 items-center justify-center rounded-lg bg-accent/10 text-accent dark:bg-accent-light/10 dark:text-accent-light"><Sparkles className="size-4" /></span>
+        <span className="flex size-7 items-center justify-center rounded-lg bg-accent/10 text-accent dark:bg-accent-light/10 dark:text-accent-light"><RenIcon className="size-4" /></span>
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-semibold text-ink dark:text-ink-inverse">Ask Ron</p>
-          <p className="truncate text-xs text-ink-muted dark:text-ink-inverse-muted">Ron researches and drafts this {noun}; nothing changes until you insert or overwrite.</p>
+          <p className="text-sm font-semibold text-ink dark:text-ink-inverse">Ask Ren</p>
+          <p className="truncate text-xs text-ink-muted dark:text-ink-inverse-muted">Ren researches and drafts this {noun}; nothing changes until you insert or overwrite.</p>
         </div>
         {headerExtra}
         {!started && (
           <button type="button" role="switch" aria-checked={goal} onClick={() => setGoal((value) => !value)} disabled={disabled}
-            title="Goal mode: Ron keeps working until a judge agrees the request is met"
+            title="Goal mode: Ren keeps working until a judge agrees the request is met"
             className={cn('flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium transition-colors disabled:opacity-50',
               goal ? 'border-accent/40 bg-accent/10 text-accent dark:border-accent-light/40 dark:bg-accent-light/10 dark:text-accent-light'
                 : 'border-surface-200 text-ink-muted hover:text-ink dark:border-surface-700 dark:text-ink-inverse-muted dark:hover:text-ink-inverse')}>
             <Target className="size-3.5" />Goal
           </button>
         )}
-        {onClose && <Button type="button" variant="ghost" size="icon-sm" aria-label="Close Ask Ron" className="rounded-full" onClick={onClose}><X className="size-4" /></Button>}
+        {onClose && <Button type="button" variant="ghost" size="icon-sm" aria-label="Close Ask Ren" className="rounded-full" onClick={onClose}><X className="size-4" /></Button>}
       </header>
 
       {started && (
-        <div className="max-h-[640px] space-y-5 overflow-y-auto px-4 py-4" aria-label="Ask Ron conversation">
+        <div className="max-h-[640px] space-y-5 overflow-y-auto px-4 py-4" aria-label="Ask Ren conversation">
           {agent.turns.map((turn) => <TurnView key={turn.id} turn={turn} />)}
           <div ref={endRef} />
         </div>
@@ -193,15 +194,16 @@ export function RonDraftChat({ agent, editor, noun, suggestions, initialGoal = f
             <form className={composerClass} onSubmit={(event) => { event.preventDefault(); send() }}>
               <AssistField value={prompt} onChange={setPrompt} suggest count={5} className="min-w-0">
                 {(field) => (
-                  <textarea ref={inputRef} aria-label={`What should Ron write in this ${noun}?`} rows={2} maxLength={8000} value={prompt} disabled={disabled}
+                  <textarea ref={inputRef} aria-label={`What should Ren write in this ${noun}?`} rows={2} maxLength={8000} value={prompt} disabled={disabled}
                     onChange={(event) => setPrompt(event.target.value)} onFocus={field.onFocus} onBlur={field.onBlur}
                     onKeyDown={(event) => {
                       field.onKeyDown(event)
                       if (event.defaultPrevented) return
                       if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); send() }
-                      if (event.key === 'Escape') onClose?.()
+                      // Handled here, so a surrounding dialog (the issue workspace) does not close as well.
+                      if (event.key === 'Escape' && onClose) { event.preventDefault(); onClose() }
                     }}
-                    placeholder={goal ? `Describe the outcome; Ron works until the ${noun} meets it` : `What should Ron write? e.g. “an onboarding checklist with the approval workflow”`}
+                    placeholder={goal ? `Describe the outcome; Ren works until the ${noun} meets it` : `What should Ren write? e.g. “an onboarding checklist with the approval workflow”`}
                     className={composerInput} />
                 )}
               </AssistField>
@@ -223,7 +225,7 @@ export function RonDraftChat({ agent, editor, noun, suggestions, initialGoal = f
 
         {agent.running && (
           <div className="flex items-center justify-between gap-2 px-1">
-            <p role="status" className="flex items-center gap-2 text-xs text-ink-muted dark:text-ink-inverse-muted"><span className="h-2 w-2 rounded-full bg-emerald-500" />Ron is working on your {noun}</p>
+            <p role="status" className="flex items-center gap-2 text-xs text-ink-muted dark:text-ink-inverse-muted"><span className="h-2 w-2 rounded-full bg-emerald-500" />Ren is working on your {noun}</p>
             <Button type="button" variant="outline" size="sm" className="gap-1.5 rounded-full" onClick={() => void agent.stop()}><Square className="size-3" />Stop</Button>
           </div>
         )}
@@ -240,13 +242,13 @@ export function RonDraftChat({ agent, editor, noun, suggestions, initialGoal = f
           <form className={composerClass} onSubmit={(event) => { event.preventDefault(); retry() }}>
             <AssistField value={feedback} onChange={setFeedback} className="min-w-0">
               {(field) => (
-                <textarea ref={feedbackRef} aria-label="What should Ron change?" rows={2} maxLength={4000} value={feedback} disabled={disabled}
+                <textarea ref={feedbackRef} aria-label="What should Ren change?" rows={2} maxLength={4000} value={feedback} disabled={disabled}
                   onChange={(event) => setFeedback(event.target.value)} onFocus={field.onFocus} onBlur={field.onBlur}
                   onKeyDown={(event) => {
                     field.onKeyDown(event)
                     if (event.defaultPrevented) return
                     if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); retry() }
-                    if (event.key === 'Escape') setStage('review')
+                    if (event.key === 'Escape') { event.preventDefault(); setStage('review') }
                   }}
                   placeholder="What are you looking for? e.g. “shorter, add sources, and a step for legal review”"
                   className={composerInput} />

@@ -8,7 +8,7 @@ import { MessageResponse } from '@/components/ai-elements/response'
 import { ChainOfThought, ChainOfThoughtContent, ChainOfThoughtHeader, ChainOfThoughtStep } from '@/components/ai-elements/chain-of-thought'
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ai-elements/accordion'
 import { Button } from '@/components/ai-elements/button'
-import { MicIcon, MicOffIcon, MonitorUpIcon, CameraIcon, SquareIcon, PauseIcon, PhoneIcon, RefreshCwIcon } from 'lucide-react'
+import { AudioLinesIcon, ChevronDownIcon, MicIcon, MicOffIcon, MonitorUpIcon, CameraIcon, SquareIcon, PauseIcon, PhoneIcon, RefreshCwIcon } from 'lucide-react'
 import { VoiceSettings } from './VoiceSettings'
 import { useVoiceSettingsStore } from '@/stores/voiceSettingsStore'
 import { micConstraints, isMicUnavailableError, personaState, personaCaption } from '@/lib/voice-settings'
@@ -33,6 +33,20 @@ type Capture = { stream: MediaStream; timer: number }
 
 /** Graceful stop: how long to wait for `bidi_connection_stop` before force-closing. */
 const STOP_GRACE_MS = 15_000
+
+/** Live console: round hairline controls. The live microphone is volt, Pause is ink, Stop sharing is danger. */
+const CONSOLE_BUTTON = cn(
+  'size-10 rounded-full border-surface-200 bg-surface-0 text-ink-secondary shadow-none transition-colors duration-150',
+  'hover:bg-surface-50 hover:text-ink disabled:opacity-40',
+  'focus-visible:ring-2 focus-visible:ring-blurple-600/70 focus-visible:ring-offset-2 focus-visible:ring-offset-surface-0',
+  'dark:border-surface-800 dark:bg-surface-900 dark:text-ink-inverse-secondary dark:hover:bg-surface-850 dark:hover:text-ink-inverse',
+  'dark:focus-visible:ring-blurple-400/70 dark:focus-visible:ring-offset-surface-900',
+)
+const CONSOLE_VOLT = 'border-transparent bg-blurple-600 text-white hover:bg-blurple-700 hover:text-white active:bg-blurple-800 dark:border-transparent dark:bg-blurple-400 dark:text-ink dark:hover:bg-blurple-300 dark:hover:text-ink'
+const CONSOLE_INK = 'border-transparent bg-ink text-white hover:bg-surface-800 hover:text-white dark:border-transparent dark:bg-ink-inverse dark:text-ink dark:hover:bg-surface-200 dark:hover:text-ink'
+const CONSOLE_DANGER = 'border-transparent bg-danger text-white hover:bg-danger/90 hover:text-white dark:border-transparent dark:bg-danger dark:text-white dark:hover:bg-danger/90 dark:hover:text-white'
+const WARNING_NOTE = 'rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs leading-relaxed text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300'
+const DANGER_NOTE = 'rounded-xl border border-red-200 bg-red-50 p-3 text-xs leading-relaxed text-red-800 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-200'
 
 export interface VoiceAgentProps {
   userId?: string
@@ -455,42 +469,55 @@ export function VoiceAgent({ userId = 'default', agentScope = 'panel', sessionId
   const turns = live.turns
   const foreignOwner = Boolean(holder) && !claimed
 
-  const iconButton = 'size-9'
+  // Styling only: any active capture (screen, camera, microphone) reads as recording.
+  const capturing = !!source || mic
   return <div className="relative flex h-full min-h-0 w-full flex-1 flex-col">
       <div className="relative flex min-h-0 flex-1 basis-0 flex-col gap-3 overflow-y-auto overscroll-contain scrollbar-thin px-4 pb-4 pt-4">
-        {foreignOwner && <div role="alert" className="rounded-md border border-amber-300/60 bg-amber-50/80 p-3 text-xs dark:border-amber-900 dark:bg-amber-950/30">
-          A Live session for this conversation is already open in another view ({holder}). Stop it there before connecting here.
+        {foreignOwner && <div role="alert" className={WARNING_NOTE}>
+          A Live session for this conversation is already open in another view (<span className="font-mono">{holder}</span>). Stop it there before connecting here.
         </div>}
-        <section aria-label="Live status" className={cn('flex w-full shrink-0 items-center justify-between gap-2 border-b border-surface-200 pb-3 dark:border-surface-800', compact && 'pb-2')}>
-          <p role="status" className="flex items-center gap-2 text-[13px] font-medium text-ink dark:text-ink-inverse">
-            <span aria-hidden className={cn('h-2 w-2 rounded-full', status === 'ready' ? 'bg-emerald-500' : status === 'connecting' ? 'bg-amber-400' : 'bg-surface-300 dark:bg-surface-600')} />
-            {stopping ? 'Finishing pending work…' : caption}{status === 'ready' && live.processing && !live.playing ? ' · working' : ''}
-          </p>
-          {active && <span className="rounded border border-surface-300 px-1.5 py-0.5 text-[12px] text-ink-muted dark:border-surface-700 dark:text-ink-inverse-muted">
-            {source === 'screen' ? 'Sharing screen' : source === 'camera' ? 'Sharing camera' : mic ? 'Microphone on' : presence === 'speaking' ? 'Speaking' : 'Active'}
-          </span>}
-        </section>
-        <div className="flex shrink-0 items-center justify-center gap-2">
-          <Button type="button" size="icon" variant="outline" className={iconButton} disabled={status !== 'ready' || stopping} aria-pressed={mic} aria-label={mic ? 'Mute microphone' : 'Enable microphone'} onClick={() => mic ? stopMic() : void startMic()}>
-            {mic ? <MicIcon /> : <MicOffIcon />}
-          </Button>
-          <Button type="button" size="icon" variant="outline" className={iconButton} disabled={status !== 'ready' || !!source || stopping} aria-label="Share screen" onClick={() => void startVideo('screen')}><MonitorUpIcon /></Button>
-          <Button type="button" size="icon" variant="outline" className={iconButton} disabled={status !== 'ready' || !!source || stopping} aria-label="Share camera" onClick={() => void startVideo('camera')}><CameraIcon /></Button>
-          {source && <Button type="button" size="icon" variant="outline" className={iconButton} aria-label="Stop sharing" onClick={stopVideo}><SquareIcon /></Button>}
-          <Button type="button" size="icon" variant="outline" className={iconButton} disabled={status !== 'ready' || stopping} aria-label="Share current page and conversation as context" onClick={() => void sendContext()}><RefreshCwIcon /></Button>
-          {status === 'ready' && <Button type="button" size="icon" variant="outline" className={iconButton} disabled={stopping} aria-label="Pause Live session" onClick={() => void gracefulStop(true)}><PauseIcon /></Button>}
+        <div className={cn('shrink-0 rounded-2xl border border-surface-200 bg-surface-0 px-3 pb-3 pt-2.5 dark:border-surface-800 dark:bg-surface-900', compact && 'pb-2.5 pt-2')}>
+          <section aria-label="Live status" className={cn('flex w-full items-start justify-between gap-3 border-b border-surface-200 pb-2.5 dark:border-surface-800', compact && 'pb-2')}>
+            <p role="status" className="flex min-w-0 items-start gap-2 pt-1 text-[13px] font-medium leading-snug text-ink dark:text-ink-inverse">
+              <span aria-hidden className={cn('mt-[5px] size-2 shrink-0 rounded-full', status === 'ready' ? 'bg-success' : status === 'connecting' ? 'bg-amber-400' : 'bg-surface-300 dark:bg-surface-600')} />
+              <span className="min-w-0">{stopping ? 'Finishing pending work…' : caption}{status === 'ready' && live.processing && !live.playing ? ' · working' : ''}</span>
+            </p>
+            {active && <span className={cn('inline-flex h-6 shrink-0 items-center gap-1.5 rounded-full px-2.5 text-[12px] font-semibold',
+              capturing ? 'bg-ink text-white dark:bg-ink-inverse dark:text-ink' : 'bg-surface-100 text-ink-secondary dark:bg-surface-850 dark:text-ink-inverse-secondary')}>
+              <span aria-hidden className={cn('size-1.5 rounded-full', capturing ? 'bg-danger' : 'bg-blurple-600 dark:bg-blurple-400')} />
+              {source === 'screen' ? 'Sharing screen' : source === 'camera' ? 'Sharing camera' : mic ? 'Microphone on' : presence === 'speaking' ? 'Speaking' : 'Active'}
+            </span>}
+          </section>
+          <div className="flex flex-wrap items-center justify-center gap-2 pt-3">
+            <Button type="button" size="icon" variant="outline" className={cn(CONSOLE_BUTTON, mic && CONSOLE_VOLT)} disabled={status !== 'ready' || stopping} aria-pressed={mic} aria-label={mic ? 'Mute microphone' : 'Turn on microphone'} title={mic ? 'Mute microphone' : 'Turn on microphone'} onClick={() => mic ? stopMic() : void startMic()}>
+              {mic ? <MicIcon /> : <MicOffIcon />}
+            </Button>
+            <Button type="button" size="icon" variant="outline" className={CONSOLE_BUTTON} disabled={status !== 'ready' || !!source || stopping} aria-label="Share screen" title="Share screen" onClick={() => void startVideo('screen')}><MonitorUpIcon /></Button>
+            <Button type="button" size="icon" variant="outline" className={CONSOLE_BUTTON} disabled={status !== 'ready' || !!source || stopping} aria-label="Share camera" title="Share camera" onClick={() => void startVideo('camera')}><CameraIcon /></Button>
+            {source && <Button type="button" size="icon" variant="outline" className={cn(CONSOLE_BUTTON, CONSOLE_DANGER)} aria-label="Stop sharing" title="Stop sharing" onClick={stopVideo}><SquareIcon /></Button>}
+            <Button type="button" size="icon" variant="outline" className={CONSOLE_BUTTON} disabled={status !== 'ready' || stopping} aria-label="Share current page and conversation as context" title="Share this page and conversation as context" onClick={() => void sendContext()}><RefreshCwIcon /></Button>
+            {status === 'ready' && <Button type="button" size="icon" variant="outline" className={cn(CONSOLE_BUTTON, CONSOLE_INK)} disabled={stopping} aria-label="Pause Live session" title="Pause Live session" onClick={() => void gracefulStop(true)}><PauseIcon /></Button>}
+          </div>
         </div>
-        <Accordion type="single" collapsible className="rounded-xl border border-surface-200 px-3 dark:border-surface-700">
+        {status !== 'ready' && <Button type="button" className="h-10 w-full shrink-0 rounded-xl bg-blurple-600 text-[13px] font-semibold text-white shadow-none transition-colors duration-150 hover:bg-blurple-700 active:bg-blurple-800 disabled:opacity-40 focus-visible:ring-2 focus-visible:ring-blurple-600/70 focus-visible:ring-offset-2 focus-visible:ring-offset-surface-0 dark:bg-blurple-400 dark:text-ink dark:hover:bg-blurple-300 dark:focus-visible:ring-blurple-400/70 dark:focus-visible:ring-offset-surface-900" onClick={() => void connect()}
+          disabled={status === 'connecting' || stopping || foreignOwner}
+          aria-label="Connect Live">
+          <PhoneIcon />
+          {status === 'connecting' ? 'Connecting…' : 'Connect Live'}
+        </Button>}
+        <Accordion type="single" collapsible className="shrink-0 rounded-2xl border border-surface-200 bg-surface-0 px-3 dark:border-surface-800 dark:bg-surface-900">
           <AccordionItem value="conversation" className="border-none">
-            <AccordionTrigger className="py-3 text-xs hover:no-underline">Live conversation</AccordionTrigger>
+            <AccordionTrigger className="py-3 text-[13px] font-semibold text-ink hover:no-underline dark:text-ink-inverse">
+              <span className="flex items-center gap-2">Live conversation{turns.length > 0 && <span aria-hidden className="font-mono text-[11px] font-medium tabular-nums text-ink-muted dark:text-ink-inverse-muted">{turns.length}</span>}</span>
+            </AccordionTrigger>
             <AccordionContent>
               <VoiceSettings micDeviceId={settings.micDeviceId} onMicDeviceChange={settings.setMicDeviceId} micLocked={mic}
                 model={settings.model} onModelChange={settings.setModel}
                 voice={settings.voice} onVoiceChange={settings.setVoice} effort={settings.effort} onEffortChange={settings.setEffort}
                 sessionLocked={status !== 'idle'} />
-              <Conversation className="relative mt-3 min-h-[12rem]">
+              <Conversation className="relative mt-4 min-h-[12rem] border-t border-surface-200 pt-4 dark:border-surface-800">
                 <ConversationContent className="gap-3 p-0">
-                  {!turns.length && !live.reasoning && <ConversationEmptyState title="Nothing yet" description="Spoken and typed turns appear here." className="py-6 text-xs" />}
+                  {!turns.length && !live.reasoning && <ConversationEmptyState icon={<AudioLinesIcon className="size-5" aria-hidden />} title="Nothing said yet" description="Talk or type. Every turn lands here." className="py-6 text-xs" />}
                   <LiveTranscript turns={turns} reasoning={live.reasoning} streaming={live.processing} />
                 </ConversationContent>
                 <ConversationScrollButton />
@@ -498,34 +525,34 @@ export function VoiceAgent({ userId = 'default', agentScope = 'panel', sessionId
             </AccordionContent>
           </AccordionItem>
         </Accordion>
-        {status !== 'ready' && <Button type="button" className="mt-8 w-full" onClick={() => void connect()}
-          disabled={status === 'connecting' || stopping || foreignOwner}
-          aria-label="Connect Live">
-          <PhoneIcon />
-          {status === 'connecting' ? 'Connecting…' : 'Connect Live'}
-        </Button>}
-        {live.warnings.map((warning) => <p key={warning} role="status" className="rounded-xl border border-amber-200 bg-amber-50/70 p-3 text-xs dark:border-amber-900 dark:bg-amber-950/20">{warning}</p>)}
-        {live.restartNotice && <p role="status" className="rounded-xl border border-amber-200 bg-amber-50/70 p-3 text-xs dark:border-amber-900 dark:bg-amber-950/20">{live.restartNotice}</p>}
-        {live.unknownResults?.length ? <p role="status" className="rounded-xl border border-amber-200 bg-amber-50/70 p-3 text-xs dark:border-amber-900 dark:bg-amber-950/20">
-          Stopped with {live.unknownResults.length} tool result{live.unknownResults.length === 1 ? '' : 's'} unknown. Nothing was replayed; check the affected files or pages before continuing.
+        {live.warnings.map((warning) => <p key={warning} role="status" className={WARNING_NOTE}>{warning}</p>)}
+        {live.restartNotice && <p role="status" className={WARNING_NOTE}>{live.restartNotice}</p>}
+        {live.unknownResults?.length ? <p role="status" className={WARNING_NOTE}>
+          Stopped with <span className="font-mono tabular-nums">{live.unknownResults.length}</span> tool result{live.unknownResults.length === 1 ? '' : 's'} unknown. Nothing was replayed; check the affected files or pages before continuing.
         </p> : null}
-        <video ref={video} autoPlay muted playsInline className={source ? 'w-full rounded-xl bg-black shadow-lg' : 'hidden'} />
-        {blocker && <div role="alert" className="rounded-xl border border-red-300/60 bg-red-50/80 p-3 text-xs text-red-800 dark:bg-red-950/30 dark:text-red-200">
+        <video ref={video} autoPlay muted playsInline className={source ? 'w-full shrink-0 rounded-xl border border-surface-200 bg-surface-950 dark:border-surface-800' : 'hidden'} />
+        {blocker && <div role="alert" className={DANGER_NOTE}>
           <p className="font-semibold">Live is not available for this {isIssueScope(agentScope) ? 'issue' : 'agent'}</p>
           <p className="mt-1 whitespace-pre-wrap break-words">{blocker}</p>
         </div>}
-        {error && !blocker && <div role="alert" className="rounded-xl border border-red-300/60 bg-red-50/80 p-3 text-xs text-red-800 dark:bg-red-950/30 dark:text-red-200">
+        {error && !blocker && <div role="alert" className={DANGER_NOTE}>
           <p className="whitespace-pre-wrap break-words">{error}</p>
           {permissionDeniedKind && window.electron?.media?.openSettings && (
-            <Button type="button" size="sm" variant="outline" className="mt-2 h-7 text-xs"
+            <Button type="button" size="sm" variant="outline" className="mt-2.5 h-8 rounded-lg border-red-200 bg-surface-0 px-3 text-xs font-semibold text-red-800 shadow-none hover:bg-red-100 hover:text-red-900 dark:border-red-900/60 dark:bg-surface-900 dark:text-red-200 dark:hover:bg-red-950/60 dark:hover:text-red-100"
               onClick={() => void window.electron?.media?.openSettings(permissionDeniedKind)}>
-              Open {permissionDeniedKind === 'camera' ? 'Camera' : 'Microphone'} Settings
+              Open {permissionDeniedKind === 'camera' ? 'Camera' : 'Microphone'} settings
             </Button>
           )}
         </div>}
-        {pending.length > 0 && <p role="status" className="text-[11px] text-ink-muted dark:text-ink-inverse-muted">{pending.length} tool call{pending.length === 1 ? '' : 's'} running · switching to Chat waits for them</p>}
-        {live.journalHtml && <details className="rounded-xl border border-surface-200 p-3 dark:border-surface-700">
-          <summary className="cursor-pointer text-xs font-medium">Session journal · {live.journalSaved ? 'saved to configured storage' : 'save failed'}</summary>
+        {pending.length > 0 && <p role="status" className="text-[11px] text-ink-muted dark:text-ink-inverse-muted"><span className="font-mono tabular-nums">{pending.length}</span> tool call{pending.length === 1 ? '' : 's'} running · switching to Chat waits for them</p>}
+        {live.journalHtml && <details className="group shrink-0 rounded-2xl border border-surface-200 bg-surface-0 p-3 dark:border-surface-800 dark:bg-surface-900">
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-[13px] font-semibold text-ink dark:text-ink-inverse [&::-webkit-details-marker]:hidden">
+            <span>Session journal</span>
+            <span className="flex min-w-0 items-center gap-2">
+              <span className={cn('truncate font-mono text-[11px] font-medium', live.journalSaved ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-700 dark:text-red-300')}>{live.journalSaved ? 'saved to configured storage' : 'save failed'}</span>
+              <ChevronDownIcon aria-hidden className="size-4 shrink-0 text-ink-muted transition-transform duration-200 group-open:rotate-180 dark:text-ink-inverse-muted" />
+            </span>
+          </summary>
           <WebPreview className="mt-3 h-72"><WebPreviewBody srcDoc={live.journalHtml} sandbox="" title="Live session journal" /></WebPreview>
         </details>}
       </div>
@@ -538,12 +565,12 @@ function LiveTranscript({ turns, reasoning, streaming }: { turns: LiveTurn[]; re
   const showChain = Boolean(reasoning.trim()) || tools.length > 0
   return <>
     {speech.map((turn) => <Message key={turn.id} from={turn.role}>
-      <MessageContent variant={turn.role === 'assistant' ? 'flat' : 'contained'} className={cn('min-w-0 text-body-sm', turn.role === 'user' && 'group-[.is-user]:bg-gradient-to-br group-[.is-user]:from-indigo-600 group-[.is-user]:to-indigo-800 group-[.is-user]:text-white')}>
+      <MessageContent variant={turn.role === 'assistant' ? 'flat' : 'contained'} className={cn('min-w-0 text-sm leading-relaxed', turn.role === 'user' && 'group-[.is-user]:bg-surface-100 group-[.is-user]:text-ink dark:group-[.is-user]:bg-surface-800 dark:group-[.is-user]:text-ink-inverse')}>
         <MessageResponse>{turn.text || '…'}</MessageResponse>
       </MessageContent>
     </Message>)}
     {showChain && <ChainOfThought className="my-3 space-y-2 text-xs" defaultOpen={streaming} isStreaming={streaming}>
-      <ChainOfThoughtHeader>{streaming ? 'Thinking…' : 'Chain of Thought'}</ChainOfThoughtHeader>
+      <ChainOfThoughtHeader>{streaming ? 'Thinking…' : 'Chain of thought'}</ChainOfThoughtHeader>
       <ChainOfThoughtContent>
         {reasoning.trim() && <ChainOfThoughtStep label="Thinking" status={streaming ? 'active' : 'complete'}>
           <p className="whitespace-pre-wrap break-words text-xs text-ink-muted dark:text-ink-inverse-muted">{reasoning}</p>
@@ -551,8 +578,8 @@ function LiveTranscript({ turns, reasoning, streaming }: { turns: LiveTurn[]; re
         {tools.map((turn) => <ChainOfThoughtStep key={turn.id} label={`Using ${turn.toolName ?? 'tool'}`}
           status={turn.cancelled ? 'complete' : turn.final ? 'complete' : 'active'}
           description={turn.cancelled ? 'cancelled' : turn.final ? 'done' : 'running…'}>
-          {turn.toolInput !== undefined && <pre className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap break-words text-xs">{typeof turn.toolInput === 'string' ? turn.toolInput : JSON.stringify(turn.toolInput, null, 2)}</pre>}
-          {turn.text.trim() && <pre className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap break-words text-xs opacity-80">{turn.text}</pre>}
+          {turn.toolInput !== undefined && <pre className="mt-1.5 max-h-40 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-surface-50 p-2 font-mono text-[11px] leading-relaxed text-ink-secondary scrollbar-thin dark:bg-surface-850 dark:text-ink-inverse-secondary">{typeof turn.toolInput === 'string' ? turn.toolInput : JSON.stringify(turn.toolInput, null, 2)}</pre>}
+          {turn.text.trim() && <pre className="mt-1.5 max-h-40 overflow-auto whitespace-pre-wrap break-words font-mono text-[11px] leading-relaxed text-ink-muted scrollbar-thin dark:text-ink-inverse-muted">{turn.text}</pre>}
         </ChainOfThoughtStep>)}
       </ChainOfThoughtContent>
     </ChainOfThought>}

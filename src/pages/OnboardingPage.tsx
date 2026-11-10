@@ -1,5 +1,8 @@
-import { useEffect, useState, useRef } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
+import { useEffect, useState, useRef, type CSSProperties } from 'react'
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
+import { ArrowRight, Check } from 'lucide-react'
+import { RenWordmark } from '@/components/brand'
+import { Shimmer } from '@/components/ai-elements/shimmer'
 import { useOnboardingStore, INTERVIEW } from '@/stores/onboardingStore'
 import { useAuthStore } from '@/stores/authStore'
 import { useInterestsStore } from '@/stores/interestsStore'
@@ -20,7 +23,16 @@ function applyOnboardingAnswers() {
   if (window.location.hash === '#onboarding') window.location.hash = ''
 }
 
-const EASE = [0.16, 1, 0.3, 1] as const
+// Ren's house curve (docs/brand.md § Shape and depth: ease-out-expo)
+const EASE = [0.19, 1, 0.22, 1] as const
+
+// Shimmer (AI Elements) reads shadcn v4 colour variables; map them onto Ren's tokens.
+const SHIMMER_VARS = {
+  '--color-muted-foreground': 'hsl(var(--foreground) / 0.72)',
+  '--color-background': 'hsl(var(--background))',
+} as CSSProperties
+
+const twoDigits = (value: number) => String(value).padStart(2, '0')
 
 export function OnboardingPage() {
   const { user } = useAuthStore()
@@ -32,7 +44,8 @@ export function OnboardingPage() {
     completeOnboarding,
     addReasoningStep
   } = useOnboardingStore()
-  
+  const reduceMotion = useReducedMotion()
+
   const [inputValue, setInputValue] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
 
@@ -63,10 +76,10 @@ export function OnboardingPage() {
   useEffect(() => {
     if (currentStep !== 'reasoning') return
     const steps = [
-      { type: 'thinking', content: 'Analyzing responses...' },
-      { type: 'search', content: 'Identifying key interest clusters...' },
-      { type: 'tool-use', content: 'Generating personal profile...' },
-      { type: 'conclusion', content: 'Profile calibration complete.' }
+      { type: 'thinking', content: 'Reading your answers…' },
+      { type: 'search', content: 'Finding what you care about…' },
+      { type: 'tool-use', content: 'Building your profile…' },
+      { type: 'conclusion', content: 'Profile ready.' }
     ]
 
     const timeoutIds: ReturnType<typeof setTimeout>[] = []
@@ -88,213 +101,181 @@ export function OnboardingPage() {
 
   // Animation variants
   const pageVariants = {
-    initial: { opacity: 0, y: 24 },
+    initial: { opacity: 0, y: reduceMotion ? 0 : 20 },
     animate: { opacity: 1, y: 0 },
-    exit: { opacity: 0, y: -24 }
+    exit: { opacity: 0, y: reduceMotion ? 0 : -20 }
   }
 
   return (
-    <div className="min-h-screen w-full flex flex-col justify-center items-center bg-surface-0 dark:bg-surface-900 p-8 overflow-hidden relative">
-      {/* Background decorations */}
-      <div className="absolute inset-0 pointer-events-none">
-        {/* Light mode */}
-        <div className="dark:hidden">
-          <div 
-            className="absolute top-0 left-1/4 w-[600px] h-[600px]"
-            style={{
-              background: 'radial-gradient(circle, rgba(194, 106, 65, 0.05) 0%, transparent 60%)',
-            }}
-          />
-          <div 
-            className="absolute bottom-0 right-1/4 w-[500px] h-[500px]"
-            style={{
-              background: 'radial-gradient(circle, rgba(169, 83, 46, 0.04) 0%, transparent 60%)',
-            }}
-          />
-        </div>
-        {/* Dark mode */}
-        <div className="hidden dark:block">
-          <div 
-            className="absolute top-1/4 left-1/3 w-[500px] h-[500px]"
-            style={{
-              background: 'radial-gradient(circle, rgba(194, 106, 65, 0.08) 0%, transparent 60%)',
-              filter: 'blur(60px)',
-            }}
-          />
-        </div>
-      </div>
-
-      <div className="max-w-2xl w-full z-10">
-        <AnimatePresence mode="wait">
-          
-          {/* STEP 1: INTERVIEW */}
-          {currentStep === 'interview' && (
+    // `ron-content`: in the Glass theme the page becomes the see-through content layer and
+    // the paper surface below takes the blue glass tint (index.css § GLASS THEME).
+    <div className="ron-content relative min-h-screen w-full overflow-hidden bg-surface-0 text-ink dark:bg-surface-900 dark:text-ink-inverse">
+      <div className="relative flex min-h-screen w-full flex-col bg-surface-0 dark:bg-surface-900">
+        {/* Progress: a thin volt bar along the top edge */}
+        {currentStep === 'interview' && (
+          <div className="absolute inset-x-0 top-0 h-[3px] bg-surface-100 dark:bg-surface-850">
             <motion.div
-              key={`question-${currentQuestionIndex}`}
-              variants={pageVariants}
-              initial="initial"
-              animate="animate"
-              exit="exit"
+              className="h-full bg-blurple-600 dark:bg-blurple-400"
+              initial={{ width: 0 }}
+              animate={{ width: `${((currentQuestionIndex) / INTERVIEW.length) * 100}%` }}
               transition={{ duration: 0.5, ease: EASE }}
-              className="space-y-8"
-            >
-              {/* Progress indicator */}
-               <div className="space-y-2">
-                {currentQuestionIndex === 0 && (
-                  <p className="text-body-lg text-ink-secondary dark:text-ink-inverse-secondary">
-                    Welcome, {user?.name || 'Explorer'}. A few quick questions personalize your home page.
-                  </p>
-                )}
-                <span className="text-label uppercase tracking-wider text-accent dark:text-accent-light">
-                    Question {currentQuestionIndex + 1} of {INTERVIEW.length}
-                </span>
-                <h2 className="text-display-md font-display text-ink dark:text-ink-inverse leading-tight">
-                    {INTERVIEW[currentQuestionIndex].question}
-                </h2>
-               </div>
+            />
+          </div>
+        )}
 
-              {/* Input form */}
-               <form onSubmit={handleSubmit} className="space-y-6">
-                <div className="relative group">
-                  {/* Scrollable input container */}
-                  <div className="relative overflow-hidden">
-                    <div className="overflow-x-auto scrollbar-none">
-                      <input
-                        ref={inputRef}
-                        type="text"
-                        value={inputValue}
-                        onChange={(e) => setInputValue(e.target.value)}
-                        placeholder={INTERVIEW[currentQuestionIndex].placeholder}
-                        className="
-                          min-w-full bg-transparent
-                          border-b-2 border-surface-200 dark:border-surface-700
-                          focus:border-accent dark:focus:border-accent-light
-                          text-display-sm text-ink dark:text-ink-inverse
-                          py-4 pr-28 outline-none
-                          transition-colors duration-300
-                          placeholder:text-ink-muted dark:placeholder:text-ink-inverse-muted
-                          placeholder:font-sans placeholder:text-body-xl placeholder:font-thin
-                          font-thin
-                          whitespace-nowrap
-                        "
-                        autoFocus
-                        style={{ width: Math.max(100, inputValue.length * 18 + 120) + 'px' }}
-                      />
+        {/* Halftone texture, top right */}
+        <div aria-hidden className="halftone pointer-events-none absolute -right-28 -top-28 h-[520px] w-[520px]" />
+
+        {/* Header: wordmark + mono step counter */}
+        <div className="relative z-10 flex items-center justify-between px-8 pt-10 sm:px-12">
+          <RenWordmark className="text-[24px] text-ink dark:text-ink-inverse" />
+          {currentStep === 'interview' && (
+            <span className="font-mono text-[12px] font-medium tabular-nums tracking-[0.08em] text-ink-secondary dark:text-ink-inverse-secondary">
+              {twoDigits(currentQuestionIndex + 1)}
+              <span className="text-ink-muted dark:text-ink-inverse-muted"> / {twoDigits(INTERVIEW.length)}</span>
+            </span>
+          )}
+        </div>
+
+        <div className="relative z-10 flex flex-1 items-center justify-center px-8 pb-20 pt-10 sm:px-12">
+          <div className="w-full max-w-2xl">
+            <AnimatePresence mode="wait">
+
+              {/* STEP 1: INTERVIEW */}
+              {currentStep === 'interview' && (
+                <motion.div
+                  key={`question-${currentQuestionIndex}`}
+                  variants={pageVariants}
+                  initial="initial"
+                  animate="animate"
+                  exit="exit"
+                  transition={{ duration: 0.45, ease: EASE }}
+                  className="space-y-10"
+                >
+                  {/* Question */}
+                  <div className="space-y-5">
+                    {currentQuestionIndex === 0 && (
+                      <p className="text-body-lg text-ink-secondary dark:text-ink-inverse-secondary">
+                        Welcome, {user?.name || 'builder'}. A few quick questions and Ren tunes your home page to you.
+                      </p>
+                    )}
+                    <p className="tag-label tag-label-slash">
+                      Question {currentQuestionIndex + 1} of {INTERVIEW.length}
+                    </p>
+                    <h2 className="font-display text-display-md font-extrabold tracking-[-0.035em] text-ink dark:text-ink-inverse sm:text-display-lg">
+                      {INTERVIEW[currentQuestionIndex].question}
+                    </h2>
+                  </div>
+
+                  {/* Answer */}
+                  <form onSubmit={handleSubmit} className="space-y-6">
+                    <div className="relative overflow-hidden">
+                      <div className="overflow-x-auto scrollbar-none">
+                        <input
+                          ref={inputRef}
+                          type="text"
+                          value={inputValue}
+                          onChange={(e) => setInputValue(e.target.value)}
+                          placeholder={INTERVIEW[currentQuestionIndex].placeholder}
+                          aria-label={INTERVIEW[currentQuestionIndex].question}
+                          className="
+                            min-w-full bg-transparent
+                            border-b-2 border-surface-200 dark:border-surface-700
+                            focus:border-blurple-600 dark:focus:border-blurple-400
+                            font-display text-display-sm font-semibold tracking-[-0.025em]
+                            text-ink dark:text-ink-inverse
+                            py-4 pr-4 outline-none
+                            transition-colors duration-200
+                            placeholder:font-sans placeholder:text-body-xl placeholder:font-normal placeholder:tracking-normal
+                            placeholder:text-ink-muted dark:placeholder:text-ink-inverse-muted
+                            whitespace-nowrap
+                          "
+                          autoFocus
+                          style={{ width: Math.max(100, inputValue.length * 18 + 120) + 'px' }}
+                        />
+                      </div>
                     </div>
-                  </div>
-                  <div className="absolute right-0 bottom-4 flex items-center text-body-sm text-ink-muted dark:text-ink-inverse-muted bg-surface-0 dark:bg-surface-900 pl-4">
-                    Press Enter ↵
-                  </div>
-                </div>
-                
-                <div className="flex justify-end">
-                  <motion.button
-                    type="submit"
-                    disabled={!inputValue.trim()}
-                    whileHover={{ scale: 1.02 }}
-                    whileTap={{ scale: 0.98 }}
-                    className="
-                      px-8 py-3 rounded-xl
-                      bg-accent dark:bg-accent-light
-                      text-white text-body-md font-semibold
-                      disabled:opacity-50 disabled:cursor-not-allowed
-                      hover:shadow-glow-accent
-                      transition-all duration-300
-                      flex items-center gap-2
-                    "
-                  >
-                    Next
-                    <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <polyline points="9 18 15 12 9 6" />
-                    </svg>
-                  </motion.button>
-                </div>
-               </form>
-            </motion.div>
-          )}
 
-          {/* STEP 2: REASONING */}
-          {currentStep === 'reasoning' && (
-            <motion.div
-              key="reasoning"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="text-center space-y-8"
-            >
-              {/* Loading spinner */}
-                <div className="relative w-24 h-24 mx-auto">
-                <div className="absolute inset-0 border-2 border-surface-200 dark:border-surface-700 rounded-full" />
-                <motion.div 
-                  className="absolute inset-0 border-2 border-t-accent dark:border-t-accent-light rounded-full"
-                  animate={{ rotate: 360 }}
-                  transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
-                />
-                </div>
-              
-              <h2 className="text-display-sm font-display text-ink dark:text-ink-inverse">
-                Calibrating your experience<span className="text-accent dark:text-accent-light">...</span>
-              </h2>
-              
-              {/* Status messages */}
-                <div className="h-8 overflow-hidden relative">
+                    <div className="flex items-center justify-end gap-4">
+                      <span className="hidden items-center gap-1.5 text-[12px] text-ink-secondary dark:text-ink-inverse-muted sm:inline-flex">
+                        Press <kbd className="kbd">Enter</kbd>
+                      </span>
+                      <button
+                        type="submit"
+                        disabled={!inputValue.trim()}
+                        className="group inline-flex h-11 items-center gap-2 rounded-lg bg-blurple-600 px-5 text-[14px] font-semibold text-white transition-colors duration-150 hover:bg-blurple-700 active:translate-y-px active:bg-blurple-800 disabled:pointer-events-none disabled:opacity-40 dark:bg-blurple-400 dark:text-ink dark:hover:bg-blurple-300"
+                      >
+                        Next
+                        <ArrowRight className="h-4 w-4 transition-transform duration-200 ease-out group-hover:translate-x-0.5" />
+                      </button>
+                    </div>
+                  </form>
+                </motion.div>
+              )}
+
+              {/* STEP 2: REASONING */}
+              {currentStep === 'reasoning' && (
+                <motion.div
+                  key="reasoning"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="space-y-6"
+                >
+                  <p className="tag-label tag-label-slash">Tuning</p>
+                  <h2 className="font-display text-display-md font-extrabold tracking-[-0.035em] text-ink dark:text-ink-inverse sm:text-display-lg">
+                    Making Ren yours<span className="text-volt">.</span>
+                  </h2>
+
+                  {/* Status messages */}
+                  <div className="relative h-7 overflow-hidden" style={SHIMMER_VARS}>
                     <AnimatePresence mode="popLayout">
-                        {useOnboardingStore.getState().reasoning.steps.slice(-1).map((step) => (
-                             <motion.div
-                                key={step.timestamp}
-                                initial={{ y: 20, opacity: 0 }}
-                                animate={{ y: 0, opacity: 1 }}
-                                exit={{ y: -20, opacity: 0 }}
-                      className="text-body-sm text-ink-muted dark:text-ink-inverse-muted font-mono"
-                             >
-                                {step.content}
-                             </motion.div>
-                        ))}
+                      {useOnboardingStore.getState().reasoning.steps.slice(-1).map((step) => (
+                        <motion.div
+                          key={step.timestamp}
+                          initial={{ y: 20, opacity: 0 }}
+                          animate={{ y: 0, opacity: 1 }}
+                          exit={{ y: -20, opacity: 0 }}
+                          className="font-mono text-[13px] leading-7"
+                        >
+                          <Shimmer as="span">{step.content}</Shimmer>
+                        </motion.div>
+                      ))}
                     </AnimatePresence>
-                </div>
-            </motion.div>
-          )}
+                  </div>
+                </motion.div>
+              )}
 
-          {/* STEP 4: COMPLETE */}
-           {currentStep === 'complete' && (
-            <motion.div
-              key="complete"
-              variants={pageVariants}
-              initial="initial"
-              animate="animate"
-               className="text-center space-y-6"
-            >
-              <motion.div
-                initial={{ scale: 0 }}
-                animate={{ scale: 1 }}
-                transition={{ type: 'spring', stiffness: 400, damping: 20 }}
-                className="w-16 h-16 mx-auto rounded-full bg-success/10 flex items-center justify-center"
-              >
-                <svg className="w-8 h-8 text-success" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="20 6 9 17 4 12" />
-                </svg>
-              </motion.div>
-              <h1 className="text-display-lg font-display text-ink dark:text-ink-inverse">
-                All Set<span className="text-accent dark:text-accent-light">!</span>
-              </h1>
-              <p className="text-body-lg text-ink-secondary dark:text-ink-inverse-secondary">
-                Redirecting you to your personalized home...
-              </p>
-            </motion.div>
-          )}
+              {/* STEP 4: COMPLETE */}
+              {currentStep === 'complete' && (
+                <motion.div
+                  key="complete"
+                  variants={pageVariants}
+                  initial="initial"
+                  animate="animate"
+                  className="space-y-6"
+                >
+                  <motion.div
+                    initial={{ scale: reduceMotion ? 1 : 0.85, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    transition={{ duration: 0.3, ease: EASE }}
+                    className="spray-halo flex h-14 w-14 items-center justify-center rounded-2xl bg-blurple-600 text-white dark:bg-blurple-400 dark:text-ink"
+                  >
+                    <Check className="h-7 w-7" strokeWidth={2.5} />
+                  </motion.div>
+                  <h1 className="font-display text-display-lg font-extrabold tracking-[-0.035em] text-ink dark:text-ink-inverse">
+                    You’re set<span className="text-volt">.</span>
+                  </h1>
+                  <p className="text-body-lg text-ink-secondary dark:text-ink-inverse-secondary">
+                    Taking you to your home page…
+                  </p>
+                </motion.div>
+              )}
 
-        </AnimatePresence>
+            </AnimatePresence>
+          </div>
+        </div>
       </div>
-      
-      {/* Progress Bar */}
-      {currentStep === 'interview' && (
-        <motion.div 
-          className="absolute bottom-0 left-0 h-1 bg-accent dark:bg-accent-light"
-          initial={{ width: 0 }}
-          animate={{ width: `${((currentQuestionIndex) / INTERVIEW.length) * 100}%` }}
-          transition={{ duration: 0.5, ease: EASE }}
-        />
-      )}
     </div>
   )
 }

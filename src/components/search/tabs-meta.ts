@@ -1,7 +1,7 @@
 /**
- * Shared metadata for the search results tabs. The 2026 redesign uses a single
- * ember accent for every lens (no per-tab rainbow): `hue` stays on the contract so
- * panels can tint small marks, but every tab resolves to the same accent.
+ * Shared metadata for the search results tabs. Ren uses one accent for every lens: volt,
+ * which follows the theme (blurple 600 on paper, 400 on ink). `hue` stays on the contract so
+ * panels can tint small marks, and every tab resolves to the same volt colour.
  */
 export type SearchTab = 'agent' | 'web' | 'local' | 'news' | 'images' | 'videos' | 'shopping'
 
@@ -11,8 +11,8 @@ export interface TabMeta {
   hue: string
 }
 
-/** The one accent (Tailwind `ember-500`). */
-export const SEARCH_ACCENT = '#C26A41'
+/** The one accent: volt, read from the theme's `--ren-volt` channels (docs/brand.md). */
+export const SEARCH_ACCENT = 'rgb(var(--ren-volt))'
 
 export const SEARCH_TABS: readonly TabMeta[] = [
   { id: 'agent', label: 'Answer', hue: SEARCH_ACCENT },
@@ -28,11 +28,16 @@ export function tabHue(id: SearchTab): string {
   return SEARCH_TABS.find((tab) => tab.id === id)?.hue ?? SEARCH_ACCENT
 }
 
-/** Alpha-washed variant of a hue for surfaces (hex in, rgba out). */
-export function hueWash(hex: string, alpha: number): string {
-  const r = parseInt(hex.slice(1, 3), 16)
-  const g = parseInt(hex.slice(3, 5), 16)
-  const b = parseInt(hex.slice(5, 7), 16)
+/**
+ * Alpha-washed variant of a hue for surfaces. Takes a theme token in the `rgb(var(--token))`
+ * form (what `SEARCH_ACCENT` is) or a `#rrggbb` hex, and returns a CSS colour with that alpha.
+ */
+export function hueWash(hue: string, alpha: number): string {
+  const token = /^rgb\((var\(--[\w-]+\))\)$/.exec(hue)
+  if (token) return `rgb(${token[1]} / ${alpha})`
+  const r = parseInt(hue.slice(1, 3), 16)
+  const g = parseInt(hue.slice(3, 5), 16)
+  const b = parseInt(hue.slice(5, 7), 16)
   return `rgba(${r}, ${g}, ${b}, ${alpha})`
 }
 
@@ -51,8 +56,16 @@ export function domainInitials(url: string): string {
   return host.slice(0, 2).toUpperCase()
 }
 
-/** Deterministic, muted earth tone per domain, for initial-tile fallbacks. */
-const DOMAIN_PALETTE = ['#8A6A55', '#6F7A68', '#7A6F86', '#5F7684', '#8C7A57', '#7E6A6A', '#6A7C76', '#857265']
+/**
+ * Deterministic tone per domain for initial-tile fallbacks, drawn from Ren's own theme tokens
+ * (volt, deep volt, soft volt, muted ink) so every tone follows Light, Dark and Glass.
+ */
+const DOMAIN_PALETTE = [
+  'rgb(var(--ren-volt))',
+  'rgb(var(--ren-volt-deep))',
+  'rgb(var(--ren-volt-soft))',
+  'hsl(var(--muted-foreground))',
+]
 
 export function domainHue(domain: string): string {
   let hash = 0
@@ -65,7 +78,7 @@ export function domainHue(domain: string): string {
  * (U+E200 "cite" U+E202 "turn0search3" … U+E201). Citations still render as chips.
  */
 export function stripCitationMarkers(text: string): string {
-  return text.replace(/\uE200[^\uE201]*\uE201/g, '').replace(/[\uE200-\uE202]/g, '')
+  return text.replace(/[^]*/g, '').replace(/[-]/g, '')
 }
 
 /** Markdown/HTML-free plain text (for one-line previews of the agent answer). */

@@ -20,7 +20,7 @@ test('session ids satisfy the /chat identifier rule', () => {
   assert.ok(ronSessionId('wf', 'x'.repeat(300)).length <= 128)
 })
 
-test('the message names what Ron writes, carries the request, facts and current content', () => {
+test('the message names what Ren writes, carries the request, facts and current content', () => {
   const page = documentRonMessage({ target: { kind: 'page', title: '', projectName: 'Ron', projectKey: 'RON' }, intent: ' a release runbook ', currentMarkdown: '# Old' })
   assert.match(page, /page "Untitled" in the Ron \(RON\)/)
   assert.match(page, /Request: a release runbook/)
@@ -56,7 +56,7 @@ test('narration before research is not part of the draft, and glued headings sti
   assert.equal(unwrapMarkdown('Use the U.S. region. Then deploy.'), 'Use the U.S. region. Then deploy.')
 })
 
-test('Ron’s answer becomes ordered segments: top-level text and finished render_workflow calls', () => {
+test('Ren’s answer becomes ordered segments: top-level text and finished render_workflow calls', () => {
   let state = emptyPanelState('doc-a')
   const steps = [{ id: 'a', label: 'Ask', kind: 'start' }, { id: 'b', label: 'Approve?', kind: 'decision' }, { id: 'c', label: 'Done', kind: 'end' }]
   for (const next of [

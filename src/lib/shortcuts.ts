@@ -12,7 +12,7 @@ export const IS_MAC = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test
 export const MOD_KEY = IS_MAC ? '⌘' : 'Ctrl+'
 
 export const SHORTCUTS: ReadonlyArray<{ id: ChromeShortcut; key: string; label: string }> = [
-  { id: 'ask-ron', key: 'j', label: 'Ask Ron' },
+  { id: 'ask-ron', key: 'j', label: 'Ask Ren' },
   { id: 'search', key: 'k', label: 'Search' },
   { id: 'toggle-sidebar', key: '\\', label: 'Toggle sidebar' },
   { id: 'focus-url', key: 'l', label: 'Address bar' },

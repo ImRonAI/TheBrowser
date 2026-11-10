@@ -2,18 +2,18 @@
 
 ## Overview
 
-This SOP guides Ron through learning a repeatable outcome from a live demonstration. The user
-shows, on their shared screen, how they get a result they want again in the future. Ron is not
-learning to replay their clicks: Ron is learning the goal, the sources, the decisions and the
-user's judgement of a good result, so that Ron can produce the same outcome faster and more
+This SOP guides Ren through learning a repeatable outcome from a live demonstration. The user
+shows, on their shared screen, how they get a result they want again in the future. Ren is not
+learning to replay their clicks: Ren is learning the goal, the sources, the decisions and the
+user's judgement of a good result, so that Ren can produce the same outcome faster and more
 automatically with its own tools (HTTP and search instead of browsing, the browser only where
 no API exists, shell and editor, environment for secrets, `render_ui` for an interactive result
 the user can rate, and memory so their feedback shapes the next run). During the demonstration
-Ron is silent and journals. When the user presses "Finish demonstration" Ron talks: it states
+Ren is silent and journals. When the user presses "Finish demonstration" Ren talks: it states
 its understanding, takes corrections, asks its questions and proposes its implementation plan.
 After the lesson the journal becomes a human-reviewed process document, and after explicit
 approval it becomes a reusable Agent Skill plus an executable native Strands Agent SOP that is
-demonstrated once. Use it whenever a user opens Teach Ron. The learned workflow receives its own
+demonstrated once. Use it whenever a user opens Teach Ren. The learned workflow receives its own
 name; this SOP governs only the learning process.
 
 ## Parameters
@@ -27,7 +27,7 @@ name; this SOP governs only the learning process.
 - **journal** (optional): The ordered journal so far: observations, user speech, assistant
   speech, debrief corrections and answers, open questions and tasks. Empty at the start of a
   new lesson. Entries of kind `debrief`, `debrief_user_speech` and `debrief_assistant_speech`
-  were recorded after the demonstration, when the user corrected and confirmed Ron's
+  were recorded after the demonstration, when the user corrected and confirmed Ren's
   understanding, and are authoritative over earlier observations.
 - **approved_process** (optional): The exact reviewed revision and journal digest. Present only
   in the `publish` and `demonstrate` phases.
@@ -127,7 +127,7 @@ the user wants, how they judge it, and what was agreed in the debrief.
 - You MUST distinguish observed actions from commentary, inferred clicks, and missing evidence.
 - You MUST NOT invent actions, successful tool results, credentials, or completion evidence,
   because the published SOP will be executed and fabricated steps fail or cause harm.
-- You MUST express the process as the steps Ron will perform with its own tools to reach the
+- You MUST express the process as the steps Ren will perform with its own tools to reach the
   outcome, citing the journal evidence for each, not as a transcript of the user's clicks,
   because the point of the skill is to do the work for the user.
 
@@ -153,7 +153,7 @@ now on, using what already exists before proposing anything new.
 - Your `implementation` MUST state how the result is presented (a `render_ui` view and its
   controls when the outcome is something the user looks at or rates) and how the user's
   feedback is stored and reused (`add_memory` / `search_memory`), because the user asked for a
-  result they can judge and for Ron to remember their judgement.
+  result they can judge and for Ren to remember their judgement.
 - Whatever option you choose, the lesson MUST be published as a native Agent SOP; a new tool,
   MCP server or specialist agent is a dependency that the SOP invokes.
 - You MUST list only the questions that remain unanswered after the debrief in `questions`.
@@ -262,20 +262,20 @@ journal(action="write", content="User read the comments before saving. Saved to 
 journal(action="write", content="Question for the debrief: is it always this topic, or should I ask for topics each time? How many videos is a good batch?")
 ```
 
-No speech accompanies these entries. The user said nothing to Ron, so Ron said nothing.
+No speech accompanies these entries. The user said nothing to Ren, so Ren said nothing.
 
 ### Example debrief (phase `observe`, after `[demonstration finished]`)
 
-Ron (aloud): "Here is what I understood. You want a weekly batch of new YouTube videos on
+Ren (aloud): "Here is what I understood. You want a weekly batch of new YouTube videos on
 topics you care about, this time woodworking. You prefer videos over ten minutes from channels
 with a track record, uploaded recently, and you check the comments before committing. A good
 result is a handful you actually want to watch. Is that right?"
 User: "Yes, but five to eight videos, and I don't care about the comments that much."
 `journal(action="write", content="Correction: batch of 5-8 videos; comments are a minor signal, not a gate.")`
-Ron: "Got it. Two questions. Should I ask you for the topics each time, or remember them?"
+Ren: "Got it. Two questions. Should I ask you for the topics each time, or remember them?"
 User: "Remember them, I'll tell you when they change."
 `journal(action="write", content="Answer: remember topics in memory; user will update them.")`
-Ron: "Here is how I would do it. Instead of browsing, I'd search with the YouTube Data API
+Ren: "Here is how I would do it. Instead of browsing, I'd search with the YouTube Data API
 through http_request, filter by duration and upload date, rank by channel history and views,
 and then render a carousel with each video embedded so you can watch it right there, with a
 larger and smaller player size, thumbs up and down on each, and a ranking and feedback box at
@@ -285,7 +285,7 @@ render_ui and memory already exist; I need a YouTube API key stored with environ
 that work?"
 User: "Yes."
 `journal(action="write", content="Agreed plan: YouTube Data API via http_request (key in environment), filter+rank, render_ui carousel with embedded players, min/max size, thumbs up/down, final ranking + feedback box; add_memory topic 'youtube picks'; search_memory at start of each run.")`
-Ron: "Anything else?" User: "No." → `finish_observation(summary=...)`
+Ren: "Anything else?" User: "No." → `finish_observation(summary=...)`
 
 ### Example `implementation` recorded in the review (phase `review`)
 
@@ -330,7 +330,7 @@ without a live user and any observation written then is not part of the approved
 
 - The understanding, the answers and the implementation plan were spoken, corrected by the
   user, and journaled before the lesson ended.
-- The process document describes what Ron will do with its own tools to reach the outcome, and
+- The process document describes what Ren will do with its own tools to reach the outcome, and
   how the result is presented and the user's feedback remembered, traceable to journal evidence.
 - Every executable dependency is in the scoped native registry before publication.
 - The learned skill and the current native MCP SOP prompt agree with the approved process.

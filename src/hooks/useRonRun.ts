@@ -28,10 +28,10 @@ export function useRonRun(destination: RonDestination) {
     setState(null)
     try {
       const final = await runRon({ apiBase: API_BASE_URL, destination, sessionId, userId, message, goal, signal: controller.signal, onState: setState })
-      if (final.status === 'error') setError(final.error || 'Ron could not finish this request.')
+      if (final.status === 'error') setError(final.error || 'Ren could not finish this request.')
       return final
     } catch (cause) {
-      if (!controller.signal.aborted) setError(cause instanceof Error ? cause.message : 'Ron could not be reached.')
+      if (!controller.signal.aborted) setError(cause instanceof Error ? cause.message : 'Ren could not be reached.')
       return null
     } finally {
       if (active.current?.controller === controller) active.current = null

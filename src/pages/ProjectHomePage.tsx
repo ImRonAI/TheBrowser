@@ -1,5 +1,5 @@
-import { useCallback, useMemo, useState, useEffect } from 'react'
-import { ChevronDown, ChevronRight, Plus, ArrowUp, ArrowDown, FilePlus } from 'lucide-react'
+import { Fragment, useCallback, useMemo, useState, useEffect, type DragEvent } from 'react'
+import { ChevronDown, ChevronRight, Plus, ArrowUp, ArrowDown, FilePlus, MessagesSquare } from 'lucide-react'
 import { useProjectsStore, projectSelectors, projectUtils } from '@/stores/projectsStore'
 import { useNavigationStore } from '@/stores/navigationStore'
 import {
@@ -16,6 +16,9 @@ import {
   PROJECT_TYPE_SCHEMES,
 } from '@/types/projects'
 import { IssueCard } from '@/components/projects/IssueCard'
+import { BLOCKED_BAR, BlockedTag } from '@/components/projects/BlockedTag'
+import { useIssueBlocking } from '@/hooks/useIssueBlocking'
+import { ProjectDashboard } from '@/components/projects/dashboard/ProjectDashboard'
 import { IssueDrawer } from '@/components/projects/IssueDrawer'
 import { ProjectCalendar } from '@/components/projects/ProjectCalendar'
 import { ProjectConfigurationEditor } from '@/components/projects/ProjectConfigurationEditor'
@@ -24,9 +27,14 @@ import { ProjectsSyncStatus } from '@/components/projects/ProjectsSyncStatus'
 import { ProjectTypeBadge, IssueTypeBadge, IssueStatusBadge } from '@/components/projects/badges'
 import { CreateIssueDialog } from '@/components/projects/dialogs'
 import { Button } from '@/components/ui/button'
+import { Dialog as DialogRoot, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog'
+import { timelineBar } from '@/lib/timeline-bar'
 import { ProjectDocuments } from '@/components/projects/documents/ProjectDocuments'
 import { PageBackground } from '@/components/shared/PageBackground'
 import { cn } from '@/utils/cn'
+import { useAgentUi } from '@/context/AgentUiContext'
+import { usePanelAgentStore } from '@/stores/panelAgentStore'
+import { projectChoices } from '@/lib/panel-agents'
 
 interface ProjectHomePageProps {
   projectKey: string
@@ -35,10 +43,11 @@ interface ProjectHomePageProps {
 }
 
 export function ProjectHomePage({ projectKey, documentId }: ProjectHomePageProps) {
-  const { projects, issues, activity, updateProject, people, isInitialized, isLoading, userId } = useProjectsStore()
+  const { projects, issues, updateProject, people, isInitialized, isLoading, userId } = useProjectsStore()
   const { setActiveTab } = useNavigationStore()
+  const { openPanel } = useAgentUi()
   const project = projectSelectors.getProjectByKey(projects, projectKey)
-  const [activeView, setActiveView] = useState<ProjectView>(documentId ? 'docs' : 'backlog')
+  const [activeView, setActiveView] = useState<ProjectView>(documentId ? 'docs' : 'dashboard')
   const [selectedIssueId, setSelectedIssueId] = useState<string | null>(null)
   const [showCreateIssue, setShowCreateIssue] = useState(false)
   const [newDocumentRequested, setNewDocumentRequested] = useState(false)
@@ -62,9 +71,9 @@ export function ProjectHomePage({ projectKey, documentId }: ProjectHomePageProps
     return (
       <div className="min-h-full relative overflow-hidden bg-surface-0 dark:bg-surface-900">
         <PageBackground />
-        <div className="relative z-10 px-10 py-8">
+        <div className="relative z-10 px-4 sm:px-6 lg:px-10 py-6 lg:py-8">
           <ProjectsSyncStatus initialize />
-          <div className="rounded-3xl glass-card border border-white/10 p-8 shadow-soft">
+          <div className="rounded-3xl border border-surface-200 bg-surface-0 p-5 shadow-soft dark:border-surface-800 dark:bg-surface-900 sm:p-8">
             <h1 className="text-2xl font-display text-ink dark:text-ink-inverse">{isLoading || !isInitialized ? 'Loading project' : 'Project not found'}</h1>
             <p className="mt-2 text-body-sm text-ink-muted dark:text-ink-inverse-muted">
               Double-check the project key and try again.
@@ -80,29 +89,34 @@ export function ProjectHomePage({ projectKey, documentId }: ProjectHomePageProps
   return (
     <div className="min-h-full relative overflow-hidden bg-surface-0 dark:bg-surface-900">
       <PageBackground />
-      <div className="relative z-10 px-10 py-8 space-y-8">
+      <div className="relative z-10 px-4 sm:px-6 lg:px-10 py-6 lg:py-8 space-y-6 lg:space-y-8">
         <ProjectsSyncStatus initialize />
-        <div className="rounded-3xl glass-card border border-white/10 p-8 shadow-soft">
-          <div className="flex flex-wrap items-start justify-between gap-6">
-            <div>
+        <div className="rounded-3xl border border-surface-200 bg-surface-0 p-5 shadow-soft dark:border-surface-800 dark:bg-surface-900 sm:p-6 lg:p-8">
+          <div className="flex flex-wrap items-start justify-between gap-4 lg:gap-6">
+            <div className="min-w-0">
               <ProjectTypeBadge type={project.type} />
-              <h1 className="mt-4 text-3xl font-display text-ink dark:text-ink-inverse">{project.name}</h1>
+              <h1 className="mt-4 text-2xl sm:text-3xl font-display text-ink dark:text-ink-inverse break-words">{project.name}</h1>
               <p className="mt-2 text-body-sm text-ink-secondary dark:text-ink-inverse-secondary max-w-2xl">
                 {project.summary || 'Add a project summary to orient the team.'}
               </p>
               <div className="mt-4 flex flex-wrap gap-2 text-body-xs text-ink-muted dark:text-ink-inverse-muted">
-                <span className="rounded-full glass-subtle border border-white/10 dark:border-white/10 px-3 py-1">
+                <span className="rounded-full border border-surface-200 bg-surface-0 px-3 py-1 dark:border-surface-800 dark:bg-surface-900">
                   Key: {project.key}
                 </span>
-                <span className="rounded-full glass-subtle border border-white/10 dark:border-white/10 px-3 py-1">
+                <span className="rounded-full border border-surface-200 bg-surface-0 px-3 py-1 dark:border-surface-800 dark:bg-surface-900">
                   Owner: {ownerName}
                 </span>
-                <span className="rounded-full glass-subtle border border-white/10 dark:border-white/10 px-3 py-1">
+                <span className="rounded-full border border-surface-200 bg-surface-0 px-3 py-1 dark:border-surface-800 dark:bg-surface-900">
                   Type: {PROJECT_TYPE_SCHEMES[project.type].label}
                 </span>
               </div>
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+              <Button type="button" variant="outline" className="rounded-full" title="Discuss this project with its agent in the Agent Panel; it can create and edit issues"
+                onClick={() => { usePanelAgentStore.getState().requestAgent(projectChoices([project])[0]); openPanel() }}>
+                <MessagesSquare />
+                Ask the project agent
+              </Button>
               <Button type="button" variant="outline" className="rounded-full" onClick={() => setShowCreateIssue(true)}>
                 <Plus />
                 New Issue
@@ -113,16 +127,18 @@ export function ProjectHomePage({ projectKey, documentId }: ProjectHomePageProps
               </Button>
             </div>
           </div>
-          <div className="mt-8 flex flex-wrap gap-2">
+          <div className="mt-6 lg:mt-8 -mx-1 flex gap-2 overflow-x-auto px-1 pb-1 scrollbar-thin" role="group" aria-label="Project views">
             {INTERNAL_PROJECT_VIEWS.map((view) => (
               <button
                 key={view}
+                type="button"
+                aria-pressed={activeView === view}
                 onClick={() => setActiveView(view)}
                 className={cn(
-                  'px-4 py-2 rounded-full text-[11px] font-semibold uppercase tracking-wider transition',
+                  'shrink-0 whitespace-nowrap px-4 py-2 rounded-full text-[11px] font-semibold uppercase tracking-wider transition',
                   activeView === view
                     ? 'bg-accent/20 text-accent dark:text-accent-light'
-                    : 'glass-subtle border border-white/10 dark:border-white/10 text-ink-muted dark:text-ink-inverse-muted'
+                    : 'border border-surface-200 bg-surface-0 text-ink-muted dark:border-surface-800 dark:bg-surface-900 dark:text-ink-inverse-muted'
                 )}
               >
                 {view}
@@ -133,9 +149,11 @@ export function ProjectHomePage({ projectKey, documentId }: ProjectHomePageProps
 
         <div className="space-y-6">
         {activeView === 'dashboard' && (
-          <ProjectDashboardView
-            projectIssues={projectIssues}
-            activity={activity.filter((entry) => entry.projectId === project.id)}
+          <ProjectDashboard
+            key={`${userId}:${project.id}`}
+            project={project}
+            issues={projectIssues}
+            userId={userId}
             onIssueSelect={setSelectedIssueId}
           />
         )}
@@ -191,135 +209,6 @@ export function ProjectHomePage({ projectKey, documentId }: ProjectHomePageProps
         projectId={project.id}
         allowParentSelection
       />
-      </div>
-    </div>
-  )
-}
-
-function ProjectDashboardView({
-  projectIssues,
-  activity,
-  onIssueSelect,
-}: {
-  projectIssues: Issue[]
-  activity: { id: string; action: string; timestamp: number; issueId?: string; actorName?: string }[]
-  onIssueSelect: (issueId: string) => void
-}) {
-  const statusCounts = useMemo(() => {
-    return projectIssues.reduce<Record<string, number>>((acc, issue) => {
-      acc[issue.status] = (acc[issue.status] || 0) + 1
-      return acc
-    }, {})
-  }, [projectIssues])
-
-  const typeCounts = useMemo(() => {
-    return projectIssues.reduce<Record<string, number>>((acc, issue) => {
-      acc[issue.type] = (acc[issue.type] || 0) + 1
-      return acc
-    }, {})
-  }, [projectIssues])
-
-  const blockedIssues = projectIssues.filter((issue) => issue.status === 'blocked').slice(0, 3)
-  const dueSoonIssues = projectIssues
-    .filter((issue) => issue.dueDate && new Date(issue.dueDate).getTime() < Date.now() + 1000 * 60 * 60 * 24 * 7)
-    .slice(0, 3)
-  const recentActivity = activity.slice(0, 5)
-
-  return (
-    <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-      <div className="xl:col-span-2 space-y-6">
-        <div className="rounded-3xl glass-card border border-white/10 p-6 shadow-soft">
-          <h3 className="text-body-sm font-semibold text-ink dark:text-ink-inverse">Status Distribution</h3>
-          <div className="mt-4 grid grid-cols-2 md:grid-cols-5 gap-3">
-            {Object.keys(ISSUE_STATUS_CONFIG).map((status) => (
-              <div key={status} className="rounded-2xl glass-subtle border border-white/10 dark:border-white/10 px-4 py-3">
-                <p className="text-xs font-semibold text-ink dark:text-ink-inverse">
-                  {ISSUE_STATUS_CONFIG[status as IssueStatus].label}
-                </p>
-                <p className="mt-2 text-lg font-semibold text-ink dark:text-ink-inverse">
-                  {statusCounts[status] || 0}
-                </p>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div className="rounded-3xl glass-card border border-white/10 p-6 shadow-soft">
-          <h3 className="text-body-sm font-semibold text-ink dark:text-ink-inverse">Hierarchy Counts</h3>
-          <div className="mt-4 grid grid-cols-2 md:grid-cols-5 gap-3">
-            {Object.keys(ISSUE_TYPE_CONFIG).map((type) => (
-              <div key={type} className="rounded-2xl glass-subtle border border-white/10 dark:border-white/10 px-4 py-3">
-                <p className="text-xs font-semibold text-ink dark:text-ink-inverse">
-                  {ISSUE_TYPE_CONFIG[type as IssueTypeKey]?.label ?? type}
-                </p>
-                <p className="mt-2 text-lg font-semibold text-ink dark:text-ink-inverse">
-                  {typeCounts[type] || 0}
-                </p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      <div className="space-y-6">
-        <DashboardList
-          title="Blocked"
-          issues={blockedIssues}
-          onIssueSelect={onIssueSelect}
-          emptyLabel="No blocked items."
-        />
-        <DashboardList
-          title="Due Soon"
-          issues={dueSoonIssues}
-          onIssueSelect={onIssueSelect}
-          emptyLabel="No due dates in the next 7 days."
-        />
-        <div className="rounded-3xl glass-card border border-white/10 p-6 shadow-soft">
-          <h3 className="text-body-sm font-semibold text-ink dark:text-ink-inverse">Recent Activity</h3>
-          <div className="mt-4 space-y-3">
-            {recentActivity.length === 0 ? (
-              <p className="text-body-xs text-ink-muted dark:text-ink-inverse-muted">No activity yet.</p>
-            ) : (
-              recentActivity.map((entry) => (
-                <div key={entry.id} className="rounded-xl glass-subtle border border-white/10 dark:border-white/10 px-3 py-3">
-                  <p className="text-body-xs font-semibold text-ink dark:text-ink-inverse">
-                    {entry.actorName || 'System'} · {entry.action}
-                  </p>
-                  <p className="mt-2 text-[11px] uppercase tracking-wider text-ink-muted dark:text-ink-inverse-muted">
-                    {new Date(entry.timestamp).toLocaleString()}
-                  </p>
-                </div>
-              ))
-            )}
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function DashboardList({
-  title,
-  issues,
-  onIssueSelect,
-  emptyLabel,
-}: {
-  title: string
-  issues: Issue[]
-  onIssueSelect: (issueId: string) => void
-  emptyLabel: string
-}) {
-  return (
-    <div className="rounded-3xl glass-card border border-white/10 p-6 shadow-soft">
-      <h3 className="text-body-sm font-semibold text-ink dark:text-ink-inverse">{title}</h3>
-      <div className="mt-4 space-y-3">
-        {issues.length === 0 ? (
-          <p className="text-body-xs text-ink-muted dark:text-ink-inverse-muted">{emptyLabel}</p>
-        ) : (
-          issues.map((issue) => (
-            <IssueCard key={issue.id} issue={issue} compact onClick={() => onIssueSelect(issue.id)} />
-          ))
-        )}
       </div>
     </div>
   )
@@ -418,7 +307,7 @@ function ProjectBacklogView({
 
   return (
     <div
-      className="rounded-3xl glass-card border border-white/10 p-6 shadow-soft"
+      className="rounded-3xl border border-surface-200 bg-surface-0 p-6 shadow-soft dark:border-surface-800 dark:bg-surface-900"
       onDragOver={(event) => event.preventDefault()}
       onDrop={(event) => {
         const draggedId = event.dataTransfer.getData('text/plain')
@@ -521,11 +410,12 @@ function BacklogNode({
   const typeLevel = projects.find((project) => project.id === issue.projectId)?.settings.issueTypes
     ?.find((type) => type.key === issue.type)?.level ?? ISSUE_TYPE_CONFIG[issue.type]?.level
   const canHaveChildren = (typeLevel ?? 5) < 5
+  const blocking = useIssueBlocking()(issue)
 
   return (
     <div>
       <div
-        className="flex items-center gap-3 rounded-2xl glass-subtle border border-white/10 dark:border-white/10 px-4 py-3 hover:border-accent/30 transition-colors"
+        className="flex items-center gap-3 rounded-2xl border border-surface-200 bg-surface-0 px-4 py-3 transition-colors hover:border-accent/30 dark:border-surface-800 dark:bg-surface-900 dark:hover:border-accent/30"
         style={{ marginLeft: level * 20 }}
         draggable
         onDragStart={(event) => event.dataTransfer.setData('text/plain', issue.id)}
@@ -536,21 +426,26 @@ function BacklogNode({
           if (draggedId) onDropIssue(issue.id, draggedId)
         }}
       >
-        <button
-          onClick={() => onToggle(issue.id)}
-          className="text-ink-muted dark:text-ink-inverse-muted"
-        >
-          {children.length > 0 ? (
-            isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />
-          ) : (
-            <span className="w-4 h-4 inline-block" />
-          )}
-        </button>
+        {children.length > 0 ? (
+          <button
+            type="button"
+            onClick={() => onToggle(issue.id)}
+            aria-expanded={isExpanded}
+            aria-label={`${isExpanded ? 'Collapse' : 'Expand'} ${issue.title}`}
+            title={isExpanded ? 'Collapse' : 'Expand'}
+            className="shrink-0 rounded text-ink-muted dark:text-ink-inverse-muted"
+          >
+            {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+          </button>
+        ) : (
+          <span aria-hidden className="h-4 w-4 shrink-0" />
+        )}
         <div className="flex-1">
           <button onClick={() => onSelect(issue.id)} className="text-left">
             <div className="flex items-center gap-2">
               <IssueTypeBadge type={issue.type} />
               <IssueStatusBadge status={issue.status} />
+              {blocking.blocked && issue.status !== 'blocked' && <BlockedTag label={blocking.label} />}
               <span className="text-body-sm font-semibold text-ink dark:text-ink-inverse">
                 {issue.title}
               </span>
@@ -565,10 +460,12 @@ function BacklogNode({
           )}
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={() => onMove(issue.id, 'up')} className="p-1 rounded-lg hover:bg-surface-100/60 dark:hover:bg-surface-800/60">
+          <button type="button" onClick={() => onMove(issue.id, 'up')} aria-label={`Move ${issue.title} up`} title={`Move ${issue.title} up`}
+            className="p-1 rounded-lg hover:bg-surface-100/60 dark:hover:bg-surface-800/60">
             <ArrowUp className="w-4 h-4" />
           </button>
-          <button onClick={() => onMove(issue.id, 'down')} className="p-1 rounded-lg hover:bg-surface-100/60 dark:hover:bg-surface-800/60">
+          <button type="button" onClick={() => onMove(issue.id, 'down')} aria-label={`Move ${issue.title} down`} title={`Move ${issue.title} down`}
+            className="p-1 rounded-lg hover:bg-surface-100/60 dark:hover:bg-surface-800/60">
             <ArrowDown className="w-4 h-4" />
           </button>
           {canHaveChildren && (
@@ -616,6 +513,7 @@ function ReparentDialog({
 }) {
   const { reparentIssue, pendingSaves, projects } = useProjectsStore()
   const [selectedParent, setSelectedParent] = useState(issue.parentId || '')
+  const [error, setError] = useState<string | null>(null)
   const definitions = projects.find((project) => project.id === issue.projectId)?.settings.issueTypes
   const level = definitions?.find((type) => type.key === issue.type)?.level ?? ISSUE_TYPE_CONFIG[issue.type]?.level
   const allowNoParent = level !== 5
@@ -625,22 +523,27 @@ function ReparentDialog({
 
   const handleSubmit = async () => {
     if (pendingSaves || (!allowNoParent && !selectedParent)) return
+    setError(null)
     const result = await reparentIssue(issue.id, selectedParent || null)
-    if (!result.error) onClose()
+    if (result.error) setError(result.error)
+    else onClose()
   }
 
+  // Radix Dialog: Escape and a click outside close it, focus stays inside and returns to Reparent.
   return (
-    <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/40">
-      <div className="w-full max-w-lg rounded-3xl glass-card border border-white/10 p-6 shadow-2xl">
-        <h3 className="text-body-sm font-semibold text-ink dark:text-ink-inverse">Reparent Issue</h3>
-        <ProjectsSyncStatus />
-        <p className="mt-2 text-body-xs text-ink-muted dark:text-ink-inverse-muted">
+    <DialogRoot open onOpenChange={(open) => { if (!open) onClose() }}>
+      <DialogContent showCloseButton={false}
+        overlayClassName="z-[220] bg-surface-900/50 backdrop-blur-sm"
+        className="z-[221] w-[calc(100%-2rem)] max-w-lg gap-0 rounded-3xl border border-surface-200 sm:rounded-3xl bg-surface-0 p-6 text-ink shadow-bold dark:border-surface-800 dark:bg-surface-900 dark:text-ink-inverse dark:shadow-dark-bold">
+        <DialogTitle className="text-[14px] font-semibold leading-snug tracking-normal text-ink dark:text-ink-inverse">Reparent Issue</DialogTitle>
+        <DialogDescription className="mt-2 text-[12px] text-ink-muted dark:text-ink-inverse-muted">
           Select a parent from the preceding hierarchy level in this project.
-        </p>
+        </DialogDescription>
         <select
+          aria-label="New parent"
           value={selectedParent}
           onChange={(e) => setSelectedParent(e.target.value)}
-          className="mt-4 w-full rounded-xl glass-subtle border border-white/10 dark:border-white/10 px-3 py-2 text-body-sm"
+          className="mt-4 w-full rounded-xl border border-surface-200 bg-surface-0 px-3 py-2 text-body-sm text-ink dark:border-surface-800 dark:bg-surface-900 dark:text-ink-inverse"
         >
           {allowNoParent && <option value="">No parent</option>}
           {availableParents.map((candidate) => (
@@ -649,12 +552,13 @@ function ReparentDialog({
             </option>
           ))}
         </select>
+        {error && <p role="alert" className="mt-3 text-[12.5px] text-danger">{error}</p>}
         <div className="mt-6 flex justify-end gap-3">
           <Button type="button" variant="outline" className="rounded-full" onClick={onClose}>Cancel</Button>
-          <Button type="button" className="rounded-full" disabled={pendingSaves > 0} onClick={handleSubmit}>Update Parent</Button>
+          <Button type="button" className="rounded-full" disabled={pendingSaves > 0} onClick={() => void handleSubmit()}>Update Parent</Button>
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </DialogRoot>
   )
 }
 
@@ -669,17 +573,27 @@ function ProjectBoardView({
   projectIssues: Issue[]
   onIssueSelect: (issueId: string) => void
 }) {
-  const { moveIssueStatus, projects, pendingSaves } = useProjectsStore()
+  const { moveIssueStatus, projects, pendingSaves, people } = useProjectsStore()
   const project = projects.find((item) => item.id === projectId)
   const scheme = project ? projectUtils.getProjectScheme(project) : PROJECT_TYPE_SCHEMES[projectType]
   const [visibleTypes, setVisibleTypes] = useState<IssueTypeKey[]>(scheme.issueTypes)
   const [createStatus, setCreateStatus] = useState<IssueStatus | null>(null)
+  const [draggingId, setDraggingId] = useState<string | null>(null)
+  const [overStatus, setOverStatus] = useState<IssueStatus | null>(null)
 
   const columns = scheme.statuses
 
   const boardIssues = projectIssues.filter((issue) => visibleTypes.includes(issue.type))
 
-  const handleDrop = async (status: IssueStatus, issueId: string) => {
+  // The Execute board's pattern: a drop back on the card's own column saves nothing, and cards
+  // cannot be picked up while a save is pending (instead of the drop being ignored).
+  const handleDrop = async (event: DragEvent<HTMLElement>, status: IssueStatus) => {
+    event.preventDefault()
+    const issueId = event.dataTransfer.getData('text/plain')
+    setOverStatus(null)
+    setDraggingId(null)
+    const issue = projectIssues.find((item) => item.id === issueId)
+    if (!issue || issue.status === status) return
     if (!pendingSaves) await moveIssueStatus(issueId, status)
   }
 
@@ -694,52 +608,81 @@ function ProjectBoardView({
         {scheme.issueTypes.map((type) => (
           <button
             key={type}
+            type="button"
+            aria-pressed={visibleTypes.includes(type)}
             onClick={() => toggleType(type)}
             className={cn(
               'px-3 py-1 rounded-full text-[11px] font-semibold uppercase tracking-wider',
               visibleTypes.includes(type)
                 ? 'bg-accent/20 text-accent dark:text-accent-light'
-                : 'glass-subtle border border-white/10 dark:border-white/10 text-ink-muted dark:text-ink-inverse-muted'
+                : 'border border-surface-200 bg-surface-0 text-ink-muted dark:border-surface-800 dark:bg-surface-900 dark:text-ink-inverse-muted'
             )}
           >
             {project?.settings.issueTypes?.find((definition) => definition.key === type)?.label ?? ISSUE_TYPE_CONFIG[type]?.label ?? type}
           </button>
         ))}
       </div>
-      <div className="flex gap-4 overflow-x-auto">
-        {columns.map((status) => (
-          <div
-            key={status}
-            className="w-80 flex-shrink-0 rounded-3xl glass-card border border-white/10 p-4 shadow-soft"
-            onDragOver={(event) => event.preventDefault()}
-            onDrop={(event) => {
-              const issueId = event.dataTransfer.getData('text/plain')
-              if (issueId) handleDrop(status, issueId)
-            }}
-          >
-            <div className="flex items-center justify-between">
-              <IssueStatusBadge status={status} />
-              <button
-                onClick={() => setCreateStatus(status)}
-                className="text-body-xs text-accent dark:text-accent-light rounded-full px-2 py-1 glass-subtle border border-white/10 dark:border-white/10"
-              >
-                +
-              </button>
-            </div>
-            <div className="mt-4 space-y-3">
-              {boardIssues.filter((issue) => issue.status === status).map((issue) => (
-                <IssueCard
-                  key={issue.id}
-                  issue={issue}
-                  compact
-                  draggable
-                  onDragStart={(event) => event.dataTransfer.setData('text/plain', issue.id)}
-                  onClick={() => onIssueSelect(issue.id)}
-                />
-              ))}
-            </div>
-          </div>
-        ))}
+      <div role="group" aria-label="Issues by status" className="flex gap-4 overflow-x-auto">
+        {columns.map((status) => {
+          const items = boardIssues.filter((issue) => issue.status === status)
+          const label = ISSUE_STATUS_CONFIG[status].label
+          const over = overStatus === status && draggingId !== null && items.every((item) => item.id !== draggingId)
+          return (
+            <section
+              key={status}
+              aria-label={`${label}, ${items.length} issues`}
+              className={cn(
+                'flex w-80 flex-shrink-0 flex-col rounded-3xl border p-4 shadow-soft transition-colors',
+                over ? 'border-accent/60 bg-accent/5 dark:border-accent-light/50' : 'border-surface-200 bg-surface-0 dark:border-surface-800 dark:bg-surface-900'
+              )}
+              onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = 'move'; if (overStatus !== status) setOverStatus(status) }}
+              onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setOverStatus(null) }}
+              onDrop={(event) => void handleDrop(event, status)}
+            >
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex min-w-0 items-center gap-2">
+                  <IssueStatusBadge status={status} />
+                  <span className="rounded-full bg-surface-200/70 px-1.5 text-[11px] font-medium tabular-nums text-ink-muted dark:bg-surface-800 dark:text-ink-inverse-muted">{items.length}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setCreateStatus(status)}
+                  aria-label={`New ${label} issue`}
+                  title={`New ${label} issue`}
+                  className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-ink-muted transition-colors hover:bg-surface-200/70 hover:text-ink dark:text-ink-inverse-muted dark:hover:bg-surface-800 dark:hover:text-ink-inverse"
+                >
+                  <Plus className="h-4 w-4" />
+                </button>
+              </div>
+              <div className="mt-4 flex min-h-[5rem] flex-1 flex-col gap-3.5">
+                {items.map((issue) => (
+                  <IssueCard
+                    key={issue.id}
+                    issue={issue}
+                    issueKey={project ? `${project.key}-${issue.number}` : undefined}
+                    people={people}
+                    issues={projectIssues}
+                    dragging={draggingId === issue.id}
+                    draggable={pendingSaves === 0}
+                    aria-roledescription="Draggable issue"
+                    onDragStart={(event) => {
+                      event.dataTransfer.setData('text/plain', issue.id)
+                      event.dataTransfer.effectAllowed = 'move'
+                      setDraggingId(issue.id)
+                    }}
+                    onDragEnd={() => { setDraggingId(null); setOverStatus(null) }}
+                    onClick={() => onIssueSelect(issue.id)}
+                  />
+                ))}
+                {items.length === 0 && (
+                  <p className="flex flex-1 items-center justify-center rounded-xl border border-dashed border-surface-200 px-3 py-6 text-center text-[12px] text-ink-muted dark:border-surface-800 dark:text-ink-inverse-muted">
+                    {draggingId ? 'Drop to move here' : 'No issues'}
+                  </p>
+                )}
+              </div>
+            </section>
+          )
+        })}
       </div>
 
       <CreateIssueDialog
@@ -760,12 +703,25 @@ function ProjectListView({
   onIssueSelect: (issueId: string) => void
 }) {
   const { updateIssue, people } = useProjectsStore()
+  const blockingFor = useIssueBlocking()
+  // An inline edit on its way to the server: the row's selects show it (and stay disabled) until
+  // the store holds the saved issue, instead of snapping back for the whole round trip.
+  const [pending, setPending] = useState<Record<string, InlineEdit>>({})
+  const [failed, setFailed] = useState<Record<string, string>>({})
+
+  const save = async (issueId: string, updates: InlineEdit) => {
+    setPending((current) => ({ ...current, [issueId]: updates }))
+    setFailed((current) => omitKey(current, issueId))
+    const { error } = await updateIssue(issueId, updates)
+    setPending((current) => omitKey(current, issueId))
+    if (error) setFailed((current) => ({ ...current, [issueId]: error }))
+  }
 
   return (
-    <div className="rounded-3xl glass-card border border-white/10 p-6 shadow-soft">
+    <div className="rounded-3xl border border-surface-200 bg-surface-0 p-6 shadow-soft dark:border-surface-800 dark:bg-surface-900 overflow-x-auto">
       <table className="w-full text-left text-body-xs">
         <thead>
-          <tr className="text-ink-muted dark:text-ink-inverse-muted border-b border-white/10">
+          <tr className="text-ink-muted dark:text-ink-inverse-muted border-b border-surface-200 dark:border-surface-800">
             <th className="pb-3">Issue</th>
             <th className="pb-3">Status</th>
             <th className="pb-3">Priority</th>
@@ -774,19 +730,34 @@ function ProjectListView({
           </tr>
         </thead>
         <tbody>
-          {projectIssues.map((issue) => (
-            <tr key={issue.id} className="border-t border-white/10">
+          {projectIssues.length === 0 && (
+            <tr>
+              <td colSpan={5} className="py-10 text-center text-body-xs text-ink-muted dark:text-ink-inverse-muted">
+                No issues yet. Use New Issue to add the first one.
+              </td>
+            </tr>
+          )}
+          {projectIssues.map((issue) => {
+            const edit = pending[issue.id]
+            const saving = edit !== undefined
+            const error = failed[issue.id]
+            return (
+            <Fragment key={issue.id}>
+            <tr className="border-t border-surface-200 dark:border-surface-800">
               <td className="py-3">
-                <button onClick={() => onIssueSelect(issue.id)} className="flex items-center gap-2">
+                <button type="button" onClick={() => onIssueSelect(issue.id)} className="flex items-center gap-2">
                   <IssueTypeBadge type={issue.type} />
                   <span className="text-body-sm font-semibold text-ink dark:text-ink-inverse">{issue.title}</span>
+                  {(() => { const blocking = blockingFor(issue); return blocking.blocked && <BlockedTag label={blocking.label} className="shrink-0" /> })()}
                 </button>
               </td>
               <td className="py-3">
                 <select
-                  value={issue.status}
-                  onChange={(e) => updateIssue(issue.id, { status: e.target.value as IssueStatus })}
-                  className="rounded-lg glass-subtle border border-white/10 dark:border-white/10 px-2 py-1"
+                  aria-label={`Status of ${issue.title}`}
+                  value={edit?.status ?? issue.status}
+                  disabled={saving}
+                  onChange={(e) => void save(issue.id, { status: e.target.value as IssueStatus })}
+                  className="rounded-lg border border-surface-200 bg-surface-0 px-2 py-1 disabled:opacity-60 dark:border-surface-800 dark:bg-surface-900"
                 >
                   {Object.keys(ISSUE_STATUS_CONFIG).map((status) => (
                     <option key={status} value={status}>
@@ -797,9 +768,11 @@ function ProjectListView({
               </td>
               <td className="py-3">
                 <select
-                  value={issue.priority}
-                  onChange={(e) => updateIssue(issue.id, { priority: e.target.value as IssuePriority })}
-                  className="rounded-lg glass-subtle border border-white/10 dark:border-white/10 px-2 py-1"
+                  aria-label={`Priority of ${issue.title}`}
+                  value={edit?.priority ?? issue.priority}
+                  disabled={saving}
+                  onChange={(e) => void save(issue.id, { priority: e.target.value as IssuePriority })}
+                  className="rounded-lg border border-surface-200 bg-surface-0 px-2 py-1 disabled:opacity-60 dark:border-surface-800 dark:bg-surface-900"
                 >
                   <option value="critical">Critical</option>
                   <option value="high">High</option>
@@ -809,9 +782,11 @@ function ProjectListView({
               </td>
               <td className="py-3">
                 <select
-                  value={issue.assignees[0] || ''}
-                  onChange={(e) => updateIssue(issue.id, { assignees: e.target.value ? [e.target.value] : [] })}
-                  className="rounded-lg glass-subtle border border-white/10 dark:border-white/10 px-2 py-1"
+                  aria-label={`Assignee of ${issue.title}`}
+                  value={(edit?.assignees ?? issue.assignees)[0] || ''}
+                  disabled={saving}
+                  onChange={(e) => void save(issue.id, { assignees: e.target.value ? [e.target.value] : [] })}
+                  className="rounded-lg border border-surface-200 bg-surface-0 px-2 py-1 disabled:opacity-60 dark:border-surface-800 dark:bg-surface-900"
                 >
                   <option value="">Unassigned</option>
                   {people.map((person) => (
@@ -833,15 +808,34 @@ function ProjectListView({
                       void updateIssue(issue.id, { dueDate }, issue.version)
                     } catch (error) { e.target.setCustomValidity((error as Error).message); e.target.reportValidity() }
                   }}
-                  className="rounded-lg glass-subtle border border-white/10 dark:border-white/10 px-2 py-1"
+                  className="rounded-lg border border-surface-200 bg-surface-0 px-2 py-1 dark:border-surface-800 dark:bg-surface-900"
                 />
               </td>
             </tr>
-          ))}
+            {error && (
+              <tr>
+                <td colSpan={5} className="pb-3">
+                  <p role="alert" className="text-[12px] text-danger">{`${issue.title}: ${error}`}</p>
+                </td>
+              </tr>
+            )}
+            </Fragment>
+            )
+          })}
         </tbody>
       </table>
     </div>
   )
+}
+
+/** The fields the list view edits inline. */
+type InlineEdit = Partial<Pick<Issue, 'status' | 'priority' | 'assignees'>>
+
+function omitKey<T>(record: Record<string, T>, key: string): Record<string, T> {
+  if (!(key in record)) return record
+  const next = { ...record }
+  delete next[key]
+  return next
 }
 
 function ProjectTimelineView({
@@ -856,15 +850,19 @@ function ProjectTimelineView({
   const timelineEnd = new Date()
   timelineEnd.setDate(timelineEnd.getDate() + 45)
   const totalMs = timelineEnd.getTime() - timelineStart.getTime()
+  // Today is inside the window by construction (7 days back, 45 ahead).
+  const todayPct = ((Date.now() - timelineStart.getTime()) / totalMs) * 100
 
   const items = projectIssues.filter((issue) => issue.startDate || issue.endDate || issue.dueDate)
+  const blockingFor = useIssueBlocking()
 
   return (
-    <div className="rounded-3xl glass-card border border-white/10 p-6 shadow-soft">
-      <div className="flex items-center justify-between">
+    <div className="rounded-3xl border border-surface-200 bg-surface-0 p-6 shadow-soft dark:border-surface-800 dark:bg-surface-900">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-body-sm font-semibold text-ink dark:text-ink-inverse">Timeline</h3>
-        <span className="text-[11px] uppercase tracking-wider text-ink-muted dark:text-ink-inverse-muted">
-          {timelineStart.toLocaleDateString()} - {timelineEnd.toLocaleDateString()}
+        <span className="flex items-center gap-3 text-[11px] uppercase tracking-wider text-ink-muted dark:text-ink-inverse-muted">
+          <span className="flex items-center gap-1.5"><span aria-hidden className="h-3 w-0.5 rounded-full bg-danger/70" />Today</span>
+          <span>{timelineStart.toLocaleDateString()} - {timelineEnd.toLocaleDateString()}</span>
         </span>
       </div>
       <div className="mt-6 space-y-4">
@@ -874,21 +872,33 @@ function ProjectTimelineView({
           items.map((issue) => {
             const start = issue.startDate ? new Date(issue.startDate) : issue.dueDate ? new Date(issue.dueDate) : new Date(issue.createdAt)
             const end = issue.endDate ? new Date(issue.endDate) : issue.dueDate ? new Date(issue.dueDate) : new Date(start.getTime() + 1000 * 60 * 60 * 24 * 7)
-            const left = Math.max(0, ((start.getTime() - timelineStart.getTime()) / totalMs) * 100)
-            const width = Math.min(100 - left, ((end.getTime() - start.getTime()) / totalMs) * 100)
+            const bar = timelineBar(start.getTime(), end.getTime(), timelineStart.getTime(), timelineEnd.getTime())
+            const blocking = blockingFor(issue)
 
             return (
               <div key={issue.id} className="relative">
-                <button onClick={() => onIssueSelect(issue.id)} className="flex items-center gap-2">
+                <button type="button" onClick={() => onIssueSelect(issue.id)} className="flex items-center gap-2">
                   <IssueTypeBadge type={issue.type} />
                   <span className="text-body-sm font-semibold text-ink dark:text-ink-inverse">{issue.title}</span>
+                  {blocking.blocked && <BlockedTag label={blocking.label} keys={blocking.keys} showKeys />}
                 </button>
-                <div className="mt-2 h-3 rounded-full glass-subtle border border-white/10 dark:border-white/10 relative">
-                  <div
-                    className="absolute h-3 rounded-full bg-accent/60"
-                    style={{ left: `${left}%`, width: `${Math.max(width, 4)}%` }}
-                  />
-                </div>
+                {bar && bar.placement !== 'inside' ? (
+                  <p className={`mt-2 text-[11px] leading-3 text-ink-muted dark:text-ink-inverse-muted ${bar.placement === 'after' ? 'text-right' : ''}`}>
+                    {bar.placement === 'before' ? 'Before this window' : 'After this window'}
+                  </p>
+                ) : (
+                  <div className="relative mt-2 h-3 overflow-hidden rounded-full border border-surface-200 bg-surface-0 dark:border-surface-800 dark:bg-surface-900">
+                    {bar && (
+                      <div
+                        title={blocking.label || undefined}
+                        className={cn('absolute inset-y-0 rounded-full', blocking.blocked ? BLOCKED_BAR : 'bg-accent/60',
+                          bar.clippedStart && 'rounded-l-none', bar.clippedEnd && 'rounded-r-none')}
+                        style={{ left: `${bar.leftPct}%`, width: `${bar.widthPct}%` }}
+                      />
+                    )}
+                    <span aria-hidden className="absolute inset-y-0 z-10 w-0.5 bg-danger/70" style={{ left: `${todayPct}%` }} />
+                  </div>
+                )}
               </div>
             )
           })
@@ -909,9 +919,9 @@ function ProjectSettingsView({
 }) {
   const { pendingSaves } = useProjectsStore()
   return (
-    <div className="rounded-3xl glass-card border border-white/10 p-6 shadow-soft">
+    <div className="rounded-3xl border border-surface-200 bg-surface-0 p-6 shadow-soft dark:border-surface-800 dark:bg-surface-900">
       <h3 className="text-body-sm font-semibold text-ink dark:text-ink-inverse">Project Settings</h3>
-      <div className="mt-4 flex items-center justify-between rounded-2xl glass-subtle border border-white/10 dark:border-white/10 px-4 py-4">
+      <div className="mt-4 flex items-center justify-between rounded-2xl border border-surface-200 bg-surface-0 px-4 py-4 dark:border-surface-800 dark:bg-surface-900">
         <div>
           <p className="text-body-sm font-semibold text-ink dark:text-ink-inverse">Project lifecycle</p>
           <p className="mt-1 text-body-xs text-ink-muted dark:text-ink-inverse-muted">

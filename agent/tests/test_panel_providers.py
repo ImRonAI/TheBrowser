@@ -295,12 +295,18 @@ def test_gemini_xai_mistral_hosted_tools(monkeypatch):
     monkeypatch.setattr(app_config, "XAI_API_KEY", "test-key")
     monkeypatch.setattr(app_config, "MISTRAL_API_KEY", "test-key")
     monkeypatch.setattr(panel_agent, "XAI_NATIVE_TOOLS_ENABLED", True)
+    monkeypatch.delenv("GEMINI_HOSTED_TOOLS", raising=False)  # the default, whatever the local .env says
     gemini = panel_agent.build_model("gemini", "gemini-flash-latest")
     assert [t.model_dump(exclude_none=True) for t in gemini.config["gemini_tools"]] == [
         {"google_search": {}}, {"url_context": {}}, {"code_execution": {}},
     ]
     assert gemini.config["params"]["tool_config"].include_server_side_tool_invocations is True
     assert gemini.config["params"]["thinking_config"].include_thoughts is True
+    # Gemma on the Gemini API rejects url_context (400 "Url Context as tool is not enabled for this model").
+    gemma = panel_agent.build_model("gemini", "gemma-4-31b-it")
+    assert [t.model_dump(exclude_none=True) for t in gemma.config["gemini_tools"]] == [
+        {"google_search": {}}, {"code_execution": {}},
+    ]
     monkeypatch.setenv("GEMINI_HOSTED_TOOLS", "google_search")
     assert len(panel_agent.build_model("gemini", "gemini-flash-latest").config["gemini_tools"]) == 1
     xai = panel_agent.build_model("xai", "grok-4.6")
@@ -322,3 +328,23 @@ def test_config_schema_and_hosted_tool_separation(provider):
     Draft7Validator(AGENT_CONFIG_SCHEMA).validate(payload)
     assert set(payload) == {"name", "prompt", "tools"}
     assert payload["tools"] == []  # Composition supplies managed tools; hosted tools belong to models.
+
+
+def test_nim_is_the_default_provider_and_builds_the_sdk_openai_model(monkeypatch):
+    from strands.models.openai import OpenAIModel
+
+    from agent.api.core import config as app_config
+
+    monkeypatch.setattr(app_config, "NVIDIA_NIM_API_KEY", "nvapi-test")
+    monkeypatch.setattr(app_config, "MISTRAL_API_KEY", "mistral-test")
+    assert panel_agent.default_selection() == ("nim", "z-ai/glm-5.3-flash")
+
+    model = panel_agent.build_model("nim", "z-ai/glm-5.3-flash", "max")
+    assert type(model) is OpenAIModel
+    assert model.client_args == {"api_key": "nvapi-test", "base_url": "https://integrate.api.nvidia.com/v1"}
+    config = model.get_config()
+    assert config["model_id"] == "z-ai/glm-5.3-flash" and config["params"] == {"reasoning_effort": "max"}
+    assert config["context_window_limit"] == 1_048_576
+    assert "params" not in panel_agent.build_model("nim", "z-ai/glm-5.3-flash").get_config()
+    with pytest.raises(ValueError, match="supported: low, high, max"):
+        panel_agent.build_model("nim", "z-ai/glm-5.3-flash", "medium")

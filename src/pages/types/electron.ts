@@ -49,6 +49,8 @@ export interface BrowserAPI {
   setInterestMenu: (payload: InterestMenuPayload) => Promise<{ success: boolean }>
   setInterestInset: (width: number) => Promise<{ success: boolean }>
   onInterestAction: (callback: (action: InterestAction) => void) => () => void
+  /** "Add to Ron context" chosen in a page's context menu. */
+  onContextAdd?: (callback: (payload: ContextAddPayload) => void) => () => void
   /** Native repair surface: mirror the current investigation (`null` hides it). */
   setRepairSurface: (state: { repair: unknown; notification?: { title: string; body: string } | null }) => Promise<{ success: boolean }>
   /** Decisions the user took on the native surface; the shell performs them against the API. */
@@ -139,3 +141,10 @@ declare global {
   }
 }
 
+/** Payload of the page context menu's "Add to Ron context" (electron/main.ts `sendContextAdd`). */
+export interface ContextAddPayload {
+  kind: 'selection' | 'link' | 'image' | 'video' | 'screenshot'
+  title: string
+  url: string
+  text?: string
+}

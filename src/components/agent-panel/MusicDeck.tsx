@@ -136,15 +136,15 @@ export function MusicDeck({ userId, agentId, className }: { userId: string; agen
       </select>
     </label>}
     {!signedIn && <div role="status" className="mt-2 flex flex-wrap items-center gap-2 text-ink-muted dark:text-ink-inverse-muted">
-      <span>Ron plays music for you by voice. Sign in to control the transport and save what you hear.</span>
-      <Button size="sm" variant="outline" onClick={() => openSignIn()} aria-label="Sign in to Ron"><LogInIcon />Sign in</Button>
+      <span>Ren plays music for you by voice. Sign in to control the transport and save what you hear.</span>
+      <Button size="sm" variant="outline" onClick={() => openSignIn()} aria-label="Sign in to Ren"><LogInIcon />Sign in</Button>
     </div>}
     {notice && <p role="status" className="mt-2 whitespace-pre-wrap break-words">{notice}</p>}
 
     <details className="mt-3" open={libraryOpen} onToggle={(event) => setLibraryOpen((event.target as HTMLDetailsElement).open)}>
       <summary className="cursor-pointer font-medium">Saved songs{songs.length ? ` · ${songs.length}` : ''}</summary>
       {(signInRequired || !signedIn) && <p className="mt-2 flex flex-wrap items-center gap-2 text-ink-muted dark:text-ink-inverse-muted">
-        <span>Sign in to Ron to save and replay music.</span>
+        <span>Sign in to Ren to save and replay music.</span>
         <Button size="sm" variant="ghost" onClick={() => openSignIn()}><LogInIcon />Sign in</Button>
       </p>}
       {signedIn && libraryOpen && <PlaylistShelf request={request} songs={songs} player={player} onNotice={setNotice} />}

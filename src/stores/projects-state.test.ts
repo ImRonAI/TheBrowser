@@ -241,7 +241,7 @@ test('network failure and FastAPI validation errors are visible without retrying
     Response.json({ detail: [{ msg: 'Invalid project key' }] }, { status: 422 }))
   await assert.rejects(invalid('', 'POST', {}), /Invalid project key/)
 })
-test('assignee options are only the signed-in user and Ron', () => {
+test('assignee options are only the signed-in user and Ren', () => {
   const { store } = setup()
   assert.deepEqual(store.getState().people.map((p) => p.id), ['alice', RON_ASSIGNEE.id])
   store.getState().setIdentity({ id: 'guest:abc', name: 'Guest' })

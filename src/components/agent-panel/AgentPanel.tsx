@@ -1,6 +1,7 @@
-import { useState, useRef, useEffect, useCallback, useMemo, Fragment, type KeyboardEvent } from 'react'
+import { useState, useRef, useEffect, useCallback, useMemo, Fragment, type KeyboardEvent, type ReactNode, type RefObject } from 'react'
 import { Transition } from '@headlessui/react'
-import { XMarkIcon, PlusIcon, StopIcon, QueueListIcon, LightBulbIcon, HandRaisedIcon } from '@heroicons/react/24/outline'
+import { XMarkIcon, PlusIcon, QueueListIcon, LightBulbIcon, HandRaisedIcon, BookmarkIcon, ChatBubbleOvalLeftIcon, MicrophoneIcon } from '@heroicons/react/24/outline'
+import { useContextAgentStore } from '@/stores/contextAgentStore'
 import type { TakeoverStatePayload } from '@/pages/types/electron'
 import { ThreadsList } from './ThreadsList'
 import { MemoryPanel } from './MemoryPanel'
@@ -15,9 +16,16 @@ import { ChainOfThought, ChainOfThoughtContent, ChainOfThoughtHeader, ChainOfTho
 import { detectPreviewUrl, fileFromToolCall, filesFromListDir, getToolView, toolOutputText } from '@/components/ai-elements/ide-tool-mapping'
 import { displayValue, groupThinkParts, repairToolTitle, isBrowserUnavailable, isHitlApproval, RENDER_UI_TOOL, supersededUiParts, uiActionText, uiViewFromOutput, type NativePart, type PanelInterrupt, type PanelMessage, type PanelPart, type RunStatus, type RuntimeOptions, type ThinkStep, type ToolPart } from '@/lib/panel-stream'
 import { UiView } from './UiView'
-import { ContextPicker, SelectedContexts, type ContextItem } from './ContextPicker'
+import { ContextMentionList, ContextPicker, type ContextItem } from './ContextPicker'
+import { ComposerAttachmentTray, SentAttachments } from './PromptAttachments'
+import { useComposerAttachments, type ComposerAttachmentsState } from './useComposerAttachments'
+import { messageTitle, parseAttachmentBlock } from '@/lib/prompt-attachments'
+import { useContextSources } from './useContextSources'
+import { mentionAt, removeMention, searchContexts, type ContextCategory } from '@/lib/chat-context'
 import { DEFAULT_AGENT_MODEL, ModelSelector, useAgentModels, type AgentModelSelection } from './ModelSelector'
-import { usePanelChat } from './usePanelChat'
+import { usePanelChat, type PanelChat } from './usePanelChat'
+import { useElementWidth } from '@/hooks/useElementWidth'
+import { DEFAULT_RUNTIME_OPTIONS, panelStatusText } from '@/lib/panel-chat'
 import { useAuthStore } from '@/stores/authStore'
 import { AGENT_LABELS, parseArticle, type AgentDestination } from '@/lib/articles'
 import { articleDraftKey, EMPTY_ARTICLE_DRAFT, useArticleDraftStore } from '@/stores/articleDraftStore'
@@ -28,10 +36,26 @@ import { PANEL_COMMANDS, parsePanelCommand } from '@/lib/panel-commands'
 import { RepairPanel } from './RepairPanel'
 import { useTextAssist } from '@/hooks/useTextAssist'
 import { TextAssist, handleAssistKey } from '@/components/shared/TextAssist'
-import { RonLogo } from '@/components/shared/RonLogo'
+import { RenMark } from '@/components/brand'
+import { ArrowUp, ArrowUpRight, Square } from 'lucide-react'
+import { agentFromSelection, agentModel, projectChoices, RON_AGENT, specialistChoices, type AgentChoice } from '@/lib/panel-agents'
+import { createContextClient } from '@/lib/context-api'
+import { API_BASE_URL } from '@/lib/api-base'
+import { useProjectsStore } from '@/stores/projectsStore'
 
-const compactInput = 'w-full rounded-lg border border-surface-200 bg-surface-0 px-2 py-1.5 text-xs dark:border-surface-700 dark:bg-surface-850 focus:outline-none focus:ring-2 focus:ring-indigo-500/30'
-const smallButton = 'rounded-lg border border-surface-200 px-3 py-1.5 text-xs font-medium hover:bg-surface-100 disabled:opacity-50 dark:border-surface-700 dark:hover:bg-surface-800'
+const compactInput = 'w-full rounded-lg border border-surface-200 bg-surface-0 px-2 py-1.5 text-xs dark:border-surface-700 dark:bg-surface-850 focus:outline-none focus:ring-2 focus:ring-blurple-500/30'
+export const smallButton = 'rounded-lg border border-surface-200 px-3 py-1.5 text-xs font-medium hover:bg-surface-100 disabled:opacity-50 dark:border-surface-700 dark:hover:bg-surface-800'
+/** The model picker's trigger inside the composer's tool row. */
+export const MODEL_SELECTOR_CLASS = 'h-8 min-w-0 max-w-[210px] rounded-full border-surface-200 bg-surface-50 px-3 text-[12px] font-medium shadow-none dark:border-surface-700 dark:bg-surface-800/70'
+/** A quiet square icon button in a panel header. */
+const headerIconButton = 'inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-ink-secondary transition-colors hover:bg-surface-100 hover:text-ink dark:text-ink-inverse-secondary dark:hover:bg-surface-800 dark:hover:text-ink-inverse'
+/** What the header calls each conversation (the panel names the agent itself). */
+const HEADER_TITLES: Partial<Record<AgentDestination, string>> = { build: 'Build', search: 'Search' }
+/** Prompt starters for an empty conversation: they fill the composer, they never send on their own. */
+const STARTERS: Partial<Record<AgentDestination, string[]>> = {
+  panel: ['Summarize this page', 'Research a topic and cite sources', 'Fill in this form for me', 'Make me a song to focus to'],
+  search: ['Compare the top options for…', 'Explain this like I am new to it', 'Find the primary sources on…'],
+}
 /** JSON-mode text for a sibling interrupt during a quick reply; malformed text is sent as-is so the server reports it. */
 const safeJson = (text: string | undefined): unknown => { try { return JSON.parse(text ?? '') as unknown } catch { return text ?? '' } }
 const focusComposer = (element: HTMLTextAreaElement | null) => {
@@ -44,12 +68,24 @@ export function AgentPanel() {
   return isPanelOpen ? <AgentConversation key={user} destination="panel" /> : null
 }
 
-export function AgentWorkspace({ destination }: { destination: AgentDestination }) {
+/** `onChat` receives the conversation's live chat state (session, messages, status, send) on every change,
+ * so a host page (the Build workbench) can render the same session's files, preview and plan beside it. */
+export function AgentWorkspace({ destination, onChat, hero, heroFooter }: {
+  destination: AgentDestination; onChat?: (chat: PanelChat) => void
+  /** Replaces the empty state; while the conversation is empty the composer sits under it, centred. */
+  hero?: (pick: (prompt: string) => void) => ReactNode
+  /** Rendered under the hero's composer (starter prompts); `pick` puts a prompt in the composer. */
+  heroFooter?: (pick: (prompt: string) => void) => ReactNode
+}) {
   const user = useAuthStore((state) => state.user?.id || 'default')
-  return <AgentConversation key={`${user}:${destination}`} destination={destination} embedded />
+  return <AgentConversation key={`${user}:${destination}`} destination={destination} embedded onChat={onChat} hero={hero} heroFooter={heroFooter} />
 }
 
-export function AgentConversation({ destination, embedded = false }: { destination: AgentDestination; embedded?: boolean }) {
+export function AgentConversation({ destination, embedded = false, onChat, hero, heroFooter }: {
+  destination: AgentDestination; embedded?: boolean; onChat?: (chat: PanelChat) => void
+  hero?: (pick: (prompt: string) => void) => ReactNode
+  heroFooter?: (pick: (prompt: string) => void) => ReactNode
+}) {
   const { isPanelOpen, closePanel, askRonPendingPrompt, consumeAskRonPendingPrompt,
     closeAskRon, agentPanelQueuedPrompts, consumeAgentPanelPrompt,
     interactionMode, setInteractionMode } = useAgentUi()
@@ -57,7 +93,7 @@ export function AgentConversation({ destination, embedded = false }: { destinati
   const liveHandOff = useRef<(() => Promise<boolean>) | null>(null)
   const registerHandOff = useCallback((handOff: (() => Promise<boolean>) | null) => { liveHandOff.current = handOff }, [])
   const [modeNotice, setModeNotice] = useState('')
-  const { panelWidth, setPanelWidth, setPanelMode } = usePanelAgentStore()
+  const { panelWidth, setPanelWidth, setPanelMode, requestedAgent, requestAgent, requestedThread, requestThread } = usePanelAgentStore()
   const user = useAuthStore((state) => state.user?.id || 'default')
   const draftKey = articleDraftKey(user, destination)
   const draft = useArticleDraftStore((state) => state.drafts[draftKey] || EMPTY_ARTICLE_DRAFT)
@@ -67,24 +103,61 @@ export function AgentConversation({ destination, embedded = false }: { destinati
   }, [draftKey])
   const { defaultModel, defaultProvider, refresh: refreshModels, ...modelCatalogue } = useAgentModels()
   const [selection, setSelection] = useState<AgentModelSelection>({ model: DEFAULT_AGENT_MODEL, provider: '', effort: '' })
-  const [selectedContexts, setSelectedContexts] = useState<ContextItem[]>([])
-  const [options, setOptions] = useState<RuntimeOptions>({
-    checkpointing: false, tool_execution: 'concurrent', context: 'auto', goal: '', background: false,
-  })
-  const clearSentContexts = useCallback(() => { setSelectedContexts([]) }, [])
-  const [commandFeedback, setCommandFeedback] = useState('')
+  // Agent → model → effort: who the panel talks to (Ron, a saved specialist, a project's agent). Panel only.
+  const [agentChoice, setAgentChoice] = useState<AgentChoice>(RON_AGENT)
+  const [specialists, setSpecialists] = useState<AgentChoice[]>([])
+  const [agentsState, setAgentsState] = useState({ loading: false, note: '' })
+  const projects = useProjectsStore().projects
+  const agentChoices = useMemo(() => destination === 'panel'
+    ? [RON_AGENT, ...specialists, ...projectChoices(projects.filter((project) => project.lifecycle !== 'archived'))] : undefined,
+  [destination, specialists, projects])
+  const loadSpecialists = useCallback(async () => {
+    if (destination !== 'panel') return
+    setAgentsState({ loading: true, note: '' })
+    try {
+      const { agents, signInRequired } = await createContextClient(API_BASE_URL, user).agents()
+      setSpecialists(specialistChoices(agents))
+      setAgentsState({ loading: false, note: signInRequired ? 'Sign in to talk to the specialists you build.' : '' })
+    } catch (error) {
+      setAgentsState({ loading: false, note: `Specialists unavailable: ${error instanceof Error ? error.message : String(error)}` })
+    }
+  }, [destination, user])
+  useEffect(() => { void loadSpecialists() }, [loadSpecialists])
+  // Long pastes and picked context ride with the next message as attachment cards (`useComposerAttachments`).
+  const attachments = useComposerAttachments(draftKey, user)
+  const [options, setOptions] = useState<RuntimeOptions>(DEFAULT_RUNTIME_OPTIONS)
   const [threadsOpen, setThreadsOpen] = useState(false)
+  const sectionRef = useRef<HTMLElement>(null)
+  const sectionWidth = useElementWidth(sectionRef)
   const [memoryOpen, setMemoryOpen] = useState(false)
-  const [commandIndex, setCommandIndex] = useState(0)
-  const [commandsDismissed, setCommandsDismissed] = useState(false)
   const [takeoverState, setTakeoverState] = useState<TakeoverStatePayload>({ active: false, url: '', title: '', breadcrumbs: [] })
   const [giveBackPromptOpen, setGiveBackPromptOpen] = useState(false)
   const [giveBackFeedback, setGiveBackFeedback] = useState('')
   const giveBackInputRef = useRef<HTMLTextAreaElement>(null)
   // Chat and Live are two agents over the same native thread (`session_id`): each restores the
   // thread's messages from the SDK snapshot, so no history is bridged between them in the renderer.
-  const chat = usePanelChat({ ...selection, destination, attachments: draft.articles,
-    contexts: selectedContexts, options, onSent: clearSentContexts })
+  const chat = usePanelChat({ ...selection, agent: agentChoice, destination, attachments: draft.articles,
+    promptAttachments: { count: attachments.count, resolve: attachments.forSend }, options })
+  // The full header is the title block (50px + ~100px of status, so "Paused at checkpoint" fits) beside the labelled
+  // mode selector, a divider and 34px per icon button (measured: 115 + 34n). Narrower, the selector shows icons and
+  // the buttons tighten, which leaves the status 108px in the default 420px panel. The bookmark button counts before
+  // the first message, so the header does not change size when it appears.
+  const headerButtons = 4 + (voice ? 1 : 0) + (embedded ? 0 : 1)
+  const headerFullWidth = 302 + 34 * headerButtons + (chat.browser === 'cloud' ? 100 : 0) + (takeoverState.active ? 68 : 0)
+  const tight = sectionWidth > 0 && sectionWidth < headerFullWidth
+  const iconButton = tight ? cn(headerIconButton, 'w-7') : headerIconButton
+  const onChatRef = useRef(onChat)
+  onChatRef.current = onChat
+  const latestChat = useRef(chat)
+  latestChat.current = chat
+  // `chat.sendMessage` closes over this render's selection, so it is a new function on every render: a host
+  // gets stable ones that call the latest. Published only when what a host renders changes; a host that stores
+  // `chat` in state would otherwise re-render this conversation forever ("Maximum update depth exceeded").
+  const sendLatest = useCallback<PanelChat['sendMessage']>((...args) => latestChat.current.sendMessage(...args), [])
+  const newChatLatest = useCallback(() => latestChat.current.newChat(), [])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { onChatRef.current?.({ ...chat, sendMessage: sendLatest, newChat: newChatLatest }) }, [chat.sessionId, chat.messages, chat.status, chat.connection, chat.configuration, sendLatest, newChatLatest])
+  const currentAgent = chat.configuration?.agent ? agentFromSelection({ agent: chat.configuration.agent }, agentChoices ?? []) : agentChoice
   const model = chat.configuration?.model ?? selection.model
   const provider = chat.configuration?.provider ?? selection.provider
   const effort = chat.configuration?.effort ?? selection.effort
@@ -101,14 +174,12 @@ export function AgentConversation({ destination, embedded = false }: { destinati
   const paused = status === 'checkpointed' || status === 'interrupted'
   const unavailable = chat.connection !== 'connected' || chat.controlBusy || paused || chat.recoveryRequired
   const input = draft.text
-  // Brave Suggest + Spellcheck for the composer. Slash commands have their own list; assist is off
-  // while the text starts with "/" or a command list is showing.
-  const skipAssist = useCallback((value: string) => value.trimStart().startsWith('/'), [])
-  const assist = useTextAssist(input, { skip: skipAssist, count: 5 })
-  const commandSuggestions = !commandsDismissed && /^\/\S*$/.test(input)
-    ? PANEL_COMMANDS.filter((command) => command.name.startsWith(input)) : []
-  const selectedCommand = Math.min(commandIndex, Math.max(0, commandSuggestions.length - 1))
   const inputRef = useRef<HTMLTextAreaElement>(null)
+  // `@` in the message mentions the same context the link button offers; it loads only while a mention is typed.
+  const [mentionOpen, setMentionOpen] = useState(false)
+  const mentionSources = useContextSources(mentionOpen)
+  const composer = usePanelComposer(input, setInput, inputRef, active ? undefined
+    : { categories: mentionSources.categories, selected: attachments.contexts, onPick: attachments.addContext, onOpenChange: setMentionOpen })
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const sessionRef = useRef(chat.sessionId)
   sessionRef.current = chat.sessionId
@@ -184,10 +255,11 @@ export function AgentConversation({ destination, embedded = false }: { destinati
   // handed to VoiceAgent (below); the hidden Chat session never receives them.
   useEffect(() => {
     if (voice || destination !== 'panel' || unavailable || chat.connection !== 'connected' || !agentPanelQueuedPrompts.length) return
-    if (draft.articles.length) return
+    // A requested agent starts its own new chat first; the prompt then goes to that conversation.
+    if (draft.articles.length || requestedAgent) return
     const prompt = consumeAgentPanelPrompt()
     if (prompt) dispatchExternal(prompt)
-  }, [voice, destination, draft.articles.length, agentPanelQueuedPrompts, consumeAgentPanelPrompt, dispatchExternal, unavailable, chat.connection])
+  }, [voice, destination, draft.articles.length, agentPanelQueuedPrompts, consumeAgentPanelPrompt, dispatchExternal, unavailable, chat.connection, requestedAgent])
   useEffect(() => {
     if (voice || destination !== 'panel' || unavailable || chat.connection !== 'connected' || !askRonPendingPrompt) return
     if (draft.articles.length) return
@@ -250,12 +322,12 @@ export function AgentConversation({ destination, embedded = false }: { destinati
     setModeNotice('')
     sessionRef.current = ''
     chat.openThread(id)
-    setSelectedContexts([])
-    setCommandFeedback('')
+    attachments.clearContexts()
+    composer.setCommandFeedback('')
     setThreadsOpen(false)
   }
 
-  const handleNewChat = async () => {
+  const handleNewChat = async (startWith?: AgentChoice) => {
     // A new conversation must not tear down a Live session through the
     // conversationId prop effect while tools are pending: hand off first.
     if (liveHandOff.current) {
@@ -263,59 +335,95 @@ export function AgentConversation({ destination, embedded = false }: { destinati
       if (!done) { setModeNotice('Live is still working. Wait for pending tools or press Stop in Live before starting a new chat.'); return }
     }
     setModeNotice('')
-    setSelection({ model, provider, effort })
+    const nextAgent = startWith ?? currentAgent
+    const own = startWith ? agentModel(startWith) : null
+    setSelection(own ? { model: own.model, provider: own.provider, effort: '' } : { model, provider, effort })
+    setAgentChoice(nextAgent)
     setOptions(runtimeOptions)
     sessionRef.current = ''
     chat.newChat()
-    setSelectedContexts([])
-    setInput('')
-    setCommandFeedback('')
-    setCommandsDismissed(false)
+    attachments.clearContexts()
+    // A chat opened for an agent from elsewhere keeps what the user was typing (and pasted).
+    if (!startWith) useArticleDraftStore.getState().resetComposer(draftKey)
+    composer.reset()
     followOutput.current = true
     focusComposer(inputRef.current)
   }
+  // "Chat" on a specialist (Agents tab) or "Ask the project agent" on a project: a new chat with that agent.
+  const startRequested = useRef(handleNewChat)
+  startRequested.current = handleNewChat
+  useEffect(() => {
+    if (destination !== 'panel' || !requestedAgent || chat.connection === 'loading') return
+    requestAgent(null)
+    void startRequested.current(requestedAgent)
+  }, [destination, requestedAgent, requestAgent, chat.connection])
+  // A chat referenced in a page ("/" Reference a chat): open that thread here.
+  const openRequested = useRef(handleOpenThread)
+  openRequested.current = handleOpenThread
+  useEffect(() => {
+    if (destination !== 'panel' || !requestedThread || chat.connection === 'loading') return
+    requestThread(null)
+    void openRequested.current(requestedThread)
+  }, [destination, requestedThread, requestThread, chat.connection])
+  // Attachments go with a new message, never with steering.
+  const attachmentCount = draft.articles.length + attachments.count
+  const message = attachments.messageFor(input)
   const handleSend = () => {
     const text = input.trim()
-    if (!text) return
-    const command = parsePanelCommand(text, runtimeOptions, configurationLocked)
-    if (command.kind !== 'message') {
-      setCommandFeedback(command.message)
-      if (command.kind === 'configure') {
-        setOptions(command.options)
-        setInput('')
-      }
-      return
-    }
-    if (unavailable || (active && draft.articles.length > 0)) return
-    setCommandFeedback('')
-    followOutput.current = true
-    void sendMessage(text, 'message', undefined, () => {
-      useArticleDraftStore.getState().clearSent(draftKey, input, draft.articles.map((article) => article.id))
-    })
-  }
-  const chooseCommand = (name: string) => {
-    setInput(`${name} `)
-    setCommandFeedback('')
-    focusComposer(inputRef.current)
-  }
-  const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (event.nativeEvent.isComposing) return
-    if (!commandSuggestions.length && handleAssistKey(event, assist, (text) => { setInput(text); assist.dismiss() })) return
-    if (commandSuggestions.length) {
-      if (event.key === 'Escape') { event.preventDefault(); setCommandsDismissed(true); return }
-      if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
-        event.preventDefault()
-        setCommandIndex((selectedCommand + (event.key === 'ArrowDown' ? 1 : -1) + commandSuggestions.length) % commandSuggestions.length)
+    if (text) {
+      const command = parsePanelCommand(text, runtimeOptions, configurationLocked)
+      if (command.kind !== 'message') {
+        composer.setCommandFeedback(command.message)
+        if (command.kind === 'configure') {
+          setOptions(command.options)
+          setInput('')
+        }
         return
       }
-      if (event.key === 'Tab' || (event.key === 'Enter' && !event.shiftKey)) {
-        event.preventDefault(); chooseCommand(commandSuggestions[selectedCommand].name); return
-      }
     }
-    if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
-      event.preventDefault(); assist.dismiss(); handleSend()
-    }
+    if (!message.trim() || unavailable || (active && attachmentCount > 0)) return
+    composer.setCommandFeedback('')
+    followOutput.current = true
+    const sentIds = [...draft.articles.map((article) => article.id), ...attachments.pasted.map((item) => item.id)]
+    const sentContexts = attachments.contexts.map((item) => item.id)
+    void sendMessage(message, 'message', undefined, () => {
+      useArticleDraftStore.getState().clearSent(draftKey, input, sentIds)
+      attachments.clearContexts(sentContexts)
+    })
   }
+
+  // A host hero (Build) owns the empty conversation: the composer sits under it, centred, until the first message.
+  const heroMode = Boolean(hero) && !messages.length && !active
+  const pickStarter = (prompt: string) => {
+    setInput(prompt)
+    requestAnimationFrame(() => {
+      const element = inputRef.current
+      if (!element) return
+      element.focus()
+      element.setSelectionRange(prompt.length, prompt.length)
+    })
+  }
+  const composerBlock = <>
+    <div className="max-h-48 overflow-auto">{draft.articles.map((article) => <ArticleAttachmentCard key={article.id} article={article}
+      onRemove={() => useArticleDraftStore.getState().remove(draftKey, article.id)} />)}</div>
+    {active && attachmentCount > 0 && <p className="mb-2 text-xs text-ink-muted dark:text-ink-inverse-muted">Your attachments are saved for the next message. Wait for this run to finish or stop it.</p>}
+    <PanelComposer composer={composer} active={active} large={heroMode} onPaste={attachments.onPaste}
+      label={active ? 'Steer the active run' : 'Message Ren'}
+      placeholder={paused ? 'Resume the run above…' : active ? 'Steer Ren while it works…' : heroMode ? 'Describe what you want to build…' : 'Ask Ren anything…'}
+      disabled={paused || chat.recoveryRequired} onSend={handleSend} sendDisabled={!message.trim() || unavailable || (active && attachmentCount > 0)}
+      onStop={() => void chat.stop()} stopDisabled={chat.controlBusy}
+      before={<ComposerAttachmentTray attachments={attachments} className="pb-2.5" />}
+      tools={<>
+        {!active && <ContextPicker selectedContexts={attachments.contexts} onContextsChange={attachments.setContexts} />}
+        <button type="button" onClick={() => setMemoryOpen((open) => !open)} aria-pressed={memoryOpen}
+          className={cn('inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-ink-muted transition-colors hover:bg-surface-100 hover:text-ink dark:text-ink-inverse-muted dark:hover:bg-surface-800 dark:hover:text-ink-inverse', memoryOpen && 'bg-surface-100 text-ink dark:bg-surface-800 dark:text-ink-inverse')}
+          title="Memory" aria-label="Memory"><LightBulbIcon className="w-4 h-4" /></button>
+        <ModelSelector value={model} provider={provider} effort={effort} includeEffort {...modelCatalogue} disabled={configurationLocked}
+          agents={agentChoices} agent={currentAgent} agentsLoading={agentsState.loading} agentsError={agentsState.note}
+          onChange={(model, provider, effort, agent) => { setSelection({ model, provider, effort }); setAgentChoice(agent) }}
+          onOpen={() => { refreshModels(); void loadSpecialists() }} className={MODEL_SELECTOR_CLASS} />
+      </>} />
+  </>
 
   return (
     <Transition.Root show={embedded || isPanelOpen} as={Fragment}>
@@ -323,49 +431,53 @@ export function AgentConversation({ destination, embedded = false }: { destinati
         <Transition.Child as={Fragment}
           enter="transform transition ease-smooth duration-400" enterFrom="translate-x-full" enterTo="translate-x-0"
           leave="transform transition ease-smooth duration-400" leaveFrom="translate-x-0" leaveTo="translate-x-full">
-          <section aria-label={AGENT_LABELS[destination]} className="relative ml-auto h-full max-w-full pointer-events-auto transition-all duration-300 ease-in-out" style={{ width: embedded ? '100%' : panelWidth }}>
+          <section ref={sectionRef} aria-label={AGENT_LABELS[destination]} className="relative ml-auto h-full max-w-full pointer-events-auto transition-all duration-300 ease-in-out" style={{ width: embedded ? '100%' : panelWidth }}>
             <div className="ron-glass-panel h-full flex flex-col bg-surface-0 dark:bg-surface-900 text-ink dark:text-ink-inverse border-l border-surface-200 dark:border-surface-800 shadow-[-24px_0_48px_-32px_rgb(26_25_23/0.25)]">
-              <header className="flex-shrink-0 px-4 py-3 border-b border-surface-200/80 dark:border-surface-800 bg-surface-0 dark:bg-surface-900">
-                <div className="flex items-center justify-between gap-2">
+              <header className="flex-shrink-0 border-b border-surface-200/80 bg-surface-0 px-3.5 dark:border-surface-800 dark:bg-surface-900">
+                <div className="flex h-[52px] items-center justify-between gap-2">
                   <div className="flex min-w-0 items-center gap-2.5">
-                    <div className="min-w-0">
-                      <h2 className="whitespace-nowrap font-sans text-[15px] font-semibold tracking-normal">{AGENT_LABELS[destination]}</h2>
-                      <p role="status" className="truncate text-[11px] text-ink-muted dark:text-ink-inverse-muted">
-                        {chat.connection === 'loading' ? 'Restoring session…' : chat.connection === 'reconnecting' ? 'Reconnecting to run…' :
-                          chat.connection === 'detached' ? 'Disconnected · run may still be active' :
-                          active ? runtimeOptions.background ? 'Working · background enabled' : 'Working' :
-                          status === 'checkpointed' ? 'Paused at checkpoint' : status === 'interrupted' ? 'Waiting for your response' :
-                          status === 'cancelled' ? 'Stopped' : status === 'error' ? 'Run failed' : status === 'completed' ? 'Completed' : 'Ready'}
+                    {destination === 'panel' && currentAgent.kind !== 'ron'
+                      ? <span aria-hidden className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[7px] bg-ink font-display text-[13px] font-extrabold text-surface-0 dark:bg-ink-inverse dark:text-ink">{currentAgent.name.charAt(0).toUpperCase()}</span>
+                      : <RenMark className="h-7 w-7" />}
+                    <div className="min-w-0 leading-none">
+                      <h2 className="truncate font-display text-[15px] font-bold tracking-[-0.015em]"
+                        title={destination === 'panel' && currentAgent.kind !== 'ron' ? `${currentAgent.name}: ${currentAgent.description}` : undefined}>
+                        {destination === 'panel' ? currentAgent.kind !== 'ron' ? currentAgent.name : 'Ren' : HEADER_TITLES[destination] ?? AGENT_LABELS[destination]}
+                      </h2>
+                      <p role="status" className="mt-1 flex min-w-0 items-center gap-1.5 text-[11px] text-ink-muted dark:text-ink-inverse-muted">
+                        <span aria-hidden className={cn('h-1.5 w-1.5 shrink-0 rounded-full', statusDotClass(chat.connection, status))} />
+                        <span className="truncate">{panelStatusText({ connection: chat.connection, status, background: runtimeOptions.background })}</span>
                       </p>
                     </div>
                     {chat.browser === 'cloud' && <span role="status" title="This thread's work moved to the cloud browser when the app disconnected; it is not driving this window."
-                      className="shrink-0 rounded-lg border border-amber-300/60 bg-amber-50/80 px-2 py-0.5 text-[11px] font-medium text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">Cloud browser</span>}
+                      className="shrink-0 rounded-full border border-amber-300/60 bg-amber-50/80 px-2 py-0.5 text-[11px] font-medium text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">Cloud browser</span>}
                   </div>
-                  <div className="flex items-center gap-1">
+                  <div className="flex shrink-0 items-center gap-0.5">
+                    <ModeSelector value={interactionMode} onChange={(next) => void switchMode(next)} compact={tight} />
+                    <span aria-hidden className={cn('mx-1 h-4 w-px bg-surface-200 dark:bg-surface-800', tight && 'mx-0.5')} />
                     <button
                       type="button"
                       onClick={() => void handleToggleTakeover()}
                       aria-pressed={takeoverState.active}
-                      title={takeoverState.active ? 'Give browser control back to Ron and provide feedback' : 'Pause Ron and take over the browser manually'}
-                      className={cn(
-                        'inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg border px-2.5 text-xs font-semibold transition-colors',
-                        takeoverState.active
-                          ? 'border-amber-500/70 bg-amber-500/15 text-amber-800 hover:bg-amber-500/25 dark:border-amber-400/60 dark:bg-amber-400/15 dark:text-amber-200'
-                          : 'border-surface-200 bg-surface-50 text-ink hover:bg-surface-100 dark:border-surface-700 dark:bg-surface-850 dark:text-ink-inverse dark:hover:bg-surface-800'
-                      )}
+                      aria-label={takeoverState.active ? 'Give the browser back to Ren' : 'Take over the browser'}
+                      title={takeoverState.active ? 'Give browser control back to Ren and tell it what you did' : 'Pause Ren and drive the browser yourself'}
+                      className={takeoverState.active
+                        ? 'inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full bg-amber-400 px-3 text-[12px] font-semibold text-ink transition-colors hover:bg-amber-300'
+                        : iconButton}
                     >
-                      <HandRaisedIcon className="h-3.5 w-3.5" />
-                      <span>{takeoverState.active ? 'Give Back' : 'Take Over'}</span>
+                      <HandRaisedIcon className="h-[18px] w-[18px]" />
+                      {takeoverState.active && <span>Give back</span>}
                     </button>
-                    <ModeSelector value={interactionMode} onChange={(next) => void switchMode(next)} />
-                    {voice && <button onClick={() => setMemoryOpen((open) => !open)} aria-pressed={memoryOpen} className={cn('p-2 rounded-lg hover:bg-surface-100 dark:hover:bg-surface-800', memoryOpen && 'bg-surface-100 dark:bg-surface-800')} title="Memory" aria-label="Memory"><LightBulbIcon className="w-5 h-5" /></button>}
-                    <button onClick={() => setThreadsOpen((open) => !open)} aria-pressed={threadsOpen} className={cn('p-2 rounded-lg hover:bg-surface-100 dark:hover:bg-surface-800', threadsOpen && 'bg-surface-100 dark:bg-surface-800')} title="Threads" aria-label="Threads"><QueueListIcon className="w-5 h-5" /></button>
-                    <button onClick={() => void handleNewChat()} className="p-2 rounded-lg hover:bg-surface-100 dark:hover:bg-surface-800" title="New chat" aria-label="New chat"><PlusIcon className="w-5 h-5" /></button>
-                    {!embedded && <button onClick={closePanel} className="p-2 rounded-lg hover:bg-surface-100 dark:hover:bg-surface-800" title="Close" aria-label="Close agent panel"><XMarkIcon className="w-5 h-5" /></button>}
+                    {voice && <button onClick={() => setMemoryOpen((open) => !open)} aria-pressed={memoryOpen} className={cn(iconButton, memoryOpen && 'bg-surface-100 text-ink dark:bg-surface-800 dark:text-ink-inverse')} title="Memory" aria-label="Memory"><LightBulbIcon className="h-[18px] w-[18px]" /></button>}
+                    <button onClick={() => setThreadsOpen((open) => !open)} aria-pressed={threadsOpen} className={cn(iconButton, threadsOpen && 'bg-surface-100 text-ink dark:bg-surface-800 dark:text-ink-inverse')} title="Threads" aria-label="Threads"><QueueListIcon className="h-[18px] w-[18px]" /></button>
+                    {chat.messages.length > 0 && <button onClick={() => void useContextAgentStore.getState().addContext({ kind: 'thread', sessionId: chat.sessionId, title: messageTitle(chat.messages.find((message) => message.role === 'user')?.parts.flatMap((part) => part.kind === 'text' ? [part.text] : []) ?? []).slice(0, 80) || 'Chat thread' })}
+                      className={iconButton} title="Add this conversation to Ren's context" aria-label="Add this conversation to Ren's context"><BookmarkIcon className="h-[18px] w-[18px]" /></button>}
+                    <button onClick={() => void handleNewChat()} className={iconButton} title="New chat" aria-label="New chat"><PlusIcon className="h-[18px] w-[18px]" /></button>
+                    {!embedded && <button onClick={closePanel} className={iconButton} title="Close" aria-label="Close agent panel"><XMarkIcon className="h-[18px] w-[18px]" /></button>}
                   </div>
                 </div>
-                {voice && <p className="mt-2 truncate text-[11px] text-ink-muted dark:text-ink-inverse-muted">Live model, voice and effort are chosen below · Chat model unchanged</p>}
-                {modeNotice && <p role="status" className="mt-2 text-xs text-amber-700 dark:text-amber-300">{modeNotice}</p>}
+                {voice && <p className="-mt-1 pb-2.5 truncate text-[11px] text-ink-muted dark:text-ink-inverse-muted">Live model, voice and effort are chosen below · Chat model unchanged</p>}
+                {modeNotice && <p role="status" className="-mt-1 pb-2.5 text-xs text-amber-700 dark:text-amber-300">{modeNotice}</p>}
               </header>
               {memoryOpen && <MemoryPanel userId={user} onClose={() => setMemoryOpen(false)} />}
               {threadsOpen && <ThreadsList userId={user} destination={destination} currentId={chat.sessionId} onClose={() => setThreadsOpen(false)}
@@ -374,7 +486,7 @@ export function AgentConversation({ destination, embedded = false }: { destinati
                 <div role="status" className="mx-4 mt-3 rounded-xl border border-amber-300/70 bg-amber-50/80 dark:border-amber-800 dark:bg-amber-950/30 p-3 text-xs text-amber-900 dark:text-amber-200">
                   <p className="font-semibold">You have taken over the browser</p>
                   <p className="mt-1 text-amber-800/90 dark:text-amber-300/90">
-                    Ron is paused while you interact with the tab. Click <strong>Give Back</strong> above when you are ready to hand control back.
+                    Ren is paused while you interact with the tab. Click <strong>Give Back</strong> above when you are ready to hand control back.
                   </p>
                 </div>
               )}
@@ -387,7 +499,7 @@ export function AgentConversation({ destination, embedded = false }: { destinati
                   }}
                 >
                   <div className="flex items-center justify-between gap-2">
-                    <p className="font-semibold text-ink dark:text-ink-inverse">Hand back to Ron</p>
+                    <p className="font-semibold text-ink dark:text-ink-inverse">Hand back to Ren</p>
                     <button
                       type="button"
                       onClick={() => setGiveBackPromptOpen(false)}
@@ -435,90 +547,46 @@ export function AgentConversation({ destination, embedded = false }: { destinati
                   registerHandOff={registerHandOff}
                   externalPrompt={liveExternalPrompt} onExternalPromptConsumed={consumeLiveExternal} />
               </div> : <>
-              <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto scrollbar-thin px-4 py-4 space-y-4" onScroll={() => {
+              <div ref={scrollRef} className={cn('flex-1 min-h-0 overflow-y-auto scrollbar-thin', heroMode ? 'flex flex-col px-6 py-10' : 'space-y-5 px-4 py-5')} onScroll={() => {
                 const element = scrollRef.current
                 if (element) followOutput.current = element.scrollHeight - element.scrollTop - element.clientHeight < 100
               }}>
-                {!messages.length && !active && <div className="flex h-full min-h-40 flex-col justify-center px-3">
-                  <div className="mb-3 flex items-center" aria-hidden>
-                    <RonLogo className="-my-8 -ml-1.5 h-auto w-52" alt="" />
-                  </div>
-                  <h3 className="mb-1.5 font-display text-[36px] font-normal leading-tight">How can I help?</h3>
-                  <p className="text-[14px] text-ink-muted dark:text-ink-inverse-muted">Ask about this page, search, or work on a project.</p>
+                {heroMode ? <div className="m-auto w-full max-w-[720px]">
+                  {hero?.(pickStarter)}
+                  <div className="mt-9">{composerBlock}</div>
+                  {heroFooter?.(pickStarter)}
+                </div> : <>
+                {!messages.length && !active && <div className="flex h-full min-h-40 flex-col justify-center px-1.5 pb-4">
+                  <p className="tag-label tag-label-slash">{destination === 'search' ? 'Search' : 'Ask Ren'}</p>
+                  <h3 className="mt-3 font-display text-[30px] font-extrabold leading-[1.02] tracking-[-0.035em]">What’s the move?</h3>
+                  <p className="mt-2.5 max-w-[36ch] text-[14px] leading-relaxed text-ink-secondary dark:text-ink-inverse-secondary">
+                    {destination === 'search' ? 'Ask a question. Ren searches, reads the sources and cites every claim.' : 'Ask about this page, search the web, or hand Ren a task. Ren can drive this browser for you.'}
+                  </p>
+                  {(STARTERS[destination] ?? []).length > 0 && <div className="mt-6 grid gap-1.5">
+                    {(STARTERS[destination] ?? []).map((starter) => <button key={starter} type="button" onClick={() => pickStarter(starter)}
+                      className="group flex items-center justify-between gap-3 rounded-xl border border-surface-200 bg-surface-0 px-3.5 py-2.5 text-left text-[13px] font-medium text-ink transition-colors duration-150 hover:border-blurple-300 hover:bg-blurple-50/70 dark:border-surface-800 dark:bg-surface-900 dark:text-ink-inverse dark:hover:border-blurple-800 dark:hover:bg-blurple-950/40">
+                      <span className="truncate">{starter}</span>
+                      <ArrowUpRight aria-hidden className="h-4 w-4 shrink-0 text-ink-muted transition-colors group-hover:text-volt dark:text-ink-inverse-muted" />
+                    </button>)}
+                  </div>}
                 </div>}
                 {messages.map((message) => <MessageBubble key={message.id} message={message} status={message.runId === chat.runId ? status : 'completed'} onUiAction={onUiAction} superseded={supersededViews} />)}
-                {(ideState.files.length > 0 || ideState.output) && <details className="rounded-xl border border-surface-200 dark:border-surface-700 p-3">
+                {!hero && (ideState.files.length > 0 || ideState.output) && <details className="rounded-xl border border-surface-200 dark:border-surface-700 p-3">
                   <summary className="cursor-pointer text-xs font-medium">Workspace · files and terminal</summary>
                   <IDE className="mt-3 max-h-[420px]" files={ideState.files} output={ideState.output} isStreaming={active} previewUrl={ideState.previewUrl} title="Workspace" />
                 </details>}
-                {active && <div role="status" className="flex items-center gap-2 text-xs text-ink-muted dark:text-ink-inverse-muted"><span className="h-2 w-2 rounded-full bg-emerald-500" />Run in progress · send a message to steer</div>}
+                {active && <div role="status" className="flex items-center gap-2 text-xs text-ink-muted dark:text-ink-inverse-muted"><span className="h-1.5 w-1.5 rounded-full bg-volt" />Ren is working · send a message to steer</div>}
                 <div ref={messagesEndRef} />
+                </>}
               </div>
 
-              {chat.historyIncomplete && <div role="status" className="mx-4 mb-3 rounded-xl border border-amber-200 dark:border-amber-900 bg-amber-50/60 dark:bg-amber-950/20 p-3 text-xs">
-                {active || chat.followPending
-                  ? 'Replay gap: some live text and progress are unavailable. Completed SDK messages are shown; canonical history refreshes when the run finishes.'
-                  : 'Replay gap: canonical history has been refreshed. Some live progress and nested events could not be recovered.'}
-              </div>}
-              {(chat.error || chat.transportError) && <div role="alert" className="mx-4 mb-3 rounded-xl border border-red-300/60 bg-red-50/80 p-3 text-xs text-red-800 dark:bg-red-950/30 dark:text-red-200">
-                <p className="whitespace-pre-wrap break-words">{chat.error || chat.transportError}</p>
-                {chat.error && chat.transportError && <p className="mt-1">{chat.transportError}</p>}
-                {chat.connection === 'detached' && <button className={`${smallButton} mt-2`} onClick={chat.reconnect}>Reconnect</button>}
-              </div>}
-              {status === 'checkpointed' && <Checkpoint className="mx-4 mb-3" aria-label="Native checkpoint">
-                <CheckpointIcon />
-                <CheckpointTrigger disabled={chat.connection !== 'connected' || chat.controlBusy || chat.recoveryRequired}
-                  onClick={() => void sendMessage('', 'checkpoint_resume')}>Resume checkpoint</CheckpointTrigger>
-              </Checkpoint>}
-              {status === 'interrupted' && <InterruptForm key={`${chat.sessionId}-${chat.runId}`} interrupts={chat.interrupts}
-                onSubmit={(responses) => sendMessage('', 'interrupt_response', responses)} />}
-              {chat.repair && <RepairPanel repair={chat.repair} busy={chat.controlBusy}
-                onApprove={() => void chat.repairAction('approve', chat.repair!.tool, chat.repair!.rev, chat.repair!.approvalToken)}
-                onDecline={() => void chat.repairAction('decline', chat.repair!.tool, chat.repair!.rev)}
-                onCancel={() => void chat.repairAction('cancel', chat.repair!.tool)}
-                onRollback={() => void chat.repairAction('rollback', chat.repair!.tool)}
-                onDismiss={() => void chat.repairAction('dismiss', chat.repair!.tool)} />}
+              {!heroMode && <>
+              <PanelRunNotices chat={chat} />
 
-              <footer className="flex-shrink-0 px-4 pb-4 pt-3 border-t border-surface-200/80 dark:border-surface-800 bg-surface-0 dark:bg-surface-900">
-                <div className="max-h-48 overflow-auto">{draft.articles.map((article) => <ArticleAttachmentCard key={article.id} article={article}
-                  onRemove={() => useArticleDraftStore.getState().remove(draftKey, article.id)} />)}</div>
-                {active && draft.articles.length > 0 && <p className="mb-2 text-xs text-ink-muted">Your attachments are saved for the next message. Wait for this run to finish or stop it.</p>}
-                <div className={cn('relative rounded-2xl border px-4 pt-3.5 pb-3 transition-all duration-200 bg-surface-0 dark:bg-surface-850/90 focus-within:border-accent/50 focus-within:shadow-[0_0_0_3px_rgb(169_83_46/0.12),0_8px_24px_-6px_rgb(26_25_23/0.12)] dark:focus-within:border-accent-light/50', input ? 'border-accent/50 dark:border-accent-light/50 shadow-[0_0_0_3px_rgb(169_83_46/0.12),0_8px_24px_-6px_rgb(26_25_23/0.12)]' : 'border-surface-200 dark:border-surface-700/80 shadow-[0_4px_20px_-4px_rgb(26_25_23/0.06)] dark:shadow-[0_8px_24px_-6px_rgb(0_0_0/0.35)]')}>
-                  {!commandSuggestions.length && <TextAssist assist={assist} placement="above"
-                    onPick={(text) => { setInput(text); assist.dismiss(); focusComposer(inputRef.current) }}
-                    onCorrect={(text) => { setInput(text); assist.dismiss(); focusComposer(inputRef.current) }} />}
-                  {commandSuggestions.length > 0 && <div className="absolute bottom-full left-0 right-0 mb-2 rounded-xl border border-surface-200 bg-surface-0 p-1 shadow-[0_18px_48px_-18px_rgb(26_25_23/0.28)] dark:border-surface-700 dark:bg-surface-850" aria-label="Prompt commands">
-                    {commandSuggestions.map((command, index) => <button key={command.name} type="button"
-                      aria-current={selectedCommand === index ? 'true' : undefined}
-                      onMouseDown={(event) => event.preventDefault()} onClick={() => chooseCommand(command.name)}
-                      className={cn('block w-full rounded-lg px-3 py-2 text-left text-xs', selectedCommand === index && 'bg-surface-100 dark:bg-surface-800')}>
-                      <span className="font-semibold">{command.usage}</span><span className="mt-1 block text-ink-muted dark:text-ink-inverse-muted">{command.description}</span>
-                    </button>)}
-                  </div>}
-                  <SelectedContexts contexts={selectedContexts} onRemove={(id) => setSelectedContexts((previous) => previous.filter((item) => item.id !== id))} className="pb-2.5" />
-                  <textarea ref={inputRef} value={input} onChange={(event) => { setInput(event.target.value); setCommandIndex(0); setCommandsDismissed(false); setCommandFeedback('') }} onKeyDown={handleKeyDown}
-                    aria-label={active ? 'Steer the active run' : 'Message Ron'} placeholder={paused ? 'Resume the run above…' : active ? 'Guide the active run…' : 'Ask anything… / for commands'}
-                    disabled={paused || chat.recoveryRequired} rows={2} className="w-full min-w-0 resize-none bg-transparent py-1 text-[14px] leading-relaxed placeholder:text-ink-muted/60 outline-none focus-visible:ring-0 focus-visible:ring-offset-0 min-h-[52px] max-h-40" />
-                  <div className="mt-2.5 flex items-center justify-between gap-2 pt-2 border-t border-surface-200/60 dark:border-surface-700/60">
-                    <div className="flex min-w-0 flex-1 items-center gap-1.5">
-                      {!active && <ContextPicker selectedContexts={selectedContexts} onContextsChange={setSelectedContexts} />}
-                      <button type="button" onClick={() => setMemoryOpen((open) => !open)} aria-pressed={memoryOpen}
-                        className={cn('inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-ink-muted transition-colors hover:bg-surface-100 hover:text-ink dark:text-ink-inverse-muted dark:hover:bg-surface-800 dark:hover:text-ink-inverse', memoryOpen && 'bg-surface-100 text-ink dark:bg-surface-800 dark:text-ink-inverse')}
-                        title="Memory" aria-label="Memory"><LightBulbIcon className="w-4 h-4" /></button>
-                      <ModelSelector value={model} provider={provider} effort={effort} includeEffort {...modelCatalogue} disabled={configurationLocked}
-                        onChange={(model, provider, effort) => setSelection({ model, provider, effort })}
-                        onOpen={refreshModels} className="h-8 min-w-0 max-w-[220px] rounded-lg border-surface-200/70 bg-surface-50/80 px-2.5 text-[11px] dark:border-surface-700/70 dark:bg-surface-800/70" />
-                    </div>
-                    <div className="flex shrink-0 items-center gap-1.5">
-                      {active && <button type="button" onClick={() => void chat.stop()} disabled={chat.controlBusy} className={smallButton} aria-label="Stop agent run"><StopIcon className="inline w-3 h-3 mr-1" />Stop</button>}
-                      <button type="button" onClick={handleSend} disabled={!input.trim() || unavailable || (active && draft.articles.length > 0)} aria-label={active ? 'Send steering' : 'Send message'}
-                        className="shrink-0 rounded-xl bg-ink dark:bg-ink-inverse text-white dark:text-surface-900 px-3.5 h-8 text-xs font-semibold shadow-sm transition-all hover:opacity-90 disabled:opacity-30">{active ? 'Steer' : 'Send'}</button>
-                    </div>
-                  </div>
-                </div>
-                {commandFeedback && <p role="status" className="mt-2 text-xs text-ink-muted dark:text-ink-inverse-muted">{commandFeedback}</p>}
-                <p className="text-center text-[10px] text-ink-muted dark:text-ink-inverse-muted mt-2.5">{active ? 'Steering updates the current run' : '↵ to send · Shift + ↵ for a new line'}</p>
+              <footer className="flex-shrink-0 border-t border-surface-200/80 bg-surface-0 px-3.5 pb-3 pt-3 dark:border-surface-800 dark:bg-surface-900">
+                {composerBlock}
               </footer>
+              </>}
               </>}
             </div>
           </section>
@@ -528,22 +596,238 @@ export function AgentConversation({ destination, embedded = false }: { destinati
   )
 }
 
+/**
+ * Composer behaviour shared by every panel-protocol chat (Agent Panel, Build, the issue chat): Brave Suggest +
+ * Spellcheck (off while the text starts with "/" or the command list shows), the `/` command list (↑/↓, Tab or
+ * Enter to pick, Esc to dismiss) and Enter to send.
+ */
+export interface ComposerMentions {
+  /** Where `@` mentions come from (`useContextSources`). */
+  categories: ContextCategory[]
+  /** Already attached, shown checked. */
+  selected: ContextItem[]
+  onPick: (item: ContextItem) => void
+  /** True while an `@query` is being typed, so the sources load only then. */
+  onOpenChange?: (open: boolean) => void
+}
+
+export function usePanelComposer(input: string, setInput: (value: string) => void, inputRef: RefObject<HTMLTextAreaElement | null>,
+  mentions?: ComposerMentions) {
+  const [commandFeedback, setCommandFeedback] = useState('')
+  const [commandIndex, setCommandIndex] = useState(0)
+  const [commandsDismissed, setCommandsDismissed] = useState(false)
+  const [caret, setCaret] = useState(input.length)
+  const [mentionIndex, setMentionIndex] = useState(0)
+  const [mentionDismissedAt, setMentionDismissedAt] = useState<number | null>(null)
+  const commandSuggestions = !commandsDismissed && /^\/\S*$/.test(input)
+    ? PANEL_COMMANDS.filter((command) => command.name.startsWith(input)) : []
+  const typed = mentions && !commandSuggestions.length ? mentionAt(input, Math.min(caret, input.length)) : null
+  const typedResults = typed && typed.start !== mentionDismissedAt && mentions ? searchContexts(mentions.categories, typed.query, 8) : []
+  // A query with a space that matches nothing is ordinary text after an `@`, not a mention.
+  const mention = typed && typed.start !== mentionDismissedAt && (typedResults.length || !/\s/.test(typed.query)) ? typed : null
+  const mentionResults = mention ? typedResults : []
+  const selectedMention = Math.min(mentionIndex, Math.max(0, mentionResults.length - 1))
+  const mentionLoading = Boolean(mentions?.categories.some((category) => category.loading))
+  const onMentionOpenChange = mentions?.onOpenChange
+  const mentionOpen = mention !== null
+  useEffect(() => { onMentionOpenChange?.(mentionOpen) }, [mentionOpen, onMentionOpenChange])
+  const skipAssist = useCallback((value: string) => value.trimStart().startsWith('/'), [])
+  const assist = useTextAssist(mentionOpen ? '' : input, { skip: skipAssist, count: 5 })
+  const selectedCommand = Math.min(commandIndex, Math.max(0, commandSuggestions.length - 1))
+  const chooseCommand = (name: string) => {
+    setInput(`${name} `)
+    setCommandFeedback('')
+    focusComposer(inputRef.current)
+  }
+  /** Attach the mentioned item and take the `@query` out of the message. */
+  const chooseMention = (item: ContextItem) => {
+    if (!mention || !mentions) return
+    const next = removeMention(input, mention.start, Math.min(caret, input.length))
+    setInput(next.text)
+    setCaret(next.caret)
+    mentions.onPick(item)
+    requestAnimationFrame(() => {
+      const element = inputRef.current
+      if (!element) return
+      element.focus()
+      element.setSelectionRange(next.caret, next.caret)
+    })
+  }
+  const trackCaret = () => setCaret(inputRef.current?.selectionStart ?? input.length)
+  const change = (value: string) => {
+    setInput(value); setCommandIndex(0); setCommandsDismissed(false); setCommandFeedback('')
+    setCaret(inputRef.current?.selectionStart ?? value.length); setMentionIndex(0)
+    if (mentionDismissedAt !== null && !mentionAt(value, inputRef.current?.selectionStart ?? value.length)) setMentionDismissedAt(null)
+  }
+  const keyDown = (event: KeyboardEvent<HTMLTextAreaElement>, send: () => void) => {
+    if (event.nativeEvent.isComposing) return
+    if (mention) {
+      // Esc, or Enter on an empty match list, closes the list and keeps the text; the next Enter sends.
+      if (event.key === 'Escape' || (event.key === 'Enter' && !event.shiftKey && !mentionResults.length)) {
+        event.preventDefault(); setMentionDismissedAt(mention.start); return
+      }
+      if (mentionResults.length) {
+        if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+          event.preventDefault()
+          setMentionIndex((selectedMention + (event.key === 'ArrowDown' ? 1 : -1) + mentionResults.length) % mentionResults.length)
+          return
+        }
+        if (event.key === 'Tab' || (event.key === 'Enter' && !event.shiftKey)) {
+          event.preventDefault(); chooseMention(mentionResults[selectedMention].item); return
+        }
+      }
+    }
+    if (!commandSuggestions.length && handleAssistKey(event, assist, (text) => { setInput(text); assist.dismiss() })) return
+    if (commandSuggestions.length) {
+      if (event.key === 'Escape') { event.preventDefault(); setCommandsDismissed(true); return }
+      if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+        event.preventDefault()
+        setCommandIndex((selectedCommand + (event.key === 'ArrowDown' ? 1 : -1) + commandSuggestions.length) % commandSuggestions.length)
+        return
+      }
+      if (event.key === 'Tab' || (event.key === 'Enter' && !event.shiftKey)) {
+        event.preventDefault(); chooseCommand(commandSuggestions[selectedCommand].name); return
+      }
+    }
+    if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
+      event.preventDefault(); assist.dismiss(); send()
+    }
+  }
+  /** A new conversation clears the last command's feedback and re-enables the command list. */
+  const reset = () => { setCommandFeedback(''); setCommandsDismissed(false); setMentionDismissedAt(null) }
+  return { input, setInput, inputRef, assist, commandSuggestions, selectedCommand, chooseCommand, commandFeedback, setCommandFeedback, change, keyDown, reset,
+    mention, mentionResults, selectedMention, setMentionIndex, chooseMention, mentionLoading, trackCaret,
+    mentionSelectedIds: new Set((mentions?.selected ?? []).map((item) => item.id)) }
+}
+
+export type PanelComposerState = ReturnType<typeof usePanelComposer>
+
+/** The panel composer card: suggestions above, the message box, then tools (left) and Stop / Send or Steer (right). */
+export function PanelComposer({ composer, active, label, placeholder, disabled, onSend, sendDisabled, onStop, stopDisabled, before, tools, onPaste, large = false }: {
+  composer: PanelComposerState; active: boolean; label: string; placeholder: string; disabled?: boolean
+  onSend: () => void; sendDisabled?: boolean; onStop: () => void; stopDisabled?: boolean
+  /** A long paste becomes an attachment card (`useComposerAttachments.onPaste`). */
+  onPaste?: ComposerAttachmentsState['onPaste']
+  /** Rendered inside the card above the message box (selected contexts). */
+  before?: ReactNode
+  /** Left side of the tool row (context picker, memory, model selector). */
+  tools?: ReactNode
+  /** The hero composer (Build's empty state): a taller box and a larger type size. */
+  large?: boolean
+}) {
+  const { input, setInput, inputRef, assist, commandSuggestions, selectedCommand } = composer
+  return <>
+    <div className={cn('relative rounded-2xl border bg-surface-0 px-3.5 pb-2.5 pt-3 transition-[border-color,box-shadow] duration-200 dark:bg-surface-850',
+      'focus-within:border-blurple-400 focus-within:ring-[3px] focus-within:ring-blurple-500/15 dark:focus-within:border-blurple-500/70 dark:focus-within:ring-blurple-400/15',
+      large ? 'shadow-float' : 'shadow-sm',
+      input ? 'border-blurple-300 dark:border-blurple-800' : 'border-surface-200 dark:border-surface-700/80')}>
+      {composer.mention && <ContextMentionList query={composer.mention.query} results={composer.mentionResults}
+        activeIndex={composer.selectedMention} loading={composer.mentionLoading} selectedIds={composer.mentionSelectedIds}
+        onPick={composer.chooseMention} onHover={composer.setMentionIndex} />}
+      {!commandSuggestions.length && !composer.mention && <TextAssist assist={assist} placement="above"
+        onPick={(text) => { setInput(text); assist.dismiss(); focusComposer(inputRef.current) }}
+        onCorrect={(text) => { setInput(text); assist.dismiss(); focusComposer(inputRef.current) }} />}
+      {commandSuggestions.length > 0 && <div className="absolute bottom-full left-0 right-0 mb-2 rounded-xl border border-surface-200 bg-surface-0 p-1 shadow-[0_18px_48px_-18px_rgb(26_25_23/0.28)] dark:border-surface-700 dark:bg-surface-850" aria-label="Prompt commands">
+        {commandSuggestions.map((command, index) => <button key={command.name} type="button"
+          aria-current={selectedCommand === index ? 'true' : undefined}
+          onMouseDown={(event) => event.preventDefault()} onClick={() => composer.chooseCommand(command.name)}
+          className={cn('block w-full rounded-lg px-3 py-2 text-left text-xs', selectedCommand === index && 'bg-surface-100 dark:bg-surface-800')}>
+          <span className="font-semibold">{command.usage}</span><span className="mt-1 block text-ink-muted dark:text-ink-inverse-muted">{command.description}</span>
+        </button>)}
+      </div>}
+      {before}
+      <textarea ref={inputRef} value={input} onChange={(event) => composer.change(event.target.value)} onKeyDown={(event) => composer.keyDown(event, onSend)} onPaste={onPaste}
+        onSelect={composer.trackCaret} aria-expanded={composer.mention ? true : undefined}
+        aria-label={label} placeholder={placeholder}
+        disabled={disabled} rows={large ? 3 : 2}
+        className={cn('w-full min-w-0 resize-none bg-transparent px-0.5 py-1 leading-relaxed outline-none placeholder:text-ink-muted/70 focus-visible:ring-0 focus-visible:ring-offset-0 dark:placeholder:text-ink-inverse-muted/70',
+          large ? 'min-h-[84px] max-h-64 text-[16px]' : 'min-h-[48px] max-h-40 text-[14px]')} />
+      <div className="mt-1.5 flex items-center justify-between gap-2">
+        <div className="flex min-w-0 flex-1 items-center gap-1">{tools}</div>
+        <div className="flex shrink-0 items-center gap-1.5">
+          {active && <button type="button" onClick={onStop} disabled={stopDisabled} aria-label="Stop agent run" title="Stop"
+            className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-ink text-surface-0 transition-opacity hover:opacity-85 disabled:opacity-40 dark:bg-ink-inverse dark:text-ink"><Square aria-hidden className="h-3 w-3 fill-current" /></button>}
+          <button type="button" onClick={onSend} disabled={sendDisabled} aria-label={active ? 'Send steering' : 'Send message'} title={active ? 'Steer' : 'Send'}
+            className={cn('inline-flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-full bg-blurple-600 text-white transition-colors hover:bg-blurple-700 dark:bg-blurple-500 dark:hover:bg-blurple-400',
+              'disabled:bg-surface-200 disabled:text-ink-muted dark:disabled:bg-surface-800 dark:disabled:text-ink-inverse-muted', active ? 'px-3 text-[12px] font-semibold' : 'w-8')}>
+            {active && 'Steer'}<ArrowUp aria-hidden className="h-4 w-4" strokeWidth={2.25} />
+          </button>
+        </div>
+      </div>
+    </div>
+    {composer.commandFeedback && <p role="status" className="mt-2 text-xs text-ink-muted dark:text-ink-inverse-muted">{composer.commandFeedback}</p>}
+    <p className="mt-2 text-center text-[10.5px] tracking-[0.01em] text-ink-muted/80 dark:text-ink-inverse-muted/80">
+      {active ? 'Steering updates the current run' : <>↵ send <span aria-hidden className="mx-1 opacity-50">·</span> ⇧↵ new line <span aria-hidden className="mx-1 opacity-50">·</span> / commands <span aria-hidden className="mx-1 opacity-50">·</span> @ context</>}
+    </p>
+  </>
+}
+
+/** The status dot beside the conversation's name: connected (success), working (volt), waiting (signal), failed. */
+function statusDotClass(connection: PanelChat['connection'], status: RunStatus) {
+  if (connection !== 'connected') return connection === 'detached' ? 'bg-red-500' : 'bg-amber-400'
+  if (status === 'running') return 'bg-volt'
+  if (status === 'error') return 'bg-red-500'
+  if (status === 'interrupted' || status === 'checkpointed') return 'bg-amber-400'
+  return 'bg-emerald-500'
+}
+
+/** Run state below the conversation: replay gap, errors (with Reconnect), checkpoint resume, interrupts and tool repair. */
+export function PanelRunNotices({ chat }: { chat: PanelChat }) {
+  const { status, sendMessage } = chat
+  const active = status === 'running'
+  return <>
+    {chat.historyIncomplete && <div role="status" className="mx-4 mb-3 rounded-xl border border-amber-200 dark:border-amber-900 bg-amber-50/60 dark:bg-amber-950/20 p-3 text-xs">
+      {active || chat.followPending
+        ? 'Replay gap: some live text and progress are unavailable. Completed SDK messages are shown; canonical history refreshes when the run finishes.'
+        : 'Replay gap: canonical history has been refreshed. Some live progress and nested events could not be recovered.'}
+    </div>}
+    {/* Bounded: a long provider error scrolls inside the alert instead of pushing the panel past the window. */}
+    {(chat.error || chat.transportError) && <div role="alert" className="mx-4 mb-3 max-h-48 shrink-0 overflow-y-auto rounded-xl border border-red-300/60 bg-red-50/80 p-3 text-xs text-red-800 scrollbar-thin dark:bg-red-950/30 dark:text-red-200">
+      <p className="whitespace-pre-wrap break-words">{chat.error || chat.transportError}</p>
+      {chat.error && chat.transportError && <p className="mt-1">{chat.transportError}</p>}
+      {chat.error && chat.errorDetails && <details className="mt-2">
+        <summary className="cursor-pointer select-none font-medium">Details</summary>
+        <pre className="mt-1 whitespace-pre-wrap break-words font-mono text-[11px] opacity-80">{chat.errorDetails}</pre>
+      </details>}
+      {chat.connection === 'detached' && <button className={`${smallButton} mt-2`} onClick={chat.reconnect}>Reconnect</button>}
+    </div>}
+    {status === 'checkpointed' && <Checkpoint className="mx-4 mb-3" aria-label="Native checkpoint">
+      <CheckpointIcon />
+      <CheckpointTrigger disabled={chat.connection !== 'connected' || chat.controlBusy || chat.recoveryRequired}
+        onClick={() => void sendMessage('', 'checkpoint_resume')}>Resume checkpoint</CheckpointTrigger>
+    </Checkpoint>}
+    {status === 'interrupted' && <InterruptForm key={`${chat.sessionId}-${chat.runId}`} interrupts={chat.interrupts}
+      onSubmit={(responses) => sendMessage('', 'interrupt_response', responses)} />}
+    {chat.repair && <RepairPanel repair={chat.repair} busy={chat.controlBusy}
+      onApprove={() => void chat.repairAction('approve', chat.repair!.tool, chat.repair!.rev, chat.repair!.approvalToken)}
+      onDecline={() => void chat.repairAction('decline', chat.repair!.tool, chat.repair!.rev)}
+      onCancel={() => void chat.repairAction('cancel', chat.repair!.tool)}
+      onRollback={() => void chat.repairAction('rollback', chat.repair!.tool)}
+      onDismiss={() => void chat.repairAction('dismiss', chat.repair!.tool)} />}
+  </>
+}
+
 const MODES: readonly { id: 'text' | 'voice'; label: string; title: string }[] = [
   { id: 'text', label: 'Chat', title: 'Text chat with the panel agent' },
   { id: 'voice', label: 'Live', title: 'Gemini Live voice session sharing this conversation' },
 ]
 
-/** Chat / Live segmented control. The parent gates the switch on in-flight work. */
-export function ModeSelector({ value, onChange }: { value: 'text' | 'voice'; onChange: (value: 'text' | 'voice') => void }) {
+const MODE_ICONS = { text: ChatBubbleOvalLeftIcon, voice: MicrophoneIcon }
+
+/** Chat / Live segmented control. The parent gates the switch on in-flight work. `compact` (a narrow conversation)
+ *  shows the two as icons, named by their aria-label and tooltip. */
+export function ModeSelector({ value, onChange, compact = false }: { value: 'text' | 'voice'; onChange: (value: 'text' | 'voice') => void; compact?: boolean }) {
   return <div role="group" aria-label="Interaction mode"
-    className="inline-flex h-8 shrink-0 items-center gap-0.5 rounded-lg border border-surface-200 bg-surface-50 p-0.5 text-xs dark:border-surface-700 dark:bg-surface-850">
+    className="inline-flex h-8 shrink-0 items-center gap-0.5 rounded-full bg-surface-100 p-0.5 text-[12px] dark:bg-surface-800/80">
     {MODES.map((mode) => {
       const selected = mode.id === value
-      return <button key={mode.id} type="button" aria-pressed={selected} title={mode.title} onClick={() => onChange(mode.id)}
-        className={cn('h-full rounded-[10px] px-2.5 font-semibold transition-colors',
-          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-1 dark:focus-visible:ring-offset-surface-900',
-          selected ? 'bg-ink text-surface-0 shadow-sm dark:bg-ink-inverse dark:text-surface-900' : 'text-ink-muted hover:bg-surface-100 hover:text-ink dark:text-ink-inverse-muted dark:hover:bg-surface-800 dark:hover:text-ink-inverse')}>
-        {mode.label}
+      const Icon = MODE_ICONS[mode.id]
+      return <button key={mode.id} type="button" aria-pressed={selected} title={compact ? `${mode.label}: ${mode.title}` : mode.title} onClick={() => onChange(mode.id)}
+        aria-label={compact ? mode.label : undefined}
+        className={cn('inline-flex h-full items-center justify-center rounded-full font-semibold transition-colors', compact ? 'w-8' : 'px-3',
+          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blurple-500 focus-visible:ring-offset-1 dark:focus-visible:ring-offset-surface-900',
+          selected ? 'bg-surface-0 text-ink shadow-sm dark:bg-surface-700 dark:text-ink-inverse' : 'text-ink-muted hover:text-ink dark:text-ink-inverse-muted dark:hover:text-ink-inverse')}>
+        {compact ? <Icon aria-hidden className="h-4 w-4" /> : mode.label}
       </button>
     })}
   </div>
@@ -601,15 +885,25 @@ export type UiActionHandler = (viewId: string, action: unknown, payload: unknown
 
 /** One panel message (Agent Panel, Build, and Ask Ron's writing chats). */
 export function MessageBubble({ message, status, onUiAction, superseded }: { message: PanelMessage; status: RunStatus; onUiAction: UiActionHandler; superseded: ReadonlySet<string> }) {
+  // A user message's prompt attachments (pastes, picked context) show as cards above its bubble.
+  const sent = useMemo(() => {
+    const cards = new Map<string, NonNullable<ReturnType<typeof parseAttachmentBlock>>>()
+    if (message.role === 'user') for (const part of message.parts) {
+      const attachment = part.kind === 'text' ? parseAttachmentBlock(part.text) : null
+      if (attachment) cards.set(part.key, attachment)
+    }
+    return cards
+  }, [message.parts, message.role])
   // Nested output of a chain tool (`think` for Perplexity, the tool fixer's `repair`) renders as a
   // chain-of-thought block; every other part renders flat.
-  const items = useMemo(() => groupThinkParts(message.parts, status === 'running'), [message.parts, status])
+  const items = useMemo(() => groupThinkParts(message.parts.filter((part) => !sent.has(part.key)), status === 'running'), [message.parts, sent, status])
   return <Message from={message.role}>
-    <MessageContent variant={message.role === 'assistant' ? 'flat' : 'contained'} className={cn('min-w-0 w-full', message.role === 'user' && 'group-[.is-user]:bg-surface-100 group-[.is-user]:text-ink dark:group-[.is-user]:bg-surface-800 dark:group-[.is-user]:text-ink-inverse')}>
+    {sent.size > 0 && <SentAttachments attachments={[...sent.values()]} />}
+    {items.length > 0 && <MessageContent variant={message.role === 'assistant' ? 'flat' : 'contained'} className={cn('min-w-0 w-full', message.role === 'user' && 'group-[.is-user]:bg-surface-100 group-[.is-user]:text-ink dark:group-[.is-user]:bg-surface-800 dark:group-[.is-user]:text-ink-inverse')}>
       {items.map((item) => item.kind === 'think'
         ? <ThinkChain key={item.tool.key} tool={item.tool} steps={item.steps} running={status === 'running'} />
         : <PartView key={item.part.key} part={item.part} allParts={message.parts} isUser={message.role === 'user'} status={status} onUiAction={onUiAction} superseded={superseded.has(item.part.key)} />)}
-    </MessageContent>
+    </MessageContent>}
   </Message>
 }
 

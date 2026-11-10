@@ -177,7 +177,7 @@ async def test_generation_tools_are_native_async_tools_that_save_through_store_s
     assert out["status"] == "error" and "blocked" in out["content"][0]["text"]
 
     async def guest_saver(user_id, **kwargs):
-        raise PermissionError("Sign in to Ron to save music")
+        raise PermissionError("Sign in to Ren to save music")
 
     guest = mg.MusicGenerationTools("guest:abc", saver=guest_saver, lyria=lyria, compose=compose, plan=plan)
     out = await guest.lyria_generate_song(prompt="x")

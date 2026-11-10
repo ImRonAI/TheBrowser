@@ -6,7 +6,7 @@ const key = (k: string, mods: Partial<{ metaKey: boolean; ctrlKey: boolean; shif
   key: k, metaKey: false, ctrlKey: false, shiftKey: false, altKey: false, ...mods,
 })
 
-test('⌘J asks Ron and ⌘K searches on macOS', () => {
+test('⌘J asks Ren and ⌘K searches on macOS', () => {
   assert.equal(shortcutFor(key('j', { metaKey: true }), true), 'ask-ron')
   assert.equal(shortcutFor(key('K', { metaKey: true }), true), 'search')
   assert.equal(shortcutFor(key('\\', { metaKey: true }), true), 'toggle-sidebar')

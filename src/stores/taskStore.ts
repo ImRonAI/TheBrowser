@@ -1,178 +1,6 @@
 import { create } from 'zustand'
 import { Task, TaskStatus, TaskRelationship, RelationshipType } from '@/pages/types/task'
 
-// Sample data adapted from TaskCard.tsx
-const sampleTasks: Task[] = [
-  {
-    id: '1',
-    title: 'Design new onboarding flow with voice interaction',
-    description: 'Create a seamless onboarding experience that introduces the voice agent capabilities.',
-    status: 'in-progress',
-    priority: 'high',
-    type: 'feature',
-    createdAt: Date.now() - 2 * 24 * 60 * 60 * 1000,
-    updatedAt: Date.now(),
-    dueDate: Date.now() + 2 * 24 * 60 * 60 * 1000,
-    hasNotification: true,
-    assignees: [
-      { id: 'c1', name: 'Alex Chen', initials: 'AC' },
-      { id: 'c2', name: 'Sarah Kim', initials: 'SK' },
-      { id: 'c3', name: 'Mike Ross', initials: 'MR' },
-    ],
-    labels: [{ id: 'i1', label: 'Design', color: 'bg-violet-100 text-violet-700 dark:bg-violet-500/20 dark:text-violet-400' }],
-    subtasks: Array.from({ length: 8 }, (_, i) => ({
-      id: `st-1-${i}`,
-      title: `Subtask ${i + 1}`,
-      completed: i < 5,
-      order: i
-    })),
-    progress: 62,
-    healthIndicator: 'on-track',
-    // This task is parent of its subtasks
-    relationships: [
-      { id: 'rel-1-1', type: 'parent' as const, targetTaskId: 'st-1-0', targetTaskTitle: 'Subtask 1', createdAt: Date.now() },
-      { id: 'rel-1-2', type: 'parent' as const, targetTaskId: 'st-1-1', targetTaskTitle: 'Subtask 2', createdAt: Date.now() },
-      { id: 'rel-1-3', type: 'parent' as const, targetTaskId: 'st-1-2', targetTaskTitle: 'Subtask 3', createdAt: Date.now() },
-      { id: 'rel-1-4', type: 'parent' as const, targetTaskId: 'st-1-3', targetTaskTitle: 'Subtask 4', createdAt: Date.now() },
-      { id: 'rel-1-5', type: 'parent' as const, targetTaskId: 'st-1-4', targetTaskTitle: 'Subtask 5', createdAt: Date.now() },
-      { id: 'rel-1-6', type: 'parent' as const, targetTaskId: 'st-1-5', targetTaskTitle: 'Subtask 6', createdAt: Date.now() },
-      { id: 'rel-1-7', type: 'parent' as const, targetTaskId: 'st-1-6', targetTaskTitle: 'Subtask 7', createdAt: Date.now() },
-      { id: 'rel-1-8', type: 'parent' as const, targetTaskId: 'st-1-7', targetTaskTitle: 'Subtask 8', createdAt: Date.now() },
-    ]
-  },
-  {
-    id: '2',
-    title: 'Implement agent memory persistence',
-    description: 'Ensure context is saved across sessions using vector db.',
-    status: 'in-progress',
-    priority: 'high',
-    type: 'feature',
-    createdAt: Date.now() - 5 * 24 * 60 * 60 * 1000,
-    updatedAt: Date.now(),
-    dueDate: Date.now() + 24 * 60 * 60 * 1000,
-    hasNotification: false,
-    assignees: [
-      { id: 'c1', name: 'Alex Chen', initials: 'AC' },
-    ],
-    labels: [{ id: 'i2', label: 'Engineering', color: 'bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-400' }],
-    subtasks: Array.from({ length: 4 }, (_, i) => ({
-      id: `st-2-${i}`,
-      title: `Subtask ${i + 1}`,
-      completed: i < 1,
-      order: i
-    })),
-    progress: 25,
-    healthIndicator: 'at-risk',
-    relationships: [
-      { id: 'rel-2-1', type: 'parent' as const, targetTaskId: 'st-2-0', targetTaskTitle: 'Subtask 1', createdAt: Date.now() },
-      { id: 'rel-2-2', type: 'parent' as const, targetTaskId: 'st-2-1', targetTaskTitle: 'Subtask 2', createdAt: Date.now() },
-      { id: 'rel-2-3', type: 'parent' as const, targetTaskId: 'st-2-2', targetTaskTitle: 'Subtask 3', createdAt: Date.now() },
-      { id: 'rel-2-4', type: 'parent' as const, targetTaskId: 'st-2-3', targetTaskTitle: 'Subtask 4', createdAt: Date.now() },
-    ]
-  },
-  {
-    id: '3',
-    title: 'Research competitor AI browsers',
-    description: 'Analyze Arc, Sigma, and others.',
-    status: 'review',
-    priority: 'medium',
-    type: 'research',
-    createdAt: Date.now() - 10 * 24 * 60 * 60 * 1000,
-    updatedAt: Date.now(),
-    dueDate: Date.now() - 24 * 60 * 60 * 1000,
-    hasNotification: true,
-    assignees: [
-      { id: 'c2', name: 'Sarah Kim', initials: 'SK' },
-      { id: 'c4', name: 'Emma Liu', initials: 'EL' },
-      { id: 'c5', name: 'John Doe', initials: 'JD' },
-    ],
-    labels: [{ id: 'i3', label: 'Research', color: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400' }],
-    subtasks: Array.from({ length: 3 }, (_, i) => ({
-      id: `st-3-${i}`,
-      title: `Subtask ${i + 1}`,
-      completed: i < 3,
-      order: i
-    })),
-    progress: 100,
-    healthIndicator: 'on-track',
-    relationships: [
-      { id: 'rel-3-1', type: 'parent' as const, targetTaskId: 'st-3-0', targetTaskTitle: 'Subtask 1', createdAt: Date.now() },
-      { id: 'rel-3-2', type: 'parent' as const, targetTaskId: 'st-3-1', targetTaskTitle: 'Subtask 2', createdAt: Date.now() },
-      { id: 'rel-3-3', type: 'parent' as const, targetTaskId: 'st-3-2', targetTaskTitle: 'Subtask 3', createdAt: Date.now() },
-    ]
-  },
-  {
-    id: '4',
-    title: 'Write privacy policy documentation',
-    description: 'Standard GDPR compliance docs.',
-    status: 'backlog',
-    priority: 'low',
-    type: 'documentation',
-    createdAt: Date.now() - 12 * 24 * 60 * 60 * 1000,
-    updatedAt: Date.now(),
-    dueDate: null,
-    hasNotification: false,
-    assignees: [],
-    labels: [{ id: 'i4', label: 'Legal', color: 'bg-slate-100 text-slate-700 dark:bg-slate-500/20 dark:text-slate-400' }],
-    subtasks: [],
-    progress: 0,
-    healthIndicator: 'on-track',
-    relationships: []
-  },
-  // Sample Subtasks (to match Task 1)
-  {
-    id: 'st-1-0',
-    title: 'Subtask 1',
-    description: 'Detailed work for subtask 1',
-    status: 'backlog',
-    priority: 'medium',
-    type: 'feature',
-    createdAt: Date.now(),
-    updatedAt: Date.now(),
-    dueDate: null,
-    hasNotification: false,
-    assignees: [],
-    labels: [],
-    subtasks: [],
-    parentTaskId: '1',
-    relationships: [{ id: 'rel-c-1', type: 'child', targetTaskId: '1', targetTaskTitle: 'Design new onboarding flow with voice interaction', createdAt: Date.now() }]
-  },
-  {
-    id: 'st-1-1',
-    title: 'Subtask 2',
-    description: 'Detailed work for subtask 2',
-    status: 'backlog',
-    priority: 'medium',
-    type: 'feature',
-    createdAt: Date.now(),
-    updatedAt: Date.now(),
-    dueDate: null,
-    hasNotification: false,
-    assignees: [],
-    labels: [],
-    subtasks: [],
-    parentTaskId: '1',
-    relationships: [{ id: 'rel-c-2', type: 'child', targetTaskId: '1', targetTaskTitle: 'Design new onboarding flow with voice interaction', createdAt: Date.now() }]
-  },
-  {
-    id: 'st-1-2',
-    title: 'Subtask 3',
-    description: 'Detailed work for subtask 3',
-    status: 'in-progress',
-    priority: 'high',
-    type: 'feature',
-    createdAt: Date.now(),
-    updatedAt: Date.now(),
-    dueDate: null,
-    hasNotification: false,
-    assignees: [],
-    labels: [],
-    subtasks: [],
-    parentTaskId: '1',
-    relationships: [{ id: 'rel-c-3', type: 'child', targetTaskId: '1', targetTaskTitle: 'Design new onboarding flow with voice interaction', createdAt: Date.now() }]
-  }
-]
-
 interface TaskState {
   tasks: Task[]
   
@@ -192,7 +20,9 @@ interface TaskState {
 }
 
 export const useTaskStore = create<TaskState>()((set, get) => ({
-  tasks: sampleTasks,
+  // Starts empty: the legacy task store has no seed data. Execute and Projects use the canonical
+  // issues in useProjectsStore; this store only backs the legacy task-detail components and window.ronApp.taskStore.
+  tasks: [],
 
   createTask: (taskOverrides: any) => {
     const state = get()
@@ -432,7 +262,7 @@ const normalizeTaskInput = (input: any, _existingTasks: Task[] = []): Partial<Ta
           return { id: 'user', name: 'User', initials: 'ME', role: 'Owner' }
         }
         if (id.toLowerCase() === 'agent' || id.toLowerCase() === 'ron' || id.toLowerCase() === 'ai') {
-          return { id: 'agent', name: 'Ron', initials: 'AI', role: 'Assistant' }
+          return { id: 'agent', name: 'Ren', initials: 'AI', role: 'Assistant' }
         }
         // Try to find existing assignee in other tasks? For now just skip unknown IDs 
         // or create a placeholder if it looks like a name

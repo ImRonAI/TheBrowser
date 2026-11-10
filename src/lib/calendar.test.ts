@@ -11,7 +11,7 @@ const { fromLocalDateTime } = await import('./project-issue-utils.ts')
 type Issue = import('../types/projects.ts').Issue
 
 const base: Issue = { id: 'i', projectId: 'p', number: 1, version: 1, type: 'task', title: 'Issue', status: 'backlog', priority: 'medium',
-  rank: 1, createdAt: 0, updatedAt: 0, assignees: [], labels: [], customFields: {}, workProducts: [] }
+  rank: 1, createdAt: 0, updatedAt: 0, assignees: [], labels: [], customFields: {}, workProducts: [], context: [] }
 const at = (local: string) => fromLocalDateTime(local)
 const issue = (id: string, dates: Partial<Pick<Issue, 'startDate' | 'endDate' | 'dueDate'>>): Issue => ({ ...base, id, ...dates })
 const ymd = (d: Date) => `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`

@@ -4,14 +4,12 @@
  */
 
 import { useState, useEffect } from 'react'
+import { RenIcon } from '@/components/brand'
 import { NodeViewWrapper } from '@tiptap/react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useChat } from '@ai-sdk/react'
 import { DefaultChatTransport } from 'ai'
-import { 
-  Sparkles, ArrowRight, X, Check, Wand2, 
-  FileText, MessageSquare, Languages, Code
-} from 'lucide-react'
+import { ArrowRight, X, Check, FileText, MessageSquare, Languages, Code, Maximize2, MoreHorizontal } from 'lucide-react'
 import { cn } from '@/utils/cn'
 import { ContextPicker, SelectedContexts, ContextItem } from '@/components/agent-panel/ContextPicker'
 import { TextAttachmentCard } from '@/components/ai-elements/text-attachment-card'
@@ -27,7 +25,7 @@ const LARGE_PASTE_THRESHOLD_CHARS = 2000
 const QUICK_OPTIONS = [
   { id: 'fix', icon: Check, label: 'Fix Grammar', prompt: 'Fix spelling and grammar.' },
   { id: 'shorten', icon: FileText, label: 'Make Shorter', prompt: 'Make the text more concise.' },
-  { id: 'expand', icon: Wand2, label: 'Expand', prompt: 'Expand on the preceding text with more detail.' },
+  { id: 'expand', icon: Maximize2, label: 'Expand', prompt: 'Expand on the preceding text with more detail.' },
   { id: 'summarize', icon: MessageSquare, label: 'Summarize', prompt: 'Summarize the preceding text in 2-3 sentences.' },
   { id: 'translate', icon: Languages, label: 'Translate', prompt: 'Translate the text to Spanish.' },
   { id: 'code', icon: Code, label: 'Write Code', prompt: 'Convert the description into working code.' },
@@ -211,9 +209,9 @@ Return ONLY the result text. Do not include "Here is the text" or quotes.`
             <div className="flex items-center justify-between px-4 py-3 border-b border-surface-100 dark:border-surface-700/50 bg-gradient-to-r from-accent/5 to-transparent dark:from-accent-light/5">
               <div className="flex items-center gap-2">
                 <div className="w-7 h-7 rounded-lg bg-accent/10 dark:bg-accent-light/10 flex items-center justify-center">
-                  <Sparkles size={14} className="text-accent dark:text-accent-light" />
+                  <RenIcon size={14} className="text-accent dark:text-accent-light" />
                 </div>
-                <span className="text-sm font-semibold text-ink dark:text-ink-inverse">Ask Ron</span>
+                <span className="text-sm font-semibold text-ink dark:text-ink-inverse">Ask Ren</span>
               </div>
               <button 
                 onClick={deleteNode} 
@@ -257,7 +255,7 @@ Return ONLY the result text. Do not include "Here is the text" or quotes.`
                   "text-sm font-medium transition-colors"
                 )}
               >
-                <Wand2 size={14} />
+                <MoreHorizontal size={14} />
                 Something Else...
               </button>
             </div>
@@ -275,7 +273,7 @@ Return ONLY the result text. Do not include "Here is the text" or quotes.`
             {/* Header Row */}
             <div className="flex items-center justify-between px-3 py-2 border-b border-surface-100 dark:border-surface-700/50">
               <div className="flex items-center gap-2">
-                <Sparkles size={14} className="text-accent dark:text-accent-light" />
+                <RenIcon size={14} className="text-accent dark:text-accent-light" />
                 <span className="text-xs font-semibold text-ink-muted dark:text-ink-inverse-muted uppercase tracking-wider">Custom Prompt</span>
               </div>
               <button 
@@ -327,7 +325,7 @@ Return ONLY the result text. Do not include "Here is the text" or quotes.`
                     if(e.key === 'Escape') setMode('menu')
                 }}
                 onPaste={handlePaste}
-                placeholder="Tell Ron what to write..."
+                placeholder="Tell Ren what to write..."
                 className="flex-1 bg-transparent border-none outline-none text-sm text-ink dark:text-ink-inverse placeholder:text-ink-muted/50"
               />
               
@@ -369,7 +367,7 @@ Return ONLY the result text. Do not include "Here is the text" or quotes.`
                 className="absolute inset-2 rounded-full border-2 border-accent/40 dark:border-accent-light/40 border-t-accent dark:border-t-accent-light"
               />
               <div className="absolute inset-0 flex items-center justify-center">
-                <Sparkles size={20} className="text-accent dark:text-accent-light" />
+                <RenIcon size={20} className="text-accent dark:text-accent-light" />
               </div>
             </div>
              

@@ -144,7 +144,7 @@ def test_real_constructor_defaults_stream_and_complete_cleanup(offline):
     assert kwargs["context_manager"] is False
     manager = kwargs["conversation_manager"]
     assert isinstance(manager, SummarizingConversationManager)
-    assert manager._compression_threshold == 0.7
+    assert manager._compression_threshold == 0.87
     summarizer = manager.summarization_agent
     assert isinstance(summarizer, Agent) and summarizer is not agent
     assert summarizer.model is kwargs["model"]
@@ -170,7 +170,7 @@ def test_real_constructor_defaults_stream_and_complete_cleanup(offline):
     assert "recall" not in names and "search_memories" not in names
     assert "journal" not in names
     assert len(build.memory_models) == 1 and agent.aux_model is build.memory_models[0]
-    assert [s.name for s in agent.memory_manager._stores] == ["facts", "remember", "feedback", "tasks", "learned-skills"]
+    assert [s.name for s in agent.memory_manager._stores] == ["facts", "remember", "feedback", "context", "tasks", "learned-skills"]
     assert agent.memory_manager._stores[0].extraction
     texts = [b["text"] for m in models[0].calls[-1] for b in m["content"] if "text" in b]
     # PANEL_ENVIRONMENT_CONTEXT (default on) injects the harness environment block
@@ -832,3 +832,24 @@ def test_harness_plugins_gated_and_interventions_resolved(offline, monkeypatch):
     assert not any(isinstance(p, (Todos, EnvironmentContext)) for p in kwargs["plugins"])
     # strands_harness intervention sugar resolved onto the native Agent kwarg.
     assert kwargs["interventions"]
+
+
+def test_build_agent_works_in_its_workspace_without_environment_context(offline):
+    """Build destination: Todos stays, EnvironmentContext (Ron's cwd + AGENTS.md) goes, the workspace guard joins."""
+    from strands_harness.plugins import EnvironmentContext, Todos
+    from agent.api.core.build_workspace import BuildWorkspaceGuard, workspace_root
+    from agent.api.endpoints import chat
+
+    _build, _models, _catalogs, constructed, _storage = offline
+    agent = asyncio.run(chat._create_runtime_agent(
+        user_id="user", session_id="build-session", options={}, runtime_options={},
+        selection={"provider": "perplexity", "model_id": "offline", "destination": "build"}))
+    kwargs = constructed[-1][1]
+    root = workspace_root("user", "build-session")
+    assert any(isinstance(p, Todos) for p in kwargs["plugins"])
+    assert not any(isinstance(p, EnvironmentContext) for p in kwargs["plugins"])
+    guards = [p for p in kwargs["plugins"] if isinstance(p, BuildWorkspaceGuard)]
+    assert len(guards) == 1 and guards[0].root == str(root)
+    assert root.is_dir() and (root.stat().st_mode & 0o777) == 0o700
+    assert "You are Ren's Build Agent." in kwargs["system_prompt"] and str(root) in kwargs["system_prompt"]
+    assert "todo_write" in agent.tool_registry.registry

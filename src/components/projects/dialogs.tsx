@@ -32,6 +32,7 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import { fromLocalDateTime } from '@/lib/project-issue-utils'
+import { issueKey } from '@/lib/execute-issues'
 import { ProjectFieldInput } from './ProjectFieldInput'
 import { AssistField } from '@/components/shared/TextAssist'
 
@@ -78,17 +79,19 @@ export function CreateProjectDialog({ isOpen, onClose }: CreateProjectDialogProp
     onClose()
   }
 
+  const confirmDisabled = saving || !userId || !name.trim()
+
   return (
     <Dialog open={isOpen} onClose={handleClose}>
-      <DialogHeader 
+      <DialogHeader
         icon={<FolderKanban className="w-5 h-5" />}
         title="Create Project"
         subtitle="Start a new project to organize your work"
         onClose={handleClose}
       />
-      
+
+      <DialogForm onSubmit={() => { void handleSubmit() }} disabled={confirmDisabled}>
       <div className="min-h-0 overflow-y-auto p-4 sm:p-6 space-y-5">
-        {error && <p role="alert" className="text-rose-500">{error}</p>}
         {/* Name & Key Row */}
         <div className="grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_7.5rem] gap-4">
           <FormField label="Project Name">
@@ -112,13 +115,14 @@ export function CreateProjectDialog({ isOpen, onClose }: CreateProjectDialogProp
 
         {/* Project Type */}
         <FormField label="Project Type">
-          <ProjectTypeSelect value={type} onChange={setType} />
+          {(id) => <ProjectTypeSelect id={id} value={type} onChange={setType} />}
         </FormField>
 
         {/* Summary */}
         <FormField label="Summary">
-          <AssistField value={summary} onChange={setSummary}>
+          {(id) => <AssistField value={summary} onChange={setSummary}>
             {(field) => <textarea
+              id={id}
               value={summary}
               onChange={(e) => setSummary(e.target.value)}
               placeholder="Briefly describe what this project is about..."
@@ -126,16 +130,17 @@ export function CreateProjectDialog({ isOpen, onClose }: CreateProjectDialogProp
               className={cn(inputClasses, "resize-none")}
               {...field}
             />}
-          </AssistField>
+          </AssistField>}
         </FormField>
       </div>
 
+      <DialogError message={error} />
       <DialogFooter
         onCancel={handleClose}
-        onConfirm={handleSubmit}
         confirmText={saving ? 'Saving…' : 'Create Project'}
-        confirmDisabled={saving || !userId || !name.trim()}
+        confirmDisabled={confirmDisabled}
       />
+      </DialogForm>
     </Dialog>
   )
 }
@@ -287,6 +292,8 @@ function CreateIssueForm({
     onClose()
   }
 
+  const confirmDisabled = saving || !userId || !selectedProjectId || !allowedTypes.includes(selectedType) || !title.trim()
+
   return (
     <Dialog open={isOpen} onClose={handleClose} size="lg">
       <DialogHeader 
@@ -296,6 +303,7 @@ function CreateIssueForm({
         onClose={handleClose}
       />
       
+      <DialogForm onSubmit={() => { void handleSubmit() }} disabled={confirmDisabled}>
       <div className="min-h-0 overflow-y-auto p-4 sm:p-6 space-y-5">
         {/* Project & Type Row */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -308,7 +316,7 @@ function CreateIssueForm({
             >
               {projects.map((project) => (
                 <option key={project.id} value={project.id}>
-                  {project.name}
+                  {`${project.name}${project.lifecycle === 'archived' ? ' (archived)' : ''}`}
                 </option>
               ))}
             </select>
@@ -339,7 +347,7 @@ function CreateIssueForm({
               <option value="">No parent</option>
               {parentOptions.map((issue) => (
                 <option key={issue.id} value={issue.id}>
-                  {issue.id} - {issue.title}
+                  {`${issueKey(issue, projects)} · ${issue.title}`}
                 </option>
               ))}
             </select>
@@ -348,8 +356,9 @@ function CreateIssueForm({
 
         {/* Title */}
         <FormField label="Title">
-          <AssistField value={title} onChange={setTitle} suggest count={5}>
+          {(id) => <AssistField value={title} onChange={setTitle} suggest count={5}>
             {(field) => <input
+              id={id}
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder="Issue title"
@@ -357,13 +366,14 @@ function CreateIssueForm({
               className={inputClasses}
               {...field}
             />}
-          </AssistField>
+          </AssistField>}
         </FormField>
 
         {/* Description */}
         <FormField label="Description">
-          <AssistField value={description} onChange={setDescription}>
+          {(id) => <AssistField value={description} onChange={setDescription}>
             {(field) => <textarea
+              id={id}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder="Describe the issue..."
@@ -371,7 +381,7 @@ function CreateIssueForm({
               className={cn(inputClasses, "resize-none")}
               {...field}
             />}
-          </AssistField>
+          </AssistField>}
         </FormField>
 
         {/* Status & Priority Row */}
@@ -431,27 +441,19 @@ function CreateIssueForm({
           </FormField>
         </div>
 
-        {/* Error */}
+        {/* Custom fields */}
         {(selectedProject?.settings.fields ?? []).filter((field) => !field.archived && (!field.issueTypes?.length || field.issueTypes.includes(selectedType))).map((field) => <FormField key={field.key} label={`${field.label}${field.required ? ' *' : ''}`}>
           <ProjectFieldInput field={field} value={Object.hasOwn(customFields, field.key) ? customFields[field.key] : field.default} people={people} issues={issues} disabled={saving} onChange={(value) => setCustomFields((current) => ({ ...current, [field.key]: value }))} />
         </FormField>)}
-        {error && (
-          <div className={cn(
-            "rounded-lg px-4 py-3 text-body-sm",
-            "bg-rose-500/10 text-rose-600 dark:text-rose-400",
-            "border border-rose-500/20"
-          )}>
-            {error}
-          </div>
-        )}
       </div>
 
+      <DialogError message={error} />
       <DialogFooter
         onCancel={handleClose}
-        onConfirm={handleSubmit}
         confirmText={saving ? 'Saving…' : 'Create Issue'}
-        confirmDisabled={saving || !userId || !selectedProjectId || !allowedTypes.includes(selectedType) || !title.trim()}
+        confirmDisabled={confirmDisabled}
       />
+      </DialogForm>
     </Dialog>
   )
 }
@@ -539,14 +541,42 @@ function DialogHeader({ icon, title, subtitle, onClose }: DialogHeaderProps) {
   )
 }
 
+/**
+ * The fields and the footer as one form, so Enter in a single-line field submits like the confirm
+ * button. Validation stays the dialog's own (`noValidate`). A submit from a form nested in a field
+ * (an editor block's link row, rendered through a React portal) is that form's, not this one's.
+ */
+function DialogForm({ onSubmit, disabled, children }: { onSubmit: () => void; disabled: boolean; children: React.ReactNode }) {
+  return (
+    <form noValidate className="flex min-h-0 flex-col"
+      onSubmit={(event) => {
+        if (event.target !== event.currentTarget) return
+        event.preventDefault()
+        if (!disabled) onSubmit()
+      }}>
+      {children}
+    </form>
+  )
+}
+
+/** A failed save, between the fields and the buttons so it stays in view however far the fields scroll. */
+function DialogError({ message }: { message: string | null }) {
+  if (!message) return null
+  return (
+    <p role="alert" className="shrink-0 border-t border-rose-500/20 bg-rose-500/10 px-4 py-3 text-body-sm text-rose-600 dark:text-rose-400 sm:px-6">
+      {message}
+    </p>
+  )
+}
+
 interface DialogFooterProps {
   onCancel: () => void
-  onConfirm: () => void
   confirmText: string
   confirmDisabled?: boolean
 }
 
-function DialogFooter({ onCancel, onConfirm, confirmText, confirmDisabled }: DialogFooterProps) {
+/** Rendered inside a DialogForm: the confirm button submits it. */
+function DialogFooter({ onCancel, confirmText, confirmDisabled }: DialogFooterProps) {
   return (
     <div className={cn(
       "flex shrink-0 flex-wrap items-center justify-end gap-3",
@@ -567,8 +597,7 @@ function DialogFooter({ onCancel, onConfirm, confirmText, confirmDisabled }: Dia
       >
         Cancel
       </Button>
-      <Button type="button"
-        onClick={onConfirm}
+      <Button type="submit"
         disabled={confirmDisabled}
         className={cn(
           "px-4 py-2 rounded-xl",
@@ -589,14 +618,16 @@ function DialogFooter({ onCancel, onConfirm, confirmText, confirmDisabled }: Dia
 // FORM COMPONENTS
 // ─────────────────────────────────────────────────────────────────────────────
 
-function FormField({ label, children }: { label: string; children: React.ReactNode }) {
+/** A function child receives the label's id, for controls wrapped in another component (AssistField, a Radix trigger). */
+function FormField({ label, children }: { label: string; children: React.ReactNode | ((id: string) => React.ReactNode) }) {
   const id = useId()
   return (
     <div className="min-w-0 space-y-1.5">
       <label htmlFor={id} className="text-[11px] font-semibold uppercase tracking-wider text-ink-muted dark:text-ink-inverse-muted">
         {label}
       </label>
-      {isValidElement<{ id?: string }>(children) && typeof children.type === 'string' ? cloneElement(children, { id }) : children}
+      {typeof children === 'function' ? children(id)
+        : isValidElement<{ id?: string }>(children) && typeof children.type === 'string' ? cloneElement(children, { id }) : children}
     </div>
   )
 }
@@ -622,13 +653,14 @@ const PROJECT_TYPE_ICONS: Record<ProjectTypeKey, LucideIcon> = {
   'product-discovery': Lightbulb,
 }
 
-function ProjectTypeSelect({ value, onChange }: { value: ProjectTypeKey; onChange: (value: ProjectTypeKey) => void }) {
+function ProjectTypeSelect({ id, value, onChange }: { id?: string; value: ProjectTypeKey; onChange: (value: ProjectTypeKey) => void }) {
   const selected = PROJECT_TYPE_SCHEMES[value]
   const SelectedIcon = PROJECT_TYPE_ICONS[value]
 
   return (
     <Select value={value} onValueChange={(next) => onChange(next as ProjectTypeKey)}>
       <SelectPrimitive.Trigger
+        id={id}
         aria-label="Project type"
         className={cn(
           "group flex w-full items-center gap-3 px-3 py-2.5 rounded-xl text-left",

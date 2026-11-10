@@ -1,10 +1,11 @@
 import { useCallback, useMemo, useRef, useState, type DragEvent } from 'react'
+import { RenIcon } from '@/components/brand'
 import {
   ReactFlowProvider, addEdge, useEdgesState, useNodesState, useReactFlow,
   type Connection as FlowConnection, type Edge as FlowEdge, type IsValidConnection, type OnNodesChange,
 } from '@xyflow/react'
 import { nanoid } from 'nanoid'
-import { ArrowRight, CircleDot, Diamond, Loader2, MousePointerClick, Sparkles, Square, Trash2, Undo2, Wand2, Workflow as WorkflowIcon } from 'lucide-react'
+import { ArrowRight, CircleDot, Diamond, Loader2, MousePointerClick, Square, Trash2, Undo2, Workflow as WorkflowIcon, LayoutGrid } from 'lucide-react'
 import { Canvas } from '@/components/ai-elements/canvas'
 import { Connection } from '@/components/ai-elements/connection'
 import { Controls } from '@/components/ai-elements/controls'
@@ -162,7 +163,7 @@ function BuilderBody({ initialTitle, initialGraph, onSave, onClose }: {
     const drawn = [...segments].reverse().find((segment) => segment.kind === 'workflow')
     const reply = segments.filter((segment) => segment.kind === 'text').map((segment) => segment.kind === 'text' ? segment.text : '').join(' ').trim()
     if (!drawn || drawn.kind !== 'workflow') {
-      setRonNote(final.status === 'cancelled' ? 'Stopped. Nothing was changed.' : reply ? `Ron didn’t draw a workflow: ${reply}` : 'Ron didn’t draw a workflow. Try describing the steps.')
+      setRonNote(final.status === 'cancelled' ? 'Stopped. Nothing was changed.' : reply ? `Ren didn’t draw a workflow: ${reply}` : 'Ren didn’t draw a workflow. Try describing the steps.')
       return
     }
     setBeforeRon(before)
@@ -176,7 +177,7 @@ function BuilderBody({ initialTitle, initialGraph, onSave, onClose }: {
     setTitle(beforeRon.title)
     replaceGraph(beforeRon.graph)
     setBeforeRon(null)
-    setRonNote('Restored the workflow from before Ron’s change.')
+    setRonNote('Restored the workflow from before Ren’s change.')
   }
 
   const selectedNode = nodes.filter((node) => node.selected).length === 1 ? nodes.find((node) => node.selected) : undefined
@@ -210,7 +211,7 @@ function BuilderBody({ initialTitle, initialGraph, onSave, onClose }: {
         </div>
         <div className="min-w-0 flex-1">
           <DialogTitle className="sr-only">Workflow builder</DialogTitle>
-          <DialogDescription className="sr-only">Add shapes, connect them, and describe what needs to happen, or ask Ron to draw it.</DialogDescription>
+          <DialogDescription className="sr-only">Add shapes, connect them, and describe what needs to happen, or ask Ren to draw it.</DialogDescription>
           <input aria-label="Workflow title" value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Workflow title"
             className="w-full rounded-md bg-transparent font-display text-xl text-ink outline-none placeholder:text-ink-muted focus:outline-none focus-visible:outline-none dark:text-ink-inverse" />
           <p className="text-xs text-ink-muted dark:text-ink-inverse-muted">
@@ -218,7 +219,7 @@ function BuilderBody({ initialTitle, initialGraph, onSave, onClose }: {
           </p>
         </div>
         <Button type="button" variant="ghost" className="gap-1.5 rounded-full" disabled={nodes.length < 2 || ronBusy} onClick={tidy} title="Lay the steps out left to right">
-          <Wand2 className="size-4" />Tidy up
+          <LayoutGrid className="size-4" />Tidy up
         </Button>
         <Button type="button" variant="outline" className="rounded-full" onClick={onClose}>Cancel</Button>
         <Button type="button" className="rounded-full" onClick={save} disabled={nodes.length === 0 || ronBusy}>Save workflow</Button>
@@ -252,25 +253,25 @@ function BuilderBody({ initialTitle, initialGraph, onSave, onClose }: {
             onPaneClick={() => select(null)} minZoom={0.2} fitViewOptions={{ padding: 0.25 }}>
             {nodes.length === 0 && !ronBusy && (
               <Panel position="top-center" className="mt-24 max-w-sm px-4 py-3 text-center text-sm text-ink-muted shadow-subtle dark:text-ink-inverse-muted">
-                Add a Start from the shapes on the left, then the steps that follow, and drag between the dots to connect them. Or describe the process below and let Ron draw it.
+                Add a Start from the shapes on the left, then the steps that follow, and drag between the dots to connect them. Or describe the process below and let Ren draw it.
               </Panel>
             )}
             <Panel position="bottom-center" className="mb-4 w-[min(640px,calc(100%-2rem))] rounded-2xl p-2 shadow-medium dark:shadow-dark-medium">
               <form className="flex items-center gap-2" onSubmit={(event) => { event.preventDefault(); void askRon() }}>
                 <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-accent/10 text-accent dark:bg-accent-light/10 dark:text-accent-light">
-                  {ronBusy ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
+                  {ronBusy ? <Loader2 className="size-4 animate-spin" /> : <RenIcon className="size-4" />}
                 </span>
-                <input aria-label="Ask Ron to draw this workflow" value={ronPrompt} onChange={(event) => setRonPrompt(event.target.value)} disabled={ronBusy} maxLength={4000}
-                  placeholder={nodes.length ? 'Ask Ron to change this workflow, e.g. “add a legal review before launch”' : 'Describe the process and Ron will draw it'}
+                <input aria-label="Ask Ren to draw this workflow" value={ronPrompt} onChange={(event) => setRonPrompt(event.target.value)} disabled={ronBusy} maxLength={4000}
+                  placeholder={nodes.length ? 'Ask Ren to change this workflow, e.g. “add a legal review before launch”' : 'Describe the process and Ren will draw it'}
                   className="min-w-0 flex-1 bg-transparent px-1 text-sm text-ink placeholder:text-ink-muted focus:outline-none disabled:opacity-60 dark:text-ink-inverse dark:placeholder:text-ink-inverse-muted" />
                 {ronBusy
                   ? <Button type="button" size="sm" variant="outline" className="gap-1.5 rounded-full" onClick={() => void ron.stop()}><Square className="size-3" />Stop</Button>
-                  : <Button type="submit" size="sm" className="gap-1.5 rounded-full" disabled={!ronPrompt.trim()}>{nodes.length ? 'Ask Ron' : 'Draw it'}<ArrowRight className="size-3.5" /></Button>}
+                  : <Button type="submit" size="sm" className="gap-1.5 rounded-full" disabled={!ronPrompt.trim()}>{nodes.length ? 'Ask Ren' : 'Draw it'}<ArrowRight className="size-3.5" /></Button>}
               </form>
               {(ronBusy || ronNote || ron.error || beforeRon) && (
                 <div role="status" className="mt-1.5 flex items-center gap-2 px-2 pb-0.5 text-xs text-ink-muted dark:text-ink-inverse-muted">
                   <span className={cn('min-w-0 flex-1 truncate', ron.error && 'text-danger')}>
-                    {ron.error ?? (ronBusy ? 'Ron is drawing the workflow…' : ronNote)}
+                    {ron.error ?? (ronBusy ? 'Ren is drawing the workflow…' : ronNote)}
                   </span>
                   {beforeRon && !ronBusy && (
                     <Button type="button" size="sm" variant="ghost" className="h-6 gap-1 rounded-full px-2 text-xs" onClick={undoRon}><Undo2 className="size-3" />Undo</Button>
@@ -370,7 +371,7 @@ function BuilderBody({ initialTitle, initialGraph, onSave, onClose }: {
                 <li className="flex gap-2"><MousePointerClick className="mt-0.5 size-4 shrink-0 text-accent" />Pick shapes from the left: decisions, waits, documents, data stores and more.</li>
                 <li className="flex gap-2"><CircleDot className="mt-0.5 size-4 shrink-0 text-accent" />Drag from a shape's right dot to another shape's left dot to connect them.</li>
                 <li className="flex gap-2"><Diamond className="mt-0.5 size-4 shrink-0 text-accent" />Select a shape or an arrow to edit it here; label the arrows out of a decision.</li>
-                <li className="flex gap-2"><Sparkles className="mt-0.5 size-4 shrink-0 text-accent" />Or ask Ron below to draw or change the workflow for you.</li>
+                <li className="flex gap-2"><RenIcon className="mt-0.5 size-4 shrink-0 text-accent" />Or ask Ren below to draw or change the workflow for you.</li>
               </ul>
               {nodes.length > 0 && (
                 <div>

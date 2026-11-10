@@ -45,6 +45,9 @@ CATEGORIES: Final[tuple[CategoryName, ...]] = ("facts", "remember", "feedback", 
 #: Stores whose entries injection never renders (still searchable with ``search_memory``).
 NOT_INJECTED: Final[frozenset[str]] = frozenset({"tasks"})
 
+#: Stores ``add_memory`` never writes: the user fills ``context`` from the Context widget.
+NOT_ADDED: Final[frozenset[str]] = frozenset({"context"})
+
 DESCRIPTIONS: Final[dict[CategoryName, str]] = {
     "facts": "Durable facts about the user: preferences, people, places, tools, routines, decisions.",
     "remember": "Things the user explicitly asked you to remember, in their words.",
@@ -123,6 +126,10 @@ def user_stores(user_id: str, scope: MemoryScope | None = None, *, extraction: b
     if scope is not None and scope.issue_id:
         stores.append(_store(storage, scope_store_name("issue", scope.issue_id),
                              f"Memory for issue {scope.issue_id}: context, decisions and findings."))
+    from agent.api.core.context_agent import CONTEXT_STORE, CONTEXT_STORE_DESCRIPTION
+
+    # Items the user collected in the Context widget (context_agent.py); written only through /context.
+    stores.append(_store(storage, CONTEXT_STORE, CONTEXT_STORE_DESCRIPTION))
     stores.append(_store(storage, "tasks", DESCRIPTIONS["tasks"]))
     return stores
 
@@ -151,7 +158,7 @@ def memory_manager_config(user_id: str, scope: MemoryScope | None = None, *, ext
     return MemoryManagerConfig(
         stores=[*own, *extra_stores],
         search_tool_config=True,
-        add_tool_config=MemoryAddToolConfig(stores=[store.name for store in own]),
+        add_tool_config=MemoryAddToolConfig(stores=[store.name for store in own if store.name not in NOT_ADDED]),
         injection=MemoryInjectionConfig(format=render_injection),
     )
 

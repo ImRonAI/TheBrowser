@@ -1,3 +1,5 @@
+import { mapHistory, type ProjectHistory } from './agile-metrics.ts'
+
 export type ProjectsRequest = <T>(path: string, method?: string, body?: unknown) => Promise<T>
 
 /** No automatic retries: a lost write response does not mean the write failed. */
@@ -43,4 +45,9 @@ export async function allProjectPages<T>(request: ProjectsRequest, path: string)
     rows.push(...page)
     if (page.length < 200) return rows
   }
+}
+
+/** One project's issue status/estimate/type transitions (`GET /projects/{id}/history`), for the dashboard. */
+export async function fetchProjectHistory(request: ProjectsRequest, projectId: string): Promise<ProjectHistory> {
+  return mapHistory(await request<Parameters<typeof mapHistory>[0]>(`/${encodeURIComponent(projectId)}/history`))
 }

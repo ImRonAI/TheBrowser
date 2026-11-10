@@ -82,7 +82,7 @@ export function AskRonOptions({
             />
             {!isLoading && (
               <span className="text-body-xs font-medium text-ink dark:text-ink-inverse">
-                Ask Ron
+                Ask Ren
               </span>
             )}
           </div>

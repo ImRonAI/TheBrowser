@@ -19,6 +19,7 @@ import json
 import logging
 from pathlib import Path
 from typing import Annotated, Any, Literal
+from uuid import UUID
 
 import httpx
 from fastapi import APIRouter, Header, HTTPException, Query, Request
@@ -27,6 +28,10 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from agent.api.core import config as app_config
 from agent.api.core.articles import ArticleAttachment, article_message
+from agent.api.core.prompt_attachments import (
+    ATTACHMENTS_MAX, ATTACHMENTS_TOTAL_MAX, PromptAttachment, message_content as attachment_message_content,
+)
+from agent.api.core.context_agent import context_agent_prompt, context_agent_tools
 from agent.api.core.config import (
     PERPLEXITY_MODELS_URL,
     PERPLEXITY_RESPONSES_URL,
@@ -35,6 +40,8 @@ from agent.api.core.config import (
 from agent.api.core.panel_agent import (
     PROVIDERS,
     ProviderName,
+    build_model,
+    chat_providers,
     configured_providers,
     create_panel_agent,
     default_selection,
@@ -45,6 +52,7 @@ from agent.api.core.panel_agent import (
     provider_api_key,
     provider_default_model,
     xai_reasoning_efforts,
+    NIM_REASONING_EFFORTS_BY_MODEL,
 )
 from agent.api.core.panel_runtime import PanelRuntimeManager, ReplayOverflow, RuntimeConflict, SessionRun
 
@@ -72,7 +80,7 @@ ELECTRON_MCP_ENV = {
 #: Project tool library, kept off sys.path; browsed/loaded through tool_catalog.
 PROJECT_TOOLS_DIR = REPO_ROOT / "agent" / "tools" / "strands_tools"
 
-AGENT_SYSTEM_PROMPT_BASE = f"""You are Ron, the agent inside the Ron browser.
+AGENT_SYSTEM_PROMPT_BASE = f"""You are Ren, the agent inside the Ren browser.
 
 ## Task completion and continuity
 Carry out the requested work through implementation and verification. Continue
@@ -114,7 +122,7 @@ improvising with shell."""
 #: Browser-target specific paragraph appended to the automation section.
 _BROWSER_TARGET_NOTES = {
     "user": (
-        "This is your own Ron window on the user's computer, reached through their SSH tunnel. "
+        "This is your own Ren window on the user's computer, reached through their SSH tunnel. "
         "It shares the user's tabs, cookies and logins. If the user's machine or tunnel goes "
         "offline, a browser tool call pauses the run with a `browser_unavailable` interrupt: "
         "the user replies 'continue' once reconnected (the same action is re-attempted) or "
@@ -122,7 +130,7 @@ _BROWSER_TARGET_NOTES = {
         "to another browser on your own."
     ),
     "cloud": (
-        "This is the Ron instance running on the server next to you. It has its own cookies and logins "
+        "This is the Ren instance running on the server next to you. It has its own cookies and logins "
         "(nothing is copied from the user's machine) and keeps running while the user is offline. "
         "If it stops responding, a browser tool call pauses the run with a `browser_unavailable` "
         "interrupt; the user replies 'continue' to retry or 'cancel' to drop that action. Never "
@@ -138,7 +146,7 @@ def browser_prompt_section(browser: str) -> str:
     return f"""
 
 ## Browser automation
-Drive the {'user\'s' if browser == 'user' else 'cloud'} Ron window (not a hidden browser). If {server}_ tools are already
+Drive the {'user\'s' if browser == 'user' else 'cloud'} Ren window (not a hidden browser). If {server}_ tools are already
 in your registry, use them immediately. Otherwise load the browser server once:
 
 tool_catalog(action="load", name="{server}")
@@ -288,13 +296,41 @@ class InterruptResponse(BaseModel):
     response: Any
 
 
+class AgentTarget(BaseModel):
+    """Who the panel conversation is with: Ron, one of the user's saved specialists, or a project's agent.
+
+    Pinned into the immutable session selection on the first turn (like model and destination).
+    """
+    model_config = ConfigDict(extra="forbid")
+    kind: Literal["ron", "specialist", "project"] = "ron"
+    #: The specialist's ``harness_agents`` id, or the project id. Empty for Ron.
+    id: str = Field(default="", max_length=64)
+
+    @model_validator(mode="after")
+    def validate_id(self):
+        if self.kind == "ron":
+            if self.id:
+                raise ValueError("Ren takes no agent id")
+        else:
+            self.id = str(UUID(self.id))
+        return self
+
+
 class ChatRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     session_id: Identifier
     user_id: Identifier = "default"
     message: str = ""
     attachments: list[ArticleAttachment] = Field(default_factory=list, max_length=3)
-    destination: Literal["panel", "search", "build", "document"] = "panel"
+    #: Long pastes and context-menu items, each sent as one ``<attachment …>`` text block of the user
+    #: message after the typed text (``core/prompt_attachments.py``), so the agent reads the full text and
+    #: the thread keeps it.
+    prompt_attachments: list[PromptAttachment] = Field(default_factory=list, max_length=ATTACHMENTS_MAX)
+    destination: Literal["panel", "search", "build", "document", "context", "issue"] = "panel"
+    #: The issue an ``issue`` conversation belongs to (the issue workspace's Ron tab); sent on every issue turn and
+    #: pinned into the session selection on the first. Required for ``issue``, rejected for every other destination.
+    issue_id: str | None = None
+    agent: AgentTarget | None = None
     browser_context: dict[str, Any] | None = None
     model: str = ""
     provider: str = ""
@@ -308,8 +344,10 @@ class ChatRequest(BaseModel):
 
     @model_validator(mode="after")
     def validate_action(self):
-        if self.action != "message" and self.attachments:
+        if self.action != "message" and (self.attachments or self.prompt_attachments):
             raise ValueError("Attachments require a new message")
+        if sum(len(item.text) for item in self.prompt_attachments) > ATTACHMENTS_TOTAL_MAX:
+            raise ValueError(f"Attachments on one message carry at most {ATTACHMENTS_TOTAL_MAX:,} characters")
         if self.action == "message":
             if not self.message.strip() or self.interrupt_responses:
                 raise ValueError("message action requires nonempty text and no interrupt responses")
@@ -319,6 +357,16 @@ class ChatRequest(BaseModel):
             raise ValueError("interrupt_response requires responses")
         elif self.action == "checkpoint_resume" and self.interrupt_responses:
             raise ValueError("checkpoint_resume takes no interrupt responses")
+        return self
+
+    @model_validator(mode="after")
+    def validate_issue(self):
+        if self.destination == "issue":
+            if not self.issue_id:
+                raise ValueError("The issue destination requires issue_id")
+            self.issue_id = str(UUID(self.issue_id))
+        elif self.issue_id is not None:
+            raise ValueError("issue_id belongs to the issue destination only")
         return self
 
 
@@ -369,11 +417,40 @@ async def _create_runtime_agent(*, user_id, session_id, selection, options, runt
         from agent.api.core.live_takeover import UnattendedRunGuard
         runtime_options = {**runtime_options, "hooks": [*runtime_options.get("hooks", []), UnattendedRunGuard()]}
     browser = selection.get("browser", default_browser())
+    destination = selection.get("destination", "panel")
+    if destination == "issue":
+        # Routed before the repair trigger is added: issue tools are closures over the caller's project access, not
+        # catalog tools, so an approved revision could never be activated for them (tool_repairs.reload_live_sessions
+        # skips agents without a PanelToolCatalog), and their ordinary failures (version conflicts, revoked access)
+        # would only start fixers.
+        return await _create_issue_agent(user_id=user_id, session_id=session_id, selection=selection,
+                                         options=options, runtime_options=runtime_options)
+    target = selection.get("agent") or {}
     service = repair_service()
     if service is not None:
         # The service's trigger is a native HookProvider; create_panel_agent recognises it among the
         # runtime hooks and does not add its own bare trigger.
         runtime_options = {**runtime_options, "hooks": [*runtime_options.get("hooks", []), service.trigger(browser=browser)]}
+    if target.get("kind") == "specialist":
+        return await _create_specialist_agent(user_id=user_id, session_id=session_id, agent_id=target["id"],
+                                              selection=selection, runtime_options=runtime_options, browser=browser)
+    build_prompt = ""
+    if destination == "build":
+        # The Build Agent's project is its own workspace (core/build_workspace.py): BuildWorkspaceGuard, a native
+        # BeforeToolCallEvent plugin beside the runtime's ContextInjector, defaults shell/editor there, and the prompt
+        # names it. The workbench (endpoints/build.py) shows the same directory.
+        from agent.api.core.build_workspace import BuildWorkspaceGuard, build_agent_prompt, ensure_workspace
+        workspace = await asyncio.to_thread(ensure_workspace, user_id, session_id)
+        runtime_options = {**runtime_options, "plugins": [*runtime_options.get("plugins", []), BuildWorkspaceGuard(workspace)]}
+        build_prompt = build_agent_prompt(workspace)
+    project_prompt, project_tools = "", []
+    if target.get("kind") == "project":
+        from agent.api.core.project_agent import project_agent_prompt, project_agent_tools
+        # project_agent_tools picks the media tool from the lead model's catalogue entry (one GET per provider and
+        # process), so it runs off the event loop like the construction below.
+        project_prompt = project_agent_prompt(target["id"])
+        project_tools = await asyncio.to_thread(project_agent_tools, user_id, session_id, target["id"],
+                                                provider=selection["provider"], model_id=selection["model_id"])
     return await asyncio.to_thread(
         create_panel_agent,
         provider=selection["provider"], model_id=selection["model_id"],
@@ -381,19 +458,77 @@ async def _create_runtime_agent(*, user_id, session_id, selection, options, runt
         system_prompt=system_prompt_for(selection["provider"], browser=browser) + {
             "panel": "",
             "search": "\nYou are Search Agent. Research the user's question, verify claims with search tools, and cite original sources.",
-            "build": "\nYou are Build Agent. Turn the user's request and reference material into working implementations; inspect before editing and validate your work.",
-            "document": "\nYou are Document Agent. You are Ron working inside one page of a project's documentation in Ron Projects, not in the Agent Panel. "
+            "build": build_prompt,
+            "document": "\nYou are Document Agent. You are Ren working inside one page of a project's documentation in Ren Projects, not in the Agent Panel. "
                         "Each request names the project and the page and includes the page's current content. Your reply is the draft the user "
                         "reviews and then inserts into the page or uses to overwrite it, so every word you write goes into the page: reply with "
                         "only the page content in Markdown, never announce or narrate your research, and add no preamble, questions or commentary. When the topic needs facts you are not sure of, research it first with brave_web_search, "
                         "brave_news_search or brave_answer, and cite what you used as Markdown links. When the user gives feedback on a draft, "
                         "write the complete revised draft again.",
-        }[selection.get("destination", "panel")],
-        extra_tools=[], reasoning_effort=selection.get("reasoning_effort"),
+            "context": context_agent_prompt(),
+        }[destination] + project_prompt,
+        extra_tools=(context_agent_tools() if destination == "context" else []) + project_tools,
+        reasoning_effort=selection.get("reasoning_effort"),
         options=options, runtime_options=runtime_options,
         browser=browser,
-        agent_scope=selection.get("destination", "panel"),
+        agent_scope=destination,
     )
+
+
+async def _create_specialist_agent(*, user_id, session_id, agent_id, selection, runtime_options, browser):
+    """A saved specialist as this panel session's agent: its stored harness config, the session's model.
+
+    ``create_harness`` passes ``agent_id``/``session_manager``/``callback_handler`` straight to ``Agent`` (an
+    explicit ``session_manager`` beats the harness's ``session`` sugar) and takes the runtime's ContextInjector as
+    a consumer plugin. The runtime's hooks are registered after construction with the public
+    ``agent.hooks.add_hook``: the harness forwards constructor ``hooks`` to ``subagent`` children, and a child's
+    invocation must never drive this session's run lifecycle.
+    """
+    from agent.api.core.harness_agents import build_specialist, harness_table, owner_uuid
+    from agent.api.core.threads import ThreadProjection
+
+    owner = owner_uuid(user_id)
+    rows = (await (await harness_table()).select("id,name,config").eq("id", agent_id).eq("owner_id", owner).limit(1).execute()).data
+    if not rows:
+        raise RuntimeConflict("That specialist agent no longer exists")
+    runtime = dict(runtime_options)
+    hooks = [*runtime.pop("hooks", []), ThreadProjection(user_id=user_id, session_id=session_id, destination="panel",
+                                                          agent="chat", browser=browser)]
+    plugins = runtime.pop("plugins", [])
+    model = build_model(selection["provider"], selection["model_id"], selection.get("reasoning_effort"))
+    agent = await asyncio.to_thread(build_specialist, rows[0]["config"], owner, model=model, plugins=plugins, **runtime)
+    for hook in hooks:
+        agent.hooks.add_hook(hook)
+    logger.info("user=<%s>, session=<%s>, agent_id=<%s>, name=<%s> | panel session runs a specialist", user_id, session_id, agent_id, rows[0]["name"])
+    return agent
+
+
+async def _create_issue_agent(*, user_id, session_id, selection, options, runtime_options):
+    """The issue workspace's Ron tab: its own strands_harness agent for the pinned issue (``issue_agents``).
+
+    Built from the session selection only (``issue_id``, ``project_id``, ``owner_id`` pinned by the first ``/chat``),
+    never from a credential, because a credential-free ``GET /sessions/{id}`` builds it too; each ``/chat`` binds
+    the caller's verified identity into the conversation's ``ProjectService``. As in ``_create_specialist_agent``,
+    the runtime's ContextInjector is a consumer plugin, ``agent_id``/``session_manager``/``callback_handler`` go to
+    ``Agent``, and the runtime hooks are added after construction. Issue conversations are not threads.
+    """
+    from agent.api.core.issue_agents import create_issue_chat_agent
+
+    provider, model_id, effort = selection["provider"], selection["model_id"], selection.get("reasoning_effort")
+    runtime = dict(runtime_options)
+    hooks = runtime.pop("hooks", [])
+    plugins = runtime.pop("plugins", [])
+    model = build_model(provider, model_id, effort)
+    agent = await asyncio.to_thread(
+        create_issue_chat_agent,
+        user_id=user_id, session_id=session_id, issue_id=selection["issue_id"], project_id=selection["project_id"],
+        owner_id=selection["owner_id"], provider=provider, model_id=model_id, model=model,
+        side_model_factory=lambda _name: build_model(provider, model_id, effort, hosted_tools=False),
+        options=options, plugins=plugins, **runtime,
+    )
+    for hook in hooks:
+        agent.hooks.add_hook(hook)
+    return agent
 
 
 def create_runtime_manager() -> PanelRuntimeManager:
@@ -478,9 +613,13 @@ def _resolve_provider(request: ChatRequest) -> ProviderName:
 
 
 def _require_provider_key(provider: ProviderName) -> None:
+    offered = chat_providers()
+    if provider not in offered:
+        raise HTTPException(status_code=400, detail=f"Provider {provider} is not offered for chat (RON_CHAT_PROVIDERS={','.join(offered)}).")
     if provider_api_key(provider):
         return
     key_name = {
+        "nim": "NVIDIA_NIM_API_KEY",
         "perplexity": "PERPLEXITY_API_KEY",
         "mistral": "MISTRAL_API_KEY",
         "xai": "XAI_API_KEY",
@@ -489,6 +628,54 @@ def _require_provider_key(provider: ProviderName) -> None:
         "anthropic": "ANTHROPIC_API_KEY",
     }[provider]
     raise HTTPException(status_code=503, detail=f"{key_name} is not configured.")
+
+
+async def _authorize_agent(target: dict[str, Any], request: ChatRequest, http_request: Request) -> None:
+    """Specialists are their owner's; a project agent acts with the caller's own project access.
+
+    Project turns carry the user's Supabase bearer token (or the guest workspace capability), verified like every
+    Projects route and bound to this session for the agent's tools; RLS then decides what it may read and change.
+    """
+    if target.get("kind") == "specialist":
+        from agent.api.core.harness_agents import SignInRequired, harness_table, owner_uuid
+
+        try:
+            owner = owner_uuid(request.user_id)
+        except SignInRequired as error:
+            raise HTTPException(401, str(error)) from error
+        rows = (await (await harness_table()).select("id").eq("id", target["id"]).eq("owner_id", owner).limit(1).execute()).data
+        if not rows:
+            raise HTTPException(404, "That specialist agent does not exist")
+    elif target.get("kind") == "project":
+        from agent.api.core.project_agent import bind_identity
+        from agent.api.core.projects import ProjectService, project_identity
+
+        identity = await project_identity(http_request)
+        if not identity.guest and identity.user_id != request.user_id:
+            raise HTTPException(403, "The project credential belongs to another user")
+        if not await ProjectService(identity).rows("projects", select="id", id=f"eq.{target['id']}"):
+            raise HTTPException(404, "Project not found or not accessible")
+        bind_identity(request.user_id, request.session_id, identity)
+
+
+async def _authorize_issue(selection: dict[str, Any], request: ChatRequest, http_request: Request) -> tuple[Any, dict[str, Any]]:
+    """An issue conversation acts with the caller's own project access, verified on every turn like a project agent.
+
+    401 without a credential, 403 when a signed-in credential is another user's (or another workspace's than the one
+    this conversation was started with), 404 when the issue is not visible to it. The verified identity is bound to
+    this conversation, so its tools always use the newest token.
+    """
+    from agent.api.core.issue_agents import bind_issue_chat_identity
+    from agent.api.core.projects import ProjectService, project_identity
+
+    identity = await project_identity(http_request)
+    if not identity.guest and identity.user_id != request.user_id:
+        raise HTTPException(403, "The project credential belongs to another user")
+    if selection.get("owner_id", identity.user_id) != identity.user_id:
+        raise HTTPException(403, "The project credential belongs to another workspace than this conversation")
+    issue = await ProjectService(identity).issue(str(request.issue_id))
+    bind_issue_chat_identity(request.user_id, request.session_id, identity)
+    return identity, issue
 
 
 @router.post("/chat")
@@ -510,6 +697,22 @@ async def chat(request: ChatRequest, http_request: Request) -> StreamingResponse
             raise RuntimeConflict("Agent destination is locked for this session")
         if request.destination != "panel":
             selection["destination"] = request.destination
+        target = (request.agent or AgentTarget()).model_dump()
+        if existing:
+            if "agent" in request.model_fields_set and (selection.get("agent") or AgentTarget().model_dump()) != target:
+                raise RuntimeConflict("The agent is locked for this session")
+        elif target["kind"] != "ron":
+            if request.destination != "panel":
+                raise HTTPException(422, "Only the Agent Panel can talk to a specialist or a project agent")
+            selection["agent"] = target
+        await _authorize_agent(selection.get("agent") or {}, request, http_request)
+        if request.destination == "issue":
+            if existing and selection.get("issue_id") != request.issue_id:
+                raise RuntimeConflict("The issue is locked for this session")
+            identity, issue = await _authorize_issue(selection, request, http_request)
+            if not existing:
+                # Server-derived from the verified credential and issue row: the agent factory builds from these alone.
+                selection.update(issue_id=request.issue_id, project_id=issue["project_id"], owner_id=identity.user_id)
         if explicit_selection or not existing:
             provider = _resolve_provider(request)
             _require_provider_key(provider)
@@ -533,7 +736,9 @@ async def chat(request: ChatRequest, http_request: Request) -> StreamingResponse
                 request.browser_context, ensure_ascii=False, allow_nan=False
             )
         action = {"checkpoint_resume": "resume", "interrupt_response": "interrupt"}.get(request.action, "message")
-        message: Any = article_message(request.message, request.attachments) if action == "message" else None
+        message: Any = attachment_message_content(
+            article_message(request.message, request.attachments), request.prompt_attachments,
+        ) if action == "message" else None
         session = await manager.start(
             request.user_id, request.session_id, message, action=action,
             interrupt_responses=[{"interruptResponse": item.model_dump()} for item in request.interrupt_responses]
@@ -574,7 +779,7 @@ async def get_thread(session_id: Identifier, request: Request, user_id: Identifi
 
     owner = owner_uuid(user_id)
     if owner is None:
-        raise HTTPException(401, "Sign in to Ron to read saved threads.")
+        raise HTTPException(401, "Sign in to Ren to read saved threads.")
     try:
         thread = await read_thread(await supabase_client(), owner, session_id)
     except Exception as error:
@@ -834,6 +1039,10 @@ async def get_model_efforts(model_id: str, provider: str = "") -> dict[str, Any]
             detail="No Agent Panel provider is configured.",
         )
     _require_provider_key(provider_name)
+
+    if provider_name == "nim":
+        return {"model": model_id, "provider": provider_name,
+                "efforts": list(NIM_REASONING_EFFORTS_BY_MODEL.get(model_id, ()))}
 
     if provider_name == "xai":
         return {"model": model_id, "provider": provider_name, "efforts": list(xai_reasoning_efforts(model_id))}

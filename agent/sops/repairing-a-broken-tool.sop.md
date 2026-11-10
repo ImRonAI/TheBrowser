@@ -2,7 +2,7 @@
 
 ## Overview
 
-Repair one tool that keeps failing for one user, producing a user-scoped, sandbox-verified revision that the user can activate. Use this SOP when Ron's panel has proposed a repair after repeated identical failures of a tool and the user has accepted. The shared tool library, Ron's wrapper code and installed packages are never edited; the repair is a revision stored for this user only, and the user decides whether it is activated.
+Repair one tool that keeps failing for one user, producing a user-scoped, sandbox-verified revision that the user can activate. Use this SOP when Ren's panel has proposed a repair after repeated identical failures of a tool and the user has accepted. The shared tool library, Ren's wrapper code and installed packages are never edited; the repair is a revision stored for this user only, and the user decides whether it is activated.
 
 ## Parameters
 
@@ -38,11 +38,11 @@ Read the source under repair and the recorded outcome, then reproduce the record
 
 ### 2. Wrapper audit
 
-Determine whether the defect is in the tool or in one of Ron's wrapper layers around it.
+Determine whether the defect is in the tool or in one of Ren's wrapper layers around it.
 
 **Constraints:**
 - You MUST reproduce the failure twice: once calling the tool function directly, and once through the recorded `implementation` / `wrapped` chain (`_AdaptedTool` in `/sources/core/tool_repair.py` is the only tool wrapper; `_MCPToolView`, `_OwnedPanelCatalog` in `/sources/core/panel_agent.py`; the hooks `MCPConnectionGuard`, `ThinkToolsGuard`, `BrowserAvailabilityHook`, `ToolObservation`).
-- If ONLY the wrapped call fails, you MUST set `fix_type="WRAPPER_FIX"`; when the wrapper is Ron's core code you MUST submit `status="needs_maintainer"` with the patch as `diff` and a test under `/workspace/tests/`, because `/sources/core` is shared code that no per-user revision can replace.
+- If ONLY the wrapped call fails, you MUST set `fix_type="WRAPPER_FIX"`; when the wrapper is Ren's core code you MUST submit `status="needs_maintainer"` with the patch as `diff` and a test under `/workspace/tests/`, because `/sources/core` is shared code that no per-user revision can replace.
 - You MUST NOT re-wrap the tool to hide a wrapper defect because that would stack a second layer on a broken one and make the next failure harder to diagnose.
 - You MUST record `wrapper_audit` as `{direct_call, wrapped_call, conclusion}`.
 
@@ -50,7 +50,7 @@ Determine whether the defect is in the tool or in one of Ron's wrapper layers ar
 
 Answer each question explicitly; the answers are stored as `reflection`, keyed `"1"` through `"7"`.
 
-1. Is the failure in the tool, a Ron wrapper, the provider's argument shape (see `/sources/core/perplexity_model.py` argument recovery), or the environment (missing dependency, credential, network)?
+1. Is the failure in the tool, a Ren wrapper, the provider's argument shape (see `/sources/core/perplexity_model.py` argument recovery), or the environment (missing dependency, credential, network)?
 2. Does the recorded exception reproduce with the exact recorded input?
 3. Is the fix a code change (`OTHERS`), a `TOOL_DESCRIPTION_FIX` (schema or docstring so the model stops mis-calling the tool), or a `SYSTEM_PROMPT_FIX` (provider prompt, maintainer-only)?
 4. Does the change alter any external side effect?
@@ -107,7 +107,7 @@ Call `submit_repair` exactly once with the complete result.
 - You MUST pass `status`, `fix_type`, `repair_kind`, a one-paragraph `summary` the user will read, `reflection`, `wrapper_audit`, `diff` and `test_file`.
 - `verified` MUST only be used when the failing demonstration and all four context demonstrations passed, pytest is green and `sandbox` is `docker`.
 - You MUST state uncertainty plainly in `summary`.
-- You MUST NOT activate anything because activation is the user's decision in Ron's panel.
+- You MUST NOT activate anything because activation is the user's decision in Ren's panel.
 - You MUST NOT touch another user's data, memories or sessions because repairs are tenant-scoped.
 
 ## Examples

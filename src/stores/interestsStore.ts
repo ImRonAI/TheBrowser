@@ -14,6 +14,8 @@ export interface InterestNode {
   weight: number           // 0-1, strength of interest
   category: InterestCategory
   source: 'onboarding' | 'browsing'
+  /** Context Agent's one-line reason for this interest (agent-written graphs only). */
+  reason?: string
   lastUpdated: number
   position: { x: number; y: number }
   velocity: { x: number; y: number }
@@ -56,6 +58,8 @@ const CATEGORY_KEYWORDS: Record<InterestCategory, string[]> = {
 
 // Maximum number of nodes to prevent overcrowding
 const MAX_NODES = 8
+/** The Context Agent's graph holds at most this many (agent/api/core/context_agent.py MAX_INTERESTS). */
+const MAX_AGENT_NODES = 10
 
 interface InterestsState {
   nodes: InterestNode[]
@@ -67,6 +71,8 @@ interface InterestsState {
   initializeFromOnboarding: () => void
   addInterest: (label: string, source: 'onboarding' | 'browsing', weight?: number) => void
   recordInteraction: (topic: string, delta?: number) => void
+  /** Replace the graph with the Context Agent's complete revised graph (`update_interest_graph`). */
+  applyAgentGraph: (interests: Array<{ label: string; weight: number; category: InterestCategory; reason: string }>) => void
   removeInterest: (id: string) => void
   updateNodePosition: (id: string, position: { x: number; y: number }) => void
   updateNodeVelocity: (id: string, velocity: { x: number; y: number }) => void
@@ -332,6 +338,33 @@ export const useInterestsStore = create<InterestsState>()(
           // Add new browsing-derived interest
           addInterest(topic, 'browsing', 0.3)
         }
+      },
+
+      applyAgentGraph: (interests) => {
+        const { nodes, connections } = get()
+        const byLabel = new Map(nodes.map((node) => [node.label.toLowerCase(), node]))
+        const next: InterestNode[] = []
+        for (const interest of interests.slice(0, MAX_AGENT_NODES)) {
+          const key = interest.label.toLowerCase()
+          if (next.some((node) => node.label.toLowerCase() === key)) continue
+          const existing = byLabel.get(key)
+          next.push(existing
+            ? { ...existing, label: interest.label, weight: interest.weight, category: interest.category, reason: interest.reason, lastUpdated: Date.now() }
+            : { id: generateId(), label: interest.label, weight: interest.weight, category: interest.category, reason: interest.reason,
+                source: 'browsing', lastUpdated: Date.now(), position: generateInitialPosition(next), velocity: { x: 0, y: 0 } })
+        }
+        // Keep the strength of connections that survive so the canvas does not reshuffle on every revision.
+        const kept = new Map(connections.map((connection) => [[connection.from, connection.to].sort().join('|'), connection]))
+        const nextConnections: InterestConnection[] = []
+        for (let i = 0; i < next.length; i++) {
+          for (let j = i + 1; j < next.length; j++) {
+            const previous = kept.get([next[i].id, next[j].id].sort().join('|'))
+            if (previous) { nextConnections.push(previous); continue }
+            const strength = calculateConnectionStrength(next[i], next[j])
+            if (strength > 0.25) nextConnections.push({ id: `conn_${next[i].id}_${next[j].id}`, from: next[i].id, to: next[j].id, strength })
+          }
+        }
+        set({ nodes: next, connections: nextConnections, isInitialized: true })
       },
 
       removeInterest: (id: string) => {

@@ -1,5 +1,6 @@
 import { useState, KeyboardEvent, useEffect, useCallback, useRef } from 'react'
-import { Search, Lock, Globe, ArrowRight } from 'lucide-react'
+import { Search, Lock, LockOpen, Globe, ArrowRight } from 'lucide-react'
+import { RenMark } from '@/components/brand'
 import { useNavigationStore } from '@/stores/navigationStore'
 import { MOD_KEY } from '@/lib/shortcuts'
 import { cn } from '@/utils/cn'
@@ -144,27 +145,44 @@ export function UrlBar() {
     if (!url.startsWith('https://')) return null
     try { return new URL(url).hostname.replace(/^www\./, '') } catch { return null }
   })()
+  // Display only: at rest an https address is drawn as an emphasised host + quiet path over the
+  // (transparent) input text, so the field's value, focus and selection behave exactly as before.
+  const restingPath = restingHost !== null && restingText.startsWith(restingHost) ? restingText.slice(restingHost.length) : null
+  const showIdentity = !isFocused && restingPath !== null
+  const isPlainHttp = url.startsWith('http://')
+  const securityHint = isRonProtocol ? 'Ren page' : isSecure ? 'Secure connection (HTTPS)' : isPlainHttp ? 'Not secure: this page uses plain HTTP' : undefined
 
   return (
     <div className="relative">
       <div
         className={cn(
-          'group relative flex h-8 items-center overflow-hidden rounded-lg transition-[background-color,box-shadow] duration-150',
+          'group relative flex h-8 items-center overflow-hidden rounded-full border transition-[background-color,border-color,box-shadow] duration-150 ease-out',
           isFocused
-            ? 'bg-surface-0 shadow-[0_0_0_1px_rgb(169_83_46/0.45),0_0_0_4px_rgb(169_83_46/0.10)] dark:bg-surface-850 dark:shadow-[0_0_0_1px_rgb(214_130_90/0.5),0_0_0_4px_rgb(214_130_90/0.12)]'
-            : 'bg-surface-200/45 hover:bg-surface-200/70 dark:bg-surface-800/70 dark:hover:bg-surface-800',
+            ? 'border-blurple-500 bg-surface-0 ring-[3px] ring-blurple-500/15 dark:border-blurple-400 dark:bg-surface-850 dark:ring-blurple-400/20'
+            : 'border-surface-200 bg-surface-0 hover:border-surface-300 dark:border-surface-800 dark:bg-surface-850 dark:hover:border-surface-700',
         )}
       >
-        {/* Left — page identity */}
-        <span className="flex h-full w-8 flex-shrink-0 items-center justify-center" aria-hidden>
+        {/* Left — page identity and security */}
+        <span className="flex h-full w-9 flex-shrink-0 items-center justify-center pl-1" aria-hidden title={securityHint}>
           {isRonProtocol ? (
-            <img src="/favicon.png" alt="" className="h-3.5 w-3.5" />
+            <RenMark className="h-4 w-4" />
           ) : isSecure ? (
-            <Lock className="h-3 w-3 text-ink-muted dark:text-ink-inverse-muted" strokeWidth={2} />
+            <Lock className="h-3.5 w-3.5 text-ink-secondary dark:text-ink-inverse-secondary" strokeWidth={2} />
+          ) : isPlainHttp ? (
+            <LockOpen className="h-3.5 w-3.5 text-amber-700 dark:text-amber-300" strokeWidth={2} />
           ) : (
             <Globe className="h-3.5 w-3.5 text-ink-muted dark:text-ink-inverse-muted" strokeWidth={1.75} />
           )}
         </span>
+
+        {showIdentity && (
+          <span aria-hidden className="pointer-events-none absolute inset-y-0 left-9 right-9 flex items-center justify-center text-[13px]">
+            <span className="min-w-0 truncate">
+              <span className="font-medium text-ink dark:text-ink-inverse">{restingHost}</span>
+              <span className="text-ink-muted transition-colors duration-150 group-hover:text-ink-secondary dark:text-ink-inverse-muted dark:group-hover:text-ink-inverse-secondary">{restingPath}</span>
+            </span>
+          </span>
+        )}
 
         {/* URL input */}
         <input
@@ -182,6 +200,7 @@ export function UrlBar() {
             'text-ink placeholder:text-ink-muted dark:text-ink-inverse dark:placeholder:text-ink-inverse-muted',
             !isFocused && restingHost && 'text-ink-secondary dark:text-ink-inverse-secondary',
             !isFocused && 'text-center group-hover:text-ink dark:group-hover:text-ink-inverse',
+            showIdentity && 'text-transparent group-hover:text-transparent dark:text-transparent dark:group-hover:text-transparent',
           )}
           placeholder="Search or enter address"
         />
@@ -191,15 +210,15 @@ export function UrlBar() {
           <button
             type="button"
             onMouseDown={(e) => e.preventDefault()}
-            className="mr-1 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md text-ink-secondary transition-colors hover:bg-surface-100 hover:text-ink dark:text-ink-inverse-secondary dark:hover:bg-surface-800 dark:hover:text-ink-inverse"
+            className="mr-1 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full text-ink-secondary transition-colors duration-150 hover:bg-surface-100 hover:text-ink dark:text-ink-inverse-secondary dark:hover:bg-surface-800 dark:hover:text-ink-inverse"
             onClick={handleSearchClick}
             aria-label="Search or navigate"
             title="Search or navigate"
           >
-            {looksLikeUrl(url.trim()) ? <ArrowRight className="h-3.5 w-3.5" /> : <Search className="h-3.5 w-3.5" />}
+            {looksLikeUrl(url.trim()) ? <ArrowRight className="h-3.5 w-3.5" strokeWidth={2} /> : <Search className="h-3.5 w-3.5" strokeWidth={2} />}
           </button>
         ) : (
-          <kbd className="mr-1.5 hidden flex-shrink-0 rounded px-1 text-[10px] leading-4 text-ink-muted opacity-0 transition-opacity group-hover:opacity-100 dark:text-ink-inverse-muted sm:block">
+          <kbd className="mr-2 hidden h-[18px] min-w-[18px] flex-shrink-0 items-center justify-center rounded-[5px] border border-b-2 border-surface-200 px-1 font-mono text-[10px] font-medium leading-none text-ink-muted opacity-0 transition-opacity duration-150 group-hover:opacity-100 dark:border-surface-700 dark:text-ink-inverse-muted sm:inline-flex">
             {MOD_KEY}L
           </kbd>
         )}

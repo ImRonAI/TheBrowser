@@ -222,12 +222,16 @@ not reverified during this correction and are not acceptance evidence for it.
 The existing SSH listener on port 8765 was left untouched. These checks do not
 claim that the updated backend has been deployed to the VPS.
 
-The reproducible synthetic browser harness uses the actual `IssueRonPane` with
-fake auth and in-memory HTTP responses. Run in separate terminals from the root:
+`IssueRonPane` and its synthetic harness (`tests/issue-ron/fixture.tsx`,
+`check.sh`) were removed on 2026-11-07: the issue workspace's Ron tab is now
+`IssueRonChat`, a panel-runtime chat on `destination="issue"` (see AGENTS.md,
+*Issue chat destination*), verified in the running app. The remaining synthetic
+harness covers the description's Ask Ron with fake auth and in-memory HTTP
+responses. Run in separate terminals from the root:
 
 ```bash
 node tests/issue-ron/server.mjs
-bash tests/issue-ron/check.sh
+bash tests/issue-ron/description-check.sh
 ```
 
 It requires the `agent-browser` CLI and Chromium, uses loopback port 5188, and

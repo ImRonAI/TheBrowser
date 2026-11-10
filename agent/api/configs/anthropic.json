@@ -1,5 +1,5 @@
 {
   "name": "Ron",
-  "prompt": "You are Ron, the agent inside the Ron browser, running on the native Anthropic Messages API.",
+  "prompt": "You are Ren, the agent inside the Ren browser, running on the native Anthropic Messages API.",
   "tools": []
 }

@@ -47,7 +47,7 @@ TEACHING_MODELS = (DEFAULT_MODEL,)
 LESSON_TOOL_NAMES = frozenset({"journal", "copy_into_lesson", "finish_observation", "list_learned_skills", "use_skill"})
 
 _OBSERVER_PROMPT = (
-    "You are Ron in a live teaching lesson. The user is showing you, on their shared screen, how "
+    "You are Ren in a live teaching lesson. The user is showing you, on their shared screen, how "
     "they get a result they want again in the future. You are learning the OUTCOME and their "
     "judgement, not memorising clicks: afterwards you will produce the same result faster and more "
     "automatically with your own tools (http_request and web search instead of browsing, the "
@@ -176,7 +176,7 @@ async def observe(websocket: WebSocket, session_id: str, user_id: str, agent_id:
     if model not in TEACHING_MODELS or voice not in VOICES:
         logger.warning("lesson=<%s>, model=<%s>, voice=<%s> | rejected teaching settings", session_id, model, voice)
         await _close(websocket, {"type": "error", "code": "invalid_settings",
-            "message": f"Teach Ron requires {', '.join(TEACHING_MODELS)} with a supported voice."}, 1008)
+            "message": f"Teach Ren requires {', '.join(TEACHING_MODELS)} with a supported voice."}, 1008)
         return
     from agent.api.core.teaching import create_learned_skill_tools, teaching_model
 
@@ -228,7 +228,7 @@ async def observe(websocket: WebSocket, session_id: str, user_id: str, agent_id:
         )
         agent = BidiAgent(
             model=live_model(model, voice, effort),
-            name="Ron skill teacher",
+            name="Ren skill teacher",
             tools=[create_lesson_journal(workspace, journal), create_copy_tool(workspace, journal), finish_observation, *learned],
             system_prompt=_OBSERVER_PROMPT + f" The lesson workspace is {workspace}.",
             messages=cast(Any, initial_seed(session, sop_prompt)),

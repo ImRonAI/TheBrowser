@@ -13,7 +13,8 @@
  */
 import { useEffect, useRef, useState } from 'react'
 import { motion, useReducedMotion } from 'framer-motion'
-import { ArrowUp, Check, ChevronDown, Compass, Calendar, Columns3, Hammer, Music2, Search } from 'lucide-react'
+import { ArrowUp, Check, ChevronDown, Compass, Calendar, Columns3, Hammer, Music2, Search, X } from 'lucide-react'
+import { RenWordmark } from '@/components/brand'
 import { useNavigationStore, type HomeTab } from '@/stores/navigationStore'
 import { useTextAssist } from '@/hooks/useTextAssist'
 import { TextAssist, handleAssistKey } from '@/components/shared/TextAssist'
@@ -58,17 +59,18 @@ function SearchDepthSelector() {
           aria-label={`Search depth: ${active?.label ?? level}`}
           title="Search depth"
           className={cn(
-            'flex h-6 flex-shrink-0 items-center gap-1 rounded-md px-1.5',
-            'text-[11px] font-medium text-ink-secondary transition-colors hover:bg-surface-100 hover:text-ink',
-            'dark:text-ink-inverse-secondary dark:hover:bg-surface-800 dark:hover:text-ink-inverse',
+            'flex h-6 flex-shrink-0 items-center gap-1 rounded-full pl-2 pr-1.5',
+            'text-[12px] font-medium text-ink-secondary transition-colors duration-150 ease-out hover:bg-surface-100 hover:text-ink data-[state=open]:bg-surface-100 data-[state=open]:text-ink',
+            'dark:text-ink-inverse-secondary dark:hover:bg-surface-800 dark:hover:text-ink-inverse dark:data-[state=open]:bg-surface-800 dark:data-[state=open]:text-ink-inverse',
           )}
         >
           <span>{active?.label ?? level}</span>
-          <ChevronDown className={cn('h-3 w-3 opacity-60 transition-transform duration-200', open && 'rotate-180')} />
+          <ChevronDown className={cn('h-3 w-3 opacity-70 transition-transform duration-200', open && 'rotate-180')} />
         </button>
       </PopoverTrigger>
-      <PopoverContent align="end" sideOffset={8} className="z-[200] w-64 p-1.5">
-        <p className="px-2 pb-1.5 pt-1.5 text-[11px] font-medium text-ink-muted dark:text-ink-inverse-muted">Search depth</p>
+      {/* `data-[state=open]:shadow-float`: outranks the primitive's own shadow-md, still yields to Glass. */}
+      <PopoverContent align="end" sideOffset={8} className="z-[200] w-72 rounded-xl border-border p-1 data-[state=open]:shadow-float">
+        <p className="px-2.5 pb-1.5 pt-2 font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground">Search depth</p>
         {LEVEL_INFO.map((info) => {
           const isActive = info.id === level
           return (
@@ -80,21 +82,21 @@ function SearchDepthSelector() {
                 setOpen(false)
               }}
               className={cn(
-                'flex w-full items-start gap-2.5 rounded-md px-2 py-2 text-left transition-colors',
-                isActive ? 'bg-surface-100 dark:bg-surface-800' : 'hover:bg-surface-50 dark:hover:bg-surface-800/60',
+                'flex w-full items-start gap-2.5 rounded-lg px-2.5 py-2 text-left transition-colors duration-150 ease-out focus-visible:ring-inset focus-visible:ring-offset-0',
+                isActive ? 'bg-muted' : 'hover:bg-muted/70',
               )}
             >
-              <span className={cn('mt-0.5 flex h-3.5 w-3.5 items-center justify-center', !isActive && 'opacity-0')}>
-                <Check className="h-3 w-3 text-accent dark:text-accent-light" strokeWidth={2.5} />
+              <span className={cn('mt-0.5 flex h-4 w-4 flex-shrink-0 items-center justify-center', !isActive && 'opacity-0')}>
+                <Check className="h-3.5 w-3.5 text-volt" strokeWidth={2.5} />
               </span>
               <span className="min-w-0 flex-1">
-                <span className="block text-[13px] font-medium text-ink dark:text-ink-inverse">
+                <span className="flex items-baseline gap-1.5 text-[13px] font-semibold text-popover-foreground">
                   {info.label}
-                  <span className="ml-1.5 font-mono text-[10px] font-normal text-ink-muted dark:text-ink-inverse-muted">
+                  <span className="font-mono text-[10px] font-normal uppercase tracking-[0.08em] text-muted-foreground">
                     {info.id}
                   </span>
                 </span>
-                <span className="mt-0.5 block text-[12px] leading-snug text-ink-muted dark:text-ink-inverse-muted">
+                <span className="mt-0.5 block text-[12px] leading-snug text-muted-foreground">
                   {info.description}
                 </span>
               </span>
@@ -118,11 +120,15 @@ const DESTINATIONS: { id: HomeTab; label: string; icon: typeof Compass }[] = [
   { id: 'build', label: 'Build', icon: Hammer },
 ]
 
+/** Mono micro-label. Secondary ink (not muted) so it keeps 4.5:1 on the light chrome. */
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
-    <p className="px-2.5 pb-1.5 pt-4 text-[11px] font-medium text-ink-muted dark:text-ink-inverse-muted">{children}</p>
+    <p className="px-2.5 pb-2 pt-5 font-mono text-[11px] font-medium uppercase leading-none tracking-[0.08em] text-ink-secondary dark:text-ink-inverse-muted">{children}</p>
   )
 }
+
+/** Hover wash for rows sitting directly on the chrome (reads on paper, ink and glass alike). */
+const ROW_HOVER = 'hover:bg-ink/[0.06] hover:text-ink dark:hover:bg-ink-inverse/[0.07] dark:hover:text-ink-inverse'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // MAIN COMPONENT
@@ -275,16 +281,18 @@ export function Sidebar() {
       initial={false}
       animate={{ width: isSidebarOpen ? SIDEBAR_WIDTH : 0 }}
       transition={{ duration: reduced ? 0 : 0.28, ease: EASE }}
-      className="ron-sidebar relative z-[95] h-full flex-shrink-0 overflow-hidden ron-chrome"
+      className="ron-sidebar relative z-[95] h-full flex-shrink-0 overflow-hidden"
     >
       <div
-        className="flex h-full flex-col border-r border-surface-200/80 dark:border-surface-800"
+        className="flex h-full flex-col border-r border-surface-200 dark:border-surface-800"
         style={{ width: SIDEBAR_WIDTH }}
       >
-        {/* Top row: traffic lights + window drag area */}
-        <div className="h-11 flex-shrink-0 drag-region" />
+        {/* Top row: traffic lights + window drag area, with the wordmark as the brand anchor */}
+        <div className="flex h-11 flex-shrink-0 items-center pl-[84px] pr-3 drag-region">
+          <RenWordmark className="text-[22px] text-ink dark:text-ink-inverse" />
+        </div>
 
-        <div className="flex min-h-0 flex-1 flex-col px-2.5">
+        <div className="flex min-h-0 flex-1 flex-col px-2.5 pt-1">
           {/* ── Search composer ───────────────────────────────────────────── */}
           <div className="no-drag">
             {articles.map((article) => <ArticleAttachmentCard key={article.id} article={article}
@@ -310,16 +318,16 @@ export function Sidebar() {
                 {selectedContexts.map(context => (
                   <span
                     key={context.id}
-                    className="inline-flex max-w-full items-center gap-1 rounded-md border border-surface-200 bg-surface-0 py-0.5 pl-2 pr-1 text-[11px] text-ink-secondary dark:border-surface-700 dark:bg-surface-800 dark:text-ink-inverse-secondary"
+                    className="inline-flex h-6 max-w-full items-center gap-1 rounded-full border border-surface-200 bg-surface-0 pl-2.5 pr-1 text-[12px] font-medium text-ink-secondary dark:border-surface-700 dark:bg-surface-850 dark:text-ink-inverse-secondary"
                   >
                     <span className="truncate">{context.name}</span>
                     <button
                       type="button"
                       onClick={() => setSelectedContexts(prev => prev.filter(c => c.id !== context.id))}
-                      className="flex h-4 w-4 items-center justify-center rounded text-ink-muted hover:bg-surface-100 hover:text-ink dark:text-ink-inverse-muted dark:hover:bg-surface-700 dark:hover:text-ink-inverse"
+                      className="flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full text-ink-muted transition-colors duration-150 hover:bg-surface-100 hover:text-ink focus-visible:ring-offset-0 dark:text-ink-inverse-muted dark:hover:bg-surface-700 dark:hover:text-ink-inverse"
                       aria-label={`Remove ${context.name}`}
                     >
-                      ×
+                      <X className="h-3 w-3" strokeWidth={2.25} aria-hidden />
                     </button>
                   </span>
                 ))}
@@ -328,13 +336,13 @@ export function Sidebar() {
 
             <form onSubmit={handleSearch} className="relative" role="search">
               <div className={cn(
-                'rounded-xl border transition-[border-color,box-shadow,background-color] duration-150',
+                'rounded-xl border transition-[border-color,box-shadow,background-color] duration-150 ease-out',
                 isFocused
-                  ? 'border-accent/45 bg-surface-0 shadow-[0_0_0_3px_rgb(169_83_46/0.10)] dark:border-accent-light/50 dark:bg-surface-850 dark:shadow-[0_0_0_3px_rgb(214_130_90/0.12)]'
-                  : 'border-surface-200 bg-surface-0/80 hover:border-surface-300 dark:border-surface-800 dark:bg-surface-800/60 dark:hover:border-surface-700',
+                  ? 'border-blurple-500 bg-surface-0 ring-[3px] ring-blurple-500/15 dark:border-blurple-400 dark:bg-surface-850 dark:ring-blurple-400/20'
+                  : 'border-surface-200 bg-surface-0 hover:border-surface-300 dark:border-surface-800 dark:bg-surface-850 dark:hover:border-surface-700',
               )}>
                 <label className="flex h-10 items-center gap-2 px-3">
-                  <Search className={cn('h-4 w-4 flex-shrink-0 transition-colors', isFocused ? 'text-ink dark:text-ink-inverse' : 'text-ink-muted dark:text-ink-inverse-muted')} strokeWidth={1.75} aria-hidden />
+                  <Search className={cn('h-4 w-4 flex-shrink-0 transition-colors duration-150', isFocused ? 'text-volt' : 'text-ink-muted dark:text-ink-inverse-muted')} strokeWidth={1.75} aria-hidden />
                   <span className="sr-only">Search or ask anything</span>
                   <input
                     ref={inputRef}
@@ -348,7 +356,7 @@ export function Sidebar() {
                     id="nav-search-bar"
                     data-testid="nav-search-input"
                     placeholder="Search or ask anything"
-                    className="min-w-0 flex-1 bg-transparent text-[13.5px] text-ink outline-none focus-visible:ring-0 focus-visible:ring-offset-0 placeholder:text-ink-muted dark:text-ink-inverse dark:placeholder:text-ink-inverse-muted"
+                    className="min-w-0 flex-1 bg-transparent text-sm text-ink outline-none focus-visible:ring-0 focus-visible:ring-offset-0 placeholder:text-ink-muted dark:text-ink-inverse dark:placeholder:text-ink-inverse-muted"
                     autoComplete="off"
                   />
                   {!isFocused && !query && <kbd className="kbd" aria-hidden>{MOD_KEY}K</kbd>}
@@ -367,11 +375,12 @@ export function Sidebar() {
                     type="submit"
                     disabled={!canSubmit}
                     aria-label="Search"
+                    title="Search"
                     className={cn(
-                      'flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md transition-colors duration-150',
+                      'flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-lg transition-colors duration-150 ease-out',
                       canSubmit
-                        ? 'bg-ink text-surface-0 hover:bg-ink/85 dark:bg-ink-inverse dark:text-surface-900 dark:hover:bg-ink-inverse/85'
-                        : 'bg-surface-100 text-ink-muted/60 dark:bg-surface-800 dark:text-ink-inverse-muted/60',
+                        ? 'bg-blurple-600 text-white hover:bg-blurple-700 active:bg-blurple-800 dark:bg-blurple-400 dark:text-ink dark:hover:bg-blurple-300'
+                        : 'bg-surface-100 text-ink-muted opacity-60 dark:bg-surface-800 dark:text-ink-inverse-muted',
                     )}
                   >
                     <ArrowUp className="h-3.5 w-3.5" strokeWidth={2.25} />
@@ -387,7 +396,7 @@ export function Sidebar() {
 
           {/* ── Destinations ──────────────────────────────────────────────── */}
           <nav aria-label="Destinations" className="no-drag">
-            <SectionLabel>Ron</SectionLabel>
+            <SectionLabel>Ren</SectionLabel>
             <ul className="flex flex-col gap-px">
               {DESTINATIONS.map(({ id, label, icon: Icon }) => {
                 const isActive = activeTab === id
@@ -398,13 +407,15 @@ export function Sidebar() {
                       onClick={() => handleTabClick(id)}
                       aria-current={isActive ? 'page' : undefined}
                       className={cn(
-                        'flex h-8 w-full items-center gap-2.5 rounded-lg px-2.5 text-[13px] transition-colors duration-150 focus-visible:ring-offset-0',
+                        'relative flex h-8 w-full items-center gap-2.5 rounded-lg px-2.5 text-[13px] transition-colors duration-150 ease-out focus-visible:ring-offset-0',
                         isActive
-                          ? 'bg-surface-200/70 font-medium text-ink dark:bg-surface-800 dark:text-ink-inverse'
-                          : 'text-ink-secondary hover:bg-surface-200/50 hover:text-ink dark:text-ink-inverse-secondary dark:hover:bg-surface-800/60 dark:hover:text-ink-inverse',
+                          ? 'bg-ink/[0.045] font-semibold text-ink dark:bg-ink-inverse/[0.06] dark:text-ink-inverse'
+                          : cn('text-ink-secondary dark:text-ink-inverse-secondary', ROW_HOVER),
                       )}
                     >
-                      <Icon className={cn('h-4 w-4 flex-shrink-0', isActive ? 'text-accent dark:text-accent-light' : 'opacity-80')} strokeWidth={1.75} />
+                      {/* Active: a volt bar on the leading edge */}
+                      {isActive && <span aria-hidden className="absolute left-0 top-1/2 h-4 w-[3px] -translate-y-1/2 rounded-full bg-volt" />}
+                      <Icon className={cn('h-4 w-4 flex-shrink-0', isActive ? 'text-volt' : 'opacity-80')} strokeWidth={isActive ? 2 : 1.75} />
                       {label}
                     </button>
                   </li>
@@ -423,8 +434,8 @@ export function Sidebar() {
         </div>
 
         {/* ── Shortcut legend ─────────────────────────────────────────────── */}
-        <div className="flex flex-shrink-0 items-center gap-3 border-t border-surface-200/70 px-4 py-2.5 text-[11px] text-ink-muted dark:border-surface-800 dark:text-ink-inverse-muted">
-          <span className="flex items-center gap-1.5"><kbd className="kbd">{MOD_KEY}J</kbd>Ask Ron</span>
+        <div className="flex flex-shrink-0 items-center gap-3 border-t border-surface-200 px-4 py-2.5 text-[11px] font-medium text-ink-secondary dark:border-surface-800 dark:text-ink-inverse-muted">
+          <span className="flex items-center gap-1.5"><kbd className="kbd">{MOD_KEY}J</kbd>Ask Ren</span>
           <span className="flex items-center gap-1.5"><kbd className="kbd">{MOD_KEY}K</kbd>Search</span>
           <span className="ml-auto flex items-center gap-1.5" title="Toggle sidebar"><kbd className="kbd">{MOD_KEY}\</kbd></span>
         </div>

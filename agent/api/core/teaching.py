@@ -7,6 +7,7 @@ import json
 import logging
 import os
 import re
+import shutil
 import signal
 import sys
 import uuid
@@ -493,12 +494,12 @@ class TeachingService:
                     plugins=[learning_sop],
                     tools=[catalog], callback_handler=None, system_prompt="""Turn the actual teaching brief and timestamped journal into a process document for human approval.
 The user taught an OUTCOME and their judgement of a good result, not a click script: the
-process you write is what Ron will do with its own tools to produce that outcome faster and
+process you write is what Ren will do with its own tools to produce that outcome faster and
 more automatically (http_request and web search instead of browsing, the browser only where a
 source has no API, shell/editor, environment for secrets, render_ui to present an interactive
 result the user can rate, add_memory/search_memory so their feedback shapes the next run).
 Journal entries of kind debrief, debrief_user_speech and debrief_assistant_speech were recorded
-after the demonstration, when the user corrected Ron's understanding, answered its questions
+after the demonstration, when the user corrected Ren's understanding, answered its questions
 and agreed an implementation plan: they are authoritative over earlier observations, and the
 agreed plan is the default implementation unless the catalog proves it impossible.
 Preserve every observed decision, source, input, verification criterion and prerequisite.
@@ -728,7 +729,7 @@ after the debrief in `questions`.""")
                     if set(configured_assignments.get(name, skill.allowed_tools or available_tools)).issubset(available_tools)}
         taught = await self.list_skills(session["user_id"], session["agent_id"])
         prompt = """Compile the approved process into a reliable reusable agent skill that produces
-the taught OUTCOME with Ron's own tools, faster and more automatically than the user did it
+the taught OUTCOME with Ren's own tools, faster and more automatically than the user did it
 by hand: http_request and web search over APIs instead of browsing, the browser only where a
 source has no API, shell/editor, environment for secrets, render_ui for the interactive result
 (embedded players or previews, size options, thumbs up/down, ranking, a feedback box, actions
@@ -924,6 +925,52 @@ verify it with list_harness_agents, and assign a2a_send_message to the steps tha
         session.update(status="ready", error=None, skill_id=skill_id)
         await self._write(key, session)
 
+    async def install_skill(self, user_id: str, agent_id: str, manifest: dict[str, Any],
+                            files: dict[str, str]) -> dict[str, Any]:
+        """Publish a finished skill directory under ``manifest["id"]``, replacing an earlier revision.
+
+        Used by skills authored as project pages (``core/document_skills.py``). The directory is
+        checked in staging with the same native loaders ``_compile_bundle`` runs on a taught skill
+        (``Skill.from_file(strict=True)``, the upstream ``load_external_sops`` and the SOP MCP
+        prompt) before it replaces the published one, so a rejected revision never hides the
+        previous one. The manifest stays the publication marker and ``_register_memory`` the
+        discovery entry, exactly as for taught skills.
+        """
+        scope = _scope(user_id, agent_id)
+        skill_id, name = _identifier(manifest["id"]), _identifier(manifest["name"])
+        staging = f"{scope}/staging/{skill_id}-{uuid.uuid4().hex}"
+        for path, content in files.items():
+            await self.storage.write(f"{staging}/{name}/{path}", content.encode())
+        directory = self.root / staging / name
+        try:
+            await asyncio.to_thread(Skill.from_file, directory, strict=True)
+            if not await asyncio.to_thread(load_external_sops, [directory]):
+                raise ValueError("The native SOP loader rejected workflow.sop.md")
+            if files["workflow.sop.md"] not in await asyncio.to_thread(native_sop_prompt, directory):
+                raise ValueError("The native Agent SOP prompt does not match workflow.sop.md")
+        except BaseException:
+            await asyncio.to_thread(shutil.rmtree, self.root / staging, True)
+            raise
+        destination = self.root / scope / "skills" / skill_id
+        async with self._lock(f"{scope}/skills/{skill_id}"):
+            previous = await self.storage.read(f"{scope}/skills/{skill_id}/manifest.json")
+            replaced = self.root / scope / "staging" / f"replaced-{skill_id}-{uuid.uuid4().hex}"
+            if destination.exists():
+                await asyncio.to_thread(os.rename, destination, replaced)
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            await asyncio.to_thread(os.rename, self.root / staging, destination)
+            published = {**manifest, "files": [*files, "manifest.json"], "memory_registered": False}
+            await self._write(f"{scope}/skills/{skill_id}/manifest.json", published)
+            await self._register_memory(user_id, agent_id, published)
+            old = json.loads(previous) if previous else {}
+            if old and old.get("description") != published["description"]:
+                # FileMemoryStore.add appends the lines after an existing heading (vended
+                # file_memory_store/store.py:172-197), so the entry records the new description.
+                await self.get_memory_store(user_id, agent_id).add(
+                    f"# Learned skill {skill_id}\nSkill {name} (revision {published.get('approval_revision')}): {published['description']}")
+            await asyncio.to_thread(shutil.rmtree, replaced, True)
+            return published
+
     async def run_script(self, user_id: str, agent_id: str, skill_id: str, path: str,
                          arguments: list[str]) -> dict[str, Any]:
         manifest = await self.read_skill(user_id, agent_id, skill_id)
@@ -1079,7 +1126,7 @@ def create_learned_skill_tools(user_id: str, agent_id: str, model_factory: Calla
     return [list_learned_skills, use_skill]
 
 
-mcp = FastMCP("Ron taught skills and agent SOPs")
+mcp = FastMCP("Ren taught skills and agent SOPs")
 
 
 @mcp.tool

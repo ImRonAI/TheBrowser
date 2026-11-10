@@ -41,7 +41,7 @@ type Session = { user: { id: string }; access_token: string } | null
  * panel's user (`useAuthStore(... ?? 'default')`); anything but the signed-in user's own id is refused
  * here with the same message the server returns.
  */
-export const SIGN_IN_MESSAGE = 'Sign in to Ron to use the music deck (guest sessions cannot).'
+export const SIGN_IN_MESSAGE = 'Sign in to Ren to use the music deck (guest sessions cannot).'
 
 export function musicHeaders(userId: string, session: Session): Record<string, string> {
   if (!session || session.user.id !== userId) throw new Error(SIGN_IN_MESSAGE)

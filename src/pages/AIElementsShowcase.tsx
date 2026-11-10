@@ -119,7 +119,7 @@ The food science research confirms that the key to great NYC pizza is the Mailla
 
 function createSwarmState(): SwarmState {
   const nodes: StrandsSwarmNode[] = [
-    { id: "orchestrator", type: "swarm-node", position: { x: 320, y: 20 }, data: { type: "swarm-node", agent: { id: "orchestrator", name: "Ron", description: "Coordinates pizza research", modelProvider: "bedrock", modelId: "claude-opus-4", tools: ["handoff"], priority: 5 }, status: "idle", isEntryPoint: true, canHandoffTo: ["food_expert", "local_guide", "reviewer"] } },
+    { id: "orchestrator", type: "swarm-node", position: { x: 320, y: 20 }, data: { type: "swarm-node", agent: { id: "orchestrator", name: "Ren", description: "Coordinates pizza research", modelProvider: "bedrock", modelId: "claude-opus-4", tools: ["handoff"], priority: 5 }, status: "idle", isEntryPoint: true, canHandoffTo: ["food_expert", "local_guide", "reviewer"] } },
     { id: "food_expert", type: "swarm-node", position: { x: 40, y: 220 }, data: { type: "swarm-node", agent: { id: "food_expert", name: "Food Expert", description: "Analyzes pizza quality", modelProvider: "anthropic", modelId: "claude-sonnet-4", tools: ["search"], priority: 4 }, status: "idle", canHandoffTo: ["orchestrator", "reviewer"] } },
     { id: "local_guide", type: "swarm-node", position: { x: 320, y: 220 }, data: { type: "swarm-node", agent: { id: "local_guide", name: "Local Guide", description: "NYC expertise", modelProvider: "anthropic", modelId: "claude-sonnet-4", tools: ["maps"], priority: 4 }, status: "idle", canHandoffTo: ["orchestrator", "food_expert"] } },
     { id: "reviewer", type: "swarm-node", position: { x: 600, y: 220 }, data: { type: "swarm-node", agent: { id: "reviewer", name: "Reviewer", description: "Compiles recommendations", modelProvider: "bedrock", modelId: "claude-sonnet-4", tools: ["summarize"], priority: 3 }, status: "idle", canHandoffTo: ["orchestrator"] } },
@@ -338,7 +338,7 @@ export function AIElementsShowcase() {
         <div className="max-w-3xl mx-auto flex items-center justify-between">
           <div>
             <h1 className="text-lg font-semibold text-ink dark:text-ink-inverse">AI Elements Showcase</h1>
-            <p className="text-sm text-ink-muted dark:text-ink-inverse-muted">Interactive demo of Ron's capabilities</p>
+            <p className="text-sm text-ink-muted dark:text-ink-inverse-muted">Interactive demo of Ren's capabilities</p>
           </div>
           {!isEmpty && (
             <button
@@ -364,7 +364,7 @@ export function AIElementsShowcase() {
             </div>
             <h2 className="text-2xl font-light text-ink dark:text-ink-inverse mb-2">AI Elements Demo</h2>
             <p className="text-ink-muted dark:text-ink-inverse-muted text-center mb-8 max-w-md">
-              Watch Ron answer a question using reasoning, web search, academic research, images, agent orchestration, and a phone call.
+              Watch Ren answer a question using reasoning, web search, academic research, images, agent orchestration, and a phone call.
             </p>
             <button
               onClick={runDemo}
@@ -564,7 +564,7 @@ export function AIElementsShowcase() {
                                     <div className="space-y-1.5 pt-1 border-t border-zinc-100 dark:border-zinc-800">
                                       {step10.transcript.map((line, i) => (
                                         <div key={i} className="text-xs text-zinc-600 dark:text-zinc-400">
-                                          <span className="font-medium text-zinc-500 dark:text-zinc-500">{i % 2 === 0 ? 'Them' : 'Ron'}:</span> {line}
+                                          <span className="font-medium text-zinc-500 dark:text-zinc-500">{i % 2 === 0 ? 'Them' : 'Ren'}:</span> {line}
                                         </div>
                                       ))}
                                     </div>

@@ -12,7 +12,7 @@ import { emptyPanelState, readPanelStream, reducePanelEvent, responseError, type
 import { normalizeWorkflow, type WorkflowGraph } from './workflow.ts'
 
 /** `ChatRequest.destination`: which scoped agent answers (agent/api/endpoints/chat.py). */
-export type RonDestination = 'panel' | 'search' | 'build' | 'document'
+export type RonDestination = 'panel' | 'search' | 'build' | 'document' | 'context'
 
 export interface RonRunRequest {
   apiBase: string
@@ -51,7 +51,7 @@ export async function runRon({ apiBase, destination, sessionId, userId, message,
     const follow = await fetcher(`${apiBase}/sessions/${encodeURIComponent(sessionId)}/events?user_id=${encodeURIComponent(userId)}&after=${state.sequence}`, { signal })
     terminal = await readPanelStream(follow, accept)
   }
-  if (!terminal && !signal?.aborted) throw new Error('Ron’s answer was interrupted. Try again.')
+  if (!terminal && !signal?.aborted) throw new Error('Ren’s answer was interrupted. Try again.')
   return state
 }
 

@@ -1,17 +1,9 @@
 import { useState } from 'react'
+import { RenIcon } from '@/components/brand'
 import { motion, AnimatePresence } from 'framer-motion'
 import type { Task } from '@/pages/types/task'
 import { NotionEditor } from '../editor/NotionEditor'
-import { 
-  Sparkles as SparklesIcon, 
-  ListTodo as ChecklistIcon, 
-  Check as CheckIcon, 
-  ChevronRight as ChevronRightIcon, 
-  Plus as PlusIcon,
-  Clock as ClockIcon,
-  User as UserIcon,
-  Flag as FlagIcon
-} from 'lucide-react'
+import { ListTodo as ChecklistIcon, Check as CheckIcon, ChevronRight as ChevronRightIcon, Plus as PlusIcon, Clock as ClockIcon, User as UserIcon, Flag as FlagIcon } from 'lucide-react'
 import { cn } from '@/utils/cn'
 import { TaskPriority } from '@/pages/types/task'
 
@@ -57,7 +49,7 @@ export function DescriptionTab({ task, onUpdate, onTaskClick }: DescriptionTabPr
               "flex items-center justify-center",
               "text-indigo-600 dark:text-indigo-400"
             )}>
-              <SparklesIcon className="w-4 h-4" />
+              <RenIcon className="w-4 h-4" />
             </span>
             <div className="flex-1 min-w-0">
               <h4 className={cn(

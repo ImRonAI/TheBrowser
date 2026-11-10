@@ -135,7 +135,7 @@ def failure_guidance(context: InjectionContext) -> str | None:
         )
     if phase == "investigating":
         return (
-            f"The tool {name} failed ({record.get('errors', [''])[-1]}). Ron's fixer is investigating it in an "
+            f"The tool {name} failed ({record.get('errors', [''])[-1]}). Ren's fixer is investigating it in an "
             "isolated environment; the user will see the result in the panel and decide whether to apply a repair. "
             "Do not call this tool again now"
             + (" — it has side effects on the user's browser or data" if record.get("side_effecting") else "")

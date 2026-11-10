@@ -1,6 +1,6 @@
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
-import { CalendarDays, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Ban, CalendarDays, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react'
 import { useProjectsStore } from '@/stores/projectsStore'
 import { ISSUE_STATUS_CONFIG, type Issue, type IssueStatus } from '@/types/projects'
 import { calendarDay } from '@/lib/project-issue-utils'
@@ -10,6 +10,8 @@ import {
   unscheduledIssues, weekDays, type CalendarMode, type PositionedBlock,
 } from '@/lib/calendar'
 import { cn } from '@/utils/cn'
+import { useIssueBlocking } from '@/hooks/useIssueBlocking'
+import { BlockedTag } from '@/components/projects/BlockedTag'
 
 /**
  * Issue calendar with Day, Week, Month and Quarter views (Month by default).
@@ -35,6 +37,13 @@ const STATUS_DOT: Record<IssueStatus, string> = {
   done: 'bg-success',
 }
 const HAIRLINE = 'border-surface-200 dark:border-surface-700'
+/** Blocked issues read rose in every view: tinted chip, stop mark, hazard-striped time block. */
+const BLOCKED_CHIP = 'bg-rose-500/[0.08] ring-1 ring-inset ring-rose-500/25 dark:bg-rose-400/10 dark:ring-rose-300/20 hover:bg-rose-500/[0.14] dark:hover:bg-rose-400/[0.16]'
+const BLOCKED_BLOCK = 'border-rose-300/80 dark:border-rose-400/30 bg-[repeating-linear-gradient(135deg,rgba(244,63,94,0.07)_0_6px,transparent_6px_12px)] dark:bg-[repeating-linear-gradient(135deg,rgba(251,113,133,0.10)_0_6px,transparent_6px_12px)]'
+
+function BlockedMark() {
+  return <Ban aria-hidden className="h-3 w-3 shrink-0 text-rose-500 dark:text-rose-300" strokeWidth={2.5} />
+}
 const TODAY_CIRCLE = 'bg-ink text-surface-0 dark:bg-ink-inverse dark:text-surface-900'
 const PERIOD_NOUN: Record<CalendarMode, string> = { day: 'day', week: 'week', month: 'month', quarter: 'quarter' }
 
@@ -60,6 +69,7 @@ export function IssueCalendar({ issues, onIssueSelect, mode: controlledMode, onM
   const now = useNow()
   const reduceMotion = useReducedMotion()
   const { projects } = useProjectsStore()
+  const blockingFor = useIssueBlocking()
   const [showUnscheduled, setShowUnscheduled] = useState(false)
 
   const keyFor = useMemo<KeyFor>(() => {
@@ -144,23 +154,25 @@ export function IssueCalendar({ issues, onIssueSelect, mode: controlledMode, onM
           </button>
           {showUnscheduled && (
             <div className="mt-2 flex max-h-28 flex-wrap gap-1.5 overflow-y-auto">
-              {unscheduled.map((issue) => (
+              {unscheduled.map((issue) => { const blocking = blockingFor(issue); return (
                 <button
                   key={issue.id}
                   type="button"
                   onClick={() => onIssueSelect(issue.id)}
+                  title={blocking.label || undefined}
                   className={cn(
                     'inline-flex max-w-[18rem] items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs transition-colors',
                     HAIRLINE,
                     'hover:border-surface-300 dark:hover:border-surface-600 hover:bg-surface-50 dark:hover:bg-surface-800',
+                    blocking.blocked && cn('border-transparent', BLOCKED_CHIP),
                     issue.status === 'done' && 'opacity-60'
                   )}
                 >
-                  <StatusDot status={issue.status} />
+                  {blocking.blocked ? <BlockedMark /> : <StatusDot status={issue.status} />}
                   <span className="shrink-0 tabular-nums text-ink-muted dark:text-ink-inverse-muted">{keyFor(issue)}</span>
                   <span className="truncate text-ink dark:text-ink-inverse">{issue.title}</span>
                 </button>
-              ))}
+              )})}
             </div>
           )}
         </footer>
@@ -257,20 +269,20 @@ function StatusDot({ status, className }: { status: IssueStatus; className?: str
 }
 
 function IssueChip({ issue, keyFor, onSelect, tinted }: { issue: Issue; keyFor: KeyFor; onSelect: (id: string) => void; tinted?: boolean }) {
+  const blocking = useIssueBlocking()(issue)
   return (
     <button
       type="button"
       onClick={() => onSelect(issue.id)}
-      title={`${keyFor(issue)} · ${issue.title}`}
+      title={`${keyFor(issue)} · ${issue.title}${blocking.blocked ? ` · ${blocking.label}` : ''}`}
       className={cn(
         'flex w-full min-w-0 items-center gap-1.5 rounded-md px-1.5 py-[3px] text-left text-[11px] leading-4 transition-colors',
-        tinted ? 'bg-surface-100 dark:bg-surface-800' : '',
-        'hover:bg-surface-200/70 dark:hover:bg-surface-700',
+        blocking.blocked ? BLOCKED_CHIP : cn(tinted ? 'bg-surface-100 dark:bg-surface-800' : '', 'hover:bg-surface-200/70 dark:hover:bg-surface-700'),
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60',
         issue.status === 'done' && 'opacity-60'
       )}
     >
-      <StatusDot status={issue.status} />
+      {blocking.blocked ? <BlockedMark /> : <StatusDot status={issue.status} />}
       <span className="shrink-0 tabular-nums text-ink-muted dark:text-ink-inverse-muted">{keyFor(issue)}</span>
       <span className="truncate font-medium text-ink dark:text-ink-inverse">{issue.title}</span>
     </button>
@@ -528,24 +540,30 @@ function TimedBlock({ block, keyFor, onSelect }: { block: PositionedBlock; keyFo
   const height = Math.max(((block.endMinutes - block.startMinutes) / 60) * HOUR_HEIGHT - 2, 22)
   const width = 100 / block.columns
   const compact = height < 44
+  const blocking = useIssueBlocking()(block.issue)
   return (
     <button
       type="button"
       onClick={() => onSelect(block.issue.id)}
-      title={`${blockLabel(block)} · ${keyFor(block.issue)} · ${block.issue.title}`}
+      title={`${blockLabel(block)} · ${keyFor(block.issue)} · ${block.issue.title}${blocking.blocked ? ` · ${blocking.label}` : ''}`}
       className={cn(
         'absolute z-[1] flex overflow-hidden rounded-lg border text-left transition-colors',
         HAIRLINE,
         'bg-surface-0 dark:bg-surface-850 shadow-subtle dark:shadow-dark-subtle',
         'hover:border-surface-300 dark:hover:border-surface-600 hover:bg-surface-50 dark:hover:bg-surface-800',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60',
+        blocking.blocked && BLOCKED_BLOCK,
         block.issue.status === 'done' && 'opacity-60'
       )}
       style={{ top: top + 1, height, left: `calc(${block.column * width}% + 2px)`, width: `calc(${width}% - 4px)` }}
     >
-      <span aria-hidden className={cn('w-[3px] shrink-0', STATUS_DOT[block.issue.status] ?? 'bg-surface-400')} />
+      <span aria-hidden className={cn('w-[3px] shrink-0', blocking.blocked ? 'bg-rose-500 dark:bg-rose-400' : STATUS_DOT[block.issue.status] ?? 'bg-surface-400')} />
       <span className={cn('flex min-w-0 flex-1 px-2', compact ? 'items-center gap-1.5' : 'flex-col justify-start gap-0.5 py-1.5')}>
-        <span className="shrink-0 text-[10px] font-medium tabular-nums text-ink-muted dark:text-ink-inverse-muted">{blockLabel(block)}</span>
+        <span className="flex shrink-0 items-center gap-1.5 text-[10px] font-medium tabular-nums text-ink-muted dark:text-ink-inverse-muted">
+          {blocking.blocked && compact && <BlockedMark />}
+          {blockLabel(block)}
+          {blocking.blocked && !compact && <BlockedTag label={blocking.label} />}
+        </span>
         <span className="truncate text-[11px] leading-4">
           <span className="tabular-nums text-ink-muted dark:text-ink-inverse-muted">{keyFor(block.issue)} </span>
           <span className="font-medium text-ink dark:text-ink-inverse">{block.issue.title}</span>

@@ -7,7 +7,7 @@ import type { Issue, Project } from '../types/projects.ts'
 const project: Project = { id: 'p', version: 1, key: 'PR', name: 'Project', type: 'research', lifecycle: 'active', createdAt: 0, updatedAt: 0,
   settings: { allowCrossProjectParents: false, issueTypes: [{ key: 'goal', label: 'Goal', level: 3 }, { key: 'experiment', label: 'Experiment', level: 4 }, { key: 'step', label: 'Step', level: 5 }] } }
 const issue: Issue = { id: 'i', projectId: 'p', number: 1, version: 1, type: 'experiment', title: 'Canonical', status: 'backlog', priority: 'medium',
-  rank: 100.5, createdAt: 0, updatedAt: 0, assignees: [], labels: [], customFields: { one: 'original', two: 2 }, workProducts: [] }
+  rank: 100.5, createdAt: 0, updatedAt: 0, assignees: [], labels: [], customFields: { one: 'original', two: 2 }, workProducts: [], context: [] }
 
 test('configured hierarchy supports custom types and forbids cross-project parents', () => {
   assert.equal(issueDefinitions(project)[0].key, 'goal')

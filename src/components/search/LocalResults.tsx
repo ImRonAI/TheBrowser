@@ -97,14 +97,63 @@ function PlaceCard({ item, index }: { item: DiscoverItem; index: number }) {
   )
 }
 
-export function LocalResults({ state, onRetry }: { state: SearchRunState; hue?: string; onRetry?: () => void }) {
+/** Sets the profile's home location and re-runs Places there (`searchResultsStore.refreshPlaces`). */
+function LocationForm({ initial, onSubmit }: { initial: string; onSubmit: (location: string) => void }) {
+  const [value, setValue] = useState(initial)
+  const trimmed = value.trim()
+  return (
+    <form
+      className="mt-5 flex w-full max-w-sm items-center gap-2"
+      onSubmit={(event) => {
+        event.preventDefault()
+        if (trimmed) onSubmit(trimmed)
+      }}
+    >
+      <label htmlFor="places-location" className="sr-only">Your city or neighborhood</label>
+      <input
+        id="places-location"
+        value={value}
+        onChange={(event) => setValue(event.target.value)}
+        placeholder="City or neighborhood"
+        maxLength={200}
+        autoComplete="address-level2"
+        className="h-9 min-w-0 flex-1 rounded-lg border border-surface-200 bg-surface-0 px-3 text-[13px] text-ink placeholder:text-ink-muted dark:border-surface-800 dark:bg-surface-900 dark:text-ink-inverse dark:placeholder:text-ink-inverse-muted"
+      />
+      <button
+        type="submit"
+        disabled={!trimmed}
+        className="inline-flex h-9 flex-shrink-0 items-center rounded-lg bg-blurple-600 px-3 text-[13px] font-semibold text-white transition-colors duration-150 hover:bg-blurple-700 disabled:pointer-events-none disabled:opacity-40 dark:bg-blurple-400 dark:text-ink dark:hover:bg-blurple-300"
+      >
+        Search here
+      </button>
+    </form>
+  )
+}
+
+export function LocalResults({ state, onRetry, location, onLocationChange }: {
+  state: SearchRunState
+  hue?: string
+  onRetry?: () => void
+  /** The profile's home location, prefilled in the empty state's form. */
+  location?: string | null
+  onLocationChange?: (location: string) => void
+}) {
   const section = state.sections.places
   if (!section) return <CardSkeleton cards={4} />
   if (section.status === 'error') return <div className="max-w-[680px]"><SourceErrorNotice error={{ source: 'brave', ...section.error! }} onRetry={onRetry} /></div>
 
   const items = sectionItems(state, 'places')
   if (!items.length) {
-    return <EmptyState title="No places found" hint="Add a city or neighborhood to your profile for sharper local results" />
+    return (
+      <EmptyState
+        title="No places found"
+        hint={onLocationChange
+          ? 'Add your city or neighborhood for sharper local results. Ren saves it to your profile.'
+          : 'Add a city or neighborhood to your profile for sharper local results'}
+      >
+        {onLocationChange && <LocationForm initial={location ?? ''} onSubmit={onLocationChange} />}
+      </EmptyState>
+    )
   }
   return (
     <ul className="grid max-w-4xl grid-cols-1 gap-3 md:grid-cols-2">

@@ -9,7 +9,7 @@ async def create_project_via_browser(
     description: str = "",
     project_type: str = "work"
 ) -> dict:
-    """Create a new project in Ron Browser.
+    """Create a new project in Ren.
 
     Args:
         name: Project name
@@ -77,7 +77,7 @@ async def create_issue_in_project(
 
 @tool
 async def get_projects() -> dict:
-    """Get all projects from Ron Browser.
+    """Get all projects from Ren.
 
     Returns:
         Dictionary with projects list
@@ -93,7 +93,7 @@ async def get_projects() -> dict:
 
 @tool
 async def set_selected_project(project_id: str) -> dict:
-    """Set the currently selected project in Ron Browser.
+    """Set the currently selected project in Ren.
 
     Args:
         project_id: Project ID to select, or 'null' for all tasks

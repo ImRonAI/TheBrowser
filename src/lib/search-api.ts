@@ -9,6 +9,7 @@
  * sections for the Web and Images tabs.
  */
 import type { DiscoverItem, FeedSection } from './discover-feed.ts'
+import type { FeedRequestBody } from './discover-profile.ts'
 
 export type SearchLevel = 'fast' | 'low' | 'medium' | 'high' | 'xhigh'
 export const SEARCH_LEVELS: readonly SearchLevel[] = ['fast', 'low', 'medium', 'high', 'xhigh']
@@ -203,6 +204,61 @@ export function beginFollowUpState(state: SearchRunState, question: string): Sea
       images: state.agent.images,
       fetched: state.agent.fetched,
     },
+  }
+}
+
+/** Which query and level a stored run belongs to; the results page starts a run only when this changes. */
+export function searchRunKey(q: string, level: string): string {
+  return `${level}:${q}`
+}
+
+export const CANCELLED_ANSWER_MESSAGE = 'Stopped before an answer was written.'
+export const CANCELLED_SECTION_MESSAGE = 'Stopped before results arrived.'
+
+/**
+ * Settle a run the user stopped. The aborted stream delivers no further events, so every
+ * lane still `idle`/`streaming` is closed here: one with text keeps it as a finished
+ * answer, one without becomes a `cancelled` error (rendered with Retry), and each Brave
+ * section that never arrived becomes a `cancelled` error section instead of a skeleton.
+ * A follow-up streams only the agent lane (the backend skips Brave and shopping for
+ * `follow_up`), so `'follow-up'` settles that lane alone.
+ */
+export function settleCancelledRun(state: SearchRunState, scope: 'search' | 'follow-up' = 'search'): SearchRunState {
+  const settle = (lane: AgentRunState, source: 'agent' | 'shopping'): AgentRunState => {
+    if (lane.status !== 'idle' && lane.status !== 'streaming') return lane
+    if (lane.text) return { ...lane, status: 'done' }
+    return { ...lane, status: 'error', error: { source, code: 'cancelled', message: CANCELLED_ANSWER_MESSAGE } }
+  }
+  const agent = settle(state.agent, 'agent')
+  if (scope === 'follow-up') return { ...state, agent }
+  const sections = { ...state.sections }
+  for (const kind of SECTION_KINDS) {
+    if (sections[kind]) continue
+    sections[kind] = {
+      kind,
+      q: state.meta?.q ?? state.activeQuestion,
+      status: 'error',
+      items: [],
+      error: { code: 'cancelled', message: CANCELLED_SECTION_MESSAGE },
+    }
+  }
+  return { ...state, agent, shopping: settle(state.shopping, 'shopping'), sections }
+}
+
+/** Places count the search stream asks Brave for (`SECTION_COUNTS["places"]` in agent/api/endpoints/search.py). */
+export const PLACES_RESULT_COUNT = 20
+
+/**
+ * `POST /discover/feed` body that re-runs only the Places section of a search. The feed
+ * route and the search stream share `run_section`, so this returns the same section the
+ * stream would for the new location.
+ */
+export function placesRefreshRequest(q: string, opts: { country: string; location?: string | null }): FeedRequestBody {
+  const location = opts.location?.trim()
+  return {
+    sections: [{ kind: 'places', q, count: PLACES_RESULT_COUNT }],
+    ...(location ? { location: { location } } : {}),
+    country: opts.country,
   }
 }
 

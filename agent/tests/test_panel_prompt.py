@@ -22,7 +22,7 @@ def test_user_browser_prompt(clean_env):
     prompt = system_prompt_for("openai", browser="user")
     assert 'tool_catalog(action="load", name="user_browser")' in prompt
     assert "user_browser_playwright_List_tabs" in prompt
-    assert "your own Ron window on the user's computer" in prompt
+    assert "your own Ren window on the user's computer" in prompt
     assert "browser_unavailable" in prompt
     assert 'mcp_client(action="connect"' not in prompt
     assert "cloud_browser_" not in prompt

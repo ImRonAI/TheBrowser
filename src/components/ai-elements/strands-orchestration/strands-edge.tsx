@@ -10,6 +10,10 @@
  * - Animated data flow visualization
  * - Handoff message display (Swarm pattern)
  * - Active/inactive state styling
+ *
+ * Ren styling: idle edges are ink hairlines, live flow is volt. Colours come from the
+ * theme's CSS variables (`--ren-ink`, `--ren-volt`), so Light, Dark and Glass all follow.
+ * Flow particles are hidden under reduced motion.
  */
 
 "use client";
@@ -26,8 +30,16 @@ import {
   useInternalNode,
 } from "@xyflow/react";
 import { motion } from "framer-motion";
+import { ArrowRight, Split } from "lucide-react";
 import { memo } from "react";
 import type { GraphEdgeData, SwarmEdgeData, StrandsGraphEdge, StrandsSwarmEdge } from "./types";
+
+// Theme-following stroke colours (index.css: --ren-ink / --ren-volt flip with .dark).
+const VOLT = "rgb(var(--ren-volt))";
+const VOLT_TRAIL = "rgb(var(--ren-volt) / 0.4)";
+const INK_HAIRLINE = "rgb(var(--ren-ink) / 0.22)";
+const INK_POTENTIAL = "rgb(var(--ren-ink) / 0.16)";
+const INK_PENDING = "rgb(var(--ren-ink) / 0.3)";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
@@ -146,30 +158,22 @@ export const GraphEdgeComponent = memo(function GraphEdgeComponent({
 
   return (
     <>
-      {/* Main edge */}
+      {/* Main edge: ink hairline at rest, volt while data flows; conditions are dashed */}
       <BaseEdge
         id={id}
         path={edgePath}
         style={{
-          stroke: isActive
-            ? isConditional
-              ? "rgb(194, 106, 65)"
-              : "rgb(14, 165, 233)"
-            : "rgb(148, 163, 184)",
-          strokeWidth: isActive ? 2.5 : 1.5,
-          strokeDasharray: isConditional ? "8 4" : "none",
-          transition: "stroke 0.3s, stroke-width 0.3s",
+          stroke: isActive ? VOLT : INK_HAIRLINE,
+          strokeWidth: isActive ? 2 : 1.25,
+          strokeDasharray: isConditional ? "6 4" : "none",
+          transition: "stroke 200ms ease-out, stroke-width 200ms ease-out",
         }}
         markerEnd={isActive ? `url(#arrow-${isConditional ? "conditional" : "normal"})` : undefined}
       />
 
-      {/* Animated particle */}
+      {/* Animated particle (live flow only; hidden under reduced motion) */}
       {isAnimated && (
-        <motion.circle
-          r="4"
-          fill={isConditional ? "rgb(194, 106, 65)" : "rgb(14, 165, 233)"}
-          filter="drop-shadow(0 0 4px currentColor)"
-        >
+        <motion.circle r="3" className="motion-reduce:hidden" style={{ fill: VOLT }}>
           <animateMotion
             dur={isConditional ? "2.5s" : "1.5s"}
             path={edgePath}
@@ -186,19 +190,19 @@ export const GraphEdgeComponent = memo(function GraphEdgeComponent({
             style={{ left: labelX, top: labelY }}
           >
             <motion.div
-              initial={{ opacity: 0, scale: 0.8 }}
+              initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
+              transition={{ duration: 0.18, ease: "easeOut" }}
               className={cn(
-                "px-2 py-1 rounded-md text-[10px] font-medium border backdrop-blur-sm",
+                "inline-flex h-6 items-center gap-1 rounded-full border px-2.5",
+                "font-mono text-[11px] font-medium leading-none transition-colors duration-200",
                 isActive || condition.isActive
-                  ? "bg-violet-100 dark:bg-violet-900/50 border-violet-300 dark:border-violet-700 text-violet-700 dark:text-violet-300"
-                  : "bg-slate-100 dark:bg-slate-800/50 border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-400"
+                  ? "border-blurple-600/30 bg-blurple-50 text-blurple-700 dark:border-blurple-400/30 dark:bg-blurple-950 dark:text-blurple-200"
+                  : "border-surface-200 bg-card text-ink-secondary dark:border-surface-800 dark:text-ink-inverse-secondary"
               )}
             >
-              <span className="flex items-center gap-1">
-                <ConditionIcon className="w-3 h-3" />
-                {condition.label}
-              </span>
+              <Split className="h-3 w-3 shrink-0" />
+              {condition.label}
             </motion.div>
           </div>
         </EdgeLabelRenderer>
@@ -245,33 +249,27 @@ export const SwarmEdgeComponent = memo(function SwarmEdgeComponent({
 
   return (
     <>
-      {/* Main edge - elegant dashed line for potential, solid for active */}
+      {/* Main edge: dashed ink hairline for a possible handoff, solid volt for the live one */}
       <BaseEdge
         id={id}
         path={edgePath}
         style={{
-          stroke: isActive
-            ? "rgb(194, 106, 65)"
-            : "rgba(148, 163, 184, 0.4)",
+          stroke: isActive ? VOLT : INK_POTENTIAL,
           strokeWidth: isActive ? 2 : 1,
-          strokeDasharray: isActive ? "none" : "6 4",
-          transition: "stroke 0.4s ease, stroke-width 0.4s ease",
+          strokeDasharray: isActive ? "none" : "4 4",
+          transition: "stroke 200ms ease-out, stroke-width 200ms ease-out",
         }}
         markerEnd={isActive ? "url(#arrow-handoff)" : undefined}
       />
 
-      {/* Animated handoff particle */}
+      {/* Animated handoff particle (hidden under reduced motion) */}
       {isAnimated && (
         <>
-          <motion.circle
-            r="5"
-            fill="rgb(194, 106, 65)"
-            filter="drop-shadow(0 0 8px rgba(194, 106, 65, 0.6))"
-          >
+          <motion.circle r="3.5" className="motion-reduce:hidden" style={{ fill: VOLT }}>
             <animateMotion dur="1s" path={edgePath} repeatCount="indefinite" />
           </motion.circle>
           {/* Trail */}
-          <motion.circle r="3" fill="rgba(194, 106, 65, 0.4)">
+          <motion.circle r="2" className="motion-reduce:hidden" style={{ fill: VOLT_TRAIL }}>
             <animateMotion dur="1s" path={edgePath} repeatCount="indefinite" begin="0.15s" />
           </motion.circle>
         </>
@@ -285,17 +283,17 @@ export const SwarmEdgeComponent = memo(function SwarmEdgeComponent({
             style={{ left: labelX, top: labelY - 24 }}
           >
             <motion.div
-              initial={{ opacity: 0, y: 8, scale: 0.9 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: -8 }}
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -6 }}
+              transition={{ duration: 0.18, ease: "easeOut" }}
               className={cn(
-                "max-w-[180px] px-2.5 py-1.5 rounded-lg text-[11px]",
-                "bg-violet-600 text-white shadow-xl",
-                "border border-violet-400/30"
+                "max-w-[200px] rounded-lg px-2.5 py-1.5 text-[11px] font-medium shadow-float",
+                "bg-blurple-600 text-white dark:bg-blurple-400 dark:text-ink"
               )}
             >
               <span className="flex items-start gap-1.5">
-                <HandoffIcon className="w-3 h-3 mt-0.5 flex-shrink-0 opacity-70" />
+                <ArrowRight className="mt-0.5 h-3 w-3 shrink-0" />
                 <span className="line-clamp-2 leading-snug">{handoffMessage}</span>
               </span>
             </motion.div>
@@ -323,7 +321,7 @@ export function EdgeMarkerDefinitions() {
           markerHeight="6"
           orient="auto-start-reverse"
         >
-          <path d="M 0 0 L 10 5 L 0 10 z" fill="rgb(14, 165, 233)" />
+          <path d="M 0 0 L 10 5 L 0 10 z" style={{ fill: VOLT }} />
         </marker>
 
         <marker
@@ -335,7 +333,7 @@ export function EdgeMarkerDefinitions() {
           markerHeight="6"
           orient="auto-start-reverse"
         >
-          <path d="M 0 0 L 10 5 L 0 10 z" fill="rgb(194, 106, 65)" />
+          <path d="M 0 0 L 10 5 L 0 10 z" style={{ fill: VOLT }} />
         </marker>
 
         <marker
@@ -347,7 +345,7 @@ export function EdgeMarkerDefinitions() {
           markerHeight="7"
           orient="auto-start-reverse"
         >
-          <path d="M 0 0 L 10 5 L 0 10 z" fill="rgb(194, 106, 65)" />
+          <path d="M 0 0 L 10 5 L 0 10 z" style={{ fill: VOLT }} />
         </marker>
       </defs>
     </svg>
@@ -382,31 +380,10 @@ export const PendingEdge = memo(function PendingEdge({
       id={id}
       path={edgePath}
       style={{
-        stroke: "rgb(148, 163, 184)",
-        strokeWidth: 2,
+        stroke: INK_PENDING,
+        strokeWidth: 1.5,
         strokeDasharray: "6 3",
       }}
     />
   );
 });
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Icons
-// ─────────────────────────────────────────────────────────────────────────────
-
-function ConditionIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M4 12h6l4-8 4 16 4-8h2" />
-    </svg>
-  );
-}
-
-function HandoffIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M5 12h14" />
-      <path d="m12 5 7 7-7 7" />
-    </svg>
-  );
-}

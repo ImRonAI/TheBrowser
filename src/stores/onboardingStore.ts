@@ -62,7 +62,7 @@ export interface InterviewQuestion {
  * `interestsStore` keyword-matches `topics` / `brings you` / `goal`, so keep those words.
  */
 const INTERVIEW: InterviewQuestion[] = [
-  { id: 'intent', question: "What brings you to Ron Browser today?",
+  { id: 'intent', question: "What brings you to Ren Browser today?",
     placeholder: 'e.g. Staying on top of AI news without the noise' },
   { id: 'topics', question: "What topics are you most interested in?",
     placeholder: 'e.g. AI, design, climate, cooking' },

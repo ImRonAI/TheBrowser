@@ -8,6 +8,10 @@ wsproto==1.3.2
 # HTTP Client
 httpx==0.28.1
 
+# Issue/project agents read stored HTML as Markdown and write Markdown back as HTML (core/media_understanding.py)
+markdownify==1.2.2
+markdown-it-py==4.2.0
+
 # Supabase (stored harness specialist agents)
 supabase==2.31.0
 

@@ -33,8 +33,10 @@ snapshot for canonical SDK history (including GoalLoop/structured output).
 Durability uses immutable *native* snapshots plus an application journal pointing
 to the committed snapshot. Live deltas/replay are MEMORY ONLY between lifecycle,
 steering, pause and final journal commits. Tokens never wait for storage I/O.
-An unclean restart does not replay
-tools: it restores the committed native snapshot and reports recovery_required.
+The session manager saves the native snapshot_latest after every message
+(save_latest_on="message"), so a run a restart interrupted continues, in the same run, on a fresh
+agent that restores it; no tool is replayed (an unanswered toolUse gets the SDK's
+"Tool was interrupted." result). No failure leaves a session unusable.
 InMemoryStorage is process-local; choose durable panel_storage for restart support.
 No cross-process writer locking is provided; run one manager-owning API worker.
 
@@ -43,10 +45,15 @@ preserve_context=False and checkpoint/interrupt workflows is unsupported; its
 history rollback happens before pause hooks. Runtime hooks use priority 200:
 application resume/retry/result-transform hooks must use a lower priority.
 Idle steering reserves a native follow-up invocation; paused steering stays queued.
-The manager's stall watchdog (stall_seconds/tool_stall_seconds/max_recoveries; 0 disables)
-cancels a wedged run and, within the budget, reserves a fresh "[recovery]" run on the same
-session: the factory rebuilds the agent on the same ThreadSessionManager, so construction
-restores the committed thread and the recovery prompt restates the stalled request.
+A stalled attempt (the manager's watchdog: stall_seconds/tool_stall_seconds; 0 disables), a model
+timeout the native retry strategy gave up on, or a context-window overflow the conversation
+manager could not reduce is recovered inside the same run, max_recoveries times: the old
+instance is saved as the session's latest snapshot, the factory builds a fresh agent on the same
+ThreadSessionManager (which restores it), and the run continues with no error event. The
+ContextInjector adds a recovery note to the model input; after an overflow the request context
+is shortened to RECOVERY_CONTEXT_SHARE of the model's window. The budget counts consecutive
+recoveries: a completed tool call resets it. A run that spends it fails with its error; the
+session stays open and the next message continues on a fresh agent from the saved conversation.
 Finishing-phase arrivals are admitted after the native stream exits. Root model
 deltas/retries carry cycle (native cycle ID) and model_attempt (1-based per cycle).
 Retry identifies the discarded attempt; attempt is the next attempt number.
@@ -67,6 +74,9 @@ from collections.abc import AsyncIterator, Awaitable, Callable, Mapping
 from contextlib import aclosing, suppress
 from typing import Any, Protocol
 
+import grpc
+import grpc.aio
+import httpx
 from strands import Agent
 from strands.agent.agent_result import AgentResult
 from strands.hooks.events import (
@@ -90,24 +100,42 @@ _DURABLE_EVENTS = {"run_started", "steering_accepted", "steering_applied", "chec
                    "tool_repair_proposed", "tool_repair_investigating", "tool_repair_approval", "tool_repair_ready"}
 _LOGGER = logging.getLogger(__name__)
 
-#: Durable user turn the stall watchdog starts after respawning a fresh agent instance on the
-#: same session. The stalled turn is NOT in the committed snapshot (Chat saves on invocation
-#: triggers), so the prompt carries the original request into the restored context.
-RECOVERY_PROMPT = (
-    "[recovery] The previous agent instance stalled ({reason}) and was automatically respawned "
-    "(recovery {attempt} of {limit}). Your conversation, agent state, and todo list were restored "
-    "from the session's committed snapshot; the stalled turn itself was not committed, so your "
-    "context resumes from the last completed turn.{input_clause} A tool result may have been lost "
-    "with the stall — never replay a tool whose result was lost. Check your todo list, review the "
-    "thread, and continue the user's request from where it stopped without redoing completed work."
+#: Ephemeral note the ContextInjector adds to every model call after an in-run respawn. It is
+#: never stored, so the thread shows nothing.
+RECOVERY_NOTE = (
+    "[recovery] {what} A fresh agent instance took over this same conversation (recovery {attempt} "
+    "of {limit}); your messages, agent state and todo list were restored. Continue the user's request "
+    "from where it stopped without redoing completed work.{tools}"
 )
+#: Added only when a tool call was cut off by the respawn.
+RECOVERY_TOOL_NOTE = (
+    " The tool call whose result reads \"Tool was interrupted.\" never returned: do not repeat it if it "
+    "may already have had side effects until you have checked whether it did."
+)
+RECOVERY_REASONS = {
+    "stall": "{detail}; the previous attempt was stopped.",
+    "timeout": "The previous model call timed out ({detail}).",
+    "restart": "{detail}",
+    "overflow": "The previous model call exceeded the model's context window; the reference context "
+                "attached to this request was shortened to fit.",
+}
+#: Share of the model's context window the per-request reference context may use after an overflow.
+RECOVERY_CONTEXT_SHARE = 0.25
+_DISPOSE_SECONDS = 30.0
 
 
-def _recovery_prompt(reason: str, attempt: int, limit: int, stalled_input: Any) -> str:
-    request = ""
-    if isinstance(stalled_input, str) and stalled_input.strip():
-        request = f' The user\'s request was: "{stalled_input.strip()[:2000]}".'
-    return RECOVERY_PROMPT.format(reason=reason, attempt=attempt, limit=limit, input_clause=request)
+def is_model_timeout(error: BaseException | None) -> bool:
+    """True when a provider call failed on a timeout: TimeoutError, an httpx timeout, or gRPC
+    DEADLINE_EXCEEDED (xai_sdk), anywhere on the exception's cause/context chain."""
+    seen: set[int] = set()
+    while error is not None and id(error) not in seen:
+        seen.add(id(error))
+        if isinstance(error, (TimeoutError, httpx.TimeoutException)) or (
+                isinstance(error, (grpc.Call, grpc.aio.AioRpcError))
+                and error.code() == grpc.StatusCode.DEADLINE_EXCEEDED):
+            return True
+        error = error.__cause__ or error.__context__
+    return False
 
 
 class RuntimeConflict(RuntimeError):
@@ -163,11 +191,11 @@ class SessionRun:
 
     def __init__(
         self, user_id: str, session_id: str, storage: Storage, *, history_limit: int,
-        history_bytes: int, factory: AgentFactory | None,
+        history_bytes: int, factory: AgentFactory | None, max_recoveries: int = 2,
     ) -> None:
         self.user_id, self.session_id = user_id, session_id
         self.storage = storage
-        self.session_manager = ThreadSessionManager(session_id, storage=storage, save_latest_on="trigger")
+        self.session_manager = ThreadSessionManager(session_id, storage=storage, save_latest_on="message")
         self.agent_id = thread_agent_id(user_id)
         self.key = f"panel-runtime/{hashlib.sha256(session_id.encode()).hexdigest()}.json"
         self.factory = factory
@@ -219,7 +247,16 @@ class SessionRun:
         self._last_event_at = time.monotonic()
         self._tools_in_flight: set[str] = set()
         self._stall_reason: str | None = None
-        self._recoveries = 0
+        # In-run recovery: the current stream attempt (the watchdog cancels only this), the
+        # per-run respawn count and the note the ContextInjector adds after a respawn.
+        self._attempt_task: asyncio.Task[AgentResult | None] | None = None
+        self._max_recoveries = max_recoveries
+        self.recoveries = 0
+        self._recovery_note: str | None = None
+        # What continues the run: its input, or [] once that input is in the saved conversation.
+        self._run_input: Any = None
+        # A previous process stopped during this session's run; the next access continues it.
+        self._interrupted = False
 
     @property
     def active(self) -> bool:
@@ -246,7 +283,7 @@ class SessionRun:
         return {name: copy.deepcopy(getattr(self, name)) for name in (
             "selection", "options", "run_id", "status", "sequence", "replay_after",
             "messages", "input", "checkpoint", "interrupts", "result", "snapshot_id",
-            "steering", "recovery_required", "error",
+            "steering", "recovery_required", "error", "recoveries",
         )} | {"version": 1, "events": list(self._history)}
 
     async def _persist(self) -> None:
@@ -266,14 +303,25 @@ class SessionRun:
         self._history = deque(metadata["events"])
         self._event_sizes = deque(len(json.dumps(event).encode()) for event in self._history)
         self._retained_bytes = sum(self._event_sizes)
-        if self.status in _ACTIVE:
-            # The native latest may be ahead of our commit. Only the paired immutable
-            # snapshot is authoritative. Never automatically repeat model/tool work.
-            self.status = "failed"
-            self.recovery_required = True
-            await self._emit("error", error={"code": "recovery_required", "message":
-                "Server restarted during invocation; restored last committed snapshot. Execution was not repeated."})
+        if self.status in _ACTIVE or self.recovery_required:
+            # The native snapshot_latest (saved after every message) is ahead of the journal's
+            # immutable snapshot: the next agent restores it on construction.
+            self._interrupted = self.status in _ACTIVE
+            self.recovery_required = False
+            self.snapshot_id = None
         return True
+
+    async def _resume_interrupted(self) -> None:
+        """Continue, in the same run, the invocation a previous process stopped in."""
+        self._interrupted = False
+        if self.recoveries >= self._max_recoveries:
+            self.status = "failed"
+            await self._emit("error", error="The server restarted repeatedly during this run. The conversation is "
+                                            "saved up to its last completed step; send a message to continue.")
+            await self._emit("run_finished", stop_reason="error", status=self.status)
+            return
+        self.recoveries += 1
+        self._reserve(self.input, restart=True)
 
     async def _ensure_agent(self, *, restore_checkpoint: bool = True) -> None:
         if self.agent is not None:
@@ -304,29 +352,72 @@ class SessionRun:
         if restore_checkpoint and self.snapshot_id is not None:
             if not await self.session_manager.restore_snapshot(agent, snapshot_id=self.snapshot_id):
                 raise RuntimeError("Committed native snapshot is missing")
-        elif restore_checkpoint and self.recovery_required:
-            raise RuntimeError("Interrupted startup has no committed snapshot; use a new session")
         # The journal also persists steering accepted since the last native snapshot.
         agent.state.set(STEERING_STATE_KEY, self.steering)
         self.messages = _wire(agent.messages)
 
-    async def _reopen_agent(self) -> None:
-        """Construct a new agent on this session after a context-window overflow.
+    async def _respawn(self, kind: str, error: Any) -> None:
+        """Continue this run on a fresh agent from the same factory and the same session.
 
-        The factory is the same one that built the agent that overflowed (same
-        ``agent_id``, same ``ThreadSessionManager``). Session init loads
-        ``snapshot_latest``, which already contains the turn the model rejected.
-        The pre-run immutable snapshot stays put.
+        The old instance is saved as ``snapshot_latest``; the new one restores it on
+        construction (same ``agent_id`` and ``ThreadSessionManager``), so it carries the same
+        conversation manager, offloader and ContextInjector. After a restart there is no old
+        instance and the new one restores the ``snapshot_latest`` the session manager saved after
+        the last message. ``_run_input`` becomes ``[]`` once the run's input is in the restored
+        conversation (the SDK then closes a toolUse that was never answered with "Tool was
+        interrupted."). The pre-run immutable snapshot and the pre-run ``messages`` stay put.
         """
-        old = self.agent
+        if kind != "restart":
+            self.recoveries += 1
+        _LOGGER.warning("session_id=<%s>, kind=<%s>, recovery=<%d/%d>, error=<%s> | respawning the agent on "
+                        "the same session", self.session_id, kind, self.recoveries, self._max_recoveries, error)
+        # Silent: the renderer drops the failed attempt's partial text without showing a retry.
+        await self._model_retry(kind, silent=True)
+        tools_cut = RECOVERY_TOOL_NOTE if self._tools_in_flight else ""
+        for tool_id in sorted(self._tools_in_flight):
+            await self._tool_result({"toolUseId": tool_id, "status": "error",
+                                     "content": [{"text": "Tool was interrupted."}]}, ())
+        self._tools_in_flight.clear()
+        old, self.agent, pre_run = self.agent, None, self.messages
         if old is not None:
-            old.state.set(STEERING_STATE_KEY, self.steering)
-            await self.session_manager.save_snapshot(old, is_latest=True)
-            if old.memory_manager is not None:
-                await old.memory_manager.flush()
-            await asyncio.to_thread(old.cleanup)
-        self.agent = None
+            try:
+                old.state.set(STEERING_STATE_KEY, self.steering)
+                await asyncio.wait_for(self.session_manager.save_snapshot(old, is_latest=True), _DISPOSE_SECONDS)
+            except Exception:
+                _LOGGER.exception("session_id=<%s> | saving the old instance failed; continuing from the last "
+                                  "saved message", self.session_id)
+            await self._dispose(old)
         await self._ensure_agent(restore_checkpoint=False)
+        assert self.agent is not None
+        if self.messages != pre_run:
+            self._run_input = []
+        self.messages = pre_run
+        last = self.agent.messages[-1]["content"] if self.agent.messages else []
+        if any("toolUse" in block for block in last):
+            tools_cut = RECOVERY_TOOL_NOTE
+        if kind == "overflow" and self.request_context:
+            self.request_context = await self._fit_request_context(self.agent.model, self.request_context)
+        self._recovery_note = RECOVERY_NOTE.format(
+            what=RECOVERY_REASONS[kind].format(detail=error), attempt=self.recoveries, limit=self._max_recoveries,
+            tools=tools_cut)
+        self._last_event_at = time.monotonic()
+
+    @staticmethod
+    async def _dispose(agent: Agent) -> None:
+        """Bounded memory flush and cleanup of an instance this session no longer uses."""
+        if agent.memory_manager is not None:
+            with suppress(Exception):
+                await asyncio.wait_for(agent.memory_manager.flush(), _DISPOSE_SECONDS)
+        with suppress(Exception):
+            await asyncio.wait_for(asyncio.to_thread(agent.cleanup), _DISPOSE_SECONDS)
+
+    @staticmethod
+    async def _fit_request_context(model: Any, text: str) -> str:
+        """Shorten the per-request context to RECOVERY_CONTEXT_SHARE of the model's real window."""
+        used = model.estimate_utilization(await model.count_tokens([{"role": "user", "content": [{"text": text}]}]))
+        if used <= RECOVERY_CONTEXT_SHARE:
+            return text
+        return text[:int(len(text) * RECOVERY_CONTEXT_SHARE / used)] + "\n[reference context shortened to fit]"
 
     async def _emit(self, event_type: str, *, node_path: tuple[str, ...] = (), **payload: Any) -> dict[str, Any]:
         async with self._lock:
@@ -427,6 +518,8 @@ class SessionRun:
             parts = [record["message"] for record in pending]
             if self.request_context:
                 parts.insert(0, self.request_context)
+            if self._recovery_note:
+                parts.append(self._recovery_note)
             return "\n\n".join(parts) or None
 
     def _before_model(self, event: BeforeModelCallEvent) -> None:
@@ -448,7 +541,9 @@ class SessionRun:
     async def _after_model(self, event: AfterModelCallEvent) -> None:
         if event.retry:
             self._injected.clear()
-            await self._model_retry(_wire(event.exception) or "model hook retry")
+            # A hook that recovered an overflow (XAIStatePruner) is invisible like a respawn.
+            await self._model_retry(_wire(event.exception) or "model hook retry",
+                                    silent=isinstance(event.exception, ContextWindowOverflowException))
             return
         if event.stop_response is None or self._cancel.is_set():
             self._injected.clear()
@@ -483,6 +578,7 @@ class SessionRun:
 
     async def _after_tool(self, event: AfterToolCallEvent) -> None:
         self._tools_in_flight.discard(str(event.tool_use.get("toolUseId", "")))
+        self.recoveries = 0
         payload = {"tool_result": _wire(event.result), "tool_use": _wire(event.tool_use), "retry": event.retry}
         background = self._background_id(event.tool_use["toolUseId"])
         if threading.get_ident() != self._thread:
@@ -670,52 +766,92 @@ class SessionRun:
         if path and "result" in event:
             await self._emit("node_event", node_path=path, event={"result": _wire(event["result"])})
 
-    async def _execute(self, prompt: Any) -> None:
+    async def _stream(self, prompt: Any) -> AgentResult | None:
+        assert self.agent is not None
+        final = None
+        async with aclosing(self.agent.stream_async(prompt, cancel_signal=self._cancel)) as stream:
+            async for event in stream:
+                if isinstance(event.get("result"), AgentResult):
+                    final = event["result"]
+                await self._translate(event)
+        return final
+
+    def _can_recover(self) -> bool:
+        return self.recoveries < self._max_recoveries and not self._cancel.is_set() and self.factory is not None
+
+    def _answered(self) -> bool:
+        """The restored conversation already ends with the assistant's answer to this run."""
+        assert self.agent is not None
+        last = self.agent.messages[-1] if self.agent.messages else None
+        return (self._run_input == [] and last is not None and last["role"] == "assistant"
+                and not any("toolUse" in block for block in last["content"]))
+
+    async def _run_attempt(self, recovery: tuple[str, Any] | None) -> AgentResult | None:
+        """One cancellable attempt: the respawn a recovery asks for, then the native stream."""
+        if recovery is not None:
+            await self._respawn(*recovery)
+            if self._answered():
+                return None
+        return await self._stream(self._run_input)
+
+    async def _execute(self, restart: bool = False) -> None:
         try:
             async with self._lock:
                 await self._persist()
-            await self._ensure_agent()
-            assert self.agent is not None
-            if self.snapshot_id is None:
-                self.snapshot_id = await self.session_manager.save_snapshot(self.agent, is_latest=False)
-                await self.session_manager.save_snapshot(self.agent, is_latest=True)
-            async with self._lock:
-                self.messages = _wire(self.agent.messages)
-                self.status = "running"
-                await self._emit_locked("run_started", model_id=self.selection.get("model_id"), provider=self.selection.get("provider"))
+            recovery: tuple[str, Any] | None = None
+            if restart:
+                recovery = ("restart", "The server restarted while the previous attempt was running.")
+                async with self._lock:
+                    self.status = "running"
+            else:
+                await self._ensure_agent()
+                assert self.agent is not None
+                if self.snapshot_id is None:
+                    self.snapshot_id = await self.session_manager.save_snapshot(self.agent, is_latest=False)
+                    await self.session_manager.save_snapshot(self.agent, is_latest=True)
+                async with self._lock:
+                    self.messages = _wire(self.agent.messages)
+                    self.status = "running"
+                    await self._emit_locked("run_started", model_id=self.selection.get("model_id"), provider=self.selection.get("provider"))
             final = None
-            prompt_for_stream: Any = prompt
-            for attempt in range(2):
+            while not self._cancel.is_set():
+                # The watchdog cancels only this task; a respawn that hangs is recovered like a stream.
+                self._stall_reason = None
+                self._last_event_at = time.monotonic()
+                self._attempt_task = asyncio.create_task(self._run_attempt(recovery))
                 try:
-                    if self._cancel.is_set():
-                        break
-                    async with aclosing(self.agent.stream_async(prompt_for_stream, cancel_signal=self._cancel)) as stream:
-                        async for event in stream:
-                            if isinstance(event.get("result"), AgentResult):
-                                final = event["result"]
-                            await self._translate(event)
+                    final = await self._attempt_task
                     break
-                except ContextWindowOverflowException:
-                    # The conversation manager already had its chance inside the SDK
-                    # (reduce_context, then retry). A fresh agent on this same session
-                    # loads snapshot_latest — the turn that overflowed — and continues
-                    # it. The pre-run checkpoint is not restored; that would drop the turn.
-                    if attempt or self._cancel.is_set():
+                except asyncio.CancelledError:
+                    # Only the watchdog cancels the attempt alone; cancelling the run is not a stall.
+                    current = asyncio.current_task()
+                    if self._stall_reason is None or (current and current.cancelling()) or not self._can_recover():
                         raise
-                    await self._reopen_agent()
-                    prompt_for_stream = None
+                    recovery = ("stall", self._stall_reason)
+                except ContextWindowOverflowException as overflow:
+                    # The SDK already ran the conversation manager's reduce_context and retried.
+                    if not self._can_recover():
+                        raise
+                    recovery = ("overflow", overflow)
+                except Exception as failure:
+                    # Timeouts reach here after the native retry strategy's attempts.
+                    if not is_model_timeout(failure) or not self._can_recover():
+                        raise
+                    recovery = ("timeout", failure)
             async with self._lock:
                 self.status = "finishing"
             await self._announce_repair_proposal()
-            if final is None and not self._cancel.is_set():
+            assert self.agent is not None
+            answered = final is None and not self._cancel.is_set() and self._answered()
+            if final is None and not self._cancel.is_set() and not answered:
                 raise RuntimeError("Native stream ended without an AgentResult")
-            stop = final.stop_reason if final else "cancelled"
+            stop = final.stop_reason if final else "end_turn" if answered else "cancelled"
+            if self._closed and stop == "cancelled":
+                # Shutdown: the journal keeps the run active, so the next process continues it.
+                return
             status = {"checkpoint": "checkpointed", "interrupt": "interrupted", "cancelled": "cancelled"}.get(stop, "completed")
             if stop not in ("checkpoint", "interrupt", "cancelled", "end_turn", "stop_sequence"):
                 status = "failed"
-            if status == "completed":
-                # A healthy run clears the consecutive-stall recovery budget.
-                self._recoveries = 0
             await self._drain_callbacks()
             # Snapshot first, then one journal commit pairs it with pause metadata.
             async with self._lock:
@@ -734,7 +870,8 @@ class SessionRun:
                     await self._emit_locked("interrupt", interrupts=self.interrupts)
                 await self._emit_locked("run_finished", stop_reason=stop, status=status, result=self.result)
         except asyncio.CancelledError:
-            await self._fail(self._stall_reason or "Server shutdown forced invocation cancellation", cancelled=True)
+            if not self._closed:
+                await self._fail(self._stall_reason or "The run was stopped before it finished.", cancelled=True)
         except Exception as error:
             await self._fail(error)
         finally:
@@ -748,14 +885,19 @@ class SessionRun:
                 self._wake_steering(finishing=True)
             self._changed.set()
 
-    def _reserve(self, prompt: Any, *, request_context: str | None = None) -> None:
-        """Atomic loop-local admission shared by start and idle steering."""
-        self.run_id = uuid.uuid4().hex
+    def _reserve(self, prompt: Any, *, request_context: str | None = None, restart: bool = False) -> None:
+        """Atomic loop-local admission shared by start, idle steering and a restart's continuation
+        (which keeps the interrupted run's id, input, replay cursor and recovery count)."""
+        if not restart:
+            self.run_id = uuid.uuid4().hex
+            self.input = _wire(prompt)
+            self.replay_after = self.sequence
+            self.recoveries = 0
         self.status = "starting"
         self.error = None
-        self.input = _wire(prompt)
         self.request_context = request_context or None
-        self.replay_after = self.sequence
+        self._run_input = prompt
+        self._last_event_at = time.monotonic()
         self._cancel = threading.Event()
         self._results.clear()
         self._inputs.clear()
@@ -766,7 +908,9 @@ class SessionRun:
         self._retried = None
         self._tools_in_flight.clear()
         self._stall_reason = None
-        self.task = asyncio.create_task(self._execute(prompt), name=f"panel-{self.session_id}-{self.run_id}")
+        self._attempt_task = None
+        self._recovery_note = None
+        self.task = asyncio.create_task(self._execute(restart), name=f"panel-{self.session_id}-{self.run_id}")
         self.task.add_done_callback(lambda done: None if done.cancelled() else done.exception())
 
     def _wake_steering(self, *, finishing: bool = False) -> None:
@@ -778,23 +922,27 @@ class SessionRun:
     async def _fail(self, error: Any, *, cancelled: bool = False) -> None:
         async with self._lock:
             self.status = "cancelled" if cancelled else "failed"
-            # Ordinary model failures have exited the native loop. Preserve that
-            # history (including completed tools) so a new message or reload
-            # cannot silently roll back and repeat side effects. Forced shutdown
-            # is different: execution may have been interrupted mid-tool.
-            if cancelled:
-                self.recovery_required = True
-            elif self.agent is not None:
-                self.messages = _wire(self.agent.messages)
-                self.agent.state.set(STEERING_STATE_KEY, self.steering)
+            # Preserve the history (including completed tools) so a new message or reload cannot
+            # roll back and repeat side effects. The session always stays open: the next message
+            # continues from this snapshot, or from the snapshot_latest the session manager saved
+            # after the last message when this save fails.
+            agent, drop = self.agent, cancelled
+            if agent is not None:
+                self.messages = _wire(agent.messages)
+                agent.state.set(STEERING_STATE_KEY, self.steering)
                 try:
-                    snapshot_id = await self.session_manager.save_snapshot(self.agent, is_latest=False)
-                    await self.session_manager.save_snapshot(self.agent, is_latest=True)
+                    snapshot_id = await asyncio.wait_for(self.session_manager.save_snapshot(agent, is_latest=False),
+                                                         _DISPOSE_SECONDS)
+                    await asyncio.wait_for(self.session_manager.save_snapshot(agent, is_latest=True), _DISPOSE_SECONDS)
                     self.snapshot_id = snapshot_id
-                except Exception as snapshot_error:
-                    self.recovery_required = True
-                    error = {"cause": _wire(error), "snapshot_error": _wire(snapshot_error)}
-            await self._emit_locked("error", error=_wire(error), recovery_required=self.recovery_required)
+                except Exception:
+                    _LOGGER.exception("session_id=<%s> | saving the failed run's history failed", self.session_id)
+                    self.snapshot_id, drop = None, True
+            if drop and agent is not None:
+                # A stopped instance may be wedged mid-call: the next message builds a fresh one.
+                self.agent = None
+                await self._dispose(agent)
+            await self._emit_locked("error", error=_wire(error), recovery_required=False)
             await self._emit_locked("run_finished", stop_reason="cancelled" if cancelled else "error", status=self.status)
 
     async def _cancel_background(self) -> None:
@@ -893,11 +1041,15 @@ class PanelRuntimeManager:
         session = self._sessions.get(key)
         if session is None:
             session = SessionRun(*key, self.storage_factory(key[0]), history_limit=self.history_limit,
-                                 history_bytes=self.history_bytes, factory=factory or self.factory)
+                                 history_bytes=self.history_bytes, factory=factory or self.factory,
+                                 max_recoveries=self.max_recoveries)
             exists = await session._load()
             if not exists and not create:
                 return None
             self._sessions[key] = session
+            if session._interrupted and session.factory is not None:
+                self._ensure_watchdog()
+                await session._resume_interrupted()
         elif factory is not None and session.factory is None:
             session.factory = factory
         return session
@@ -906,7 +1058,7 @@ class PanelRuntimeManager:
         key = self._key(user_id, session_id)
         async with self._locks.setdefault(key, asyncio.Lock()):
             session = await self._get_locked(key, factory, create=False)
-            if session is not None and not session.active and not (session.recovery_required and session.snapshot_id is None):
+            if session is not None and not session.active:
                 await session._ensure_agent()
             return session
 
@@ -1031,50 +1183,31 @@ class PanelRuntimeManager:
                     _LOGGER.exception("Stall recovery failed for session %s", session.session_id)
 
     async def _recover_if_stalled(self, key: tuple[str, str], session: SessionRun) -> None:
-        """Respawn a fresh agent instance on the same session when a run stalls.
+        """Stop a silent attempt so its run respawns the agent; hard-cancel a run that stays wedged.
 
-        The wedged run is hard-cancelled (a wedged agent does not heed the cooperative
-        cancel event), its ``_fail`` emits the stall as the run's error, and — within the
-        recovery budget — a new agent is built on the same ``ThreadSessionManager`` and a
-        durable ``[recovery]`` user turn continues the stalled request. The stalled turn was
-        never committed to the snapshot, so the prompt restates the original request.
+        The first window cancels only the stream attempt (a wedged agent does not heed the
+        cooperative cancel event); ``SessionRun._execute`` then continues the same run on a fresh
+        agent. A window that passes outside an attempt (the run's startup I/O) cancels the run:
+        it fails with the stall as its error and the session stays open for the next message.
         """
         async with self._locks.setdefault(key, asyncio.Lock()):
             idle = self._stalled_for(session)
-            if idle is None or not session.active:
+            if idle is None or not session.active or session.task is None:
                 return
-            reason = f"no activity for {idle:.0f}s"
-            session._stall_reason = f"Run stalled ({reason})"
+            attempt = session._attempt_task
+            if session._stall_reason is None and attempt is not None and not attempt.done():
+                session._stall_reason = f"Run stalled (no activity for {idle:.0f}s)"
+                session._last_event_at = time.monotonic()
+                attempt.cancel()
+                return
+            session._stall_reason = f"Run stalled (no activity for {idle:.0f}s)"
             task = session.task
-            if task is None:
-                return
             task.cancel()
-            done, _ = await asyncio.wait({task}, timeout=30.0)
+            done, _ = await asyncio.wait({task}, timeout=_DISPOSE_SECONDS)
             if not done:
                 # A run that ignores asyncio cancellation cannot be recovered from the loop;
                 # leave it to the existing shutdown/409 semantics instead of double-booking.
-                _LOGGER.error("Stalled run %s ignored cancellation; leaving it failed", session.run_id)
-                session._stall_reason = None
-                return
-            if session._recoveries >= self.max_recoveries:
-                # Budget exhausted: _fail already set recovery_required; do not respawn again.
-                _LOGGER.warning("Recovery budget exhausted for session %s; run left failed", session.session_id)
-                return
-            session._recoveries += 1
-            _LOGGER.warning("Session %s stalled (%s); respawning agent (recovery %d/%d)",
-                            session.session_id, reason, session._recoveries, self.max_recoveries)
-            stalled_input = session.input
-            session.recovery_required = False
-            old, session.agent = session.agent, None
-            if old is not None:
-                # Best-effort, bounded: never let a wedged instance block its own replacement.
-                if old.memory_manager is not None:
-                    with suppress(Exception):
-                        await asyncio.wait_for(old.memory_manager.flush(), 10.0)
-                with suppress(Exception):
-                    await asyncio.wait_for(asyncio.to_thread(old.cleanup), 10.0)
-            session._reserve(_recovery_prompt(
-                reason, session._recoveries, self.max_recoveries, stalled_input))
+                _LOGGER.error("run_id=<%s> | stalled run ignored cancellation", session.run_id)
 
     async def snapshot(self, user_id: str, session_id: str, *, factory: AgentFactory | None = None) -> dict[str, Any]:
         session = await self.get(user_id, session_id, factory=factory)

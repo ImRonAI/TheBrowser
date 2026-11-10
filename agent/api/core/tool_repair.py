@@ -867,7 +867,7 @@ def _repair_tools(run: RepairRun) -> list[AgentTool]:
         Args:
             status: ``verified`` (all demonstrations passed in a sandbox and pytest is green),
                 ``failed``, ``not_reproducible`` (the recorded exception did not reproduce),
-                ``needs_maintainer`` (only for a system-prompt defect or a Ron wrapper defect no
+                ``needs_maintainer`` (only for a system-prompt defect or a Ren wrapper defect no
                 adapter can sit in front of) or ``unverified`` (no isolated sandbox was available).
             fix_type: SYSTEM_PROMPT_FIX | TOOL_DESCRIPTION_FIX | OTHERS | WRAPPER_FIX.
             summary: One paragraph the user will read.
@@ -1078,23 +1078,23 @@ def build_fixer(run: RepairRun, *, models: Sequence[str], effort: str | None = D
         builtin_tools=["shell", "read", "write", "edit"], builtin_plugins=["todos", "environment"],
         sandbox=environment, memory=False, session=False, skills=False, caching=None,
         background_tasks=False, interventions=None, callback_handler=None, load_tools_from_directory=False,
-        name="Ron Tool Fixer",
-        description="Reproduces a failed Ron tool, repairs it in its workspace and submits a revision for the user's approval.",
+        name="Ren Tool Fixer",
+        description="Reproduces a failed Ren tool, repairs it in its workspace and submits a revision for the user's approval.",
     )
 
 
-FIXER_PROMPT = """You are Ron's tool fixer. Your input is a native Agent SOP ("Repairing a Broken Tool") with
+FIXER_PROMPT = """You are Ren's tool fixer. Your input is a native Agent SOP ("Repairing a Broken Tool") with
 its parameters in <user-input>; run it in order and call submit_repair exactly once. The user decides
-in Ron's panel whether a verified revision is applied; you never apply anything.
+in Ren's panel whether a verified revision is applied; you never apply anything.
 
 Server-side (Perplexity) tools run inside your model turn: web_search, fetch_url, image_search for
 documentation and prior art; the sandbox for scratch computation; the GitHub connector for upstream
 source/issues/PRs of the tool's project; Context7 (MCP) for current library documentation.
-Your shell, read, write and edit tools run inside one isolated container (a replica of Ron's
+Your shell, read, write and edit tools run inside one isolated container (a replica of Ren's
 runtime when the replica image is configured). Read-only mounts: /sources/tools (vendored tool
-library), /sources/core (Ron's wrapper code), /sources/strands_tools (installed host tools),
+library), /sources/core (Ren's wrapper code), /sources/strands_tools (installed host tools),
 /sources/mcp (browser MCP server package). /workspace is the only writable area. Install what you
-need with pip inside the sandbox. The container has no access to the user's live browser, Ron's
+need with pip inside the sandbox. The container has no access to the user's live browser, Ren's
 API or the host: a demonstration against the live server is a dry run. Never claim a run you did
 not perform; a model's belief that code works is not a passed demonstration."""
 
@@ -1107,7 +1107,7 @@ def sop_parameters(run: RepairRun, request: dict[str, Any], failing_use: dict[st
     source_path = run.manifest.get("source_path")
     paths = fixer_paths(run)
     ws, lib = paths["workspace"], paths["tools"]
-    core, mcp, installed = paths.get("core", "(Ron core)"), paths.get("mcp", "(MCP package)"), paths.get("strands_tools", "(strands_tools)")
+    core, mcp, installed = paths.get("core", "(Ren core)"), paths.get("mcp", "(MCP package)"), paths.get("strands_tools", "(strands_tools)")
     if kind == "library":
         location = f"Source: {lib}/{source_path} (sha256 {run.manifest['base_sha256']}). A copy is at {ws}/files/{source_path}; edit the copy only."
     elif kind == "mcp":
@@ -1115,7 +1115,7 @@ def sop_parameters(run: RepairRun, request: dict[str, Any], failing_use: dict[st
                     f"(a) repair_kind=server — the server package is copied at {ws}/server/{MCP_SERVER_PACKAGE}/ "
                     f"(original at {mcp}); edit the copy. (b) repair_kind=adapter — write {ws}/adapter/<tool>.py with "
                     "transform_input(input) and/or transform_result(result, input) to fix the call boundary. "
-                    f"Audit Ron's wrapper in {core} (panel_browser.py, panel_tools.py). You have no browser: "
+                    f"Audit Ren's wrapper in {core} (panel_browser.py, panel_tools.py). You have no browser: "
                     "unit-test the adapter/server logic directly with pytest; live-browser demonstrations are dry runs.")
     elif kind == "core":
         location = (f"Target kind: core host tool (installed file {source_path} under {installed}). Installed code is not "

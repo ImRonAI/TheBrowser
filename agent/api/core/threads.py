@@ -67,13 +67,25 @@ def message_rows(messages: list[dict[str, Any]], agent: AgentKind) -> list[dict[
 
 
 def thread_title(messages: list[dict[str, Any]]) -> str:
-    """First user text line, trimmed to the column limit."""
+    """First user text line, trimmed to the column limit.
+
+    A pasted prompt (the panel's fixed instruction, then the paste as an attachment) is titled by the
+    attachment's card name instead of the instruction.
+    """
+    from agent.api.core.prompt_attachments import PASTED_PROMPT_INSTRUCTION, parse_attachment_title
+
     for message in messages:
         if message.get("role") != "user":
             continue
-        for block in message.get("content") or []:
-            text = block.get("text") if isinstance(block, dict) else None
-            if isinstance(text, str) and text.strip() and not text.startswith("[handoff]"):
+        texts = [block["text"] for block in message.get("content") or []
+                 if isinstance(block, dict) and isinstance(block.get("text"), str)]
+        for text in texts:
+            if text.strip() and not text.startswith("[handoff]"):
+                if text.strip().startswith(PASTED_PROMPT_INSTRUCTION):
+                    pasted = next((parsed[1] for parsed in map(parse_attachment_title, texts)
+                                   if parsed and parsed[0] == "pasted"), None)
+                    if pasted:
+                        return pasted[:200]
                 return text.strip().splitlines()[0][:200]
     return ""
 

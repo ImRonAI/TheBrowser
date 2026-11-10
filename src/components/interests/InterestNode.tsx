@@ -168,7 +168,9 @@ export function InterestNodeComponent({
       style={{
         left: `${leftPercent}%`,
         top: `${topPercent}%`,
-        transform: 'translate(-50%, -50%)',
+        // Centre on the point with motion values: a `transform` string is replaced by the animated scale.
+        x: '-50%',
+        y: '-50%',
         zIndex: isActive ? 30 : isConnected ? 20 : 10
       }}
       initial={{ scale: 0, opacity: 0 }}

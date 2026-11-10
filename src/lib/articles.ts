@@ -1,5 +1,7 @@
-export type AgentDestination = 'panel' | 'search' | 'build' | 'voice'
-export const AGENT_LABELS: Record<AgentDestination, string> = { panel: 'Agent Panel', search: 'Search Agent', build: 'Build Agent', voice: 'Voice agent' }
+export type AgentDestination = 'panel' | 'search' | 'build' | 'voice' | 'issue'
+export const AGENT_LABELS: Record<AgentDestination, string> = { panel: 'Agent Panel', search: 'Search Agent', build: 'Build Agent', voice: 'Voice agent', issue: 'Issue agent' }
+/** "Attach to" destinations for an article. An issue chat belongs to one issue and has no article composer. */
+export const ARTICLE_DESTINATIONS: readonly AgentDestination[] = ['panel', 'search', 'build', 'voice']
 export type StoryKind = 'article' | 'video' | 'web' | 'discussion'
 export interface Story {
   title: string

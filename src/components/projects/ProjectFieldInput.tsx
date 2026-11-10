@@ -2,7 +2,7 @@ import type { Issue, Person, ProjectField } from '@/types/projects'
 import { NotionEditor } from '@/components/board/task-detail/editor/NotionEditor'
 import { fromLocalDateTime, toLocalDateTime } from '@/lib/project-issue-utils'
 
-export const projectInputClass = 'w-full rounded-xl border border-surface-200 dark:border-surface-800 bg-surface-0 dark:bg-surface-900 px-3 py-2 text-sm disabled:opacity-50'
+export const projectInputClass = 'w-full rounded-lg border border-surface-200 dark:border-surface-800 bg-surface-0 dark:bg-surface-900 px-3 py-[7px] text-[13px] leading-5 text-ink dark:text-ink-inverse placeholder:text-ink-muted dark:placeholder:text-ink-inverse-muted transition-colors focus:border-blurple-500 dark:focus:border-blurple-400 focus:outline-none disabled:cursor-not-allowed disabled:opacity-40'
 
 export function ProjectFieldInput({ field, value, onChange, people, issues, disabled = false }: {
   field: ProjectField; value: unknown; onChange: (value: unknown) => void

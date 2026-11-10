@@ -1,549 +1,409 @@
 /**
- * Context Picker - Nested Context Selection
- * 
- * A sophisticated nested listbox for adding context to prompts.
- * Features sub-menus, search, badges, and multi-select.
- * 
- * UPDATED: Uses React Portal to avoid z-index clipping in scrolling containers.
- * UPDATED: Uses correct electronAPI for tab data.
+ * Context Picker: the agent chat's context menu (the link button in the composer) and the `@` mention list.
+ *
+ * Every entry is real: open tabs, previous chats, issues, projects, dates that matter, interests, project pages
+ * and saved context, loaded by `useContextSources` each time the menu opens. What a selected item contributes to
+ * the message is read at send time and sent as an attachment (`src/lib/context-attachments.ts`). Rendered in a portal so scrolling
+ * containers never clip it.
  */
 
-import { useState, useMemo, useEffect, useRef } from 'react'
+import { useEffect, useId, useMemo, useRef, useState, type ComponentType, type KeyboardEvent as ReactKeyboardEvent } from 'react'
+import { RenIcon } from '@/components/brand'
 import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { 
-  // PlusIcon, -> Removed unused import 
-  DocumentIcon, 
-  GlobeAltIcon, 
-  ChatBubbleLeftRightIcon, 
-  CodeBracketIcon, 
-  SparklesIcon, 
-  ClipboardDocumentListIcon,
-  ArrowUpTrayIcon,
-  FolderIcon,
-  ChevronRightIcon,
-  MagnifyingGlassIcon,
-  XMarkIcon,
-  CheckIcon,
-  LinkIcon,
-} from '@heroicons/react/24/outline'
+import { DocumentIcon, DocumentTextIcon, GlobeAltIcon, ChatBubbleLeftRightIcon, FolderIcon, ClipboardDocumentListIcon, CalendarDaysIcon, ArrowUpTrayIcon, ChevronLeftIcon, ChevronRightIcon, MagnifyingGlassIcon, XMarkIcon, CheckIcon, LinkIcon, ArrowPathIcon } from '@heroicons/react/24/outline'
 import { cn } from '@/utils/cn'
+import { API_BASE_URL } from '@/lib/api-base'
+import { createContextClient, formatBytes } from '@/lib/context-api'
+import { savedContextItem, searchContexts, type CategoryId, type ContextCategory, type ContextItem, type ContextType } from '@/lib/chat-context'
+import { useContextSources } from './useContextSources'
 
-// ─────────────────────────────────────────────────────────────────────────────
-// TYPES
-// ─────────────────────────────────────────────────────────────────────────────
+export type { ContextItem } from '@/lib/chat-context'
 
-export interface ContextItem {
-  id: string
-  type: 'file' | 'tab' | 'conversation' | 'project' | 'interest' | 'task'
-  name: string
-  description?: string
-  icon?: React.ComponentType<{ className?: string }>
-  meta?: string // e.g., "2 hours ago", "3 files"
-  color?: string
-  favicon?: string // URL to favicon image (for tabs)
-  url?: string // Complete URL for tabs
-  title?: string // Complete title for tabs
-  /** Populated on send when the user attached an open tab from the context picker. */
-  tab_context?: import('@/pages/types/electron').TabContext
+type Icon = ComponentType<{ className?: string }>
+
+const TYPE_ICON: Record<ContextType, Icon> = {
+  tab: GlobeAltIcon,
+  conversation: ChatBubbleLeftRightIcon,
+  project: FolderIcon,
+  issue: ClipboardDocumentListIcon,
+  task: ClipboardDocumentListIcon,
+  interest: RenIcon,
+  event: CalendarDaysIcon,
+  document: DocumentTextIcon,
+  file: DocumentIcon,
+}
+const CATEGORY_ICON: Record<CategoryId, Icon> = {
+  tabs: GlobeAltIcon,
+  conversations: ChatBubbleLeftRightIcon,
+  issues: ClipboardDocumentListIcon,
+  projects: FolderIcon,
+  dates: CalendarDaysIcon,
+  interests: RenIcon,
+  documents: DocumentTextIcon,
+}
+const CATEGORY_TYPES: Record<CategoryId, ContextType[]> = {
+  tabs: ['tab'], conversations: ['conversation'], issues: ['issue', 'task'], projects: ['project'],
+  dates: ['event'], interests: ['interest'], documents: ['document', 'file'],
+}
+const MAX_ROWS = 100
+
+export const contextIcon = (type: ContextType): Icon => TYPE_ICON[type] ?? DocumentIcon
+
+const META_TONE: Record<string, string> = {
+  Active: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400',
+  Overdue: 'bg-rose-500/10 text-rose-600 dark:text-rose-400',
+  Today: 'bg-amber-500/10 text-amber-700 dark:text-amber-300',
+  Now: 'bg-accent/10 text-accent dark:text-accent-light',
+  Critical: 'bg-rose-500/10 text-rose-600 dark:text-rose-400',
+  High: 'bg-amber-500/10 text-amber-700 dark:text-amber-300',
 }
 
-interface ContextCategory {
-  id: string
-  name: string
-  icon: React.ComponentType<{ className?: string }>
-  description: string
-  items: ContextItem[]
-  actions?: { id: string; name: string; icon: React.ComponentType<{ className?: string }> }[]
+/** One selectable row: favicon, status dot or type icon, name, description, meta badge and a check when chosen. */
+function ContextRow({ id, item, selected, active, label, onPick, onHover }: {
+  id: string; item: ContextItem; selected: boolean; active: boolean; label?: string; onPick: () => void; onHover: () => void
+}) {
+  const TypeIcon = contextIcon(item.type)
+  return (
+    <button type="button" id={id} role="option" aria-selected={selected} data-active={active || undefined}
+      onMouseDown={(event) => event.preventDefault()} onClick={onPick} onMouseEnter={onHover}
+      className={cn('w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left transition-colors duration-100',
+        active ? 'bg-surface-100 dark:bg-surface-700' : 'hover:bg-surface-100 dark:hover:bg-surface-700',
+        selected && 'ring-1 ring-inset ring-accent/30 dark:ring-accent-light/30')}>
+      {item.favicon ? <img src={item.favicon} alt="" className="w-4 h-4 rounded flex-shrink-0" />
+        : item.color ? <span className={cn('w-2.5 h-2.5 rounded-full flex-shrink-0 mx-[3px]', item.color)} />
+          : <TypeIcon className="w-4 h-4 text-ink-muted dark:text-ink-inverse-muted flex-shrink-0" />}
+      <span className="flex-1 min-w-0">
+        <span className={cn('block text-body-sm font-medium truncate', selected ? 'text-accent dark:text-accent-light' : 'text-ink dark:text-ink-inverse')}>{item.name}</span>
+        {(label || item.description) && <span className="block text-body-xs text-ink-muted dark:text-ink-inverse-muted truncate">
+          {label && <span className="font-medium">{label}{item.description ? ' · ' : ''}</span>}{item.description}
+        </span>}
+      </span>
+      {item.meta && <span className={cn('px-1.5 py-0.5 rounded text-[10px] font-medium flex-shrink-0',
+        META_TONE[item.meta] ?? 'bg-surface-200 dark:bg-surface-700 text-ink-muted dark:text-ink-inverse-muted')}>{item.meta}</span>}
+      {selected && <CheckIcon className="w-4 h-4 text-accent dark:text-accent-light flex-shrink-0" />}
+    </button>
+  )
 }
+
+function Note({ children }: { children: React.ReactNode }) {
+  return <p className="px-4 py-3 text-body-xs text-ink-muted dark:text-ink-inverse-muted">{children}</p>
+}
+
+/** As the menu closes, focus returns to its trigger when it was inside the menu (or nowhere), never when it moved on. */
+function restoreFocus(trigger: HTMLElement | null, menu: HTMLElement | null) {
+  const focused = document.activeElement
+  if (focused && focused !== document.body && !menu?.contains(focused)) return
+  requestAnimationFrame(() => trigger?.focus())
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PICKER (link button)
+// ─────────────────────────────────────────────────────────────────────────────
 
 interface ContextPickerProps {
   selectedContexts: ContextItem[]
   onContextsChange: (contexts: ContextItem[]) => void
   className?: string
-  /** Where the dropdown anchors relative to button. 'top' opens upward, 'bottom' opens downward */
+  /** Where the dropdown anchors relative to the button. 'top' opens upward, 'bottom' opens downward. */
   anchor?: 'top' | 'bottom'
+  /** The trigger stays in place but does not open (e.g. while a run is active). */
+  disabled?: boolean
+  /** Width of the dropdown in px. */
+  width?: number
+  /** The dropdown's right edge never passes this x (px); defaults to 8px inside the window. */
+  boundsRight?: number
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// SAMPLE DATA - In production, this would come from stores/APIs
-// ─────────────────────────────────────────────────────────────────────────────
-
-const SAMPLE_CONVERSATIONS: ContextItem[] = [
-  { id: 'conv-1', type: 'conversation', name: 'API Integration Help', description: 'Discussed REST endpoints', meta: 'Today' },
-  { id: 'conv-2', type: 'conversation', name: 'CSS Layout Issues', description: 'Fixed flexbox problems', meta: 'Yesterday' },
-  { id: 'conv-3', type: 'conversation', name: 'Database Schema', description: 'Designed user tables', meta: '2 days ago' },
-  { id: 'conv-4', type: 'conversation', name: 'Auth Flow Design', description: 'OAuth implementation', meta: '3 days ago' },
-  { id: 'conv-5', type: 'conversation', name: 'Performance Tuning', description: 'Optimized queries', meta: '1 week ago' },
-  { id: 'conv-6', type: 'conversation', name: 'Mobile Responsiveness', description: 'Breakpoint adjustments', meta: '1 week ago' },
-]
-
-const SAMPLE_PROJECTS: ContextItem[] = [
-  { id: 'proj-1', type: 'project', name: 'ronbrowser', description: 'Electron + React', meta: '142 files', color: 'bg-violet-500' },
-  { id: 'proj-2', type: 'project', name: 'api-server', description: 'Node.js + Express', meta: '67 files', color: 'bg-blue-500' },
-  { id: 'proj-3', type: 'project', name: 'mobile-app', description: 'React Native', meta: '89 files', color: 'bg-pink-500' },
-]
-
-const SAMPLE_INTERESTS: ContextItem[] = [
-  { id: 'int-1', type: 'interest', name: 'Technology', color: 'bg-blue-500' },
-  { id: 'int-2', type: 'interest', name: 'Design', color: 'bg-pink-500' },
-  { id: 'int-3', type: 'interest', name: 'Privacy', color: 'bg-emerald-500' },
-  { id: 'int-4', type: 'interest', name: 'Research', color: 'bg-amber-500' },
-  { id: 'int-5', type: 'interest', name: 'Learning', color: 'bg-cyan-500' },
-]
-
-const SAMPLE_TASKS: ContextItem[] = [
-  { id: 'task-1', type: 'task', name: 'Implement auth flow', description: 'In Progress', meta: 'High', color: 'bg-blue-500' },
-  { id: 'task-2', type: 'task', name: 'Design system updates', description: 'Review', meta: 'Medium', color: 'bg-amber-500' },
-  { id: 'task-3', type: 'task', name: 'API documentation', description: 'Backlog', meta: 'Low', color: 'bg-slate-500' },
-  { id: 'task-4', type: 'task', name: 'Performance audit', description: 'In Progress', meta: 'High', color: 'bg-blue-500' },
-  { id: 'task-5', type: 'task', name: 'Mobile testing', description: 'Backlog', meta: 'Medium', color: 'bg-amber-500' },
-  { id: 'task-6', type: 'task', name: 'Security review', description: 'Scheduled', meta: 'High', color: 'bg-red-500' },
-]
-
-const SAMPLE_DOCUMENTS: ContextItem[] = [
-  { id: 'doc-1', type: 'file', name: 'Project Brief.pdf', description: 'Saved document', meta: '2.4 MB' },
-  { id: 'doc-2', type: 'file', name: 'API Specs.md', description: 'Saved document', meta: '156 KB' },
-  { id: 'doc-3', type: 'file', name: 'Design Guidelines.figma', description: 'Saved document', meta: '8.2 MB' },
-]
-
-// ─────────────────────────────────────────────────────────────────────────────
-// MAIN COMPONENT
-// ─────────────────────────────────────────────────────────────────────────────
-
-export function ContextPicker({ selectedContexts, onContextsChange, className, anchor = 'top' }: ContextPickerProps) {
+export function ContextPicker({ selectedContexts, onContextsChange, className, anchor = 'top', disabled = false, width = 336, boundsRight }: ContextPickerProps) {
   const [isOpen, setIsOpen] = useState(false)
-  const [activeCategory, setActiveCategory] = useState<string | null>(null)
+  const [activeCategory, setActiveCategory] = useState<CategoryId | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
-  const [openTabs, setOpenTabs] = useState<ContextItem[]>([])
-  
-  // Refs for positioning
+  const [activeIndex, setActiveIndex] = useState(0)
+  const [upload, setUpload] = useState<{ busy: boolean; error?: string }>({ busy: false })
+  const { categories, reload, userId } = useContextSources(isOpen)
   const buttonRef = useRef<HTMLButtonElement>(null)
+  const fileRef = useRef<HTMLInputElement>(null)
+  const listRef = useRef<HTMLDivElement>(null)
+  const searchRef = useRef<HTMLInputElement>(null)
+  const dialogRef = useRef<HTMLDivElement>(null)
+  const listId = useId()
   const [coords, setCoords] = useState({ bottom: 0, left: 0 })
 
-  // Calculate position and open - done synchronously to avoid render flash
   const handleOpen = () => {
+    if (disabled) return
     if (buttonRef.current) {
       const rect = buttonRef.current.getBoundingClientRect()
-      if (anchor === 'bottom') {
-        // Position menu BELOW button (for search bar at top of page)
-        setCoords({
-          bottom: -(rect.bottom + 8), // Negative = use top instead
-          left: rect.left
-        })
-      } else {
-        // Position menu ABOVE button (default - for panels at bottom)
-        setCoords({
-          bottom: window.innerHeight - rect.top + 8,
-          left: rect.left
-        })
-      }
+      const right = boundsRight ?? window.innerWidth - 8
+      const left = Math.max(8, Math.min(rect.left, right - width))
+      setCoords(anchor === 'bottom' ? { bottom: -(rect.bottom + 8), left } : { bottom: window.innerHeight - rect.top + 8, left })
     }
     setIsOpen(true)
   }
-
-  // Load real active tab and all tabs when the picker opens
-  useEffect(() => {
-    const loadTabs = async () => {
-      try {
-        if (typeof window !== 'undefined' && window.electron?.tabs) {
-          // Use the Electron tabs API exposed on window.electron.
-          const list = await window.electron.tabs.list()
-          
-          if (Array.isArray(list)) {
-            const items: ContextItem[] = list.map(t => ({
-              id: t.id,
-              type: 'tab',
-              name: t.title || t.url || 'New Tab',
-              description: t.url,
-              meta: t.isActive ? 'Active' : undefined,
-              favicon: t.favicon,
-              url: t.url,
-              title: t.title
-            }))
-            // Sort active to top
-            items.sort((a, _b) => (a.meta === 'Active' ? -1 : 1))
-            setOpenTabs(items)
-          }
-        }
-      } catch (e) {
-        console.error('Failed to load tabs from electronAPI', e)
-        // Fallback silently to sample tabs
-      }
-    }
-    if (isOpen) loadTabs()
-  }, [isOpen])
-
-  const categories: ContextCategory[] = [
-    {
-      id: 'file',
-      name: 'File',
-      icon: DocumentIcon,
-      description: 'Add a file for context',
-      items: SAMPLE_DOCUMENTS,
-      actions: [
-        { id: 'upload', name: 'Upload file', icon: ArrowUpTrayIcon },
-        { id: 'saved', name: 'Saved documents', icon: FolderIcon },
-      ],
-    },
-    {
-      id: 'tabs',
-      name: 'Open Tabs',
-      icon: GlobeAltIcon,
-      description: openTabs.length ? `${openTabs.length} tabs open` : 'No tabs loaded',
-      items: openTabs,
-    },
-    {
-      id: 'conversations',
-      name: 'Prior Conversations',
-      icon: ChatBubbleLeftRightIcon,
-      description: 'Reference past chats',
-      items: SAMPLE_CONVERSATIONS,
-    },
-    {
-      id: 'project',
-      name: 'Coding Project',
-      icon: CodeBracketIcon,
-      description: 'Add project context',
-      items: SAMPLE_PROJECTS,
-    },
-    {
-      id: 'interest',
-      name: 'Interest',
-      icon: SparklesIcon,
-      description: 'Add from your interests',
-      items: SAMPLE_INTERESTS,
-    },
-    {
-      id: 'task',
-      name: 'Task',
-      icon: ClipboardDocumentListIcon,
-      description: 'Reference a task',
-      items: SAMPLE_TASKS,
-    },
-  ]
-
-  const activeItems = useMemo(() => {
-    const category = categories.find(c => c.id === activeCategory)
-    if (!category) return []
-    
-    if (!searchQuery) return category.items.slice(0, 5)
-    
-    return category.items.filter(item => 
-      item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      item.description?.toLowerCase().includes(searchQuery.toLowerCase())
-    ).slice(0, 5)
-  }, [activeCategory, searchQuery, categories])
-
-  const toggleContext = (item: ContextItem) => {
-    const exists = selectedContexts.find(c => c.id === item.id)
-    if (exists) {
-      onContextsChange(selectedContexts.filter(c => c.id !== item.id))
-    } else {
-      onContextsChange([...selectedContexts, item])
-    }
-  }
-
-  const isSelected = (id: string) => selectedContexts.some(c => c.id === id)
-
-  const handleBack = () => {
-    setActiveCategory(null)
-    setSearchQuery('')
-  }
-
-  const handleClose = () => {
+  /** Close; focus goes back to the trigger unless it already moved somewhere else. */
+  const handleClose = (returnFocus = true) => {
+    if (returnFocus) restoreFocus(buttonRef.current, dialogRef.current)
     setIsOpen(false)
     setActiveCategory(null)
     setSearchQuery('')
+    setUpload({ busy: false })
   }
 
+  const category = categories.find((candidate) => candidate.id === activeCategory) ?? null
+  const rows = useMemo<{ item: ContextItem; label?: string }[]>(() => {
+    const needle = searchQuery.trim().toLowerCase()
+    if (category) {
+      const matches = needle ? searchContexts([category], needle, MAX_ROWS) : category.items.slice(0, MAX_ROWS).map((item) => ({ item }))
+      return matches.map(({ item }) => ({ item }))
+    }
+    return needle ? searchContexts(categories, needle, 40).map(({ item, category: from }) => ({ item, label: from.name })) : []
+  }, [category, categories, searchQuery])
+
+  useEffect(() => { setActiveIndex(0) }, [activeCategory, searchQuery])
+  // Escape closes the menu even when focus has left it (the dialog's own handler steps back first when it has focus).
+  useEffect(() => {
+    if (!isOpen) return
+    const onWindowKey = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || event.defaultPrevented) return
+      restoreFocus(buttonRef.current, dialogRef.current)
+      setIsOpen(false); setActiveCategory(null); setSearchQuery(''); setUpload({ busy: false })
+    }
+    window.addEventListener('keydown', onWindowKey)
+    return () => window.removeEventListener('keydown', onWindowKey)
+  }, [isOpen])
+  // The menu closes when the trigger becomes disabled (a run started).
+  useEffect(() => {
+    if (!disabled || !isOpen) return
+    restoreFocus(buttonRef.current, dialogRef.current)
+    setIsOpen(false); setActiveCategory(null); setSearchQuery(''); setUpload({ busy: false })
+  }, [disabled, isOpen])
+  // Typing goes to the search box when the menu opens and whenever it moves between categories.
+  useEffect(() => {
+    if (isOpen) searchRef.current?.focus()
+  }, [isOpen, activeCategory])
+  useEffect(() => {
+    listRef.current?.querySelector('[data-active]')?.scrollIntoView({ block: 'nearest' })
+  }, [activeIndex])
+
+  const isSelected = (id: string) => selectedContexts.some((context) => context.id === id)
+  const toggleContext = (item: ContextItem) => {
+    onContextsChange(isSelected(item.id) ? selectedContexts.filter((context) => context.id !== item.id) : [...selectedContexts, item])
+  }
+
+  const uploadFile = async (file: File) => {
+    setUpload({ busy: true })
+    try {
+      const kind = file.type.startsWith('image/') ? 'image' : file.type.startsWith('video/') ? 'video' : 'file'
+      // A text file's own words go in the entry's Markdown (`text`, at most 20,000 characters on the server).
+      const textual = file.type.startsWith('text/') || /\.(md|markdown|txt|csv|tsv|json|ya?ml|xml|html?|log|ini|toml)$/i.test(file.name)
+      const text = textual ? (await file.text()).slice(0, 20_000) : undefined
+      const saved = await createContextClient(API_BASE_URL, userId).upload({ kind, blob: file, name: file.name, title: file.name, text })
+      onContextsChange([...selectedContexts, savedContextItem(saved)])
+      setUpload({ busy: false })
+      reload()
+    } catch (error) {
+      setUpload({ busy: false, error: `Upload failed: ${error instanceof Error ? error.message : String(error)}` })
+    } finally {
+      if (fileRef.current) fileRef.current.value = ''
+    }
+  }
+
+  const rootRows = !category && !searchQuery.trim()
+  const optionCount = rootRows ? categories.length : rows.length
+  const onKeyDown = (event: ReactKeyboardEvent) => {
+    if (event.key === 'Escape') {
+      event.preventDefault()
+      if (searchQuery) setSearchQuery('')
+      else if (category) setActiveCategory(null)
+      else handleClose()
+      return
+    }
+    const count = optionCount
+    if (!count) return
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      event.preventDefault()
+      setActiveIndex((index) => (index + (event.key === 'ArrowDown' ? 1 : -1) + count) % count)
+    } else if (event.key === 'Enter') {
+      event.preventDefault()
+      if (rootRows) setActiveCategory(categories[activeIndex]?.id ?? null)
+      else if (rows[activeIndex]) toggleContext(rows[activeIndex].item)
+    } else if (event.key === 'ArrowLeft' && category && !searchQuery) {
+      event.preventDefault(); setActiveCategory(null)
+    }
+  }
+
+  const selectedIn = (candidate: ContextCategory) => selectedContexts.filter((context) => CATEGORY_TYPES[candidate.id].includes(context.type)).length
+
   return (
-    <div className={cn("relative", className)}>
-      {/* Trigger Button */}
+    <div className={cn('relative', className)}>
       <button
         ref={buttonRef}
-        onClick={() => isOpen ? handleClose() : handleOpen()}
-        aria-label="Add Context"
+        type="button"
+        onClick={() => { if (disabled) return; if (isOpen) handleClose(); else handleOpen() }}
+        aria-label="Add context"
+        aria-expanded={isOpen}
+        aria-haspopup="dialog"
+        aria-disabled={disabled || undefined}
+        title={disabled ? 'Add context after this run finishes' : 'Add context (or type @)'}
         className={cn(
-          "flex items-center justify-center",
-          "w-8 h-8 rounded-lg",
-          "text-ink-muted dark:text-ink-inverse-muted",
-          "hover:bg-surface-100 dark:hover:bg-surface-800",
-          "hover:text-ink dark:hover:text-ink-inverse",
-          "transition-all duration-200",
-          selectedContexts.length > 0 && "text-accent dark:text-accent-light"
+          'flex shrink-0 items-center justify-center w-8 h-8 rounded-full',
+          'text-ink-muted dark:text-ink-inverse-muted transition-all duration-200',
+          disabled ? 'cursor-not-allowed opacity-40' : 'hover:bg-surface-100 dark:hover:bg-surface-800 hover:text-ink dark:hover:text-ink-inverse',
+          selectedContexts.length > 0 && 'text-accent dark:text-accent-light',
         )}
       >
-        <LinkIcon className="w-5 h-5" />
+        <LinkIcon className="w-4 h-4" />
       </button>
 
-      {/* Portal Dropdown - Portal wraps AnimatePresence for proper exit animations */}
       {typeof document !== 'undefined' && createPortal(
         <AnimatePresence>
           {isOpen && (
             <>
-              {/* Backdrop */}
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[9998]" onClick={() => handleClose()} />
               <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                className="fixed inset-0 z-[9998]"
-                onClick={handleClose}
-              />
-
-              {/* Menu */}
-              <motion.div
+                ref={dialogRef}
+                role="dialog"
+                aria-label="Add context"
                 initial={{ opacity: 0, y: 8, scale: 0.96 }}
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: 8, scale: 0.96 }}
                 transition={{ duration: 0.15 }}
-                style={{
-                  position: 'fixed',
-                  ...(anchor === 'bottom' 
-                    ? { top: -coords.bottom } 
-                    : { bottom: coords.bottom }),
-                  left: coords.left
+                onKeyDown={onKeyDown}
+                onBlur={(event) => {
+                  // Tabbing or clicking out of the menu closes it; focus leaving the window (the file chooser) does not.
+                  const next = event.relatedTarget
+                  if (next instanceof Node && !event.currentTarget.contains(next)) handleClose(false)
                 }}
-                className={cn(
-                  "z-[9999]", // High z-index in Portal
-                  "w-72 py-2",
-                  "bg-surface-0 dark:bg-surface-800",
-                  "rounded-xl border border-surface-200 dark:border-surface-700",
-                  "shadow-bold dark:shadow-dark-bold",
-                  "overflow-hidden"
-                )}
+                style={{ position: 'fixed', ...(anchor === 'bottom' ? { top: -coords.bottom } : { bottom: coords.bottom }), left: coords.left, width }}
+                className="z-[9999] max-w-[calc(100vw-16px)] py-2 bg-surface-0 dark:bg-surface-800 rounded-xl border border-surface-200 dark:border-surface-700 shadow-bold dark:shadow-dark-bold overflow-hidden"
               >
-              {/* Header */}
-              <div className="px-3 py-2 border-b border-surface-100 dark:border-surface-700 flex items-center gap-2">
-                {activeCategory ? (
-                  <>
-                    <button
-                      onClick={handleBack}
-                      aria-label="Back to categories"
-                      className="p-1 rounded hover:bg-surface-100 dark:hover:bg-surface-700 text-ink-muted dark:text-ink-inverse-muted"
-                    >
+                <input type="file" ref={fileRef} className="hidden" aria-hidden tabIndex={-1}
+                  onChange={(event) => { const file = event.target.files?.[0]; if (file) void uploadFile(file) }} />
+
+                <div className="px-3 py-2 border-b border-surface-100 dark:border-surface-700 flex items-center gap-2">
+                  {category ? <>
+                    <button type="button" onClick={() => { setActiveCategory(null); setSearchQuery('') }} aria-label="Back to categories"
+                      className="p-1 rounded hover:bg-surface-100 dark:hover:bg-surface-700 text-ink-muted dark:text-ink-inverse-muted">
                       <ChevronLeftIcon className="w-4 h-4" />
                     </button>
-                    <p className="text-body-sm font-medium text-ink dark:text-ink-inverse">
-                      {categories.find(c => c.id === activeCategory)?.name}
-                    </p>
-                  </>
-                ) : (
-                  <p className="text-label text-ink-muted dark:text-ink-inverse-muted">Add Context</p>
-                )}
-              </div>
+                    <p className="flex-1 text-body-sm font-medium text-ink dark:text-ink-inverse">{category.name}</p>
+                  </> : <p className="flex-1 text-label text-ink-muted dark:text-ink-inverse-muted">Add context</p>}
+                  <button type="button" onClick={reload} aria-label="Refresh" title="Refresh"
+                    className="p-1 rounded hover:bg-surface-100 dark:hover:bg-surface-700 text-ink-muted dark:text-ink-inverse-muted">
+                    <ArrowPathIcon className={cn('w-4 h-4', categories.some((candidate) => candidate.loading) && 'animate-spin')} />
+                  </button>
+                </div>
 
-              {/* Search (only in subcategory) */}
-              {activeCategory && (
                 <div className="px-3 py-2 border-b border-surface-100 dark:border-surface-700">
                   <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-surface-50 dark:bg-surface-850 border border-surface-200 dark:border-surface-700">
                     <MagnifyingGlassIcon className="w-4 h-4 text-ink-muted dark:text-ink-inverse-muted" />
                     <input
+                      ref={searchRef}
                       type="text"
+                      role="combobox"
+                      aria-expanded="true"
+                      aria-controls={listId}
+                      aria-autocomplete="list"
+                      aria-activedescendant={optionCount ? `${listId}-${activeIndex}` : undefined}
                       value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      placeholder="Search..."
+                      onChange={(event) => setSearchQuery(event.target.value)}
+                      placeholder={category ? `Search ${category.name.toLowerCase()}…` : 'Search chats, issues, tabs, dates…'}
+                      aria-label={category ? `Search ${category.name}` : 'Search all context'}
                       className="flex-1 bg-transparent text-body-sm text-ink dark:text-ink-inverse placeholder:text-ink-muted/50 outline-none"
                       autoFocus
                     />
-                    {searchQuery && (
-                      <button onClick={() => setSearchQuery('')} aria-label="Clear search" className="text-ink-muted hover:text-ink dark:text-ink-inverse-muted dark:hover:text-ink-inverse">
-                        <XMarkIcon className="w-3.5 h-3.5" />
-                      </button>
-                    )}
+                    {searchQuery && <button type="button" onClick={() => { setSearchQuery(''); searchRef.current?.focus() }} aria-label="Clear search"
+                      className="text-ink-muted hover:text-ink dark:text-ink-inverse-muted dark:hover:text-ink-inverse"><XMarkIcon className="w-3.5 h-3.5" /></button>}
                   </div>
                 </div>
-              )}
 
-              {/* Content */}
-              <div className="max-h-64 overflow-y-auto scrollbar-thin">
-                <AnimatePresence mode="wait">
-                  {!activeCategory ? (
-                    // Category List
-                    <motion.div
-                      key="categories"
-                      initial={{ opacity: 0, x: -10 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      exit={{ opacity: 0, x: -10 }}
-                      transition={{ duration: 0.15 }}
-                      className="py-1"
-                    >
-                      {categories.map((category) => {
-                        const selectedCount = selectedContexts.filter(c => c.type === category.id || 
-                          (category.id === 'file' && c.type === 'file') ||
-                          (category.id === 'tabs' && c.type === 'tab') ||
-                          (category.id === 'conversations' && c.type === 'conversation') ||
-                          (category.id === 'project' && c.type === 'project') ||
-                          (category.id === 'interest' && c.type === 'interest') ||
-                          (category.id === 'task' && c.type === 'task')
-                        ).length
-
-                        return (
-                          <button
-                            key={category.id}
-                            onClick={() => setActiveCategory(category.id)}
-                            className={cn(
-                              "w-full flex items-center gap-3 px-3 py-2.5 mx-1 rounded-lg",
-                              "hover:bg-surface-100 dark:hover:bg-surface-700",
-                              "transition-colors duration-150",
-                              "text-left group"
-                            )}
-                          >
-                            <div className={cn(
-                              "flex items-center justify-center w-8 h-8 rounded-lg",
-                              "bg-surface-100 dark:bg-surface-700",
-                              selectedCount > 0 && "bg-accent/10 dark:bg-accent-light/10"
-                            )}>
-                              <category.icon className={cn(
-                                "w-4 h-4",
-                                selectedCount > 0 
-                                  ? "text-accent dark:text-accent-light" 
-                                  : "text-ink-muted dark:text-ink-inverse-muted"
-                              )} />
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2">
-                                <p className="text-body-sm font-medium text-ink dark:text-ink-inverse">
-                                  {category.name}
-                                </p>
-                                {selectedCount > 0 && (
-                                  <span className="px-1.5 py-0.5 rounded-full bg-accent/10 dark:bg-accent-light/10 text-accent dark:text-accent-light text-[10px] font-semibold">
-                                    {selectedCount}
-                                  </span>
-                                )}
-                              </div>
-                              <p className="text-body-xs text-ink-muted dark:text-ink-inverse-muted truncate">
-                                {category.description}
-                              </p>
-                            </div>
-                            <ChevronRightIcon className="w-4 h-4 text-ink-muted dark:text-ink-inverse-muted opacity-0 group-hover:opacity-100 transition-opacity" />
-                          </button>
-                        )
-                      })}
-                    </motion.div>
-                  ) : (
-                    // Item List
-                    <motion.div
-                      key="items"
-                      initial={{ opacity: 0, x: 10 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      exit={{ opacity: 0, x: 10 }}
-                      transition={{ duration: 0.15 }}
-                      className="py-1"
-                    >
-                      {/* Actions (e.g., Upload for Files) */}
-                      {categories.find(c => c.id === activeCategory)?.actions?.map((action) => (
-                        <button
-                          key={action.id}
-                          onClick={() => {
-                            // Handle action (upload, etc.)
-                            console.log('Action:', action.id)
-                          }}
-                          className={cn(
-                            "w-full flex items-center gap-3 px-3 py-2.5 mx-1 rounded-lg",
-                            "hover:bg-surface-100 dark:hover:bg-surface-700",
-                            "transition-colors duration-150",
-                            "text-left border-b border-surface-100 dark:border-surface-700 mb-1"
-                          )}
-                        >
-                          <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-accent/10 dark:bg-accent-light/10">
-                            <action.icon className="w-4 h-4 text-accent dark:text-accent-light" />
-                          </div>
-                          <p className="text-body-sm font-medium text-accent dark:text-accent-light">
-                            {action.name}
-                          </p>
-                        </button>
-                      ))}
-
-                      {/* Items */}
-                      {activeItems.length === 0 ? (
-                        <div className="px-4 py-8 text-center">
-                          <p className="text-body-sm text-ink-muted dark:text-ink-inverse-muted">
-                            {searchQuery ? 'No results found' : 'No items available'}
-                          </p>
-                        </div>
-                      ) : (
-                        activeItems.map((item) => (
-                          <button
-                            key={item.id}
-                            onClick={() => toggleContext(item)}
-                            className={cn(
-                              "w-full flex items-center gap-3 px-3 py-2 mx-1 rounded-lg",
-                              "hover:bg-surface-100 dark:hover:bg-surface-700",
-                              "transition-colors duration-150",
-                              "text-left",
-                              isSelected(item.id) && "bg-accent/5 dark:bg-accent-light/5"
-                            )}
-                          >
-                            {/* Favicon for tabs, color dot for others */}
-                            {item.favicon ? (
-                              <img src={item.favicon} alt="" className="w-4 h-4 rounded flex-shrink-0" />
-                            ) : item.color ? (
-                              <div className={cn("w-2.5 h-2.5 rounded-full flex-shrink-0", item.color)} />
-                            ) : item.type === 'tab' ? (
-                              <GlobeAltIcon className="w-4 h-4 text-ink-muted dark:text-ink-inverse-muted flex-shrink-0" />
-                            ) : (
-                              <div className="w-4" />
-                            )}
-                            
-                            <div className="flex-1 min-w-0">
-                              <p className={cn(
-                                "text-body-sm font-medium truncate",
-                                isSelected(item.id) 
-                                  ? "text-accent dark:text-accent-light" 
-                                  : "text-ink dark:text-ink-inverse"
-                              )}>
-                                {item.name}
-                              </p>
-                              {item.description && (
-                                <p className="text-body-xs text-ink-muted dark:text-ink-inverse-muted truncate">
-                                  {item.description}
-                                </p>
-                              )}
-                            </div>
-                            
-                            {/* Meta badge */}
-                            {item.meta && (
-                              <span className={cn(
-                                "px-1.5 py-0.5 rounded text-[10px] font-medium flex-shrink-0",
-                                item.meta === 'Active' 
-                                  ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
-                                  : item.meta === 'High'
-                                  ? "bg-red-500/10 text-red-600 dark:text-red-400"
-                                  : item.meta === 'Medium'
-                                  ? "bg-amber-500/10 text-amber-600 dark:text-amber-400"
-                                  : "bg-surface-200 dark:bg-surface-700 text-ink-muted dark:text-ink-inverse-muted"
-                              )}>
-                                {item.meta}
-                              </span>
-                            )}
-                            
-                            {/* Check */}
-                            {isSelected(item.id) && (
-                              <CheckIcon className="w-4 h-4 text-accent dark:text-accent-light flex-shrink-0" />
-                            )}
-                          </button>
-                        ))
-                      )}
-
-                      {/* Show more indicator */}
-                      {!searchQuery && categories.find(c => c.id === activeCategory)!.items.length > 5 && (
-                        <div className="px-4 py-2 text-center border-t border-surface-100 dark:border-surface-700 mt-1">
-                          <p className="text-body-xs text-ink-muted dark:text-ink-inverse-muted">
-                            {categories.find(c => c.id === activeCategory)!.items.length - 5} more · Use search to find
-                          </p>
-                        </div>
-                      )}
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </div>
+                <div ref={listRef} role="listbox" aria-multiselectable className="max-h-80 overflow-y-auto scrollbar-thin px-1 py-1">
+                  {rootRows ? categories.map((candidate, index) => {
+                    const CategoryIcon = CATEGORY_ICON[candidate.id]
+                    const count = selectedIn(candidate)
+                    return (
+                      <button key={candidate.id} type="button" data-active={index === activeIndex || undefined}
+                        onClick={() => setActiveCategory(candidate.id)} onMouseEnter={() => setActiveIndex(index)}
+                        className={cn('w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left group transition-colors duration-100',
+                          index === activeIndex ? 'bg-surface-100 dark:bg-surface-700' : 'hover:bg-surface-100 dark:hover:bg-surface-700')}>
+                        <span className={cn('flex items-center justify-center w-8 h-8 rounded-lg bg-surface-100 dark:bg-surface-700', count > 0 && 'bg-accent/10 dark:bg-accent-light/10')}>
+                          <CategoryIcon className={cn('w-4 h-4', count > 0 ? 'text-accent dark:text-accent-light' : 'text-ink-muted dark:text-ink-inverse-muted')} />
+                        </span>
+                        <span className="flex-1 min-w-0">
+                          <span className="flex items-center gap-2">
+                            <span className="text-body-sm font-medium text-ink dark:text-ink-inverse">{candidate.name}</span>
+                            {count > 0 && <span className="px-1.5 py-0.5 rounded-full bg-accent/10 dark:bg-accent-light/10 text-accent dark:text-accent-light text-[10px] font-semibold">{count}</span>}
+                          </span>
+                          <span className="block text-body-xs text-ink-muted dark:text-ink-inverse-muted truncate">
+                            {candidate.loading ? 'Loading…' : candidate.items.length ? candidate.description : candidate.note ?? candidate.description}
+                          </span>
+                        </span>
+                        <ChevronRightIcon className="w-4 h-4 text-ink-muted dark:text-ink-inverse-muted opacity-60 group-hover:opacity-100" />
+                      </button>
+                    )
+                  }) : <>
+                    {category?.id === 'documents' && !searchQuery && <>
+                      <button type="button" disabled={upload.busy} onClick={() => fileRef.current?.click()}
+                        className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left hover:bg-surface-100 dark:hover:bg-surface-700 disabled:opacity-60 border-b border-surface-100 dark:border-surface-700 mb-1">
+                        <span className="flex items-center justify-center w-8 h-8 rounded-lg bg-accent/10 dark:bg-accent-light/10">
+                          <ArrowUpTrayIcon className="w-4 h-4 text-accent dark:text-accent-light" />
+                        </span>
+                        <span className="flex-1">
+                          <span className="block text-body-sm font-medium text-accent dark:text-accent-light">{upload.busy ? 'Uploading…' : 'Upload a file'}</span>
+                          <span className="block text-body-xs text-ink-muted dark:text-ink-inverse-muted">Saved to your Ren context (up to {formatBytes(100 * 1024 * 1024)})</span>
+                        </span>
+                      </button>
+                      {upload.error && <p role="alert" className="px-3 pb-2 text-body-xs text-rose-600 dark:text-rose-400">{upload.error}</p>}
+                    </>}
+                    {rows.map(({ item, label }, index) => (
+                      <ContextRow key={item.id} item={item} label={label} selected={isSelected(item.id)} active={index === activeIndex}
+                        onPick={() => toggleContext(item)} onHover={() => setActiveIndex(index)} />
+                    ))}
+                    {!rows.length && (category?.loading ? <Note>Loading…</Note>
+                      : <Note>{searchQuery ? `Nothing matches “${searchQuery}”.` : category?.note ?? 'Nothing here yet.'}</Note>)}
+                    {!!rows.length && category?.note && <Note>{category.note}</Note>}
+                    {category && !searchQuery && category.items.length > MAX_ROWS && <Note>{category.items.length - MAX_ROWS} more · search to find them</Note>}
+                  </>}
+                </div>
+                <p className="px-4 pt-2 border-t border-surface-100 dark:border-surface-700 text-[10px] text-ink-muted dark:text-ink-inverse-muted">
+                  Tip: type <kbd className="font-semibold">@</kbd> in the message to mention anything here.
+                </p>
               </motion.div>
             </>
           )}
         </AnimatePresence>,
-        document.body
+        document.body,
       )}
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// @ MENTION LIST (rendered by the composer while an @query is being typed)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export function ContextMentionList({ query, results, activeIndex, loading, onPick, onHover, selectedIds }: {
+  query: string
+  results: { category: ContextCategory; item: ContextItem }[]
+  activeIndex: number
+  loading: boolean
+  onPick: (item: ContextItem) => void
+  onHover: (index: number) => void
+  selectedIds: Set<string>
+}) {
+  const listRef = useRef<HTMLDivElement>(null)
+  useEffect(() => { listRef.current?.querySelector('[data-active]')?.scrollIntoView({ block: 'nearest' }) }, [activeIndex])
+  return (
+    <div ref={listRef} role="listbox" aria-label="Mention context"
+      className="absolute bottom-full left-0 right-0 mb-2 max-h-72 overflow-y-auto scrollbar-thin rounded-xl border border-surface-200 bg-surface-0 p-1 shadow-[0_18px_48px_-18px_rgb(26_25_23/0.28)] dark:border-surface-700 dark:bg-surface-850">
+      <p className="px-3 pt-1.5 pb-1 text-[10px] font-semibold uppercase tracking-wider text-ink-muted dark:text-ink-inverse-muted">
+        {query ? `Context matching “${query}”` : 'Mention a chat, issue, tab, date or interest'}
+      </p>
+      {results.map(({ category, item }, index) => (
+        <ContextRow key={item.id} item={item} label={category.name} active={index === activeIndex} selected={selectedIds.has(item.id)}
+          onPick={() => onPick(item)} onHover={() => onHover(index)} />
+      ))}
+      {!results.length && <Note>{loading ? 'Loading…' : query ? `Nothing matches “${query}”. Esc or Enter keeps it as text.` : 'Nothing to mention yet.'}</Note>}
     </div>
   )
 }
@@ -560,64 +420,24 @@ interface SelectedContextsProps {
 
 export function SelectedContexts({ contexts, onRemove, className }: SelectedContextsProps) {
   if (contexts.length === 0) return null
-
-  const getIcon = (type: ContextItem['type']) => {
-    switch (type) {
-      case 'file': return DocumentIcon
-      case 'tab': return GlobeAltIcon
-      case 'conversation': return ChatBubbleLeftRightIcon
-      case 'project': return CodeBracketIcon
-      case 'interest': return SparklesIcon
-      case 'task': return ClipboardDocumentListIcon
-      default: return DocumentIcon
-    }
-  }
-
   return (
-    <motion.div
-      initial={{ opacity: 0, height: 0 }}
-      animate={{ opacity: 1, height: 'auto' }}
-      exit={{ opacity: 0, height: 0 }}
-      className={cn("flex flex-wrap gap-1.5", className)}
-    >
+    <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}
+      className={cn('flex flex-wrap gap-1.5', className)} aria-label="Attached context">
       {contexts.map((context) => {
-        const Icon = getIcon(context.type)
+        const Icon = contextIcon(context.type)
         return (
-          <motion.span
-            key={context.id}
-            initial={{ scale: 0.8, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            exit={{ scale: 0.8, opacity: 0 }}
-            className={cn(
-              "inline-flex items-center gap-1.5 px-2 py-1 rounded-full",
-              "bg-accent/10 dark:bg-accent-light/10",
-              "text-accent dark:text-accent-light text-body-xs"
-            )}
-          >
-            <Icon className="w-3 h-3" />
-            <span className="max-w-[100px] truncate">{context.name}</span>
-            <button
-              onClick={() => onRemove(context.id)}
-              aria-label={`Remove ${context.name}`}
-              className="ml-0.5 hover:text-accent-light dark:hover:text-accent transition-colors"
-            >
+          <motion.span key={context.id} initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.8, opacity: 0 }}
+            title={[context.name, context.description].filter(Boolean).join(' · ')}
+            className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full bg-accent/10 dark:bg-accent-light/10 text-accent dark:text-accent-light text-body-xs">
+            {context.favicon ? <img src={context.favicon} alt="" className="w-3 h-3 rounded-sm" /> : <Icon className="w-3 h-3" />}
+            <span className="max-w-[160px] truncate">{context.name}</span>
+            <button type="button" onClick={() => onRemove(context.id)} aria-label={`Remove ${context.name}`}
+              className="ml-0.5 hover:text-accent-light dark:hover:text-accent transition-colors">
               <XMarkIcon className="w-3 h-3" />
             </button>
           </motion.span>
         )
       })}
     </motion.div>
-  )
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// ICONS
-// ─────────────────────────────────────────────────────────────────────────────
-
-function ChevronLeftIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <polyline points="15 18 9 12 15 6" />
-    </svg>
   )
 }

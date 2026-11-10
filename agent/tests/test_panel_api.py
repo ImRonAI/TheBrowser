@@ -62,7 +62,7 @@ def events(response):
     return [json.loads(line[6:]) for line in response.text.splitlines() if line.startswith("data: ")]
 
 
-@pytest.mark.parametrize('destination', ['panel', 'search', 'build', 'document'])
+@pytest.mark.parametrize('destination', ['panel', 'search', 'build', 'document', 'context'])
 @pytest.mark.parametrize('explicit_selection', [True, False])
 def test_article_reaches_native_model_and_restored_history(monkeypatch, destination, explicit_selection):
     from agent.api.core.articles import ARTICLE_PREFIX
@@ -86,8 +86,14 @@ def test_article_reaches_native_model_and_restored_history(monkeypatch, destinat
             assert snapshot['selection']['provider'] == 'openai'
             assert snapshot['selection']['model_id'] == 'offline'
             assert snapshot['messages'][0]['content'] == blocks
-            if destination != 'panel':
+            if destination == 'build':
+                from agent.api.core.build_workspace import workspace_root
+                assert "You are Ren's Build Agent." in builds[0]['system_prompt']
+                assert str(workspace_root('default', 'article-build')) in builds[0]['system_prompt']
+            elif destination != 'panel':
                 assert f'You are {destination.title()} Agent.' in builds[0]['system_prompt']
+            context_tools = {tool.tool_name for tool in builds[0]['extra_tools']}
+            assert context_tools == ({'update_interest_graph', 'recommend_agent'} if destination == 'context' else set())
             wrong = await client.post('/chat', json={'session_id': f'article-{destination}', 'provider': 'openai',
                 'message': 'Wrong destination', 'destination': 'build' if destination != 'build' else 'search'})
             assert wrong.status_code == 409
@@ -386,7 +392,7 @@ def test_opt_in_a2a_native_factory_mount_and_cleanup(monkeypatch):
             async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
                 card = await client.get("/a2a/.well-known/agent-card.json")
                 assert card.status_code == 200
-                assert card.json()["name"] == "Ron"
+                assert card.json()["name"] == "Ren"
                 assert (await client.get("/config")).json()["features"]["a2a"] is True
                 # Metadata construction never spawns shell. The panel card model (the fixer card,
                 # `RepairService.agent_for` at /a2a/fixer, is built with hosted_tools=False).
@@ -458,4 +464,63 @@ def test_browser_invalid_value_is_422(monkeypatch):
             assert response.status_code == 422
             assert builds == []
 
+    asyncio.run(scenario())
+
+
+def test_project_agent_acts_with_the_callers_project_access_and_is_pinned(monkeypatch, tmp_path):
+    """Agent picker: a project agent needs the caller's project credential; its tools act through it (guest SQLite)."""
+    from agent.tests.test_panel_tools import call_tool
+
+    monkeypatch.setenv('PROJECTS_GUEST_DB', str(tmp_path / 'projects.db'))
+    workspace = {'X-Ron-Workspace': 'd' * 64}
+
+    async def scenario():
+        async with offline_api(monkeypatch) as (client, manager, builds, agents, shell, threads):
+            project = (await client.post('/projects', json={'name': 'Launch', 'key': 'LCH'}, headers=workspace)).json()
+            epic = (await client.post('/projects/issues', json={'project_id': project['id'], 'type': 'epic', 'title': 'Beta'}, headers=workspace)).json()
+            body = {'session_id': 'project-chat', 'provider': 'openai', 'model': 'offline', 'message': 'What is left?',
+                    'agent': {'kind': 'project', 'id': project['id']}}
+            assert (await client.post('/chat', json=body)).status_code == 401
+            other = {**body, 'agent': {'kind': 'project', 'id': '00000000-0000-4000-8000-000000000000'}}
+            assert (await client.post('/chat', json=other, headers=workspace)).status_code == 404
+            assert (await client.post('/chat', json={**body, 'agent': {'kind': 'ron', 'id': project['id']}})).status_code == 422
+            events((await client.post('/chat', json=body, headers=workspace)))
+            snapshot = (await client.get('/sessions/project-chat')).json()
+            assert snapshot['selection']['agent'] == {'kind': 'project', 'id': project['id']}
+            assert 'You are the project agent' in builds[0]['system_prompt'] and project['id'] in builds[0]['system_prompt']
+            tools = {value.tool_name: value for value in builds[0]['extra_tools']}
+            assert {'read_project', 'read_issue', 'create_issue', 'update_issue', 'add_issue_context', 'link_issues',
+                    'list_project_documents', 'read_project_document', 'understand_media'} <= tools.keys()
+            # The agent is pinned to the session like the model.
+            locked = await client.post('/chat', json={**body, 'message': 'Switch', 'agent': {'kind': 'ron', 'id': ''}}, headers=workspace)
+            assert locked.status_code == 409
+
+            _, result = await call_tool(tools['read_project'], {})
+            assert result['status'] == 'success', result
+            overview = json.loads(result['content'][0]['text'])
+            assert overview['key'] == 'LCH' and [issue['key'] for issue in overview['issues']] == ['LCH-1']
+            assert {item['key'] for item in overview['issue_types']} >= {'epic', 'story', 'task'}
+            _, result = await call_tool(tools['create_issue'], {'type': 'story', 'title': 'Invite testers', 'parent_id': epic['id'],
+                                                                 'description_markdown': '## Goal\n\n- **20** testers'})
+            assert result['status'] == 'success', result
+            story = json.loads(result['content'][0]['text'])
+            stored = (await client.get(f"/projects/issues/{story['id']}/context", headers=workspace)).json()['issue']
+            assert stored['parent_id'] == epic['id'] and '<h2>Goal</h2>' in stored['description'] and '<strong>20</strong>' in stored['description']
+            _, result = await call_tool(tools['update_issue'], {'issue_id': story['id'], 'version': story['version'], 'values': {'status': 'done'}})
+            assert result['status'] == 'error' and 'status' in result['content'][0]['text']
+            _, result = await call_tool(tools['add_issue_context'], {'issue_id': story['id'], 'version': story['version'], 'title': 'Tester pool',
+                                                                     'content_markdown': 'Use the beta list.', 'url': 'https://example.com/beta'})
+            assert result['status'] == 'success', result
+            _, result = await call_tool(tools['read_issue'], {'issue_id': story['id']})
+            read = json.loads(result['content'][0]['text'])
+            issue = read['issue']
+            assert issue['description_markdown'].startswith('## Goal') and issue['context'][0]['title'] == 'Tester pool'
+            # Audit rows keep who/what/when; their whole-row old/new snapshots stay out of the agent's context.
+            assert read['activity'] and all(set(row) == {'timestamp', 'actor_name', 'actor_type', 'action', 'field'} for row in read['activity'])
+            assert issue['context'][0]['url'] == 'https://example.com/beta'
+
+            # Specialists belong to a signed-in owner.
+            specialist = await client.post('/chat', json={**body, 'session_id': 'specialist-chat',
+                                                          'agent': {'kind': 'specialist', 'id': project['id']}})
+            assert specialist.status_code == 401
     asyncio.run(scenario())

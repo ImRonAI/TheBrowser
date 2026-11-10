@@ -415,7 +415,7 @@ export function canHandOff(state: LiveState): { ok: boolean; reason?: string } {
   if (state.status === 'idle') return { ok: true }
   const pending = pendingTools(state)
   if (pending.length) return { ok: false, reason: `${pending.length} tool call${pending.length === 1 ? '' : 's'} still running. Wait or stop the Live session.` }
-  if (state.processing) return { ok: false, reason: 'Ron is still working on the last turn. Wait or stop the Live session.' }
+  if (state.processing) return { ok: false, reason: 'Ren is still working on the last turn. Wait or stop the Live session.' }
   return { ok: true }
 }
 

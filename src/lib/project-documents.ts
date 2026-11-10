@@ -111,6 +111,55 @@ export const createDocumentConversation = async (request: ProjectsRequest, docum
 export const touchDocumentConversation = async (request: ProjectsRequest, conversation: DocumentConversation) =>
   mapDocumentConversation(await request<Row>(`/document-conversations/${conversation.id}`, 'PATCH', { title: conversation.title }))
 
+/**
+ * The agent skill a page was published as (`POST /projects/documents/{id}/skill`, `core/document_skills.py`):
+ * stored with the agent's taught skills, so `GET /teaching/skills` lists it and `use_skill` runs it.
+ */
+export interface DocumentSkill {
+  id: string
+  name: string
+  description: string
+  agentId: string
+  files: string[]
+  createdAt: number
+  updatedAt: number
+  /** The page version the skill was published from. */
+  publishedVersion: number | null
+  /** Whether the page is unchanged since then. */
+  current: boolean
+  steps: number
+  /** Registered in the agent's learned-skills memory (what `list_learned_skills` finds). */
+  listed: boolean
+}
+
+export const mapDocumentSkill = (row: Row): DocumentSkill => ({
+  id: row.id, name: row.name, description: row.description, agentId: row.agent_id, files: row.files ?? [],
+  createdAt: Date.parse(row.created_at), updatedAt: Date.parse(row.updated_at),
+  publishedVersion: row.published_version ?? null, current: row.current === true, steps: row.steps ?? 0, listed: row.listed === true,
+})
+
+const skillScope = (userId: string, agentId: string) => new URLSearchParams({ user_id: userId, agent_id: agentId }).toString()
+
+/** The skill this page was published as for `userId`'s agent, or null. */
+export const getDocumentSkill = async (request: ProjectsRequest, documentId: string, userId: string, agentId = 'panel') => {
+  const body = await request<{ skill: Row | null }>(`/documents/${encodeURIComponent(documentId)}/skill?${skillScope(userId, agentId)}`)
+  return body.skill ? mapDocumentSkill(body.skill) : null
+}
+
+/** Publish (or republish) the saved page as a skill. A 422 lists what the page must fix. */
+export const publishDocumentSkill = async (request: ProjectsRequest, documentId: string, userId: string, agentId = 'panel') => {
+  const body = await request<{ status: 'published' | 'updated'; skill: Row }>(`/documents/${encodeURIComponent(documentId)}/skill`, 'POST',
+    { user_id: userId, agent_id: agentId })
+  return { status: body.status, skill: mapDocumentSkill(body.skill) }
+}
+
+/** A publish failure split into the separate problems it names (references are listed with "; "). */
+export function skillProblems(message: string): string[] {
+  const prefix = 'Unknown or unusable references: '
+  if (!message.startsWith(prefix)) return [message]
+  return message.slice(prefix.length).replace(/\.$/, '').split('; ').map((part) => part.trim()).filter(Boolean)
+}
+
 /** A 409 from a version-checked save: someone else saved first (or access was removed). */
 export const isConflict = (error: unknown) => (error as { status?: number } | null)?.status === 409
 

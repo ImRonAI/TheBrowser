@@ -12,7 +12,15 @@ import {
 } from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
 import { BrainIcon, ChevronDownIcon, DotIcon } from "lucide-react";
-import { createContext, memo, useContext, useMemo } from "react";
+import {
+  createContext,
+  memo,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
 interface ChainOfThoughtContextValue {
   isOpen: boolean;
@@ -41,22 +49,63 @@ export type ChainOfThoughtProps = ComponentProps<"div"> & {
   autoCollapseDelay?: number;
 };
 
+const AUTO_CLOSE_DELAY = 1000;
+
 export const ChainOfThought = memo(
   ({
     className,
     open,
-    defaultOpen = false,
+    defaultOpen,
     onOpenChange,
-    isStreaming: _isStreaming,
-    autoCollapseDelay: _autoCollapseDelay,
+    isStreaming = false,
+    autoCollapseDelay,
     children,
     ...props
   }: ChainOfThoughtProps) => {
-    const [isOpen, setIsOpen] = useControllableState({
-      defaultProp: defaultOpen,
+    // Open/close while streaming as Reasoning (./reasoning.tsx) does.
+    const resolvedDefaultOpen = defaultOpen ?? isStreaming;
+    // Track if defaultOpen was explicitly set to false (to prevent auto-open)
+    const isExplicitlyClosed = defaultOpen === false;
+
+    const [isOpen, setIsOpen] = useControllableState<boolean>({
+      defaultProp: resolvedDefaultOpen,
       onChange: onOpenChange,
       prop: open,
     });
+
+    const hasEverStreamedRef = useRef(isStreaming);
+    const [hasAutoClosed, setHasAutoClosed] = useState(false);
+    const closeDelay = autoCollapseDelay ?? AUTO_CLOSE_DELAY;
+
+    useEffect(() => {
+      if (isStreaming) {
+        hasEverStreamedRef.current = true;
+      }
+    }, [isStreaming]);
+
+    // Auto-open when streaming starts (unless explicitly closed)
+    useEffect(() => {
+      if (isStreaming && !isOpen && !isExplicitlyClosed) {
+        setIsOpen(true);
+      }
+    }, [isStreaming, isOpen, setIsOpen, isExplicitlyClosed]);
+
+    // Auto-close when streaming ends (once only, and only if it ever streamed)
+    useEffect(() => {
+      if (
+        hasEverStreamedRef.current &&
+        !isStreaming &&
+        isOpen &&
+        !hasAutoClosed
+      ) {
+        const timer = setTimeout(() => {
+          setIsOpen(false);
+          setHasAutoClosed(true);
+        }, closeDelay);
+
+        return () => clearTimeout(timer);
+      }
+    }, [isStreaming, isOpen, setIsOpen, hasAutoClosed, closeDelay]);
 
     const chainOfThoughtContext = useMemo(
       () => ({ isOpen, setIsOpen }),

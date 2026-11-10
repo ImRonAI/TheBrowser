@@ -1,7 +1,7 @@
 import { Menu, MenuButton, MenuItem, MenuItems } from '@headlessui/react'
-import { 
-  ChevronDown, 
-  Settings, 
+import {
+  ChevronDown,
+  Settings,
   LogOut,
   UserCircle,
   Palette
@@ -21,11 +21,11 @@ export function UserMenu() {
       <button
         type="button"
         onClick={() => openSignIn()}
-        aria-label="Sign in to Ron"
+        aria-label="Sign in to Ren"
         className={cn(
-          'h-8 rounded-lg px-2.5 text-[12.5px] font-medium transition-colors duration-150',
-          'text-ink-secondary hover:bg-surface-200/60 hover:text-ink',
-          'dark:text-ink-inverse-secondary dark:hover:bg-surface-800 dark:hover:text-ink-inverse',
+          'h-8 rounded-lg border px-3 text-[13px] font-semibold transition-colors duration-150 ease-out',
+          'border-surface-200 bg-surface-0 text-ink hover:border-surface-300 hover:bg-surface-50',
+          'dark:border-surface-700 dark:bg-surface-800 dark:text-ink-inverse dark:hover:border-surface-600 dark:hover:bg-surface-850',
         )}
       >
         Sign in
@@ -33,58 +33,57 @@ export function UserMenu() {
     )
   }
 
-  // toggleTheme cycles system → dark → light → system.
+  // toggleTheme steps through the appearance order in lib/theme.ts: light → dark → glass → system → light.
   const getThemeLabel = () => {
     switch (theme) {
-      case 'system': return 'Theme: System · switch to Dark'
-      case 'dark': return 'Theme: Dark · switch to Light'
-      default: return 'Theme: Light · switch to System'
+      case 'light': return 'Theme: Light · switch to Dark'
+      case 'dark': return 'Theme: Dark · switch to Glass'
+      case 'glass': return 'Theme: Glass · switch to System'
+      default: return 'Theme: System · switch to Light'
     }
   }
 
   const initial = user?.name?.charAt(0).toUpperCase() || user?.email?.charAt(0).toUpperCase() || 'U'
-  const itemClass = 'flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-left text-[13px] text-ink transition-colors data-[focus]:bg-surface-100 dark:text-ink-inverse dark:data-[focus]:bg-surface-800'
-  const iconClass = 'h-4 w-4 text-ink-muted dark:text-ink-inverse-muted'
+  const itemClass = 'flex h-8 w-full items-center gap-2.5 rounded-lg px-2.5 text-left text-[13px] text-popover-foreground transition-colors duration-150 data-[focus]:bg-muted'
+  const iconClass = 'h-4 w-4 flex-shrink-0 text-muted-foreground'
 
   return (
     <Menu as="div" className="relative">
       <MenuButton
         aria-label="Account menu"
         className={cn(
-          'flex h-8 items-center gap-1 rounded-lg pl-1 pr-1.5 transition-colors duration-150',
-          'hover:bg-surface-200/60 data-[open]:bg-surface-200/60 dark:hover:bg-surface-800 dark:data-[open]:bg-surface-800',
+          'flex h-8 items-center gap-1 rounded-lg pl-1 pr-1.5 transition-colors duration-150 ease-out',
+          'hover:bg-ink/[0.06] data-[open]:bg-ink/[0.07] dark:hover:bg-ink-inverse/[0.07] dark:data-[open]:bg-ink-inverse/[0.09]',
           '[&[data-open]_svg]:rotate-180',
         )}
       >
-        <span className="relative flex h-6 w-6 items-center justify-center rounded-full bg-ink text-[11px] font-semibold text-surface-0 dark:bg-ink-inverse dark:text-surface-900">
+        <span className="relative flex h-6 w-6 items-center justify-center rounded-full bg-ink font-display text-[11px] font-bold text-white dark:bg-ink-inverse dark:text-ink">
           {initial}
           {/* Signed-in indicator */}
-          <span className="absolute -bottom-px -right-px h-2 w-2 rounded-full border-[1.5px] border-surface-100 bg-success dark:border-surface-900" aria-hidden />
+          <span className="absolute -bottom-px -right-px h-2 w-2 rounded-full border-[1.5px] border-surface-100 bg-success dark:border-surface-950" aria-hidden />
         </span>
-        <ChevronDown className="h-3 w-3 text-ink-muted transition-transform duration-200 dark:text-ink-inverse-muted" />
+        <ChevronDown className="h-3 w-3 text-ink-secondary transition-transform duration-200 dark:text-ink-inverse-secondary" />
       </MenuButton>
 
       <MenuItems
         transition
         className={cn(
-          'absolute right-0 z-[9999] mt-2 w-64 origin-top-right overflow-hidden rounded-xl p-1',
-          'border border-surface-200 bg-surface-0 dark:border-surface-700 dark:bg-surface-850',
-          'shadow-[0_18px_48px_-18px_rgb(26_25_23/0.28)] focus:outline-none',
-          'transition duration-150 ease-smooth data-[closed]:-translate-y-1 data-[closed]:scale-[0.98] data-[closed]:opacity-0',
+          'absolute right-0 z-[9999] mt-2 w-64 origin-top-right overflow-hidden rounded-xl border border-border bg-popover p-1 text-popover-foreground shadow-float focus:outline-none',
+          'transition duration-150 ease-out data-[closed]:-translate-y-1 data-[closed]:scale-[0.98] data-[closed]:opacity-0',
         )}
       >
         {/* User info header */}
         <div className="flex items-center gap-3 px-2.5 py-2.5">
-          <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-ink font-display text-base text-surface-0 dark:bg-ink-inverse dark:text-surface-900">
+          <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-ink font-display text-base font-bold text-white dark:bg-ink-inverse dark:text-ink">
             {user?.name?.charAt(0).toUpperCase() || 'U'}
           </span>
           <div className="min-w-0 flex-1">
-            <p className="truncate text-[13px] font-medium text-ink dark:text-ink-inverse">{user?.name}</p>
-            <p className="truncate text-[12px] text-ink-muted dark:text-ink-inverse-muted">{user?.email}</p>
+            <p className="truncate text-[13px] font-semibold text-popover-foreground">{user?.name}</p>
+            <p className="truncate text-[12px] text-muted-foreground">{user?.email}</p>
           </div>
         </div>
 
-        <div className="mx-1 my-1 h-px bg-surface-200 dark:bg-surface-700" />
+        <div className="-mx-1 my-1 h-px bg-border" />
 
         <MenuItem>
           <button onClick={() => console.log('Profile')} className={itemClass}>
@@ -107,14 +106,14 @@ export function UserMenu() {
           </button>
         </MenuItem>
 
-        <div className="mx-1 my-1 h-px bg-surface-200 dark:bg-surface-700" />
+        <div className="-mx-1 my-1 h-px bg-border" />
         <MenuItem>
           <button
             onClick={logout}
-            className="flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-left text-[13px] font-medium text-danger transition-colors data-[focus]:bg-danger/10"
+            className="flex h-8 w-full items-center gap-2.5 rounded-lg px-2.5 text-left text-[13px] font-medium text-danger transition-colors duration-150 data-[focus]:bg-red-50 dark:data-[focus]:bg-red-950/40"
           >
-            <LogOut className="h-4 w-4" />
-            Sign Out
+            <LogOut className="h-4 w-4 flex-shrink-0" />
+            Sign out
           </button>
         </MenuItem>
       </MenuItems>

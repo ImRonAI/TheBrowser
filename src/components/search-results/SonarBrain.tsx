@@ -501,7 +501,7 @@ export function SonarBrain({ sonarReasoning, searchQuery }: SonarBrainProps) {
                   className="w-full"
                 >
                   <ExternalLinkIcon className="w-4 h-4 mr-2" />
-                  Move this conversation to Ron
+                  Move this conversation to Ren
                 </Button>
               )}
             </div>

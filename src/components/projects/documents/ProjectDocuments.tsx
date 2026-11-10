@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Editor } from '@tiptap/react'
 import {
-  AlertTriangle, Check, ChevronDown, ChevronRight, FilePlus, FileText, Loader2, Plus, RotateCcw, Save, Trash2,
+  AlertTriangle, Check, ChevronDown, ChevronRight, FilePlus, FileText, LayoutTemplate, Loader2, Plus, RotateCcw, Save, Trash2,
 } from 'lucide-react'
 import { NotionEditor } from '@/components/board/task-detail/editor/NotionEditor'
 import { WorkflowBlockExtension } from '@/components/board/task-detail/editor/extensions/WorkflowBlockExtension'
@@ -18,6 +18,10 @@ import type { Project } from '@/types/projects'
 import { cn } from '@/lib/utils'
 import { DocumentToolbar } from './DocumentToolbar'
 import { DocumentIssueLinks } from './DocumentIssueLinks'
+import { useContextAgentStore } from '@/stores/contextAgentStore'
+import { instantiateTemplate, isSkillDocument, type DocumentTemplate } from '@/lib/document-templates'
+import { TemplateGallery } from './TemplateGallery'
+import { SkillPublishBar } from './SkillPublishBar'
 
 const AUTOSAVE_MS = 1000
 // Workflow blocks, and the official Markdown extension (Ron writes Markdown; the page is read back as Markdown for context).
@@ -65,6 +69,9 @@ export function ProjectDocuments({ project, startWithDraft, onDraftStarted, open
   const [editor, setEditor] = useState<Editor | null>(null)
   const [ron, setRon] = useState<{ goal: boolean } | null>(null)
   const openRon = useCallback((goal: boolean) => setRon({ goal }), [])
+  /** The template gallery: for a new page (under `parentId`), or to fill the empty page that is open. */
+  const [gallery, setGallery] = useState<{ mode: 'new'; parentId: string | null } | { mode: 'apply' } | null>(null)
+  const titleRef = useRef<HTMLInputElement>(null)
 
   const pageRef = useRef<OpenPage | null>(null)
   const savedRef = useRef(new Map<string, SavedState>())
@@ -145,13 +152,46 @@ export function ProjectDocuments({ project, startWithDraft, onDraftStarted, open
   // Leaving the docs view saves what is pending.
   useEffect(() => () => { void queueSave() }, [queueSave])
 
-  const startDraft = useCallback((parentId: string | null = null) => {
+  /** A new page, blank or with a template's title and content (saved at once so it exists in the project). */
+  const startDraft = useCallback((parentId: string | null = null, initial: { title: string; content: string } = { title: '', content: '' }) => {
     void queueSave()
     const key = nextKey()
     savedRef.current.set(key, { id: null, version: 0, title: '', content: '' })
-    setPage({ key, id: null, parentId, title: '', content: '' })
+    const next = { key, id: null, parentId, ...initial }
+    pageRef.current = next
+    setPage(next)
     setStatus('idle'); setMessage(''); setSavedAt(null)
     if (parentId) setCollapsed((current) => { const next = new Set(current); next.delete(parentId); return next })
+    if (initial.title.trim() || !isBlank(initial.content)) void queueSave(next)
+  }, [queueSave])
+
+  /** Where to type first: a template whose title is left to the author ('' or "ADR: ") starts in the title. */
+  const focusTitleIfOpen = (title: string) => {
+    if (title.trim() && !title.endsWith(': ')) return
+    window.requestAnimationFrame(() => { const input = titleRef.current; if (input) { input.focus(); input.setSelectionRange(input.value.length, input.value.length) } })
+  }
+
+  const chooseTemplate = (template: DocumentTemplate) => {
+    if (!gallery) return
+    const { title, content } = template.id === 'blank' ? { title: '', content: '' } : instantiateTemplate(template)
+    if (gallery.mode === 'new') {
+      startDraft(gallery.parentId, { title, content })
+      focusTitleIfOpen(title)
+      return
+    }
+    const keepTitle = pageRef.current?.title.trim() ? pageRef.current.title : title
+    edit({ title: keepTitle, content })
+    focusTitleIfOpen(keepTitle)
+  }
+
+  /** Saves pending edits of the open page; true when everything it holds is saved. */
+  const flushOpenPage = useCallback(async () => {
+    const open = pageRef.current
+    if (!open) return false
+    await queueSave(open)
+    const saved = savedRef.current.get(open.key)
+    const now = pageRef.current
+    return !!saved?.id && !blockedRef.current.has(open.key) && !!now && saved.title === now.title && saved.content === now.content
   }, [queueSave])
 
   const openDocument = useCallback(async (id: string) => {
@@ -170,10 +210,10 @@ export function ProjectDocuments({ project, startWithDraft, onDraftStarted, open
     }
   }, [request, queueSave, upsertSummary])
 
-  // New Document from the project header opens a fresh draft.
+  // New Document from the project header opens the template gallery.
   useEffect(() => {
-    if (startWithDraft && request) { startDraft(null); onDraftStarted() }
-  }, [startWithDraft, request, startDraft, onDraftStarted])
+    if (startWithDraft && request) { setGallery({ mode: 'new', parentId: null }); onDraftStarted() }
+  }, [startWithDraft, request, onDraftStarted])
 
   useEffect(() => {
     if (openDocumentId && request) void openDocument(openDocumentId)
@@ -273,7 +313,7 @@ export function ProjectDocuments({ project, startWithDraft, onDraftStarted, open
             <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-ink-muted dark:text-ink-inverse-muted">{project.key} space</p>
             <h3 className="text-body-sm font-semibold text-ink dark:text-ink-inverse">Pages</h3>
           </div>
-          <Button type="button" size="icon-sm" variant="ghost" className="rounded-full" title="New page" aria-label="New page" onClick={() => startDraft(null)}>
+          <Button type="button" size="icon-sm" variant="ghost" className="rounded-full" title="New page" aria-label="New page" onClick={() => setGallery({ mode: 'new', parentId: null })}>
             <Plus />
           </Button>
         </div>
@@ -298,7 +338,7 @@ export function ProjectDocuments({ project, startWithDraft, onDraftStarted, open
                   <FileText className="size-4 shrink-0 opacity-70" />
                   <span className="truncate">{(active ? page?.title : doc.title) || UNTITLED}</span>
                 </button>
-                <button type="button" title="Add child page" aria-label={`Add a page under ${doc.title}`} onClick={() => startDraft(doc.id)}
+                <button type="button" title="Add child page" aria-label={`Add a page under ${doc.title}`} onClick={() => setGallery({ mode: 'new', parentId: doc.id })}
                   className="flex size-6 shrink-0 items-center justify-center rounded-md text-ink-muted opacity-0 hover:bg-surface-200/60 group-hover:opacity-100 focus:opacity-100 dark:hover:bg-surface-700/60">
                   <Plus className="size-3.5" />
                 </button>
@@ -332,6 +372,17 @@ export function ProjectDocuments({ project, startWithDraft, onDraftStarted, open
               </nav>
               <div className="flex items-center gap-2">
                 <SaveState status={status} savedAt={savedAt} isDraft={!page.id} />
+                {editor && (
+                  <Button type="button" size="sm" variant="ghost" className="h-8 rounded-full text-ink-muted"
+                    title="Add this page to Ren context as Markdown" aria-label="Add this page to Ren context"
+                    disabled={isBlank(page.content)}
+                    onClick={() => void useContextAgentStore.getState().addContext({
+                      kind: 'document', title: `${project.key} · ${page.title || UNTITLED}`, text: editor.getMarkdown(),
+                      url: page.id ? `ron://project/${project.id}/docs/${page.id}` : '',
+                    })}>
+                    + Context
+                  </Button>
+                )}
                 <Button type="button" size="sm" variant="outline" className="h-8 gap-1.5 rounded-full"
                   disabled={status === 'saving' || status === 'conflict' || (!page.id && !page.title.trim() && isBlank(page.content))}
                   onClick={() => void queueSave()}>
@@ -360,7 +411,7 @@ export function ProjectDocuments({ project, startWithDraft, onDraftStarted, open
               </div>
             )}
 
-            <input aria-label="Page title" value={page.title} maxLength={300} placeholder="Give this page a title"
+            <input ref={titleRef} aria-label="Page title" value={page.title} maxLength={300} placeholder="Give this page a title"
               onChange={(event) => edit({ title: event.target.value })}
               onKeyDown={(event) => {
                 if (event.key === 'Enter' && editor) {
@@ -378,6 +429,15 @@ export function ProjectDocuments({ project, startWithDraft, onDraftStarted, open
                 : 'Draft · saved to this project as soon as you start writing'}
             </p>
             {page.id && request && <DocumentIssueLinks request={request} documentId={page.id} onOpenIssue={onIssueSelect} />}
+            {isBlank(page.content) && status !== 'conflict' && (
+              <Button type="button" size="sm" variant="outline" className="mt-4 h-8 gap-1.5 rounded-full" onClick={() => setGallery({ mode: 'apply' })}>
+                <LayoutTemplate />Use a template
+              </Button>
+            )}
+            {page.id && (
+              <SkillPublishBar key={page.id} request={request} documentId={page.id} version={openSummary?.version}
+                isSkill={isSkillDocument(page.content)} flush={flushOpenPage} />
+            )}
 
             <div className="sticky top-2 z-20 mt-6">
               {editor && <DocumentToolbar editor={editor} onAskRon={() => openRon(false)} />}
@@ -394,7 +454,7 @@ export function ProjectDocuments({ project, startWithDraft, onDraftStarted, open
             <div className="mt-2">
               <NotionEditor key={page.key} canonical content={page.content} extensions={DOCUMENT_EXTENSIONS} onAskRon={openRon}
                 onEditor={setEditor} onChange={(content) => edit({ content })} onSave={() => void queueSave()}
-                placeholder="Write, or type / for headings, tables, a workflow, Ask Ron…"
+                placeholder="Write, or type / for headings, tables, a workflow, Ask Ren…"
                 editorClassName="prose prose-base dark:prose-invert max-w-none focus:outline-none min-h-[420px] px-1 py-6" />
             </div>
           </div>
@@ -408,11 +468,14 @@ export function ProjectDocuments({ project, startWithDraft, onDraftStarted, open
               <p className="mt-2 text-body-sm text-ink-muted dark:text-ink-inverse-muted">
                 {status === 'error' ? message : 'Specs, decisions, meeting notes and runbooks live beside this project’s issues. Add a workflow to show how the work flows.'}
               </p>
-              <Button type="button" className="mt-5 gap-2 rounded-full" onClick={() => startDraft(null)}><FilePlus />New Document</Button>
+              <Button type="button" className="mt-5 gap-2 rounded-full" onClick={() => setGallery({ mode: 'new', parentId: null })}><FilePlus />New Document</Button>
             </div>
           </div>
         )}
       </section>
+
+      <TemplateGallery open={!!gallery} mode={gallery?.mode ?? 'new'} extensions={DOCUMENT_EXTENSIONS}
+        onOpenChange={(next) => { if (!next) setGallery(null) }} onChoose={chooseTemplate} />
 
       <Dialog open={!!confirmDelete} onOpenChange={(next) => { if (!next && !deleting) setConfirmDelete(null) }}>
         <DialogContent showCloseButton={false} overlayClassName="z-[220] bg-surface-900/50 backdrop-blur-sm"

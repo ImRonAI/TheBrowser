@@ -177,6 +177,40 @@ def test_models_endpoint_503_without_key(monkeypatch):
     assert "provider" in res.json()["detail"]
 
 
+def test_chat_providers_allowlist_limits_picker_catalogue_and_chat(monkeypatch):
+    """RON_CHAT_PROVIDERS offers only the listed providers; other keys stay set (Live keeps GEMINI_API_KEY)."""
+    _clear_provider_keys(monkeypatch)
+    monkeypatch.setattr(app_config, "NVIDIA_NIM_API_KEY", "nim-test")
+    monkeypatch.setattr(app_config, "MISTRAL_API_KEY", "mistral-test")
+    monkeypatch.setattr(app_config, "GEMINI_API_KEY", "gemini-test")
+    monkeypatch.setattr(app_config, "XAI_API_KEY", "xai-test")
+    monkeypatch.setenv("RON_CHAT_PROVIDERS", " mistral , NIM ")
+    listed: list[str] = []
+
+    def catalogue(provider):
+        listed.append(provider)
+        return [{"id": f"{provider}-model", "owned_by": provider, "provider": provider}]
+
+    monkeypatch.setattr(chat_endpoint, "list_provider_models", catalogue)
+
+    assert panel_agent.chat_providers() == ("nim", "mistral")
+    assert panel_agent.configured_providers() == ["nim", "mistral"]
+    assert client.get("/config").json()["providers"] == {"nim": True, "mistral": True}
+    body = client.get("/models").json()
+    assert listed == ["nim", "mistral"]
+    assert [item["provider"] for item in body["data"]] == ["nim", "mistral"]
+    assert (body["default_provider"], body["default_model"]) == ("nim", app_config.NIM_DEFAULT_MODEL)
+    for provider, model in (("gemini", "gemini-flash-lite-latest"), ("", "gemini-flash-lite-latest"), ("xai", "grok-4.3")):
+        res = client.post("/chat", json={"session_id": "s", "user_id": "u", "message": "hi", "provider": provider, "model": model})
+        assert res.status_code == 400
+        assert "RON_CHAT_PROVIDERS=nim,mistral" in res.json()["detail"]
+    assert client.get("/models/grok-4.3/efforts?provider=xai").status_code == 400
+
+    monkeypatch.setenv("RON_CHAT_PROVIDERS", "nim,nvidia")
+    with pytest.raises(ValueError, match="got nvidia"):
+        panel_agent.chat_providers()
+
+
 def test_efforts_endpoint_probes_and_caches(monkeypatch):
     """Efforts come from live validation probes and are cached per model."""
     probed: list[tuple[str, str]] = []
@@ -408,6 +442,7 @@ def test_config_endpoint_reports_only_panel_providers(monkeypatch):
     body = res.json()
     assert body["features"]["chat"] is True
     assert body["providers"] == {
+        "nim": False,
         "perplexity": False,
         "mistral": False,
         "xai": True,

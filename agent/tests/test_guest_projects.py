@@ -323,3 +323,160 @@ def test_guest_issue_agent_draws_a_workflow_into_the_description(tmp_path, monke
         assert result['status'] == 'error'
 
     asyncio.run(scenario())
+
+
+def test_guest_issue_context_is_saved_versioned_and_read_by_the_issue_agent(tmp_path, monkeypatch):
+    """The issue's Context section (`context`, migration 020) round-trips like work_products."""
+    monkeypatch.setenv('PROJECTS_GUEST_DB', str(tmp_path / 'projects.db'))
+
+    async def scenario():
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=application()), base_url='http://test',
+                                    headers={'X-Ron-Workspace': 'c' * 64}) as client:
+            project = (await client.post('/projects', json={'name': 'Context', 'key': 'CTX'})).json()
+            issue = (await client.post('/projects/issues', json={'project_id': project['id'], 'type': 'task', 'title': 'With context'})).json()
+            assert issue['context'] == []
+            entry = {'id': 'ctx-1', 'kind': 'link', 'title': 'Tokio', 'content': '# Tokio\n\nAsync runtime', 'source': 'https://tokio.rs/',
+                     'url': 'https://tokio.rs/', 'images': [], 'files': [], 'added': '2026-11-06T10:00:00Z', 'attachedAt': '2026-11-06T11:00:00Z'}
+            saved = await client.patch(f"/projects/issues/{issue['id']}", json={'version': 1, 'context': [entry]})
+            assert saved.status_code == 200, saved.text
+            assert saved.json()['version'] == 2 and saved.json()['context'] == [entry]
+            assert saved.json()['work_products'] == []
+            assert (await client.patch(f"/projects/issues/{issue['id']}", json={'version': 2, 'context': {'id': 'x'}})).status_code == 422
+            current = (await client.get(f"/projects/issues/{issue['id']}/context")).json()['issue']
+            assert current['context'][0]['content'] == '# Tokio\n\nAsync runtime'
+        return issue
+
+    asyncio.run(scenario())
+
+
+def test_issue_agent_reads_a_related_page_as_it_is_now(tmp_path, monkeypatch):
+    """A page added from the Related documents field is attached empty; read_issue returns its current Markdown."""
+    monkeypatch.setenv('PROJECTS_GUEST_DB', str(tmp_path / 'projects.db'))
+
+    async def scenario():
+        from starlette.requests import Request
+        from agent.api.core.projects import ProjectService, project_identity
+
+        identity = await project_identity(Request({'type': 'http', 'headers': [(b'x-ron-workspace', b'9' * 64)]}))
+        service = ProjectService(identity)
+        project = (await service.request('POST', 'projects', body={'name': 'Pages', 'key': 'PGS'}))[0]
+        other = (await service.request('POST', 'projects', body={'name': 'Elsewhere', 'key': 'ELW'}))[0]
+        page = (await service.request('POST', 'project_documents', body={'project_id': project['id'], 'title': 'Rollout plan', 'content': ''}))[0]
+        foreign = (await service.request('POST', 'project_documents', body={'project_id': other['id'], 'title': 'Other', 'content': '<p>Not this project</p>'}))[0]
+        issue = await service.create_issue({'project_id': project['id'], 'type': 'task', 'title': 'Ship it'})
+        entry = lambda doc, project_id: {'id': f"document:{doc['id']}", 'kind': 'document', 'title': doc['title'], 'content': '',
+                                         'source': f"ron://project/{project_id}/docs/{doc['id']}", 'url': '', 'images': [], 'files': [],
+                                         'added': '2026-11-07T10:00:00Z', 'attachedAt': '2026-11-07T10:00:00Z'}
+        note = {'id': 'note-1', 'kind': 'note', 'title': 'Note', 'content': 'Keep me', 'source': '', 'url': '', 'images': [], 'files': []}
+        issue = await service.update_issue(issue['id'], 1, {'context': [entry(page, project['id']), entry(foreign, other['id']), note]})
+        # The user writes the page after linking it.
+        await service.request('PATCH', 'project_documents', params={'id': f"eq.{page['id']}", 'version': f"eq.{page['version']}"},
+                              body={'title': 'Rollout plan v2', 'content': '<h2>Steps</h2><ul><li><p>Canary</p></li></ul>'})
+
+        tools = {tool.tool_name: tool for tool in issue_tools(service, issue)}
+        _, result = await call_tool(tools['read_issue'], {})
+        assert result['status'] == 'success'
+        block = result['content'][0]
+        context = (block['json'] if 'json' in block else json.loads(block['text']))['context']
+        assert context[0]['title'] == 'Rollout plan v2'
+        assert context[0]['content'].startswith('## Steps') and 'Canary' in context[0]['content']
+        assert context[1] == entry(foreign, other['id'])  # another project's page is not read
+        assert context[2] == note
+        # Storage keeps the entry as attached; only the read is current.
+        assert (await service.issue(issue['id']))['context'][0]['content'] == ''
+
+    asyncio.run(scenario())
+
+
+def test_guest_project_history_is_compacted_status_estimate_and_type_transitions(tmp_path, monkeypatch):
+    """GET /projects/{id}/history reads the workspace audit trail and keeps only flow-relevant changes."""
+    monkeypatch.setenv('PROJECTS_GUEST_DB', str(tmp_path / 'projects.db'))
+
+    async def scenario():
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=application()), base_url='http://test',
+                                    headers={'X-Ron-Workspace': 'd' * 64}) as client:
+            project = (await client.post('/projects', json={'name': 'Flow', 'key': 'FLW'})).json()
+            other = (await client.post('/projects', json={'name': 'Elsewhere', 'key': 'ELS'})).json()
+            issue = (await client.post('/projects/issues', json={'project_id': project['id'], 'type': 'task', 'title': 'Flow item'})).json()
+            await client.post('/projects/issues', json={'project_id': other['id'], 'type': 'task', 'title': 'Not this project'})
+            version = issue['version']
+            for patch in [{'status': 'in-progress'}, {'title': 'Renamed only'}, {'estimate': 3}, {'type': 'bug'},
+                          {'status': 'done'}]:
+                response = await client.patch(f"/projects/issues/{issue['id']}", json={'version': version, **patch})
+                assert response.status_code == 200, response.text
+                version = response.json()['version']
+
+            history = await client.get(f"/projects/{project['id']}/history")
+            assert history.status_code == 200, history.text
+            body = history.json()
+            assert body['project_id'] == project['id'] and body['truncated'] is False and body['rows_read'] == 6
+            steps = [(t['status'], t['estimate'], t['type']) for t in body['transitions']]
+            # The title-only update is not a transition; the other project's issue is not included.
+            assert steps == [('backlog', None, 'task'), ('in-progress', None, 'task'), ('in-progress', 3.0, 'task'),
+                             ('in-progress', 3.0, 'bug'), ('done', 3.0, 'bug')]
+            assert {t['issue_id'] for t in body['transitions']} == {issue['id']}
+            moments = [t['at'] for t in body['transitions']]
+            assert moments == sorted(moments) and all(isinstance(at, int) for at in moments)
+            assert body['since'] == moments[0]
+
+            assert (await client.get(f"/projects/{project['id']}/history", headers={'X-Ron-Workspace': 'e' * 64})).status_code == 404
+
+    asyncio.run(scenario())
+
+
+def test_a_blocking_relationship_moves_the_blocked_issue_to_blocked_and_back(tmp_path, monkeypatch):
+    monkeypatch.setenv('PROJECTS_GUEST_DB', str(tmp_path / 'projects.db'))
+
+    async def scenario():
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=application()), base_url='http://test',
+                                     headers={'X-Ron-Workspace': 'e' * 64}) as client:
+            project = (await client.post('/projects', json={'name': 'Blocking', 'key': 'BL'})).json()
+
+            async def issue(title, status):
+                created = (await client.post('/projects/issues', json={'project_id': project['id'], 'type': 'task', 'title': title})).json()
+                if status == 'backlog':
+                    return created
+                return (await client.patch(f"/projects/issues/{created['id']}", json={'version': created['version'], 'status': status})).json()
+
+            async def status(issue_id):
+                return (await client.get(f"/projects/issues/{issue_id}/context")).json()['issue']['status']
+
+            api, ui, docs, shipped = (await issue('API', 'in-progress'), await issue('UI', 'review'),
+                                      await issue('Docs', 'backlog'), await issue('Shipped', 'done'))
+
+            # API blocks UI: UI moves to Blocked and the response carries the moved issue.
+            link = (await client.post('/projects/links', json={'source_id': api['id'], 'target_id': ui['id'], 'type': 'blocks'})).json()
+            assert link['blocked_issue']['id'] == ui['id'] and link['blocked_issue']['status'] == 'blocked'
+            assert await status(ui['id']) == 'blocked'
+            # A second blocker leaves it Blocked; other relationship types never move anything.
+            second = (await client.post('/projects/links', json={'source_id': docs['id'], 'target_id': ui['id'], 'type': 'blocks'})).json()
+            assert 'blocked_issue' not in second
+            relates = (await client.post('/projects/links', json={'source_id': api['id'], 'target_id': docs['id'], 'type': 'relates'})).json()
+            assert 'blocked_issue' not in relates and await status(docs['id']) == 'backlog'
+            # A finished issue blocks nothing; a finished issue is never moved to Blocked.
+            assert 'blocked_issue' not in (await client.post('/projects/links', json={'source_id': shipped['id'], 'target_id': docs['id'], 'type': 'blocks'})).json()
+            assert 'blocked_issue' not in (await client.post('/projects/links', json={'source_id': api['id'], 'target_id': shipped['id'], 'type': 'blocks'})).json()
+            assert await status(docs['id']) == 'backlog' and await status(shipped['id']) == 'done'
+
+            # Removing one of two blockers keeps UI Blocked.
+            removed = (await client.delete(f"/projects/links/{link['id']}")).json()
+            assert removed == {'deleted': True} and await status(ui['id']) == 'blocked'
+            # Finishing the last blocker returns UI to the status it had before Blocked.
+            docs_now = (await client.get(f"/projects/issues/{docs['id']}/context")).json()['issue']
+            finished = (await client.patch(f"/projects/issues/{docs['id']}", json={'version': docs_now['version'], 'status': 'done'})).json()
+            assert finished['status'] == 'done'
+            assert [(i['id'], i['status']) for i in finished['unblocked_issues']] == [(ui['id'], 'review')]
+            assert await status(ui['id']) == 'review'
+
+            # Removing the only blocking relationship also restores the earlier status.
+            fresh = await issue('Fresh', 'backlog')
+            again = (await client.post('/projects/links', json={'source_id': api['id'], 'target_id': fresh['id'], 'type': 'blocks'})).json()
+            assert await status(fresh['id']) == 'blocked'
+            released = (await client.delete(f"/projects/links/{again['id']}")).json()
+            assert released['deleted'] is True and released['unblocked_issues'][0]['status'] == 'backlog'
+            assert await status(fresh['id']) == 'backlog'
+            # The moves are ordinary audited updates.
+            history = (await client.get(f"/projects/issues/{fresh['id']}/context")).json()['activity']
+            assert [json.loads(entry['new_value'])['status'] for entry in history][:2] == ['backlog', 'blocked']
+
+    asyncio.run(scenario())

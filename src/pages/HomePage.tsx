@@ -1,7 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
-import { ChevronLeft, ChevronRight, Pause, Play, RefreshCw, Sparkles } from 'lucide-react'
+import { ChevronLeft, ChevronRight, MapPin, Pause, Play, RefreshCw, SlidersHorizontal, TriangleAlert } from 'lucide-react'
+import { Marker } from '@/components/brand'
 import { useDiscoverProfile } from '@/stores/discoverProfileStore'
+import { discoverTopics } from '@/lib/context-api'
+import { useContextAgentStore } from '@/stores/contextAgentStore'
 import { STORY_GRID_SLOTS } from '@/lib/discover-profile'
 import { useOnboardingStore } from '@/stores/onboardingStore'
 import { useDiscoverFeedStore } from '@/stores/discoverFeedStore'
@@ -12,7 +15,7 @@ import { RichAnswerCard } from '@/components/home/RichAnswerCard'
 import { StoryCard, STORY_CARD_HEIGHT, type StoryCardSize } from '@/components/home/StoryCard'
 import { FavoriteLinks } from '@/components/home/FavoriteLinks'
 import { useNavigationStore } from '@/stores/navigationStore'
-import { KanbanBoard } from '@/components/board'
+import { ExecutePage } from '@/pages/ExecutePage'
 import { CalendarPage } from '@/pages/CalendarPage'
 import { ErrorBoundary } from '@/components/ui/ErrorBoundary'
 import { BuildWorkbenchPage } from '@/components/build'
@@ -36,7 +39,8 @@ export function HomePage() {
   const activeTab = useNavigationStore((state) => state.activeTab)
   return <div className="h-full overflow-auto bg-surface-0 text-ink dark:bg-surface-900 dark:text-ink-inverse">
     {activeTab === 'discover' && <ErrorBoundary componentName="Discover"><DiscoverContent /></ErrorBoundary>}
-    {activeTab === 'execute' && <ErrorBoundary componentName="KanbanBoard"><KanbanBoard /></ErrorBoundary>}
+    {/* App routes 'execute' to ExecutePage directly; if HomePage is ever shown on that tab it renders the same real view. */}
+    {activeTab === 'execute' && <ErrorBoundary componentName="ExecutePage"><ExecutePage /></ErrorBoundary>}
     {activeTab === 'calendar' && <ErrorBoundary componentName="Calendar"><CalendarPage /></ErrorBoundary>}
     {activeTab === 'vibe' && <ErrorBoundary componentName="SuperAgentInterface"><SuperAgentInterface /></ErrorBoundary>}
     {activeTab === 'build' && <BuildWorkbenchPage />}
@@ -65,12 +69,34 @@ const FALLBACK_GROUPS: Story[][] = [
 
 type SlotSwap = { name: SwapAnimationName; direction: SwapDirection }
 
+const BUTTON = 'inline-flex h-9 items-center gap-2 rounded-lg px-3.5 text-[13px] font-semibold transition-colors duration-150 ease-out disabled:cursor-not-allowed disabled:opacity-40'
+const BUTTON_PRIMARY = 'bg-blurple-600 text-white enabled:hover:bg-blurple-700 enabled:active:bg-blurple-800 dark:bg-blurple-400 dark:text-ink dark:enabled:hover:bg-blurple-300'
+const BUTTON_SECONDARY = 'border border-surface-200 bg-surface-0 text-ink enabled:hover:bg-surface-50 dark:border-surface-800 dark:bg-surface-900 dark:text-ink-inverse dark:enabled:hover:bg-surface-850'
+const ICON_BUTTON = 'flex h-8 w-8 items-center justify-center rounded-lg text-ink-secondary transition-colors duration-150 ease-out hover:bg-surface-100 hover:text-ink dark:text-ink-inverse-secondary dark:hover:bg-surface-850 dark:hover:text-ink-inverse'
+const CHIP = 'inline-flex h-6 items-center gap-1 rounded-full bg-surface-100 px-2.5 text-[12px] font-medium text-ink-secondary dark:bg-surface-850 dark:text-ink-inverse-secondary'
+const MICRO = 'font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-ink-muted dark:text-ink-inverse-muted'
+
+/** A section's micro label on a hairline rule; decorative, the section itself carries the accessible name. */
+function SectionRule({ label }: { label: string }) {
+  return (
+    <div aria-hidden className="mb-4 flex items-center gap-3">
+      <span className={MICRO}>{label}</span>
+      <span className="h-px flex-1 bg-surface-200 dark:bg-surface-800" />
+    </div>
+  )
+}
+
 function DiscoverContent() {
   const reducedMotion = useReducedMotion()
-  const profile = useDiscoverProfile()
-  const topics = profile.topics.slice(0, 5)
+  const savedProfile = useDiscoverProfile()
+  // Interests the Context Agent learned from browsing and saved context lead the feed (a string selector:
+  // node positions change every animation frame, the topics do not).
+  const learnedTopics = useInterestsStore((state) => discoverTopics(savedProfile.topics, state.nodes).join('\n'))
+  const profile = useMemo(() => ({ ...savedProfile, topics: learnedTopics ? learnedTopics.split('\n') : savedProfile.topics }), [savedProfile, learnedTopics])
+  const topics = profile.topics.slice(0, 7)
   const { sections, loading, error, fetchedAt, load } = useDiscoverFeedStore()
   const recordInteraction = useInterestsStore((state) => state.recordInteraction)
+  const addContext = useContextAgentStore((state) => state.addContext)
   const hasAnswers = useOnboardingStore((state) => state.answers.length > 0)
   const resetOnboarding = useOnboardingStore((state) => state.resetOnboarding)
   // Re-run the interview: clear answers, then route via #onboarding (App.tsx shows the page for guests too).
@@ -140,29 +166,39 @@ function DiscoverContent() {
     return () => clearInterval(timer)
   }, [paused, hovered, focused, hidden, reducedMotion, groups])
   const status = error ? (error.code === 'not_configured' ? 'Live feed off: BRAVE_SEARCH_API_KEY is not set on the backend.'
-    : error.code === 'unreachable' ? 'Live feed off: the Ron API is not running.' : `Live feed error: ${error.message}`)
+    : error.code === 'unreachable' ? 'Live feed off: the Ren API is not running.' : `Live feed error: ${error.message}`)
     : loading && !live ? 'Loading your feed…' : live && fetchedAt ? `Updated ${formatRelative(fetchedAt)}` : ''
   return <main className="mx-auto max-w-7xl px-6 pb-24 pt-10 sm:px-10">
-    <header className="mb-8 border-b border-surface-200/80 pb-7 dark:border-surface-800">
-      <div className="mb-5 flex items-center justify-between gap-4 text-[11px] font-medium uppercase tracking-[0.14em] text-ink-muted dark:text-ink-inverse-muted"><span>Ron <span aria-hidden className="mx-1 opacity-50">/</span> Discover</span><span className="flex items-center gap-1.5">{live && <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-success" />}{live ? 'Live from your interests' : 'Selected for the curious'}</span></div>
-      <div className="flex flex-wrap items-end justify-between gap-5">
-        <div><h1 className="font-display text-[2.6rem] font-normal leading-[1.05] tracking-[-0.02em] sm:text-[3.25rem]">A little more <em className="italic">perspective.</em></h1><p className="mt-3 max-w-md text-[14px] leading-relaxed text-ink-secondary dark:text-ink-inverse-secondary">Your interests, worth a closer look. Read something. Make something of it.</p></div>
-        <div className="flex items-center gap-2">
-          <button onClick={personalize} aria-label={hasAnswers ? 'Redo the interests interview' : 'Personalize your feed'} className="flex h-8 items-center gap-1.5 rounded-lg border border-surface-200 px-3 text-[12.5px] font-medium text-ink-secondary transition-colors hover:border-surface-300 hover:bg-surface-50 hover:text-ink disabled:opacity-50 dark:border-surface-800 dark:text-ink-inverse-secondary dark:hover:border-surface-700 dark:hover:bg-surface-850 dark:hover:text-ink-inverse"><Sparkles size={13} strokeWidth={1.75} />{hasAnswers ? 'Redo interview' : 'Personalize'}</button>
-          <button onClick={() => void load(profile, { force: true })} disabled={loading} aria-label="Refresh feed" className="flex h-8 items-center gap-1.5 rounded-lg border border-surface-200 px-3 text-[12.5px] font-medium text-ink-secondary transition-colors hover:border-surface-300 hover:bg-surface-50 hover:text-ink disabled:opacity-50 dark:border-surface-800 dark:text-ink-inverse-secondary dark:hover:border-surface-700 dark:hover:bg-surface-850 dark:hover:text-ink-inverse"><RefreshCw size={13} strokeWidth={1.75} className={loading ? 'animate-spin' : ''} />Refresh</button>
-          <button onClick={() => setPaused((value) => !value)} disabled={Boolean(reducedMotion)} aria-pressed={!paused && !reducedMotion} className="flex h-8 items-center gap-1.5 rounded-lg border border-surface-200 px-3 text-[12.5px] font-medium text-ink-secondary transition-colors hover:border-surface-300 hover:bg-surface-50 hover:text-ink disabled:opacity-50 dark:border-surface-800 dark:text-ink-inverse-secondary dark:hover:border-surface-700 dark:hover:bg-surface-850 dark:hover:text-ink-inverse">{paused || reducedMotion ? <Play size={13} strokeWidth={1.75} /> : <Pause size={13} strokeWidth={1.75} />}{paused || reducedMotion ? 'Auto-play off' : 'Pause stories'}</button>
+    <header className="mb-10 border-b border-surface-200 pb-8 dark:border-surface-800">
+      <div className="mb-7 flex items-center justify-between gap-4">
+        <span className="tag-label tag-label-slash">Discover</span>
+        <span className={cn(MICRO, 'flex items-center gap-2')}>{live && <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-success" />}{live ? 'Live from your interests' : 'Selected for the curious'}</span>
+      </div>
+      <div className="flex flex-wrap items-end justify-between gap-x-10 gap-y-6">
+        <div className="min-w-0 max-w-3xl">
+          <h1 className="font-display text-display-md font-extrabold tracking-[-0.035em] text-ink sm:text-display-lg dark:text-ink-inverse">A little more <Marker>perspective</Marker>.</h1>
+          <p className="mt-4 max-w-md text-[15px] leading-relaxed text-ink-secondary dark:text-ink-inverse-secondary">Your interests, worth a closer look. Read something. Make something of it.</p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <button onClick={personalize} aria-label={hasAnswers ? 'Redo the interests interview' : 'Personalize your feed'} className={cn(BUTTON, hasAnswers ? BUTTON_SECONDARY : BUTTON_PRIMARY)}><SlidersHorizontal className="h-4 w-4" />{hasAnswers ? 'Redo interview' : 'Personalize'}</button>
+          <button onClick={() => void load(profile, { force: true })} disabled={loading} aria-label="Refresh feed" className={cn(BUTTON, BUTTON_SECONDARY)}><RefreshCw className={cn('h-4 w-4', loading && 'animate-spin')} />Refresh</button>
+          <button onClick={() => setPaused((value) => !value)} disabled={Boolean(reducedMotion)} aria-pressed={!paused && !reducedMotion} className={cn(BUTTON, BUTTON_SECONDARY)}>{paused || reducedMotion ? <Play className="h-4 w-4" /> : <Pause className="h-4 w-4" />}{paused || reducedMotion ? 'Auto-play off' : 'Pause stories'}</button>
         </div>
       </div>
-      <div className="mt-5 flex flex-wrap items-center gap-2">
-        {topics.map((topic) => <span key={topic} className="rounded-md border border-surface-200 px-2.5 py-1 text-[12px] text-ink-secondary dark:border-surface-800 dark:text-ink-inverse-secondary">{topic}</span>)}
-        {profile.location && <span className="rounded-md border border-surface-200 px-2.5 py-1 text-[12px] text-ink-secondary dark:border-surface-800 dark:text-ink-inverse-secondary">{profile.location}</span>}
-        {status && <span role="status" className="ml-auto text-[11px] text-ink-muted dark:text-ink-inverse-muted">{status}</span>}
+      <div className="mt-7 flex flex-wrap items-center gap-1.5">
+        {topics.map((topic) => <span key={topic} className={CHIP}>{topic}</span>)}
+        {profile.location && <span className={CHIP}><MapPin className="h-3 w-3" />{profile.location}</span>}
+        {status && <span role="status" className={cn('ml-auto flex items-center gap-1.5 text-[12px]', error ? 'text-amber-800 dark:text-amber-300' : 'text-ink-muted dark:text-ink-inverse-muted')}>{error && <TriangleAlert className="h-3.5 w-3.5 shrink-0" />}{status}</span>}
       </div>
     </header>
     <FavoriteLinks />
     {/* At-a-glance cards fill the full content width: four across on desktop, every card stretched to the row's height. */}
-    {answers.length > 0 && <section aria-label="At a glance" className="mb-10 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">{answers.map((answer, index) => <RichAnswerCard key={`${answer.subtype}-${index}`} answer={answer} />)}</section>}
-    {failed.length > 0 && <p className="mb-6 text-[11px] text-ink-muted dark:text-ink-inverse-muted">Couldn’t load {failed.map((section) => `${section.q || section.kind}${section.error?.code === 'not_in_plan' ? ' (not in plan)' : ''}`).join(', ')}.</p>}
+    {answers.length > 0 && <section aria-label="At a glance" className="mb-12">
+      <SectionRule label="At a glance" />
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">{answers.map((answer, index) => <RichAnswerCard key={`${answer.subtype}-${index}`} answer={answer} />)}</div>
+    </section>}
+    {failed.length > 0 && <p className="mb-6 text-[12px] text-ink-muted dark:text-ink-inverse-muted">Couldn’t load {failed.map((section) => `${section.q || section.kind}${section.error?.code === 'not_in_plan' ? ' (not in plan)' : ''}`).join(', ')}.</p>}
+    <SectionRule label="Stories by interest" />
     <section aria-label="Stories by interest" className="grid grid-cols-1 gap-x-6 gap-y-10 md:grid-cols-2 xl:grid-cols-3" onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)} onFocusCapture={() => setFocused(true)} onBlurCapture={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) setFocused(false) }}>
       {groups.map((group, slot) => {
         const story = group[at(slot)]
@@ -175,15 +211,15 @@ function DiscoverContent() {
             <AnimatePresence mode="wait" initial={false} custom={custom}>
               <motion.div key={story.url} custom={custom} variants={swapVariants} initial="initial" animate="animate" exit="exit"
                 style={{ transformStyle: 'preserve-3d' }} data-swap-animation={custom.name} data-swap-direction={custom.direction} className="h-full will-change-transform">
-                <StoryCard story={story} featured={featured} size={size} tilt={cardTilt(story.url)} hue={stickerHue(group[0].topic)} onRead={() => open(story)} />
+                <StoryCard story={story} featured={featured} size={size} tilt={cardTilt(story.url)} hue={stickerHue(group[0].topic)} onRead={() => open(story)} onAddContext={() => void addContext({ kind: 'article', url: story.url, title: story.title })} />
               </motion.div>
             </AnimatePresence>
           </div>
-          <div className="mt-3 flex items-center justify-between text-[11px] text-ink-muted dark:text-ink-inverse-muted">
-            <span><span className="font-mono font-medium tabular-nums text-ink-secondary dark:text-ink-inverse-secondary">{String(at(slot) + 1).padStart(2, '0')} / {group.length}</span> <span className="opacity-70">in {group[0].topic}</span></span>
-            <div className="flex gap-1">
-              <button aria-label={`Previous ${group[0].topic} story`} onClick={() => swap(slot, -1, slotAnimation(slot))} className="flex h-7 w-7 items-center justify-center rounded-md border border-surface-200 text-ink-secondary transition-colors hover:border-surface-300 hover:bg-surface-50 hover:text-ink dark:border-surface-800 dark:text-ink-inverse-secondary dark:hover:border-surface-700 dark:hover:bg-surface-850 dark:hover:text-ink-inverse"><ChevronLeft size={14} /></button>
-              <button aria-label={`Next ${group[0].topic} story`} onClick={() => swap(slot, 1, slotAnimation(slot))} className="flex h-7 w-7 items-center justify-center rounded-md border border-surface-200 text-ink-secondary transition-colors hover:border-surface-300 hover:bg-surface-50 hover:text-ink dark:border-surface-800 dark:text-ink-inverse-secondary dark:hover:border-surface-700 dark:hover:bg-surface-850 dark:hover:text-ink-inverse"><ChevronRight size={14} /></button>
+          <div className="mt-2.5 flex items-center justify-between gap-3">
+            <span className="flex min-w-0 items-baseline gap-2 text-[12px] text-ink-muted dark:text-ink-inverse-muted"><span className="shrink-0 font-mono text-[11px] font-medium tabular-nums tracking-[0.04em]"><span className="text-ink dark:text-ink-inverse">{String(at(slot) + 1).padStart(2, '0')}</span> / {group.length}</span> <span className="truncate">in {group[0].topic}</span></span>
+            <div className="flex shrink-0 gap-0.5">
+              <button aria-label={`Previous ${group[0].topic} story`} onClick={() => swap(slot, -1, slotAnimation(slot))} className={ICON_BUTTON}><ChevronLeft className="h-4 w-4" /></button>
+              <button aria-label={`Next ${group[0].topic} story`} onClick={() => swap(slot, 1, slotAnimation(slot))} className={ICON_BUTTON}><ChevronRight className="h-4 w-4" /></button>
             </div>
           </div>
         </div>

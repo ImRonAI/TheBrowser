@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { ASSIST_MAX_CHARS, assistable, createAssistClient, debounced, normalizeSuggestion } from './text-assist.ts'
+import {
+  ASSIST_MAX_CHARS, assistable, assistAnnouncement, assistFieldAria, assistKeyAction, assistOptionKey, assistOptions, createAssistClient,
+  debounced, moveHighlight, normalizeSuggestion, type AssistKeyContext,
+} from './text-assist.ts'
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })
 
@@ -68,4 +71,63 @@ test('debounced runs once per pause, aborts the superseded request and resolves 
   d.dispose()
   assert.equal(seen[1].aborted, true, 'dispose aborts the in-flight request')
   assert.equal(await third, undefined)
+})
+
+test('the correction leads the listbox rows, and row keys stay stable when it arrives later', () => {
+  const suggestions = [{ query: 'palm springs', type: 'query' as const }, { query: 'Palm Springs', type: 'entity' as const }]
+  const rows = assistOptions('palm springs ca', suggestions)
+  assert.deepEqual(rows.map((row) => row.kind), ['correction', 'suggestion', 'suggestion'])
+  assert.deepEqual(assistOptions(null, []), [])
+  assert.deepEqual(assistOptions(null, suggestions).map(assistOptionKey), rows.slice(1).map(assistOptionKey))
+  assert.equal(new Set(rows.map(assistOptionKey)).size, rows.length, 'every row has its own key')
+})
+
+test('moveHighlight: down from the field reaches the first row, wraps back to the field, up reaches the last row', () => {
+  assert.equal(moveHighlight(-1, 1, 3), 0, 'the old cycling formula left ↓ stuck on the field')
+  assert.equal(moveHighlight(0, 1, 3), 1)
+  assert.equal(moveHighlight(2, 1, 3), -1, '↓ past the last row returns to the field')
+  assert.equal(moveHighlight(-1, -1, 3), 2)
+  assert.equal(moveHighlight(0, -1, 3), -1)
+  assert.equal(moveHighlight(7, 1, 3), -1, 'a stale index past the end is treated as the last row')
+  assert.equal(moveHighlight(-1, 1, 0), -1, 'nothing to highlight')
+})
+
+test('assistKeyAction keeps the documented keys and leaves a textarea caret alone until the list is in use', () => {
+  const field: AssistKeyContext = { options: 2, active: -1, hasSuggestions: true, multiline: false, caretAtEnd: false }
+  assert.deepEqual(assistKeyAction('ArrowDown', field), { type: 'move', delta: 1 })
+  assert.deepEqual(assistKeyAction('ArrowUp', field), { type: 'move', delta: -1 })
+  assert.equal(assistKeyAction('Enter', field), null, 'Enter with nothing highlighted is the host\'s (submit)')
+  assert.deepEqual(assistKeyAction('Enter', { ...field, active: 0 }), { type: 'accept' })
+  assert.deepEqual(assistKeyAction('Tab', { ...field, active: 1 }), { type: 'accept' })
+  assert.deepEqual(assistKeyAction('Escape', field), { type: 'dismiss' })
+  assert.equal(assistKeyAction('a', field), null)
+  assert.equal(assistKeyAction('Escape', { ...field, options: 0 }), null, 'no list, nothing consumed')
+
+  const correctionOnly: AssistKeyContext = { options: 1, active: -1, hasSuggestions: false, multiline: true, caretAtEnd: false }
+  assert.equal(assistKeyAction('ArrowDown', correctionOnly), null, 'mid-text ↓ moves the caret')
+  assert.equal(assistKeyAction('ArrowUp', { ...correctionOnly, caretAtEnd: true }), null)
+  assert.deepEqual(assistKeyAction('ArrowDown', { ...correctionOnly, caretAtEnd: true }), { type: 'move', delta: 1 }, '↓ at the end reaches the correction')
+  assert.deepEqual(assistKeyAction('ArrowUp', { ...correctionOnly, active: 0 }), { type: 'move', delta: -1 }, 'once highlighted, the arrows stay with the list')
+  assert.deepEqual(assistKeyAction('ArrowDown', { ...correctionOnly, hasSuggestions: true }), { type: 'move', delta: 1 })
+})
+
+test('assistFieldAria: a combobox for single-line fields, textbox-safe properties otherwise', () => {
+  assert.deepEqual(assistFieldAria('a1', 3, 1, true), {
+    role: 'combobox', 'aria-expanded': true, 'aria-autocomplete': 'list', 'aria-controls': 'a1-listbox', 'aria-activedescendant': 'a1-option-1',
+  })
+  assert.deepEqual(assistFieldAria('a1', 0, 1, true), {
+    role: 'combobox', 'aria-expanded': false, 'aria-autocomplete': 'list', 'aria-controls': undefined, 'aria-activedescendant': undefined,
+  })
+  const textbox = assistFieldAria('a1', 2, -1, false)
+  assert.equal('role' in textbox, false, 'a textarea keeps its textbox role')
+  assert.equal('aria-expanded' in textbox, false, 'aria-expanded is not a textbox property')
+  assert.equal(textbox['aria-controls'], 'a1-listbox')
+  assert.equal(textbox['aria-activedescendant'], undefined)
+})
+
+test('assistAnnouncement says what appeared', () => {
+  assert.equal(assistAnnouncement(null, 0), '')
+  assert.equal(assistAnnouncement('receive', 0), 'Did you mean receive?')
+  assert.equal(assistAnnouncement(null, 1), '1 suggestion, use the arrow keys to choose.')
+  assert.equal(assistAnnouncement('receive', 4), 'Did you mean receive? 4 suggestions, use the arrow keys to choose.')
 })

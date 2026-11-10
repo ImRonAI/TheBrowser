@@ -61,8 +61,10 @@ from strands.models.mistral import MistralModel
 from strands.types.content import Messages
 from strands.types.exceptions import ContextWindowOverflowException, ModelThrottledException
 from strands.types.streaming import StreamEvent
-from strands.types.tools import ToolChoice, ToolSpec
+from strands.types.tools import ToolChoice, ToolResult, ToolSpec
 from typing_extensions import override
+
+from agent.api.core.media_capabilities import cached_tool_result_images, has_tool_result_images, load_capability
 
 logger = logging.getLogger(__name__)
 
@@ -297,6 +299,31 @@ class RonMistralModel(MistralModel):
         self._replay_reasoning(messages, request["messages"])
         return request
 
+    @override
+    def _format_request_tool_message(self, tool_result: ToolResult) -> dict[str, Any]:
+        """Vended tool message plus the result's images as ``image_url`` chunks, for vision models.
+
+        The vended formatter keeps only text/json. ``ToolMessage.content`` is ``str | List[ContentChunk]``
+        (``mistralai/client/models/toolmessage.py``) and a vision model reads an image chunk in a ``tool``
+        message; a model without ``capabilities.vision`` answers ``400 Image input is not enabled for this
+        model``, so its tool-result images stay dropped (``media_capabilities``).
+        """
+        message = super()._format_request_tool_message(tool_result)
+        images = [self._format_request_message_content(item) for item in tool_result["content"] if "image" in item]
+        if not images:
+            return message
+        if not cached_tool_result_images("mistral", self.config["model_id"]):
+            logger.debug("model=<%s>, images=<%d> | model reads no images: tool-result images dropped",
+                         self.config["model_id"], len(images))
+            return message
+        text = message["content"]
+        message["content"] = [*([{"type": "text", "text": text}] if text else []), *images]
+        return message
+
+    async def _load_media_capability(self, messages: Messages) -> None:
+        if has_tool_result_images(messages):
+            await load_capability("mistral", self.config["model_id"])
+
     @staticmethod
     def _replay_reasoning(messages: Messages, formatted: list[dict[str, Any]]) -> None:
         """Replay stored ``reasoningContent`` as ``thinking`` chunks on assistant messages.
@@ -347,6 +374,7 @@ class RonMistralModel(MistralModel):
         agent_metadata: AgentMetadata | None = None,
         **kwargs: Any,
     ) -> AsyncGenerator[StreamEvent, None]:
+        await self._load_media_capability(messages)
         request = self.format_request(messages, tool_specs, system_prompt, agent_metadata)
         self._apply_tool_choice(request, tool_choice)
         logger.debug("request=<%s>", request)
@@ -485,6 +513,7 @@ class RonMistralModel(MistralModel):
             "description": f"Extract structured data in the format of {output_model.__name__}",
             "inputSchema": {"json": output_model.model_json_schema()},
         }
+        await self._load_media_capability(prompt)
         request = self.format_request(messages=prompt, tool_specs=[tool_spec], system_prompt=system_prompt)
         request["tool_choice"] = "any"
         request["parallel_tool_calls"] = False

@@ -5,6 +5,7 @@
  * (grouped by merchant with product imagery and prices) and Brick-and-Mortar / Local Stores
  * (with address, rating, hours, phone, and website/storefront links).
  */
+import { useState } from 'react'
 import { motion, useReducedMotion } from 'framer-motion'
 import { ExternalLink, MapPin, Phone, ShoppingBag, Star, Store } from 'lucide-react'
 import { ResponseMarkdown } from '@/components/ai-elements/response'
@@ -39,10 +40,10 @@ function isLocalSource(source: AgentSearchResult): boolean {
 }
 
 /**
- * Map every product source to a photo. First pass: exact merchant-host match against
- * the image's page metadata. Second pass: distribute the unclaimed image pool across
- * the remaining products in order, so every card shows a photo whenever the agent's
- * image_search returned any.
+ * Map product sources to photos taken from the same merchant: an image is used only when
+ * its page metadata names the product's host. A product without such a photo keeps the
+ * bag placeholder (a photo from another page would misrepresent what is for sale); the
+ * unmatched photos are shown on their own under "Product photos".
  */
 function assignImages(sources: AgentSearchResult[], images: AgentImageResult[]): Map<string, AgentImageResult> {
   const bySourceUrl = new Map<string, AgentImageResult>()
@@ -61,13 +62,6 @@ function assignImages(sources: AgentSearchResult[], images: AgentImageResult[]):
       bySourceUrl.set(source.url, match)
       claimed.add(match)
     }
-  }
-  const pool = images.filter((image) => !claimed.has(image) && image.url)
-  let cursor = 0
-  for (const source of sources) {
-    if (!source.url || bySourceUrl.has(source.url) || pool.length === 0) continue
-    bySourceUrl.set(source.url, pool[cursor % pool.length])
-    cursor += 1
   }
   return bySourceUrl
 }
@@ -124,13 +118,14 @@ function mergeLocalStores(sources: AgentSearchResult[], places: DiscoverItem[]):
 
 function ProductCard({ product, index }: { product: Product; index: number }) {
   const reduced = useReducedMotion()
+  const [failed, setFailed] = useState(false)
   const { source, image, price } = product
   return (
     <motion.li {...rowMotion(index, reduced)} className="list-none">
       <button type="button" onClick={() => openResult(source.url)} className="group block w-full rounded-lg text-left" title={source.url}>
         <span className="flex aspect-square w-full items-center justify-center overflow-hidden rounded-lg border border-surface-200/70 bg-surface-50 dark:border-surface-800 dark:bg-surface-850">
-          {image?.url ? (
-            <img src={image.url} alt="" loading="lazy" className="h-full w-full object-contain p-3 mix-blend-multiply transition-transform duration-500 ease-smooth motion-safe:group-hover:scale-[1.04] dark:mix-blend-normal" />
+          {image?.url && !failed ? (
+            <img src={image.url} alt="" loading="lazy" onError={() => setFailed(true)} className="h-full w-full object-contain p-3 mix-blend-multiply transition-transform duration-500 ease-smooth motion-safe:group-hover:scale-[1.04] dark:mix-blend-normal" />
           ) : (
             <ShoppingBag className="h-6 w-6 text-ink-muted/50 dark:text-ink-inverse-muted/50" strokeWidth={1.5} />
           )}
@@ -216,6 +211,24 @@ function LocalStoreCard({ store, index }: { store: AgentSearchResult; index: num
   )
 }
 
+/** A product photo with no matching product card; hidden when the image fails to load. */
+function ProductPhoto({ image }: { image: AgentImageResult }) {
+  const [failed, setFailed] = useState(false)
+  if (failed) return null
+  return (
+    <li className="list-none">
+      <button
+        type="button"
+        onClick={() => openResult(((image.page_url as string) || (image.source as string) || image.url) as string)}
+        className="group block aspect-square w-full overflow-hidden rounded-lg border border-surface-200/70 bg-surface-50 dark:border-surface-800 dark:bg-surface-850"
+        aria-label="Open product photo source"
+      >
+        <img src={image.url} alt="" loading="lazy" onError={() => setFailed(true)} className="h-full w-full object-contain p-3 mix-blend-multiply transition-transform duration-500 ease-smooth motion-safe:group-hover:scale-[1.04] dark:mix-blend-normal" />
+      </button>
+    </li>
+  )
+}
+
 function MerchantHeader({ url, label, count }: { url: string; label: string; count: number }) {
   return (
     <div className="mb-3 flex items-center gap-2">
@@ -231,11 +244,13 @@ export function ShoppingResults({
   run,
   places = [],
   onRetry,
+  onOpenWeb,
 }: {
   run: AgentRunState
   places?: DiscoverItem[]
   hue?: string
   onRetry?: () => void
+  onOpenWeb?: () => void
 }) {
   if (run.status === 'error' && !run.text && !run.sources.length) {
     return <div className="max-w-[680px]"><SourceErrorNotice error={run.error!} onRetry={onRetry} /></div>
@@ -247,6 +262,8 @@ export function ShoppingResults({
   const onlineSources = run.sources.filter((source) => !isLocalSource(source))
   const localStores = mergeLocalStores(run.sources, places)
   const merchants = groupByMerchant(onlineSources, run.images)
+  const onCards = new Set(merchants.flatMap(([, products]) => products.map((product) => product.image)))
+  const extraPhotos = run.images.filter((image) => image.url && !onCards.has(image))
   const streaming = run.status === 'streaming'
 
   return (
@@ -257,7 +274,12 @@ export function ShoppingResults({
             <ShoppingBag className="h-3.5 w-3.5" strokeWidth={1.75} />
             Buying guide — Online &amp; Brick-and-Mortar
             {run.model && <span className="font-mono text-[10px] normal-case tracking-normal">{run.model}</span>}
-            {streaming && <span className="h-1.5 w-1.5 rounded-full bg-accent motion-safe:animate-pulse dark:bg-accent-light" aria-label="writing" />}
+            {streaming && (
+              <>
+                <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-accent motion-safe:animate-pulse dark:bg-accent-light" />
+                <span className="sr-only">, writing</span>
+              </>
+            )}
           </p>
           <div className="text-[14px] leading-relaxed text-ink dark:text-ink-inverse [&_img]:my-3 [&_img]:max-h-56 [&_img]:w-auto [&_img]:rounded-lg [&_img]:border [&_img]:border-surface-200/70 [&_img]:bg-white [&_img]:object-contain dark:[&_img]:border-surface-800">
             <ResponseMarkdown content={stripCitationMarkers(run.text)} isStreaming={streaming} />
@@ -270,7 +292,11 @@ export function ShoppingResults({
       )}
 
       {merchants.length === 0 && localStores.length === 0 && run.status === 'done' && run.images.length === 0 && (
-        <EmptyState title="No products or stores surfaced" hint="Try naming the product, brand, or city explicitly" />
+        <EmptyState
+          title="No products or stores surfaced"
+          hint="Try naming the product, brand, or city explicitly"
+          action={onOpenWeb ? { label: 'See web results', onClick: onOpenWeb } : undefined}
+        />
       )}
 
       {localStores.length > 0 && (
@@ -289,31 +315,6 @@ export function ShoppingResults({
         </section>
       )}
 
-      {/* The agent pulled photos but no structured sources: still show the imagery. */}
-      {merchants.length === 0 && run.images.length > 0 && (
-        <section className="mt-8" aria-label="Product photos">
-          <div className="mb-3 flex items-center gap-2">
-            <span className="text-[13px] font-medium text-ink dark:text-ink-inverse">Product photos</span>
-            <span className="font-mono text-[10.5px] tabular-nums text-ink-muted dark:text-ink-inverse-muted">{run.images.length}</span>
-            <div className="h-px flex-1 bg-surface-200/80 dark:bg-surface-800" />
-          </div>
-          <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-            {run.images.map((image) => (
-              <li key={image.url} className="list-none">
-                <button
-                  type="button"
-                  onClick={() => openResult(((image.page_url as string) || (image.source as string) || image.url) as string)}
-                  className="group block aspect-square w-full overflow-hidden rounded-lg border border-surface-200/70 bg-surface-50 dark:border-surface-800 dark:bg-surface-850"
-                  aria-label="Open product photo source"
-                >
-                  <img src={image.url} alt="" loading="lazy" className="h-full w-full object-contain p-3 mix-blend-multiply transition-transform duration-500 ease-smooth motion-safe:group-hover:scale-[1.04] dark:mix-blend-normal" />
-                </button>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
-
       {merchants.map(([merchant, products]) => (
         <section key={merchant} className="mt-8" aria-label={merchant}>
           <MerchantHeader url={products[0]?.source.url || `https://${merchant}`} label={merchant} count={products.length} />
@@ -322,6 +323,20 @@ export function ShoppingResults({
           </ul>
         </section>
       ))}
+
+      {/* Photos the agent found that match no product's merchant: shown on their own, never on another product's card. */}
+      {extraPhotos.length > 0 && (
+        <section className="mt-8" aria-label={merchants.length ? 'More product photos' : 'Product photos'}>
+          <div className="mb-3 flex items-center gap-2">
+            <span className="text-[13px] font-medium text-ink dark:text-ink-inverse">{merchants.length ? 'More product photos' : 'Product photos'}</span>
+            <span className="font-mono text-[10.5px] tabular-nums text-ink-muted dark:text-ink-inverse-muted">{extraPhotos.length}</span>
+            <div className="h-px flex-1 bg-surface-200/80 dark:bg-surface-800" />
+          </div>
+          <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+            {extraPhotos.map((image) => <ProductPhoto key={image.url} image={image} />)}
+          </ul>
+        </section>
+      )}
     </div>
   )
 }

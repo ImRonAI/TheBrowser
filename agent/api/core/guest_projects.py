@@ -136,7 +136,7 @@ class Workspace:
         if row.get("start_date") and row.get("end_date") and datetime.fromisoformat(row["start_date"]) > datetime.fromisoformat(row["end_date"]):
             fail("End date precedes start date")
         values = row["custom_fields"]
-        if not isinstance(values, dict) or not isinstance(row["work_products"], list):
+        if not isinstance(values, dict) or not isinstance(row["work_products"], list) or not isinstance(row.get("context", []), list):
             fail("Invalid issue values")
         if values.keys() - {d["key"] for d in config["fields"]}:
             fail("Unknown custom field")
@@ -215,7 +215,7 @@ class Workspace:
             self.configuration(row, None)
         elif table == "issues":
             project = self.require("projects", row["project_id"])
-            row = {"parent_id": None, "description": "", "assignees": [], "labels": [], "custom_fields": {}, "work_products": [],
+            row = {"parent_id": None, "description": "", "assignees": [], "labels": [], "custom_fields": {}, "work_products": [], "context": [],
                    "status": "backlog", "priority": "medium", "rank": 100, **row,
                    "number": project["issue_counter"] + 1, "version": 1, "updated_at": now, "created_by": self.identity.user_id}
             self.validate_issue(row, None)

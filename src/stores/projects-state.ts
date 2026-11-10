@@ -43,9 +43,18 @@ export const mapIssueRow = (row: Row): Issue => ({
   status: row.status, priority: row.priority, estimate: row.estimate ?? undefined,
   assignees: row.assignees ?? [], labels: row.labels ?? [], startDate: row.start_date ?? undefined,
   endDate: row.end_date ?? undefined, dueDate: row.due_date ?? undefined, rank: Number(row.rank),
-  customFields: row.custom_fields ?? {}, workProducts: row.work_products ?? [],
+  customFields: row.custom_fields ?? {}, workProducts: row.work_products ?? [], context: row.context ?? [],
   createdBy: row.created_by, createdAt: timestamp(row.created_at), updatedAt: timestamp(row.updated_at),
 })
+/** Issues the server moved alongside a write (a blocking relationship, or a finished blocker). */
+export function withMovedIssues(issues: Issue[], rows: unknown): Issue[] {
+  if (!Array.isArray(rows) || rows.length === 0) return issues
+  const moved = new Map(rows.map((row) => mapIssueRow(row as Row)).map((issue) => [issue.id, issue]))
+  return issues.map((issue) => {
+    const next = moved.get(issue.id)
+    return next && next.version >= issue.version ? next : issue
+  })
+}
 const mapLink = (row: Row): IssueLink => ({
   id: row.id, sourceId: row.source_id, targetId: row.target_id, type: row.type,
   createdBy: row.created_by, createdAt: timestamp(row.created_at),
@@ -62,7 +71,7 @@ export function issuePatch(updates: Partial<Issue>): Record<string, unknown> {
     title: 'title', description: 'description', type: 'type', parentId: 'parent_id',
     status: 'status', priority: 'priority', assignees: 'assignees', labels: 'labels',
     estimate: 'estimate', startDate: 'start_date', endDate: 'end_date', dueDate: 'due_date',
-    rank: 'rank', customFields: 'custom_fields', workProducts: 'work_products',
+    rank: 'rank', customFields: 'custom_fields', workProducts: 'work_products', context: 'context',
   } as const
   return Object.fromEntries(Object.entries(fields).filter(([key]) => Object.hasOwn(updates, key))
     .map(([key, column]) => [column, updates[key as keyof typeof fields] ?? null]))
@@ -175,6 +184,7 @@ export function createProjectsStore(requestForUser: (userId: string) => Projects
         const body = issuePatch(input)
         delete body.rank
         delete body.work_products
+        delete body.context
         const issue = mapIssueRow(await request<Row>('/issues', 'POST', { ...body, project_id: input.projectId }))
         check()
         set({ issues: [...get().issues, issue] })
@@ -185,9 +195,10 @@ export function createProjectsStore(requestForUser: (userId: string) => Projects
         if (!current) throw new Error('Issue not found. Reload Projects.')
         if (expectedVersion !== undefined && current.version !== expectedVersion)
           throw new Error('Issue changed while you were editing. Your draft is retained; reload and review before saving.')
-        const issue = mapIssueRow(await request<Row>(`/issues/${id}`, 'PATCH', { ...issuePatch(updates), version: expectedVersion ?? current.version }))
+        const row = await request<Row>(`/issues/${id}`, 'PATCH', { ...issuePatch(updates), version: expectedVersion ?? current.version })
+        const issue = mapIssueRow(row)
         check()
-        set({ issues: get().issues.map((i) => i.id === id ? issue : i) })
+        set({ issues: withMovedIssues(get().issues.map((i) => i.id === id ? issue : i), row.unblocked_issues) })
         return { issue }
       }),
       moveIssueStatus: (id, status) => get().updateIssue(id, { status }),
@@ -221,16 +232,18 @@ export function createProjectsStore(requestForUser: (userId: string) => Projects
         return { issue }
       }),
       addIssueLink: (sourceId, targetId, type) => operation(true, async (request, check) => {
-        const link = mapLink(await request<Row>('/links', 'POST', { source_id: sourceId, target_id: targetId, type }))
+        const row = await request<Row>('/links', 'POST', { source_id: sourceId, target_id: targetId, type })
+        const link = mapLink(row)
         check()
-        set({ issueLinks: [...get().issueLinks.filter((l) => l.id !== link.id), link] })
+        set({ issueLinks: [...get().issueLinks.filter((l) => l.id !== link.id), link],
+          issues: withMovedIssues(get().issues, row.blocked_issue ? [row.blocked_issue] : []) })
         return {}
       }),
       removeIssueLink: (id) => operation(true, async (request, check) => {
-        const result = await request<{ deleted: boolean }>(`/links/${id}`, 'DELETE')
+        const result = await request<{ deleted: boolean; unblocked_issues?: Row[] }>(`/links/${id}`, 'DELETE')
         if (result?.deleted !== true) throw new Error('Relationship deletion was not confirmed. Reload before retrying.')
         check()
-        set({ issueLinks: get().issueLinks.filter((l) => l.id !== id) })
+        set({ issueLinks: get().issueLinks.filter((l) => l.id !== id), issues: withMovedIssues(get().issues, result.unblocked_issues) })
         return {}
       }),
     }

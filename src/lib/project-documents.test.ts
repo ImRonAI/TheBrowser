@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { createProjectsRequest } from './projects-api.ts'
 import {
   createDocument, deleteDocument, documentAncestors, documentSubtree, documentTitle, documentTree,
-  createDocumentConversation, isConflict, linkDocumentToIssue, touchDocumentConversation, listAllDocuments, listDocumentLinks, listDocuments, unlinkDocument, updateDocument,
+  createDocumentConversation, getDocumentSkill, isConflict, publishDocumentSkill, skillProblems, linkDocumentToIssue, touchDocumentConversation, listAllDocuments, listDocumentLinks, listDocuments, unlinkDocument, updateDocument,
   type ProjectDocumentSummary,
 } from './project-documents.ts'
 
@@ -105,4 +105,28 @@ test('page conversations are created on the page and touched on Try again; the s
   const title = (calls[0].body as { title: string }).title
   assert.ok(title.startsWith('Draft the runbook xxx') && title.length === 200 && title.endsWith('…'))
   assert.deepEqual(calls[1].body, { title: 'Draft the runbook' })
+})
+
+test('a page publishes as the agent’s skill through the documented route; problems come back one per reference', async () => {
+  const skill = { id: 'doc-d1', name: 'weekly-brief', description: 'Write a weekly brief.', agent_id: 'panel',
+    files: ['SKILL.md', 'workflow.sop.md', 'manifest.json'], created_at: '2026-11-05T10:00:00Z', updated_at: '2026-11-05T11:00:00Z',
+    published_version: 4, current: true, steps: 2, listed: true }
+  const { request, calls } = recordingRequest([
+    { status: 200, body: { skill: null } },
+    { status: 200, body: { status: 'published', skill } },
+    { status: 422, body: { detail: 'Unknown or unusable references: tool “nope” is not in the tool catalog; mcp “x” is not a configured MCP server.' } },
+  ])
+  assert.equal(await getDocumentSkill(request, 'd1', 'alice'), null)
+  const published = await publishDocumentSkill(request, 'd1', 'alice')
+  assert.equal(published.status, 'published')
+  assert.deepEqual(published.skill, { id: 'doc-d1', name: 'weekly-brief', description: 'Write a weekly brief.', agentId: 'panel',
+    files: ['SKILL.md', 'workflow.sop.md', 'manifest.json'], createdAt: Date.parse(skill.created_at), updatedAt: Date.parse(skill.updated_at),
+    publishedVersion: 4, current: true, steps: 2, listed: true })
+  const failure = await publishDocumentSkill(request, 'd1', 'alice').catch((error: Error & { status?: number }) => error)
+  assert.equal((failure as { status?: number }).status, 422)
+  assert.deepEqual(skillProblems((failure as Error).message), ['tool “nope” is not in the tool catalog', 'mcp “x” is not a configured MCP server'])
+  assert.deepEqual(skillProblems('Name this page first: its title becomes the skill’s name.'), ['Name this page first: its title becomes the skill’s name.'])
+  assert.deepEqual(calls.map((call) => `${call.method} ${call.url.replace('http://localhost:8765/projects', '')}`), [
+    'GET /documents/d1/skill?user_id=alice&agent_id=panel', 'POST /documents/d1/skill', 'POST /documents/d1/skill'])
+  assert.deepEqual(calls[1].body, { user_id: 'alice', agent_id: 'panel' })
 })

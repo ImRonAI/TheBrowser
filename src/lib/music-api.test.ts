@@ -15,7 +15,7 @@ test('createMusicRequest targets /music/* with the identity headers and surfaces
   const calls: { url: string; init: RequestInit }[] = []
   const fetcher = (async (url: string, init: RequestInit) => {
     calls.push({ url, init })
-    if (url.endsWith('/music/save')) return new Response(JSON.stringify({ detail: 'Sign in to Ron to save music' }), { status: 401 })
+    if (url.endsWith('/music/save')) return new Response(JSON.stringify({ detail: 'Sign in to Ren to save music' }), { status: 401 })
     return new Response(JSON.stringify({ action: 'play', playback: 'playing' }), { status: 200 })
   }) as unknown as typeof fetch
   const request = createMusicRequest('http://localhost:8765/', async () => ({ user: { id: 'u1' }, access_token: 'jwt' }), 'u1', fetcher)
@@ -25,7 +25,7 @@ test('createMusicRequest targets /music/* with the identity headers and surfaces
   assert.equal(calls[0].init.method, 'POST')
   assert.deepEqual(JSON.parse(String(calls[0].init.body)), { agent_id: 'agent-1', action: 'play' })
   assert.equal((calls[0].init.headers as Record<string, string>).Authorization, 'Bearer jwt')
-  await assert.rejects(musicSave(request, 'agent-1', 'x'), /Sign in to Ron to save music/)
+  await assert.rejects(musicSave(request, 'agent-1', 'x'), /Sign in to Ren to save music/)
 })
 
 test('formatSeconds and describeConfig produce deck readouts', () => {
