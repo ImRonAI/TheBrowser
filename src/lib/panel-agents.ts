@@ -1,8 +1,8 @@
 /**
  * Who the Agent Panel talks to: Ron, one of the user's saved specialists (built with `create_harness`), or a
- * project's agent. The choice is the first step of the panel's picker (agent → model → reasoning effort) and is
- * sent to `POST /chat` as `agent: {kind, id}` on a conversation's first turn, where the server pins it to the
- * session like the model.
+ * project's agent. The panel assumes Ren; a specialist or project chat is started from that agent's own entry point
+ * (Chat in the Context widget, Ask the project agent). The choice is sent to `POST /chat` as `agent: {kind, id}` on
+ * a conversation's first turn, where the server pins it to the session like the model.
  *
  * Pure (relative imports only) so node:test can run it.
  */

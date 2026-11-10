@@ -261,7 +261,7 @@ function IssueChat({ user, projectsUser, issueId, issueKey, issue, hasUnsavedCha
           before={<ComposerAttachmentTray attachments={attachments} className="pb-2.5" />}
           tools={<>
             {!active && <ContextPicker selectedContexts={attachments.contexts} onContextsChange={attachments.setContexts} />}
-            <ModelSelector value={model} provider={provider} effort={effort} includeEffort {...modelCatalogue} disabled={configurationLocked}
+            <ModelSelector value={model} provider={provider} effort={effort} {...modelCatalogue} disabled={configurationLocked}
               onChange={(model, provider, effort) => setSelection({ model, provider, effort })}
               onOpen={refreshModels} className={MODEL_SELECTOR_CLASS} />
           </>} />

@@ -307,8 +307,8 @@ XAI_REASONING_EFFORTS_BY_MODEL: dict[str, tuple[str, ...]] = {
 
 #: Per-model Mistral ``reasoning_effort`` values on ``POST /v1/chat/completions``.
 #: Sources, which agree: https://docs.mistral.ai/studio/conversations/reasoning
-#: (``mistral-small-latest`` / ``mistral-medium-3-5`` / ``mistral-large-4-0`` take
-#: ``none``/``high``; ``zai-glm-5-3`` takes ``low``/``high``/``max``, never ``none``),
+#: (``mistral-small-latest`` / ``mistral-medium-3-5`` take ``none``/``high``;
+#: ``mistral-large-4-0`` takes ``low``/``medium``/``high``; ``zai-glm-5-3`` takes ``low``/``high``/``max``, never ``none``),
 #: the installed ``mistralai`` 2.10.1 ``ReasoningEffort`` literal, and a live probe
 #: of every id ``client.models.list()`` returned on 2026-10-09: every other
 #: generation model answers ``400 "reasoning_effort is not enabled for this
@@ -318,7 +318,9 @@ XAI_REASONING_EFFORTS_BY_MODEL: dict[str, tuple[str, ...]] = {
 #: literal, so ``MistralModel`` sends it through ``_MistralReasoningEffortHook``
 #: (the SDK marshaller drops ``UnrecognizedStr`` values). Longest prefix wins.
 MISTRAL_REASONING_EFFORTS_BY_MODEL: dict[str, tuple[str, ...]] = {
-    "mistral-large-4": ("none", "high"),
+    # Live 2026-11-10: none/minimal/xhigh/max -> 400 "supported values: high, low, medium"; the docs say the same
+    # ("Mistral Large 4 does not accept none, minimal, xhigh, or max").
+    "mistral-large-4": ("low", "medium", "high"),
     "mistral-medium": ("none", "high"),
     "mistral-small": ("none", "high"),
     "mistral-vibe-cli": ("none", "high"),

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import {
-  ArrowUpTrayIcon, CameraIcon, ChatBubbleLeftRightIcon, DocumentTextIcon, FilmIcon, LinkIcon, MagnifyingGlassIcon,
+  ArrowTopRightOnSquareIcon, ArrowUpTrayIcon, CameraIcon, ClipboardDocumentListIcon, ChatBubbleLeftRightIcon, DocumentTextIcon, FilmIcon, LinkIcon, MagnifyingGlassIcon,
   NewspaperIcon, PencilSquareIcon, PhotoIcon, StopIcon, TrashIcon, VideoCameraIcon, ChatBubbleBottomCenterTextIcon, PaperClipIcon,
 } from '@heroicons/react/24/outline'
 import { useAgentUi } from '@/context/AgentUiContext'
@@ -10,6 +10,7 @@ import { kindLabel } from '@/lib/issue-attachments'
 import { useContextAgentStore } from '@/stores/contextAgentStore'
 import { cn } from '@/utils/cn'
 import { SendToIssue } from './SendToIssue'
+import { field, ghostButton, iconButton, mutedText, primaryButton } from './contextUi'
 
 const KIND_ICONS: Partial<Record<ContextKind, typeof LinkIcon>> = {
   search: MagnifyingGlassIcon, article: NewspaperIcon, link: LinkIcon, image: PhotoIcon, video: FilmIcon,
@@ -17,8 +18,6 @@ const KIND_ICONS: Partial<Record<ContextKind, typeof LinkIcon>> = {
   screenshot: CameraIcon, recording: VideoCameraIcon, file: PaperClipIcon, note: PencilSquareIcon,
 }
 const MAX_PROMPT_CHARS = 24_000
-const field = 'w-full rounded-md border border-zinc-200 bg-white/70 px-2 py-1.5 text-xs text-ron-text outline-none focus:border-royal dark:border-white/10 dark:bg-white/5 dark:text-white'
-const toolButton = 'flex items-center gap-1.5 rounded-md px-2 py-1.5 text-[11px] font-raleway text-ron-text/70 hover:bg-zinc-100 disabled:opacity-40 dark:text-white/70 dark:hover:bg-white/5'
 
 const hostOf = (value: string) => { try { return new URL(value).hostname } catch { return '' } }
 const elapsed = (since: number, now: number) => {
@@ -91,75 +90,72 @@ export function ContextTray() {
   }
 
   return <div className="flex h-full flex-col">
-    <div className="flex flex-wrap items-center gap-1 px-3 py-2" role="toolbar" aria-label="Add context">
-      <button type="button" className={toolButton} onClick={() => void captureScreenshot()} disabled={Boolean(busy)}><CameraIcon className="h-4 w-4" />Screenshot</button>
+    <div className="flex items-center gap-0.5 px-3 py-2" role="toolbar" aria-label="Add context">
+      <button type="button" className={iconButton} title="Screenshot this page" aria-label="Screenshot" onClick={() => void captureScreenshot()} disabled={Boolean(busy)}><CameraIcon className="h-4 w-4" /></button>
       {recordingSince
-        ? <button type="button" className={cn(toolButton, 'text-red-600 dark:text-red-400')} onClick={() => void stopRecording()}><StopIcon className="h-4 w-4" />Stop {elapsed(recordingSince, now)}</button>
-        : <button type="button" className={toolButton} onClick={() => void startRecording()}><VideoCameraIcon className="h-4 w-4" />Record screen</button>}
-      <button type="button" className={toolButton} onClick={() => setForm(form === 'link' ? null : 'link')}><LinkIcon className="h-4 w-4" />Link</button>
-      <button type="button" className={toolButton} onClick={() => setForm(form === 'note' ? null : 'note')}><PencilSquareIcon className="h-4 w-4" />Note</button>
-      <button type="button" className={toolButton} onClick={() => fileInput.current?.click()} disabled={Boolean(busy)}><ArrowUpTrayIcon className="h-4 w-4" />Upload</button>
+        ? <button type="button" className={cn(ghostButton, 'gap-1.5 text-red-600 hover:text-red-600 dark:text-red-400 dark:hover:text-red-400')} onClick={() => void stopRecording()}><StopIcon className="h-4 w-4" />Stop {elapsed(recordingSince, now)}</button>
+        : <button type="button" className={iconButton} title="Record screen" aria-label="Record screen" onClick={() => void startRecording()}><VideoCameraIcon className="h-4 w-4" /></button>}
+      <button type="button" className={cn(iconButton, form === 'link' && 'bg-surface-100 text-ink dark:bg-surface-850 dark:text-ink-inverse')} title="Add a link" aria-label="Link" aria-pressed={form === 'link'} onClick={() => setForm(form === 'link' ? null : 'link')}><LinkIcon className="h-4 w-4" /></button>
+      <button type="button" className={cn(iconButton, form === 'note' && 'bg-surface-100 text-ink dark:bg-surface-850 dark:text-ink-inverse')} title="Add a note" aria-label="Note" aria-pressed={form === 'note'} onClick={() => setForm(form === 'note' ? null : 'note')}><PencilSquareIcon className="h-4 w-4" /></button>
+      <button type="button" className={iconButton} title="Upload files" aria-label="Upload" onClick={() => fileInput.current?.click()} disabled={Boolean(busy)}><ArrowUpTrayIcon className="h-4 w-4" /></button>
       <input ref={fileInput} type="file" multiple hidden aria-label="Upload files to context" accept="image/*,video/*,.pdf,.txt,.md,.csv,.json"
         onChange={(event) => void upload(event.target.files)} />
     </div>
 
-    {form && <form onSubmit={(event) => void submit(event)} className="mx-3 mb-2 space-y-1.5 rounded-lg border border-zinc-200 p-2 dark:border-white/10">
+    {form && <form onSubmit={(event) => void submit(event)} className="mx-3 mb-2 space-y-1.5">
       {form === 'link'
         ? <input aria-label="Link URL" className={field} placeholder="https://…" value={url} onChange={(event) => setUrl(event.target.value)} autoFocus />
         : <textarea aria-label="Note" className={cn(field, 'h-16 resize-none')} placeholder="What should Ren know?" value={text} onChange={(event) => setText(event.target.value)} autoFocus />}
-      <div className="flex gap-1.5">
+      <div className="flex items-center gap-1.5">
         <input aria-label="Title" className={field} placeholder="Title (optional)" value={title} onChange={(event) => setTitle(event.target.value)} />
-        <button type="submit" disabled={Boolean(busy) || (form === 'link' ? !/^https?:\/\//i.test(url.trim()) : !text.trim())}
-          className="rounded-md bg-royal px-3 text-xs font-raleway font-raleway-bold text-white disabled:opacity-40 dark:bg-royal-light">Add</button>
+        <button type="submit" disabled={Boolean(busy) || (form === 'link' ? !/^https?:\/\//i.test(url.trim()) : !text.trim())} className={primaryButton}>Add</button>
       </div>
     </form>}
 
     {sending && <div className="mx-3 mb-2"><SendToIssue items={sending} onCancel={() => setSending(null)}
       onDone={(message) => { setSending(null); setSelected([]); useContextAgentStore.setState({ notice: message }) }} /></div>}
 
-    <div className="min-h-0 flex-1 space-y-1 overflow-y-auto px-3 pb-2" aria-label="Your context">
-      {itemsLoaded && !items.length && <p className="px-1 py-6 text-center text-xs text-ron-text/50 dark:text-white/50">
-        Nothing here yet. Capture this page, record your screen, add a link or a note, or right-click any page → Add to Ren context.</p>}
+    <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-2" aria-label="Your context">
+      {itemsLoaded && !items.length && <p className={cn(mutedText, 'px-2 py-8 text-center')}>Nothing saved yet. Capture, record, or add a link or note above.</p>}
       {items.map((item) => {
         const Icon = KIND_ICONS[item.kind] ?? DocumentTextIcon
         const isSelected = selected.includes(item.id)
         const visual = item.file && (item.file.media_type.startsWith('image/'))
-        return <div key={item.id} data-testid="context-item" className={cn('group flex gap-2 rounded-lg p-2', isSelected ? 'bg-royal/10' : 'hover:bg-zinc-100/70 dark:hover:bg-white/5')}>
-          <input type="checkbox" aria-label={`Select ${item.title}`} checked={isSelected} className="mt-1 accent-[#6b3420]"
+        return <div key={item.id} data-testid="context-item" className={cn('group flex items-center gap-2.5 rounded-lg px-2 py-1.5', isSelected ? 'bg-blurple-600/10 dark:bg-blurple-400/15' : 'hover:bg-surface-100 dark:hover:bg-surface-850')}>
+          <input type="checkbox" aria-label={`Select ${item.title}`} checked={isSelected} className="h-3.5 w-3.5 flex-shrink-0 accent-blurple-600 dark:accent-blurple-400"
             onChange={() => setSelected(isSelected ? selected.filter((id) => id !== item.id) : [...selected, item.id])} />
           {visual
-            ? <img src={client.fileUrl(item.id)} alt="" className="h-10 w-14 flex-shrink-0 rounded object-cover" loading="lazy" />
-            : <Icon className="mt-0.5 h-4 w-4 flex-shrink-0 text-royal dark:text-royal-light" />}
+            ? <img src={client.fileUrl(item.id)} alt="" className="h-8 w-11 flex-shrink-0 rounded object-cover" loading="lazy" />
+            : <Icon className="h-4 w-4 flex-shrink-0 text-ink-muted dark:text-ink-inverse-muted" />}
           <div className="min-w-0 flex-1">
-            <p className="truncate text-xs font-raleway font-raleway-bold text-ron-text dark:text-white" title={item.title}>{item.title || item.id}</p>
-            <p className="truncate text-[10px] text-ron-text/50 dark:text-white/50">
-              {kindLabel(item.kind)}{hostOf(item.source) ? ` · ${hostOf(item.source)}` : ''}{item.file ? ` · ${formatBytes(item.file.size)}` : ''} · {new Date(item.added).toLocaleString()}
+            <p className="truncate text-[13px] font-medium text-ink dark:text-ink-inverse" title={item.title}>{item.title || item.id}</p>
+            <p className="truncate text-[11px] text-ink-muted dark:text-ink-inverse-muted" title={item.preview && !item.file ? item.preview : undefined}>
+              {kindLabel(item.kind)}{hostOf(item.source) ? ` · ${hostOf(item.source)}` : ''}{item.file ? ` · ${formatBytes(item.file.size)}` : ''} · {new Date(item.added).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
             </p>
-            {item.preview && !item.file && <p className="line-clamp-2 text-[10px] text-ron-text/60 dark:text-white/60">{item.preview}</p>}
           </div>
-          <div className="flex flex-shrink-0 items-start gap-1 opacity-60 focus-within:opacity-100 group-hover:opacity-100">
-            {item.file && <a href={client.fileUrl(item.id)} target="_blank" rel="noreferrer" className="rounded p-1.5 text-[10px] text-ron-text/70 hover:bg-zinc-200 dark:text-white/70 dark:hover:bg-white/10" title="Open file">Open</a>}
-            <button type="button" title="Send to an issue" aria-label={`Send ${item.title} to an issue`} onClick={() => setSending([item])} className="rounded p-1.5 text-[10px] text-ron-text/70 hover:bg-zinc-200 dark:text-white/70 dark:hover:bg-white/10">Issue</button>
-            <button type="button" title="Ask Ren about this" aria-label={`Ask Ren about ${item.title}`} onClick={() => void askRon([item])} className="rounded p-1.5 text-ron-text/70 hover:bg-zinc-200 dark:text-white/70 dark:hover:bg-white/10"><ChatBubbleLeftRightIcon className="h-3.5 w-3.5" /></button>
+          <div className="flex flex-shrink-0 items-center opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
+            {item.file && <a href={client.fileUrl(item.id)} target="_blank" rel="noreferrer" className={iconButton} title="Open file" aria-label={`Open ${item.title}`}><ArrowTopRightOnSquareIcon className="h-3.5 w-3.5" /></a>}
+            <button type="button" title="Send to an issue" aria-label={`Send ${item.title} to an issue`} onClick={() => setSending([item])} className={iconButton}><ClipboardDocumentListIcon className="h-3.5 w-3.5" /></button>
+            <button type="button" title="Ask Ren about this" aria-label={`Ask Ren about ${item.title}`} onClick={() => void askRon([item])} className={iconButton}><ChatBubbleLeftRightIcon className="h-3.5 w-3.5" /></button>
             {/* One element in both states, so focus stays on it between the two clicks. */}
             {confirmDelete === item.id
               ? <button type="button" title="Click again to delete it" onClick={() => { setConfirmDelete(null); void removeContext(item.id) }}
                   onBlur={() => setConfirmDelete(null)}
-                  className="rounded px-1.5 py-1 text-[10px] font-semibold text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-500/10">
+                  className="inline-flex h-7 items-center rounded-lg px-2 text-[11px] font-semibold text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-500/10">
                   Delete<span className="sr-only"> {item.title || item.id}</span>?
                 </button>
               : <button type="button" title="Remove" aria-label={`Remove ${item.title}`} onClick={() => setConfirmDelete(item.id)}
-                  className="rounded p-1.5 text-ron-text/70 hover:bg-zinc-200 hover:text-red-600 dark:text-white/70 dark:hover:bg-white/10"><TrashIcon className="h-3.5 w-3.5" /></button>}
+                  className={cn(iconButton, 'hover:text-red-600 dark:hover:text-red-400')}><TrashIcon className="h-3.5 w-3.5" /></button>}
           </div>
         </div>
       })}
     </div>
 
-    {chosen.length > 0 && !sending && <div className="flex items-center justify-between gap-2 border-t border-zinc-200/60 px-3 py-2 dark:border-white/10">
-      <span className="text-[11px] text-ron-text/60 dark:text-white/60">{chosen.length} selected</span>
-      <div className="flex gap-1.5">
-        <button type="button" onClick={() => void askRon(chosen)} className="rounded-md px-2 py-1 text-[11px] text-royal hover:bg-royal/10 dark:text-royal-light">Ask Ren</button>
-        <button type="button" onClick={() => setSending(chosen)} className="rounded-md bg-royal px-2 py-1 text-[11px] font-raleway font-raleway-bold text-white dark:bg-royal-light">Send to issue</button>
+    {chosen.length > 0 && !sending && <div className="flex items-center justify-between gap-2 border-t border-surface-200 px-4 py-2 dark:border-surface-800">
+      <span className="text-[12px] tabular-nums text-ink-secondary dark:text-ink-inverse-secondary">{chosen.length} selected</span>
+      <div className="flex gap-1">
+        <button type="button" onClick={() => setSending(chosen)} className={ghostButton}>Send to issue</button>
+        <button type="button" onClick={() => void askRon(chosen)} className={primaryButton}>Ask Ren</button>
       </div>
     </div>}
   </div>

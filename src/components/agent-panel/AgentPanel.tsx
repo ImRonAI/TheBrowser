@@ -38,7 +38,7 @@ import { useTextAssist } from '@/hooks/useTextAssist'
 import { TextAssist, handleAssistKey } from '@/components/shared/TextAssist'
 import { RenMark } from '@/components/brand'
 import { ArrowUp, ArrowUpRight, Square } from 'lucide-react'
-import { agentFromSelection, agentModel, projectChoices, RON_AGENT, specialistChoices, type AgentChoice } from '@/lib/panel-agents'
+import { agentFromSelection, projectChoices, RON_AGENT, specialistChoices, type AgentChoice } from '@/lib/panel-agents'
 import { createContextClient } from '@/lib/context-api'
 import { API_BASE_URL } from '@/lib/api-base'
 import { useProjectsStore } from '@/stores/projectsStore'
@@ -103,23 +103,20 @@ export function AgentConversation({ destination, embedded = false, onChat, hero,
   }, [draftKey])
   const { defaultModel, defaultProvider, refresh: refreshModels, ...modelCatalogue } = useAgentModels()
   const [selection, setSelection] = useState<AgentModelSelection>({ model: DEFAULT_AGENT_MODEL, provider: '', effort: '' })
-  // Agent → model → effort: who the panel talks to (Ron, a saved specialist, a project's agent). Panel only.
+  // Who the panel talks to. Always Ren, unless a chat was started for a specialist or a project agent elsewhere
+  // (Chat in the Context widget, Ask the project agent); the known agents below name such a chat when it reopens.
   const [agentChoice, setAgentChoice] = useState<AgentChoice>(RON_AGENT)
   const [specialists, setSpecialists] = useState<AgentChoice[]>([])
-  const [agentsState, setAgentsState] = useState({ loading: false, note: '' })
   const projects = useProjectsStore().projects
   const agentChoices = useMemo(() => destination === 'panel'
     ? [RON_AGENT, ...specialists, ...projectChoices(projects.filter((project) => project.lifecycle !== 'archived'))] : undefined,
   [destination, specialists, projects])
   const loadSpecialists = useCallback(async () => {
     if (destination !== 'panel') return
-    setAgentsState({ loading: true, note: '' })
     try {
-      const { agents, signInRequired } = await createContextClient(API_BASE_URL, user).agents()
-      setSpecialists(specialistChoices(agents))
-      setAgentsState({ loading: false, note: signInRequired ? 'Sign in to talk to the specialists you build.' : '' })
-    } catch (error) {
-      setAgentsState({ loading: false, note: `Specialists unavailable: ${error instanceof Error ? error.message : String(error)}` })
+      setSpecialists(specialistChoices((await createContextClient(API_BASE_URL, user).agents()).agents))
+    } catch {
+      // Names only: a pinned specialist chat still opens, titled "Specialist agent".
     }
   }, [destination, user])
   useEffect(() => { void loadSpecialists() }, [loadSpecialists])
@@ -335,10 +332,9 @@ export function AgentConversation({ destination, embedded = false, onChat, hero,
       if (!done) { setModeNotice('Live is still working. Wait for pending tools or press Stop in Live before starting a new chat.'); return }
     }
     setModeNotice('')
-    const nextAgent = startWith ?? currentAgent
-    const own = startWith ? agentModel(startWith) : null
-    setSelection(own ? { model: own.model, provider: own.provider, effort: '' } : { model, provider, effort })
-    setAgentChoice(nextAgent)
+    // Every agent starts on the default model (GLM 5.3 Flash); a plain new chat is with Ren and keeps the model in use.
+    setSelection(startWith ? { model: defaultModel, provider: defaultProvider, effort: '' } : { model, provider, effort })
+    setAgentChoice(startWith ?? RON_AGENT)
     setOptions(runtimeOptions)
     sessionRef.current = ''
     chat.newChat()
@@ -418,10 +414,9 @@ export function AgentConversation({ destination, embedded = false, onChat, hero,
         <button type="button" onClick={() => setMemoryOpen((open) => !open)} aria-pressed={memoryOpen}
           className={cn('inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-ink-muted transition-colors hover:bg-surface-100 hover:text-ink dark:text-ink-inverse-muted dark:hover:bg-surface-800 dark:hover:text-ink-inverse', memoryOpen && 'bg-surface-100 text-ink dark:bg-surface-800 dark:text-ink-inverse')}
           title="Memory" aria-label="Memory"><LightBulbIcon className="w-4 h-4" /></button>
-        <ModelSelector value={model} provider={provider} effort={effort} includeEffort {...modelCatalogue} disabled={configurationLocked}
-          agents={agentChoices} agent={currentAgent} agentsLoading={agentsState.loading} agentsError={agentsState.note}
-          onChange={(model, provider, effort, agent) => { setSelection({ model, provider, effort }); setAgentChoice(agent) }}
-          onOpen={() => { refreshModels(); void loadSpecialists() }} className={MODEL_SELECTOR_CLASS} />
+        <ModelSelector value={model} provider={provider} effort={effort} {...modelCatalogue} disabled={configurationLocked}
+          onChange={(model, provider, effort) => setSelection({ model, provider, effort })}
+          onOpen={refreshModels} className={MODEL_SELECTOR_CLASS} />
       </>} />
   </>
 

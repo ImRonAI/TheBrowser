@@ -638,7 +638,6 @@ export function SuperAgentInterface() {
             value={selection.model}
             provider={selection.provider}
             effort={selection.effort}
-            includeEffort
             {...modelCatalogue}
             disabled={isTyping}
             onChange={(model, provider, effort) => setSelection({ model, provider, effort })}

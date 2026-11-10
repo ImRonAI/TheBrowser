@@ -1,6 +1,6 @@
 import { useEffect, useRef, type CSSProperties, type KeyboardEvent } from 'react'
 import { motion, AnimatePresence, useDragControls } from 'framer-motion'
-import { GripVertical, Network, Pin, X } from 'lucide-react'
+import { Network, Pin, X } from 'lucide-react'
 import { RenMark } from '@/components/brand'
 import { Shimmer } from '@/components/ai-elements/shimmer'
 import { BRAND } from '@/lib/brand'
@@ -145,15 +145,13 @@ function ExpandedPanel({ onClose }: { onClose: () => void }) {
   const pinned = useContextAgentStore((state) => state.pinned)
   const status = useContextAgentStore((state) => state.status)
   const activity = useContextAgentStore((state) => state.activity)
-  const watchBrowsing = useContextAgentStore((state) => state.watchBrowsing)
   const unseen = useContextAgentStore((state) => state.unseen)
   const itemCount = useContextAgentStore((state) => state.items.length)
   const recordingSince = useContextAgentStore((state) => state.recordingSince)
   const { setTab, setPinned } = useContextAgentStore.getState()
 
-  const subtitle = recordingSince ? 'Recording your screen'
-    : status === 'running' ? `${activity || 'Working'}…`
-    : watchBrowsing ? 'Watching your browsing' : 'Browsing watch is off'
+  // The header says what is happening only while something is; the browsing switch lives on the Interests tab.
+  const subtitle = recordingSince ? 'Recording your screen' : status === 'running' ? `${activity || 'Working'}…` : ''
   const working = !recordingSince && status === 'running'
 
   useEffect(() => {
@@ -211,19 +209,16 @@ function ExpandedPanel({ onClose }: { onClose: () => void }) {
       >
         {/* The surface lives on an inner layer: `ron-glass-panel` positions itself relatively in Glass. */}
         <div className="ron-glass-panel flex h-full w-full flex-col overflow-hidden rounded-2xl border border-surface-200 bg-surface-0 text-ink shadow-float dark:border-surface-800 dark:bg-surface-900 dark:text-ink-inverse">
-          <div className="flex h-14 flex-shrink-0 cursor-grab select-none items-center justify-between gap-3 pl-3 pr-2.5 active:cursor-grabbing" onPointerDown={(event) => dragControls.start(event)}>
+          <div className="flex h-12 flex-shrink-0 cursor-grab select-none items-center justify-between gap-3 pl-4 pr-2.5 active:cursor-grabbing" onPointerDown={(event) => dragControls.start(event)}>
             <div className="flex min-w-0 items-center gap-2.5">
-              <GripVertical aria-hidden className="h-4 w-4 flex-shrink-0 text-ink-muted dark:text-ink-inverse-muted" />
-              <RenMark className="h-7 w-7" title={BRAND.name} />
-              <div className="min-w-0">
-                <h2 className="font-display text-[15px] font-bold leading-tight tracking-tight text-ink dark:text-ink-inverse">Context</h2>
-                <p className="flex min-w-0 items-center gap-1.5 text-[12px] leading-tight text-ink-secondary dark:text-ink-inverse-secondary" aria-live="polite">
-                  {recordingSince && <span aria-hidden className="h-1.5 w-1.5 flex-shrink-0 rounded-full bg-danger" />}
-                  {working
-                    ? <span className="truncate" style={SHIMMER_VARS}><Shimmer as="span">{subtitle}</Shimmer></span>
-                    : <span className="truncate">{subtitle}</span>}
-                </p>
-              </div>
+              <RenMark className="h-6 w-6 flex-shrink-0" title={BRAND.name} />
+              <h2 className="font-display text-[15px] font-bold leading-tight tracking-tight text-ink dark:text-ink-inverse">Context</h2>
+              <p className="flex min-w-0 items-center gap-1.5 text-[12px] leading-tight text-ink-secondary dark:text-ink-inverse-secondary" aria-live="polite">
+                {recordingSince && <span aria-hidden className="h-1.5 w-1.5 flex-shrink-0 rounded-full bg-danger" />}
+                {working
+                  ? <span className="truncate" style={SHIMMER_VARS}><Shimmer as="span">{subtitle}</Shimmer></span>
+                  : <span className="truncate">{subtitle}</span>}
+              </p>
             </div>
             <div className="flex items-center gap-0.5" onPointerDown={(event) => event.stopPropagation()}>
               <button type="button" onClick={() => setPinned(!pinned)} title={pinned ? 'Unpin panel' : 'Keep panel open'} aria-pressed={pinned}

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { ASK_ACTIVITY, useContextAgentStore } from '@/stores/contextAgentStore'
+import { field, ghostButton, mutedText, primaryButton } from './contextUi'
 
 /** A direct line to the Context Agent: ask about your interests, context or agents. */
 export function ContextAsk() {
@@ -22,23 +23,21 @@ export function ContextAsk() {
   }
 
   return <div className="flex h-full flex-col">
-    <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-3 py-3" aria-label="Conversation with Context Agent">
-      {!asks.length && <p className="text-xs text-ron-text/50 dark:text-white/50">
-        Ask Context Agent what it has learned about your interests, to rethink your graph, or to suggest an agent for something you do often.</p>}
+    <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-3" aria-label="Conversation with Context Agent">
+      {!asks.length && <p className={mutedText}>Ask what Ren has learned about you, or for an agent that handles something you do often.</p>}
       {asks.map((turn) => <div key={turn.id} className="space-y-1.5">
-        <p className="ml-8 rounded-lg bg-royal/10 px-2.5 py-1.5 text-xs text-ron-text dark:text-white">{turn.question}</p>
+        <p className="ml-10 rounded-xl bg-surface-100 px-3 py-1.5 text-[13px] text-ink dark:bg-surface-850 dark:text-ink-inverse">{turn.question}</p>
         {turn.error
-          ? <p className="mr-8 text-xs text-red-600 dark:text-red-400" role="alert">{turn.error}</p>
-          : <p data-testid="context-answer" className="mr-8 whitespace-pre-wrap text-xs text-ron-text/80 dark:text-white/80">{turn.answer || '…'}</p>}
+          ? <p className="mr-10 text-[13px] text-red-600 dark:text-red-400" role="alert">{turn.error}</p>
+          : <p data-testid="context-answer" className="mr-10 whitespace-pre-wrap text-[13px] leading-relaxed text-ink dark:text-ink-inverse">{turn.answer || '…'}</p>}
       </div>)}
       <div ref={end} />
     </div>
-    <form onSubmit={submit} className="flex gap-1.5 border-t border-zinc-200/60 px-3 py-2 dark:border-white/10">
-      <input aria-label="Ask Context Agent" value={question} onChange={(event) => setQuestion(event.target.value)} placeholder="Ask Context Agent…"
-        className="w-full rounded-md border border-zinc-200 bg-white/70 px-2 py-1.5 text-xs text-ron-text outline-none focus:border-royal dark:border-white/10 dark:bg-white/5 dark:text-white" />
+    <form onSubmit={submit} className="flex items-center gap-1.5 border-t border-surface-200 px-4 py-2 dark:border-surface-800">
+      <input aria-label="Ask Context Agent" value={question} onChange={(event) => setQuestion(event.target.value)} placeholder="Ask about your context…" className={field} />
       {asking
-        ? <button type="button" onClick={() => void cancel()} className="rounded-md px-3 text-xs text-ron-text/70 hover:bg-zinc-100 dark:text-white/70">Stop</button>
-        : <button type="submit" disabled={!question.trim()} className="rounded-md bg-royal px-3 text-xs font-raleway font-raleway-bold text-white disabled:opacity-40 dark:bg-royal-light">Ask</button>}
+        ? <button type="button" onClick={() => void cancel()} className={ghostButton}>Stop</button>
+        : <button type="submit" disabled={!question.trim()} className={primaryButton}>Ask</button>}
     </form>
   </div>
 }

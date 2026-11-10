@@ -1,0 +1,7 @@
+/** Shared classes for the Context widget's tabs, on Ren's tokens (ink, surface, blurple) like the widget's shell. */
+export const sectionLabel = 'text-[11px] font-semibold uppercase tracking-wide text-ink-muted dark:text-ink-inverse-muted'
+export const mutedText = 'text-[12px] leading-relaxed text-ink-secondary dark:text-ink-inverse-secondary'
+export const field = 'w-full rounded-lg border border-surface-200 bg-transparent px-2.5 py-1.5 text-[12px] text-ink outline-none transition-colors placeholder:text-ink-muted focus:border-blurple-600 dark:border-surface-800 dark:text-ink-inverse dark:placeholder:text-ink-inverse-muted dark:focus:border-blurple-400'
+export const primaryButton = 'inline-flex h-7 flex-shrink-0 items-center rounded-lg bg-blurple-600 px-3 text-[12px] font-semibold text-white transition-colors hover:bg-blurple-700 disabled:pointer-events-none disabled:opacity-40 dark:bg-blurple-500 dark:hover:bg-blurple-400'
+export const ghostButton = 'inline-flex h-7 flex-shrink-0 items-center rounded-lg px-2.5 text-[12px] font-medium text-ink-secondary transition-colors hover:bg-surface-100 hover:text-ink disabled:pointer-events-none disabled:opacity-40 dark:text-ink-inverse-secondary dark:hover:bg-surface-850 dark:hover:text-ink-inverse'
+export const iconButton = 'inline-flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg text-ink-secondary transition-colors hover:bg-surface-100 hover:text-ink disabled:pointer-events-none disabled:opacity-40 dark:text-ink-inverse-secondary dark:hover:bg-surface-850 dark:hover:text-ink-inverse'

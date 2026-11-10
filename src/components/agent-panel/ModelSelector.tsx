@@ -1,9 +1,8 @@
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
-import { ArrowLeftIcon, CheckIcon, ChevronDownIcon, ChevronRightIcon } from '@heroicons/react/24/outline'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { CheckIcon, ChevronDownIcon } from '@heroicons/react/24/outline'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { API_BASE_URL } from '@/lib/api-base'
 import { cn } from '@/utils/cn'
-import { agentKindLabel, agentModel, RON_AGENT, sameAgent, type AgentChoice } from '@/lib/panel-agents'
 
 export interface AgentModelOption {
   id: string
@@ -173,15 +172,13 @@ export function useModelEfforts(modelId: string, provider = '', enabled = false)
 }
 
 const muted = 'text-ink-muted dark:text-ink-inverse-muted'
-const focus = 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-surface-900'
-const button = cn('rounded-lg px-3 py-2 text-xs font-medium hover:bg-indigo-50 dark:hover:bg-surface-800 disabled:cursor-not-allowed disabled:opacity-50', focus)
-const row = cn('flex w-full items-center gap-3 rounded-lg border border-transparent px-3 py-2.5 text-left text-xs transition-colors hover:bg-indigo-50 dark:hover:bg-indigo-950/40 disabled:cursor-not-allowed disabled:hover:bg-transparent', focus)
+const focus = 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-1 dark:focus-visible:ring-offset-surface-900'
+const capitalize = (text: string) => text.charAt(0).toUpperCase() + text.slice(1)
 
 interface ModelSelectorProps {
   value: string
   provider?: string
   effort?: string
-  includeEffort?: boolean
   models: AgentModelOption[]
   providers?: Record<string, boolean>
   providersLoading?: boolean
@@ -191,194 +188,112 @@ interface ModelSelectorProps {
   providerErrors?: Record<string, string>
   disabled?: boolean
   className?: string
-  /** When given, the picker starts by choosing who to talk to: agent → model → reasoning effort. */
-  agents?: AgentChoice[]
-  agent?: AgentChoice
-  agentsLoading?: boolean
-  agentsError?: string
-  onChange: (modelId: string, provider: string, effort: string, agent: AgentChoice) => void
+  onChange: (modelId: string, provider: string, effort: string) => void
   onOpen?: () => void
 }
 
-export function ModelSelector({ value, provider = '', effort = '', includeEffort = false, models,
-  providers = {}, providersLoading = false, providersError = '', modelsLoading = false,
-  modelsError = '', providerErrors = {}, disabled, className, onChange, onOpen,
-  agents, agent = RON_AGENT, agentsLoading = false, agentsError = '' }: ModelSelectorProps) {
+/**
+ * The model picker: one searchable list of the configured providers' models, and the chosen model's reasoning
+ * levels along the bottom. Picking a model applies it at once with the provider's default reasoning ("Auto");
+ * picking a level applies it and closes. The levels are whatever `GET /models/{id}/efforts` reports for the chosen model,
+ * and the row is absent for a model with none.
+ */
+export function ModelSelector({ value, provider = '', effort = '', models, providers = {}, providersLoading = false,
+  providersError = '', modelsLoading = false, modelsError = '', providerErrors = {}, disabled, className, onChange, onOpen }: ModelSelectorProps) {
   const [open, setOpen] = useState(false)
-  const firstStep = agents ? 'agent' : 'provider'
-  const [step, setStep] = useState<'agent' | 'provider' | 'model' | 'effort'>(firstStep)
-  const [draft, setDraft] = useState<AgentModelSelection>({ model: '', provider: '', effort: '' })
-  const [draftAgent, setDraftAgent] = useState<AgentChoice>(agent)
-  const ownModel = agentModel(draftAgent)
   const [search, setSearch] = useState('')
-  const titleId = useId()
-  const effortGroup = useId()
-  const heading = useRef<HTMLHeadingElement>(null)
-  const capabilities = useModelEfforts(draft.model, draft.provider, open && !disabled && step === 'effort' && includeEffort)
-  const currentInCatalogue = models.some((model) => model.id === value && model.provider === provider)
-  const modelSummary = [providerLabel(provider), value ? provider === 'perplexity' || !currentInCatalogue ? value : readableModelName(value) : 'Backend default', includeEffort ? effort || 'Provider default' : ''].filter(Boolean).join(' / ')
-  const summary = agents ? `${agent.name} · ${modelSummary}` : modelSummary
-  // The trigger shows what matters at a glance (who, which model, the effort when one is set); the tooltip and the
-  // accessible name keep the full provider / model / effort summary.
-  const modelName = value ? provider === 'perplexity' || !currentInCatalogue ? value.split('/').pop() || value : readableModelName(value) : 'Default model'
-  const compact = [agents && agent.kind !== 'ron' ? agent.name : '', modelName, includeEffort && effort ? effort.charAt(0).toUpperCase() + effort.slice(1) : '']
-    .filter(Boolean).join(' · ')
-  const modelError = modelsError || providerErrors[draft.provider] || ''
-  const validModel = !disabled && !providersLoading && !providersError && providers[draft.provider] === true &&
-    !modelsLoading && !modelError && models.some((model) => model.id === draft.model && model.provider === draft.provider)
-  const canApply = validModel && (includeEffort
-    ? step === 'effort' && capabilities.ready && (!draft.effort || capabilities.efforts.includes(draft.effort))
-    : step === 'model')
-  const filtered = useMemo(() => {
+  const searchBox = useRef<HTMLInputElement>(null)
+  const capabilities = useModelEfforts(value, provider, open && !disabled && Boolean(value && provider))
+  const modelName = value ? provider === 'perplexity' ? value : readableModelName(value) : 'Default model'
+  const level = effort && (!capabilities.ready || capabilities.efforts.includes(effort)) ? effort : ''
+  const summary = [modelName, level && capitalize(level)].filter(Boolean).join(' · ')
+  const loading = providersLoading || modelsLoading
+  const failure = providersError || modelsError
+  const sections = useMemo(() => {
     const query = search.trim().toLowerCase()
-    return models.filter((model) => model.provider === draft.provider &&
-      (!query || `${model.id} ${readableModelName(model.id)}`.toLowerCase().includes(query)))
-  }, [models, draft.provider, search])
+    return PROVIDERS.filter((item) => providers[item.id] === true).map((item) => ({
+      ...item,
+      error: providerErrors[item.id] ?? '',
+      models: models.filter((model) => model.provider === item.id &&
+        (!query || `${model.id} ${readableModelName(model.id)}`.toLowerCase().includes(query))),
+    })).filter((section) => section.models.length || (section.error && !query))
+  }, [models, providers, providerErrors, search])
 
   useEffect(() => {
     if (disabled) setOpen(false)
   }, [disabled])
-  useEffect(() => {
-    if (!open) return
-    const frame = requestAnimationFrame(() => heading.current?.focus())
-    return () => cancelAnimationFrame(frame)
-  }, [open, step])
 
-  const back = () => {
-    setDraft((current) => ({ ...current, model: '', effort: '' }))
-    setStep(step === 'effort' ? 'model' : step === 'model' ? 'provider' : 'agent')
-  }
-  const chooseModel = (model: string, provider: string) => {
-    setDraft({ provider, model, effort: '' })
-    if (includeEffort) { capabilities.refresh(); setStep('effort') } else setStep('model')
-  }
-  // With agents: 1 agent · 2 model (provider, then its models) · 3 effort.
-  const stepNumber = { agent: 1, provider: 2, model: 2, effort: 3 }[step]
-  const stepTotal = includeEffort ? 3 : 2
-  const groups = useMemo(() => {
-    const list = agents ?? []
-    return [
-      { label: 'Ren', items: list.filter((item) => item.kind === 'ron') },
-      { label: 'Your specialists', items: list.filter((item) => item.kind === 'specialist') },
-      { label: 'Project agents', items: list.filter((item) => item.kind === 'project') },
-    ].filter((group) => group.items.length)
-  }, [agents])
   return <Popover modal open={open && !disabled} onOpenChange={(next) => {
     if (next && disabled) return
-    if (next) {
-      setStep(firstStep); setDraft({ model: '', provider: '', effort: '' }); setDraftAgent(agent); setSearch(''); onOpen?.()
-    }
+    if (next) { setSearch(''); onOpen?.() }
     setOpen(next)
   }}>
     <PopoverTrigger asChild>
-      <button type="button" disabled={disabled} title={`${summary}${value ? `\n${value}` : ''}${disabled ? '\nConfiguration locked for this conversation' : ''}`}
-        aria-label={`Model configuration: ${summary}${disabled ? '. Locked for this conversation' : ''}`}
-        className={cn('inline-flex h-9 min-w-0 items-center gap-2 rounded-xl border border-surface-200/80 bg-white/70 px-2.5 text-xs font-semibold text-ink shadow-sm transition-colors hover:border-indigo-300 dark:border-surface-700 dark:bg-surface-850/80 dark:text-ink-inverse disabled:cursor-not-allowed disabled:opacity-60', focus, className)}>
-        <span className="min-w-0 flex-1 truncate text-left">{compact}</span>
-        <ChevronDownIcon aria-hidden="true" className="h-4 w-4 shrink-0" />
+      <button type="button" disabled={disabled}
+        title={`${providerLabel(provider)}${value ? ` · ${value}` : ''}${disabled ? '\nLocked for this conversation' : ''}`}
+        aria-label={`Model: ${summary}${disabled ? '. Locked for this conversation' : ''}`}
+        className={cn('inline-flex h-9 min-w-0 items-center gap-1.5 rounded-xl border border-surface-200/80 bg-white/70 px-2.5 text-xs font-semibold text-ink shadow-sm transition-colors hover:border-indigo-300 dark:border-surface-700 dark:bg-surface-850/80 dark:text-ink-inverse disabled:cursor-not-allowed disabled:opacity-60', focus, className)}>
+        <span className="min-w-0 flex-1 truncate text-left">{summary}</span>
+        <ChevronDownIcon aria-hidden="true" className="h-3.5 w-3.5 shrink-0 opacity-60" />
       </button>
     </PopoverTrigger>
-    <PopoverContent align="start" sideOffset={8} collisionPadding={12} aria-labelledby={titleId}
-      onOpenAutoFocus={(event) => { event.preventDefault(); heading.current?.focus() }}
-      className="z-[100] flex w-[360px] max-w-[calc(100vw-24px)] flex-col overflow-hidden rounded-xl border-surface-200 bg-white p-0 text-ink shadow-xl dark:border-surface-700 dark:bg-surface-900 dark:text-ink-inverse motion-reduce:animate-none"
-      style={{ maxHeight: 'min(520px, var(--radix-popover-content-available-height))' }}>
-      <div className="shrink-0 border-b border-surface-200 px-4 py-3 dark:border-surface-700">
-        <div className="mb-2 flex items-center justify-between gap-2">
-          <span className={cn('text-[10px] font-semibold uppercase tracking-wider', muted)}>{agents ? 'Agent configuration' : 'Model configuration'} · {agents ? stepNumber : step === 'provider' ? 1 : step === 'model' ? 2 : 3}/{agents ? stepTotal : includeEffort ? 3 : 2}</span>
-          {step !== firstStep && <button type="button" onClick={back} className={cn(button, '-my-1 flex items-center gap-1 px-2')}><ArrowLeftIcon aria-hidden="true" className="h-3 w-3" />Back</button>}
-        </div>
-        <h3 ref={heading} id={titleId} tabIndex={-1} className="text-sm font-semibold outline-none">{step === 'agent' ? 'Choose an agent' : step === 'provider' ? (agents ? 'Choose a model' : 'Choose a provider') : step === 'model' ? `${providerLabel(draft.provider)} models` : 'Choose reasoning effort'}</h3>
-        <p className={cn('mt-1 break-words text-[11px]', muted)}>{step === 'agent' ? `Current: ${summary}` : step === 'provider' ? (agents ? `For ${draftAgent.name}. Pick a provider, then a model.` : `Current: ${summary}`) : step === 'model' ? 'Choose a model from this provider’s live catalogue.' : `${agents ? `${draftAgent.name} · ` : ''}${providerLabel(draft.provider)} / ${draft.model}`}</p>
-      </div>
+    <PopoverContent align="start" sideOffset={8} collisionPadding={12} aria-label="Choose a model"
+      onOpenAutoFocus={(event) => { event.preventDefault(); searchBox.current?.focus() }}
+      className="z-[100] flex w-[300px] max-w-[calc(100vw-24px)] flex-col overflow-hidden rounded-xl border-surface-200 bg-white p-0 text-ink shadow-xl dark:border-surface-700 dark:bg-surface-900 dark:text-ink-inverse motion-reduce:animate-none"
+      style={{ maxHeight: 'min(440px, var(--radix-popover-content-available-height))' }}>
+      <input ref={searchBox} type="search" value={search} onChange={(event) => setSearch(event.target.value)}
+        onKeyDown={(event) => {
+          const first = sections[0]?.models[0]
+          if (event.key === 'Enter' && first?.provider) { event.preventDefault(); onChange(first.id, first.provider, '') }
+        }}
+        aria-label="Search models" placeholder="Search models…"
+        className="shrink-0 border-b border-surface-200 bg-transparent px-3.5 py-2.5 text-xs outline-none placeholder:text-ink-muted/70 dark:border-surface-700 dark:placeholder:text-ink-inverse-muted/70" />
 
-      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-2">
-        {step === 'agent' && <>
-          {agentsLoading && <p role="status" className={cn('px-3 py-2 text-xs', muted)}>Loading your agents…</p>}
-          {agentsError && <p role="status" className={cn('px-3 py-2 text-[11px]', muted)}>{agentsError}</p>}
-          {groups.map((group) => <div key={group.label} className="pb-1">
-            <p className={cn('px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider', muted)}>{group.label}</p>
-            {group.items.map((item) => <button type="button" key={`${item.kind}:${item.id}`} className={cn(row, sameAgent(item, draftAgent) && 'border-indigo-200 bg-indigo-50 dark:border-indigo-800 dark:bg-indigo-950/40')}
-              onClick={() => { setDraftAgent(item); setDraft({ model: '', provider: '', effort: '' }); setSearch(''); setStep('provider') }}>
-              <span className="min-w-0 flex-1"><span className="block truncate font-semibold">{item.name}</span>
-                <span className={cn('mt-0.5 line-clamp-2 block text-[11px]', muted)}>{item.description || agentKindLabel(item.kind)}</span></span>
-              {sameAgent(item, agent) && <span className="text-[10px] text-indigo-600 dark:text-indigo-300">Current</span>}
-              <ChevronRightIcon aria-hidden="true" className={cn('h-4 w-4 shrink-0', muted)} />
-            </button>)}
-          </div>)}
-        </>}
-
-        {step === 'provider' && <>
-          {agents && ownModel && <button type="button" className={cn(row, 'mb-1 border-indigo-100 dark:border-indigo-900')}
-            disabled={providers[ownModel.provider] !== true || providersLoading || Boolean(providersError)}
-            onClick={() => chooseModel(ownModel.model, ownModel.provider)}>
-            <span className="min-w-0 flex-1"><span className="block font-semibold">Use {draftAgent.name}’s model</span>
-              <span className={cn('mt-0.5 block break-all text-[11px]', muted)}>{providerLabel(ownModel.provider)} / {ownModel.model}</span></span>
-            <ChevronRightIcon aria-hidden="true" className={cn('h-4 w-4 shrink-0', muted)} />
-          </button>}
-          {providersLoading && <p role="status" className={cn('px-3 py-2 text-xs', muted)}>Checking API key configuration…</p>}
-          {providersError && <RequestError message={`Could not check API keys. ${providersError}`} onRetry={onOpen} />}
-          {modelsError && <RequestError message={`Model catalogue unavailable. ${modelsError}`} onRetry={onOpen} />}
-          {PROVIDERS.filter((item) => item.id in providers).map((item) => {
-            const configured = providers[item.id] === true && !providersLoading && !providersError
-            return <button type="button" key={item.id} disabled={!configured} className={row} onClick={() => {
-              setDraft({ provider: item.id, model: '', effort: '' }); setSearch(''); setStep('model')
-            }}>
-              <span className={cn('h-2 w-2 shrink-0 rounded-full', configured ? 'bg-indigo-500' : 'bg-surface-300 dark:bg-surface-600')} aria-hidden="true" />
-              <span className="min-w-0 flex-1"><span className="block font-semibold">{item.label}</span>
-                <span className={cn('mt-0.5 block text-[11px]', muted)}>{providersLoading ? 'Checking configuration…' : providersError ? 'Configuration unavailable' : configured ? providerErrors[item.id] ? 'Configured · catalogue unavailable' : 'Configured' : 'API key not configured'}</span></span>
-              {item.id === provider && <span className="text-[10px] text-indigo-600 dark:text-indigo-300">Current</span>}
-              {configured && <ChevronRightIcon aria-hidden="true" className={cn('h-4 w-4 shrink-0', muted)} />}
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-1.5">
+        {/* The model in use leads the list, so it is in view however long the catalogue is. */}
+        {value && !search && <div title={value} className="flex items-center gap-2 rounded-lg bg-indigo-50 px-2.5 py-1.5 text-xs font-semibold text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-200">
+          <span className="min-w-0 flex-1 truncate">{modelName}</span>
+          <span className="shrink-0 text-[10px] font-medium opacity-70">{providerLabel(provider)}</span>
+          <CheckIcon aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
+        </div>}
+        {loading && !sections.length && <p role="status" className={cn('px-2.5 py-2 text-xs', muted)}>Loading models…</p>}
+        {failure && <RequestError message={failure} onRetry={onOpen} />}
+        {!loading && !failure && !sections.length && <p role="status" className={cn('px-2.5 py-2 text-xs', muted)}>
+          {search ? 'No models match.' : 'No model provider is configured.'}</p>}
+        {sections.map((section) => <div key={section.id} role="group" aria-label={section.label}>
+          <p className={cn('px-2.5 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider', muted)}>{section.label}</p>
+          {section.error && <RequestError message={section.error} onRetry={onOpen} />}
+          {section.models.map((model) => {
+            const current = model.id === value && model.provider === provider
+            return <button type="button" key={modelOptionValue(model)} title={model.id} aria-pressed={current}
+              onClick={() => { if (!current) onChange(model.id, section.id, '') }}
+              className={cn('flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-xs transition-colors hover:bg-surface-100 dark:hover:bg-surface-800', focus,
+                current && 'bg-indigo-50 font-semibold text-indigo-700 hover:bg-indigo-50 dark:bg-indigo-950/40 dark:text-indigo-200 dark:hover:bg-indigo-950/40')}>
+              <span className="min-w-0 flex-1 truncate">{section.id === 'perplexity' ? model.id : readableModelName(model.id)}</span>
+              {current && <CheckIcon aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />}
             </button>
           })}
-        </>}
-
-        {step === 'model' && <>
-          <div className="px-2 pb-2 pt-1"><input type="search" value={search} onChange={(event) => setSearch(event.target.value)} aria-label="Search models by name or ID" placeholder="Search model name or ID…"
-            className={cn('w-full rounded-lg border border-surface-200 bg-surface-50 px-3 py-2 text-xs dark:border-surface-700 dark:bg-surface-850', focus)} /></div>
-          {modelsLoading ? <p role="status" className={cn('p-3 text-xs', muted)}>Loading models…</p> : modelError ? <RequestError message={modelError} onRetry={onOpen} /> : <>
-            {!filtered.length && <p role="status" className={cn('p-3 text-xs', muted)}>{search ? 'No models match your search.' : 'No models are available for this provider.'}</p>}
-            {!filtered.length && !search && <button type="button" onClick={onOpen} className={button}>Refresh catalogue</button>}
-            {filtered.map((model) => <button type="button" key={modelOptionValue(model)} disabled={providers[draft.provider] !== true || providersLoading || Boolean(providersError)}
-              aria-pressed={draft.model === model.id} className={cn(row, draft.model === model.id && 'border-indigo-200 bg-indigo-50 dark:border-indigo-800 dark:bg-indigo-950/40')}
-              onClick={() => {
-                setDraft((current) => ({ ...current, model: model.id, effort: '' }))
-                if (includeEffort) { capabilities.refresh(); setStep('effort') }
-              }}>
-              <span className="min-w-0 flex-1"><span className="block font-semibold">{readableModelName(model.id)}</span><span className={cn('mt-0.5 block break-all text-[11px]', muted)}>{model.id}</span></span>
-              {model.id === value && model.provider === provider && <span className="text-[10px] text-indigo-600 dark:text-indigo-300">Current</span>}
-              {includeEffort ? <ChevronRightIcon aria-hidden="true" className="h-4 w-4 shrink-0" /> : draft.model === model.id && <CheckIcon aria-hidden="true" className="h-4 w-4 shrink-0 text-indigo-500" />}
-            </button>)}
-          </>}
-        </>}
-
-        {step === 'effort' && <>
-          {capabilities.loading && <p role="status" className={cn('p-3 text-xs', muted)}>Checking supported reasoning efforts…</p>}
-          {capabilities.error && <RequestError message={`Could not check reasoning support. ${capabilities.error}`} onRetry={capabilities.refresh} />}
-          {capabilities.ready && (capabilities.efforts.length ? <fieldset className="space-y-1"><legend className="sr-only">Reasoning effort</legend>
-            {['', ...capabilities.efforts].map((option) => <label key={option} className={cn(row, draft.effort === option && 'border-indigo-200 bg-indigo-50 dark:border-indigo-800 dark:bg-indigo-950/40')}>
-              <input type="radio" name={effortGroup} value={option} checked={draft.effort === option} onChange={() => setDraft((current) => ({ ...current, effort: option }))} className={cn('h-3.5 w-3.5 accent-indigo-600', focus)} />
-              <span><span className="block font-semibold">{option ? option.charAt(0).toUpperCase() + option.slice(1) : 'Provider default'}</span>{!option && <span className={cn('mt-0.5 block text-[11px]', muted)}>Let the provider choose.</span>}</span>
-            </label>)}
-          </fieldset> : <p role="status" className="p-3 text-xs leading-relaxed"><span className="block font-semibold">Provider default only</span><span className={cn('mt-1 block', muted)}>This model does not support adjustable reasoning effort. Apply to use its default.</span></p>)}
-          {!validModel && !modelsLoading && <RequestError message={modelError || 'This model or provider is no longer available. Go back to choose another.'} onRetry={onOpen} />}
-        </>}
+        </div>)}
       </div>
 
-      <div className="flex shrink-0 items-center justify-between gap-2 border-t border-surface-200 px-3 py-2 dark:border-surface-700">
-        <button type="button" className={button} onClick={() => setOpen(false)}>Cancel</button>
-        <button type="button" disabled={!canApply} className={cn(button, 'bg-indigo-600 text-white hover:bg-indigo-700 dark:hover:bg-indigo-500')} onClick={() => {
-          if (!canApply) return
-          onChange(draft.model, draft.provider, includeEffort && capabilities.efforts.length ? draft.effort : '', draftAgent)
-          setOpen(false)
-        }}>Apply configuration</button>
-      </div>
+      {capabilities.error && <RequestError message={`Reasoning levels unavailable. ${capabilities.error}`} onRetry={capabilities.refresh} />}
+      {capabilities.efforts.length > 0 && <div role="radiogroup" aria-label={`Reasoning for ${modelName}`}
+        className="flex shrink-0 flex-wrap items-center gap-1 border-t border-surface-200 px-2 py-2 dark:border-surface-700">
+        <span className={cn('mr-auto px-1.5 text-[10px] font-semibold uppercase tracking-wider', muted)}>Reasoning</span>
+        {['', ...capabilities.efforts].map((option) => <button type="button" key={option} role="radio" aria-checked={level === option}
+          onClick={() => { onChange(value, provider, option); setOpen(false) }}
+          className={cn('rounded-md px-2 py-1 text-[11px] font-medium transition-colors hover:bg-surface-100 dark:hover:bg-surface-800', focus,
+            level === option && 'bg-indigo-600 text-white hover:bg-indigo-600 dark:hover:bg-indigo-600')}>
+          {option ? capitalize(option) : 'Auto'}
+        </button>)}
+      </div>}
     </PopoverContent>
   </Popover>
 }
 
 function RequestError({ message, onRetry }: { message: string; onRetry?: () => void }) {
-  return <div className="m-1 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
+  return <div className="m-1 rounded-lg bg-amber-50 px-2.5 py-2 text-[11px] text-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
     <p role="alert" className="break-words">{message}</p>
-    {onRetry && <button type="button" onClick={onRetry} className={cn('mt-2 rounded font-semibold underline underline-offset-2', focus)}>Retry</button>}
+    {onRetry && <button type="button" onClick={onRetry} className={cn('mt-1 rounded font-semibold underline underline-offset-2', focus)}>Retry</button>}
   </div>
 }
