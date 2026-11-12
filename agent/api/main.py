@@ -29,6 +29,7 @@ from agent.api.endpoints import music
 from agent.api.endpoints import context as context_endpoints
 from agent.api.endpoints import build as build_endpoints
 from agent.api.core.harness_agents import harness_a2a_host
+from agent.api.core import ren_mcp
 from agent.api.core.teaching import get_teaching_service, mcp_app as skills_mcp_app
 
 
@@ -100,8 +101,17 @@ async def lifespan(app: FastAPI):
                 mounted_routes = [route for route in app.routes if route not in previous]
         # Opt-in (RON_NGROK=1); only allow-listed webhook paths are reachable.
         app.state.public_url = await public_tunnel.start()
-        async with skills_mcp_app.lifespan(app):
-            yield
+        async with skills_mcp_app.lifespan(app), ren_mcp_app.lifespan(app):
+            # Joined to Ren's hub (REN_HUB_URL), ren desktop serves its MCP server there too, so the phone and the
+            # agents outside this machine can reach it.
+            hub = ren_mcp.hub_url()
+            link = asyncio.create_task(ren_mcp.attach_to_hub(ren_mcp_server, hub, os.getenv("REN_HUB_TOKEN", ""))) if hub else None
+            try:
+                yield
+            finally:
+                if link is not None:
+                    link.cancel()
+                    await asyncio.gather(link, return_exceptions=True)
     finally:
         try:
             await get_teaching_service().shutdown()
@@ -156,6 +166,10 @@ app.include_router(context_endpoints.router, tags=["context"])
 # Build Agent workbench (files, git, preview of the Build destination's workspace); loopback-only.
 app.include_router(build_endpoints.router, tags=["build"])
 app.mount("/skills/mcp", skills_mcp_app)
+# Ren desktop as an MCP server: its browser and its agent (core/ren_mcp.py); loopback-only like the rest of the API.
+ren_mcp_server = ren_mcp.create_ren_mcp(app)
+ren_mcp_app = ren_mcp_server.http_app(path="/")
+app.mount("/mcp", ren_mcp_app)
 # Stored harness specialists over native A2A (<PANEL_A2A_URL>/agents/<id>). Mounted before the
 # lifespan's /a2a mount so this prefix wins; loopback-only like /a2a (never on the ngrok allowlist).
 from agent.api.core.a2a_tools import a2a_enabled as _a2a_enabled  # noqa: E402

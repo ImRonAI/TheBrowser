@@ -1060,12 +1060,17 @@ def create_panel_agent(
     # Exactly ONE browser MCP server is configured; it is staged on demand through
     # tool_catalog(action="load", name=<server>) with a prefixed, elicitation-accepting client.
     browser_server = server_name(selected_browser)
+    from agent.api.core.ren_mcp import PHONE_SERVER, hub_client_factory, hub_server_config
+
+    # The phone (ren mobile) is one more server the agent can stage, when this desktop is joined to Ren's hub.
+    phone_server = hub_server_config()
     catalog = _OwnedPanelCatalog(
         tools=local_tools, managed_mcp=[ManagedMCP(client) for client in clients],
-        mcp_servers=browser_server_config(selected_browser),
+        mcp_servers={**browser_server_config(selected_browser), **phone_server},
         # This user's browser MCP server runs their active `server` repair (PYTHONPATH), if any.
         mcp_client_factories={browser_server: browser_client_factory(
-            selected_browser, extra_env=(lambda: browser_server_env(user_id)) if repair_config.enabled else None)},
+            selected_browser, extra_env=(lambda: browser_server_env(user_id)) if repair_config.enabled else None),
+            **({PHONE_SERVER: hub_client_factory()} if phone_server else {})},
     )
     from agent.api.core.threads import ThreadProjection
     hooks = [*hooks, BrowserAvailabilityHook(selected_browser), ToolObservation()]
