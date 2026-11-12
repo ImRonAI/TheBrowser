@@ -91,10 +91,30 @@ DOCUMENT_SUMMARY = "id,project_id,parent_id,title,version,created_by,created_at,
 
 
 class DocumentCreate(StrictModel):
-    project_id: UUID
+    #: None is a personal page (only its author sees it). A child page is always in its parent's project.
+    project_id: UUID | None = None
     parent_id: UUID | None = None
     title: str = Field(default="Untitled", min_length=1, max_length=300)
     content: str = Field(default="", max_length=2_000_000)
+
+
+class DocumentMove(StrictModel):
+    project_id: UUID
+
+
+class CommentCreate(StrictModel):
+    #: Checked after trimming by ProjectService.add_comment (blank or longer than COMMENT_MAX is a 422).
+    body: str
+
+
+class CommentUpdate(StrictModel):
+    version: int = Field(ge=1)
+    body: str
+
+
+class MemberInvite(StrictModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    email: str = Field(min_length=3, max_length=320, pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 
 class DocumentLinkCreate(StrictModel):
@@ -159,6 +179,24 @@ async def update_project(project_id: UUID, body: ProjectUpdate, identity: Identi
 @router.get("/{project_id}/issues")
 async def list_issues(project_id: UUID, identity: Identity, offset: int = Query(0, ge=0), limit: int = Query(200, ge=1, le=500)):
     return await ProjectService(identity).rows("issues", project_id=f"eq.{project_id}", order="rank.asc,id.asc", offset=offset, limit=limit)
+
+
+@router.get("/{project_id}/members")
+async def list_members(project_id: UUID, identity: Identity):
+    """The owner, then the people they invited. A guest workspace has only its owner."""
+    return await ProjectService(identity).members(str(project_id))
+
+
+@router.post("/{project_id}/members")
+async def invite_member(project_id: UUID, body: MemberInvite, identity: Identity):
+    """Invite an existing Ren account by email (owner only; guests sign in first)."""
+    return await ProjectService(identity).invite_member(str(project_id), body.email)
+
+
+@router.delete("/{project_id}/members/{user_id}")
+async def remove_member(project_id: UUID, user_id: UUID, identity: Identity):
+    """The owner removes a member, or a member leaves (their own user_id)."""
+    return await ProjectService(identity).remove_member(str(project_id), str(user_id))
 
 
 #: Rows per activity_log request (Supabase's default PostgREST max-rows) and the most read for one history.
@@ -266,6 +304,28 @@ async def create_event(issue_id: UUID, body: EventCreate, identity: Identity):
     return rows[0]
 
 
+@router.get("/issues/{issue_id}/comments")
+async def list_comments(issue_id: UUID, identity: Identity, offset: int = Query(0, ge=0), limit: int = Query(200, ge=1, le=500)):
+    """The issue's comments, oldest first (404 when the issue is not visible)."""
+    return await ProjectService(identity).comments(str(issue_id), offset=offset, limit=limit)
+
+
+@router.post("/issues/{issue_id}/comments")
+async def add_comment(issue_id: UUID, body: CommentCreate, identity: Identity):
+    """A person's comment; agents comment through their tools (ProjectService.add_comment with agent_name)."""
+    return await ProjectService(identity).add_comment(str(issue_id), body.body)
+
+
+@router.patch("/comments/{comment_id}")
+async def edit_comment(comment_id: UUID, body: CommentUpdate, identity: Identity):
+    return await ProjectService(identity).edit_comment(str(comment_id), body.version, body.body)
+
+
+@router.delete("/comments/{comment_id}")
+async def delete_comment(comment_id: UUID, identity: Identity):
+    return await ProjectService(identity).delete_comment(str(comment_id))
+
+
 @router.get("/{project_id}/documents")
 async def list_documents(project_id: UUID, identity: Identity, offset: int = Query(0, ge=0), limit: int = Query(200, ge=1, le=500)):
     return await ProjectService(identity).rows("project_documents", select=DOCUMENT_SUMMARY, project_id=f"eq.{project_id}",
@@ -274,7 +334,7 @@ async def list_documents(project_id: UUID, identity: Identity, offset: int = Que
 
 @router.get("/documents")
 async def list_all_documents(identity: Identity, offset: int = Query(0, ge=0), limit: int = Query(200, ge=1, le=500)):
-    """Every page the caller can access, across projects (for linking a page to an issue)."""
+    """Every page the caller can access: across projects, plus their personal pages (`project_id` null)."""
     return await ProjectService(identity).rows("project_documents", select=DOCUMENT_SUMMARY,
                                                order="updated_at.desc,id.asc", offset=offset, limit=limit)
 
@@ -340,8 +400,13 @@ async def get_document(document_id: UUID, identity: Identity):
 
 @router.post("/documents")
 async def create_document(body: DocumentCreate, identity: Identity):
-    rows = await ProjectService(identity).request("POST", "project_documents", body=body.model_dump(mode="json"))
-    return rows[0]
+    return await ProjectService(identity).create_document(body.model_dump(mode="json"))
+
+
+@router.post("/documents/{document_id}/move")
+async def move_document(document_id: UUID, body: DocumentMove, identity: Identity):
+    """Add a page (with every page under it) to a project, or move it to another one; it leaves its parent."""
+    return await ProjectService(identity).move_document(str(document_id), str(body.project_id))
 
 
 @router.patch("/documents/{document_id}")

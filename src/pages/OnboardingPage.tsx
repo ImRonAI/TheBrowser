@@ -179,7 +179,7 @@ export function OnboardingPage() {
                           placeholder={INTERVIEW[currentQuestionIndex].placeholder}
                           aria-label={INTERVIEW[currentQuestionIndex].question}
                           className="
-                            min-w-full bg-transparent
+                            ron-field min-w-full bg-transparent [.glass_&]:rounded-2xl [.glass_&]:pl-5
                             border-b-2 border-surface-200 dark:border-surface-700
                             focus:border-blurple-600 dark:focus:border-blurple-400
                             font-display text-display-sm font-semibold tracking-[-0.025em]

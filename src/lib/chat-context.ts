@@ -147,12 +147,12 @@ export function interestItem(node: { id: string; label: string; weight: number; 
   }
 }
 
-export function documentItem(doc: { id: string; title: string; projectId: string; updatedAt: number }, projects: Project[], now = Date.now()): ContextItem {
+export function documentItem(doc: { id: string; title: string; projectId: string | null; updatedAt: number }, projects: Project[], now = Date.now()): ContextItem {
   const project = projects.find((candidate) => candidate.id === doc.projectId)
   return {
     id: `document:${doc.id}`, type: 'document', name: doc.title || 'Untitled',
-    description: project ? `Page in ${project.name}` : 'Project page',
-    meta: relativeTime(new Date(doc.updatedAt).toISOString(), now), ref: { documentId: doc.id, projectId: doc.projectId },
+    description: project ? `Page in ${project.name}` : doc.projectId ? 'Project page' : 'Page in My documents',
+    meta: relativeTime(new Date(doc.updatedAt).toISOString(), now), ref: { documentId: doc.id, projectId: doc.projectId ?? undefined },
   }
 }
 

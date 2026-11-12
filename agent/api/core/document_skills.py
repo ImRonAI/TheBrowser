@@ -1,4 +1,7 @@
-"""Agent Skills authored as project pages (Documents -> "Agent Skill" template -> Publish as skill).
+"""Agent Skills authored as pages (Documents -> "Agent Skill" template -> Publish as skill).
+
+A project's page and a personal page (no project, 022_personal_documents.sql) publish the same way: the page is
+read with the caller's own access, and ``source_document.project_id`` is ``None`` for a personal page.
 
 A page becomes a native Agent Skill: an AgentSkills.io ``SKILL.md`` (YAML ``name``/``description``,
 validated with the SDK's ``Skill.from_file(strict=True)``, strands/vended_plugins/skills/skill.py:254)
@@ -450,7 +453,7 @@ async def _resolve(page: SkillPage, *, identity: ProjectIdentity, service: Teach
                 if not rows:
                     raise SkillDocumentError("is not a page you can open")
                 row = rows[0]
-                resolved[key] = {"title": row["title"], "id": row["id"], "project_id": row["project_id"],
+                resolved[key] = {"title": row["title"], "id": row["id"], "project_id": row.get("project_id"),
                                  "version": row["version"], "markdown": page_markdown(row.get("content") or ""),
                                  "path": f"references/{_slug(row['title'], 'page')}-{UUID(row['id']).hex[:8]}.md"}
             else:
@@ -678,7 +681,8 @@ async def publish_document_skill(service: TeachingService, identity: ProjectIden
         approval_revision=group.approval_revision,
         approval=dict(source="document", document_id=document_id, version=group.approval_revision,
                       approved_by=identity.user_id, approved_at=now),
-        source_document=dict(id=document_id, project_id=document["project_id"], title=title, version=group.approval_revision),
+        # None for a personal page (it belongs to no project).
+        source_document=dict(id=document_id, project_id=document.get("project_id"), title=title, version=group.approval_revision),
         script_verification="no scripts",
     )
     published = await service.install_skill(user_id, agent_id, manifest, files)

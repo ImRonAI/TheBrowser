@@ -7,7 +7,7 @@ import { faviconFor, useFavoritesStore, type Favorite } from '@/stores/favorites
 import { useTabStore } from '@/stores/tabStore'
 import { cn } from '@/utils/cn'
 
-/** Inputs inside the popover stay transparent so the Glass theme's popover tint shows through them. */
+/** Inputs inside the popover: transparent in Light and Dark, black fields in Glass (src/index.css § Fields). */
 const POPOVER_INPUT = cn(
   'h-9 rounded-lg text-[13px] shadow-none md:text-[13px] placeholder:text-ink-muted dark:placeholder:text-ink-inverse-muted',
   'focus-visible:border-blurple-500 focus-visible:ring-2 focus-visible:ring-blurple-600/30 focus-visible:ring-offset-0',

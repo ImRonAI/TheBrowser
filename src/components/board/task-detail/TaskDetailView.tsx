@@ -16,12 +16,13 @@ const EASE = [0.16, 1, 0.3, 1] as const
 
 type ViewMode = 'normal' | 'fullscreen'
 
-type TabId = 'description' | 'context' | 'ron' | 'comms' | 'history'
+type TabId = 'description' | 'context' | 'ron' | 'comments' | 'comms' | 'history'
 
 interface Tab {
   id: TabId
   label: string
   icon: ReactNode
+  count?: number
 }
 
 const TABS: Tab[] = [
@@ -31,8 +32,16 @@ const TABS: Tab[] = [
   { id: 'history', label: 'History', icon: <Clock className="h-4 w-4" /> },
 ]
 
-/** Canonical issues add a Context tab after Description; the legacy Task model has no pane for it. */
-const WORKSPACE_TABS: Tab[] = [TABS[0], { id: 'context', label: 'Context', icon: <Layers className="h-4 w-4" /> }, ...TABS.slice(1)]
+/** Canonical issues add Context and replace legacy Comms with real Comments; the legacy Task model keeps CommsTab. */
+function workspaceTabs(commentsCount?: number): Tab[] {
+  return [
+    TABS[0],
+    { id: 'context', label: 'Context', icon: <Layers className="h-4 w-4" /> },
+    TABS[1],
+    { id: 'comments', label: 'Comments', icon: <MessageSquare className="h-4 w-4" />, count: commentsCount },
+    TABS[3],
+  ]
+}
 
 /** Ghost icon button: the sheet's window controls. */
 const ICON_BUTTON = [
@@ -53,7 +62,8 @@ interface TaskDetailViewProps {
     description: ReactNode
     context: ReactNode
     ron: ReactNode
-    comms: ReactNode
+    comments: ReactNode
+    commentsCount?: number
     history: ReactNode
   }
 }
@@ -149,7 +159,7 @@ export function TaskDetailView({ task, onClose, onUpdate, onTaskClick, workspace
             workspace ? 'min-h-[400px] lg:min-h-0 lg:border-r' : 'border-r'
           )}>
             <TabNavigation
-              tabs={workspace ? WORKSPACE_TABS : TABS}
+              tabs={workspace ? workspaceTabs(workspace.commentsCount) : TABS}
               activeTab={activeTab}
               onTabChange={setActiveTab}
               tabId={tabId}
@@ -161,7 +171,7 @@ export function TaskDetailView({ task, onClose, onUpdate, onTaskClick, workspace
                 <div {...panel('description')} hidden={activeTab !== 'description'} className="h-full">{workspace.description}</div>
                 <div {...panel('context')} hidden={activeTab !== 'context'} className="h-full">{workspace.context}</div>
                 <div {...panel('ron')} hidden={activeTab !== 'ron'} className="h-full"><ErrorBoundary componentName="RonTab">{workspace.ron}</ErrorBoundary></div>
-                <div {...panel('comms')} hidden={activeTab !== 'comms'} className="h-full">{workspace.comms}</div>
+                <div {...panel('comments')} hidden={activeTab !== 'comments'} className="h-full"><ErrorBoundary componentName="IssueComments">{workspace.comments}</ErrorBoundary></div>
                 <div {...panel('history')} hidden={activeTab !== 'history'} className="h-full">{workspace.history}</div>
               </> : (
               <AnimatePresence mode="wait">
@@ -318,6 +328,16 @@ function TabNavigation({ tabs, activeTab, onTabChange, tabId, panelId }: TabNavi
             >
               <span className={cn('flex h-4 w-4 items-center justify-center', active && 'text-volt')}>{tab.icon}</span>
               <span>{tab.label}</span>
+              {tab.count !== undefined && tab.count > 0 && (
+                <span className={cn(
+                  'rounded-full px-1.5 py-0.5 font-mono text-[11px] font-medium leading-none tabular-nums',
+                  active
+                    ? 'bg-blurple-600/10 text-blurple-700 dark:bg-blurple-400/15 dark:text-blurple-300'
+                    : 'bg-surface-100 text-ink-secondary dark:bg-surface-850 dark:text-ink-inverse-secondary'
+                )}>
+                  {tab.count}
+                </span>
+              )}
 
               {active && (
                 <motion.span

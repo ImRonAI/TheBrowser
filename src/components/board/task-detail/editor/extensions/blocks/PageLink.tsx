@@ -11,7 +11,7 @@ declare module '@tiptap/core' {
   interface Commands<ReturnType> {
     pageLink: {
       /** An inline link to a project page at the cursor. */
-      insertPageLink: (page: { documentId: string; projectId: string; title: string }) => ReturnType
+      insertPageLink: (page: { documentId: string; projectId: string | null; title: string }) => ReturnType
     }
   }
 }
@@ -50,8 +50,8 @@ export const PageLink = Node.create({
 
   addCommands() {
     return {
-      insertPageLink: (page) => ({ chain }) => !!page.documentId && !!page.projectId && chain()
-        .insertContent([{ type: this.name, attrs: { documentId: page.documentId, projectId: page.projectId, title: page.title || UNTITLED } }, { type: 'text', text: ' ' }])
+      insertPageLink: (page) => ({ chain }) => !!page.documentId && chain()
+        .insertContent([{ type: this.name, attrs: { documentId: page.documentId, projectId: page.projectId ?? '', title: page.title || UNTITLED } }, { type: 'text', text: ' ' }])
         .run(),
     }
   },

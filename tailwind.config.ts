@@ -50,7 +50,10 @@ const SIGNAL = {
 }
 
 const config: Config = {
-  darkMode: ['class'],
+  // `dark:` is the .dark class (the installed `class` strategy, `&:is(.dark *)`). In Glass every text
+  // field (`.ron-field`) is also a Dark island, in both inks (src/index.css § Fields). `:where()` keeps
+  // the island selectors at the specificity of the class strategy.
+  darkMode: ['variant', ['&:is(.dark *)', '&:is(:where(html.glass) .ron-field)', '&:is(:where(html.glass) .ron-field *)']],
   content: [
     './index.html',
     './src/**/*.{ts,tsx,jsx}',

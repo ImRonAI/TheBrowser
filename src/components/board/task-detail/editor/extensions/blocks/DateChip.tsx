@@ -82,6 +82,6 @@ function DateView({ node, editor, selected, updateAttributes }: NodeViewProps) {
     </button>
     {editable && <input ref={input} type="date" tabIndex={-1} aria-hidden="true" value={date ?? ''}
       onChange={(event) => { const next = iso(event.target.value); if (next) updateAttributes({ date: next }) }}
-      className="pointer-events-none absolute bottom-0 left-0 h-0 w-0 opacity-0" />}
+      className="pointer-events-none absolute bottom-0 left-0 h-0 w-0 bg-transparent opacity-0" />}
   </NodeViewWrapper>
 }

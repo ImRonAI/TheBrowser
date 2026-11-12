@@ -62,6 +62,11 @@ def events(response):
     return [json.loads(line[6:]) for line in response.text.splitlines() if line.startswith("data: ")]
 
 
+#: Ren's document and project tools (core/workspace_tools.py): Ren's own Agent Panel chat only.
+WORKSPACE_TOOLS = {'list_projects', 'create_project', 'create_issue', 'list_documents', 'read_document',
+                   'create_document', 'update_document', 'add_document_to_project', 'link_document_to_issue'}
+
+
 @pytest.mark.parametrize('destination', ['panel', 'search', 'build', 'document', 'context'])
 @pytest.mark.parametrize('explicit_selection', [True, False])
 def test_article_reaches_native_model_and_restored_history(monkeypatch, destination, explicit_selection):
@@ -93,7 +98,11 @@ def test_article_reaches_native_model_and_restored_history(monkeypatch, destinat
             elif destination != 'panel':
                 assert f'You are {destination.title()} Agent.' in builds[0]['system_prompt']
             context_tools = {tool.tool_name for tool in builds[0]['extra_tools']}
-            assert context_tools == ({'update_interest_graph', 'recommend_agent'} if destination == 'context' else set())
+            assert context_tools == ({'update_interest_graph', 'recommend_agent'} if destination == 'context' else
+                                     WORKSPACE_TOOLS if destination == 'panel' else set())
+            # Only Ren's own panel chat is told about its document and project tools.
+            from agent.api.core.workspace_tools import workspace_prompt
+            assert (workspace_prompt() in builds[0]['system_prompt']) == (destination == 'panel')
             wrong = await client.post('/chat', json={'session_id': f'article-{destination}', 'provider': 'openai',
                 'message': 'Wrong destination', 'destination': 'build' if destination != 'build' else 'search'})
             assert wrong.status_code == 409
@@ -489,8 +498,12 @@ def test_project_agent_acts_with_the_callers_project_access_and_is_pinned(monkey
             assert snapshot['selection']['agent'] == {'kind': 'project', 'id': project['id']}
             assert 'You are the project agent' in builds[0]['system_prompt'] and project['id'] in builds[0]['system_prompt']
             tools = {value.tool_name: value for value in builds[0]['extra_tools']}
-            assert {'read_project', 'read_issue', 'create_issue', 'update_issue', 'add_issue_context', 'link_issues',
-                    'list_project_documents', 'read_project_document', 'understand_media'} <= tools.keys()
+            assert {'read_project', 'read_issue', 'create_issue', 'update_issue', 'add_issue_context', 'add_issue_comment',
+                    'link_issues', 'list_project_documents', 'read_project_document', 'understand_media'} <= tools.keys()
+            # Ren's workspace tools stay with Ren: the project agent works inside its one project.
+            from agent.api.core.workspace_tools import workspace_prompt
+            assert not tools.keys() & (WORKSPACE_TOOLS - {'create_issue'})
+            assert workspace_prompt() not in builds[0]['system_prompt']
             # The agent is pinned to the session like the model.
             locked = await client.post('/chat', json={**body, 'message': 'Switch', 'agent': {'kind': 'ron', 'id': ''}}, headers=workspace)
             assert locked.status_code == 409
@@ -518,9 +531,90 @@ def test_project_agent_acts_with_the_callers_project_access_and_is_pinned(monkey
             # Audit rows keep who/what/when; their whole-row old/new snapshots stay out of the agent's context.
             assert read['activity'] and all(set(row) == {'timestamp', 'actor_name', 'actor_type', 'action', 'field'} for row in read['activity'])
             assert issue['context'][0]['url'] == 'https://example.com/beta'
+            # The issue's discussion: a person's comment, then the project agent's reply under its own name.
+            assert read['comments'] == []
+            person = await client.post(f"/projects/issues/{story['id']}/comments", json={'body': 'Who owns the list?'}, headers=workspace)
+            assert person.status_code == 200, person.text
+            _, result = await call_tool(tools['add_issue_comment'], {'issue_id': story['id'], 'body_markdown': 'Product owns it.'})
+            assert result['status'] == 'success', result
+            _, result = await call_tool(tools['read_issue'], {'issue_id': story['id']})
+            comments = json.loads(result['content'][0]['text'])['comments']
+            assert [(c['author_kind'], c['agent_name'], c['body']) for c in comments] == [
+                ('user', None, 'Who owns the list?'), ('agent', 'Project agent', 'Product owns it.')]
 
             # Specialists belong to a signed-in owner.
             specialist = await client.post('/chat', json={**body, 'session_id': 'specialist-chat',
                                                           'agent': {'kind': 'specialist', 'id': project['id']}})
             assert specialist.status_code == 401
+    asyncio.run(scenario())
+
+
+def test_ren_panel_binds_the_callers_project_access_for_its_workspace_tools(monkeypatch, tmp_path):
+    """Ren's own panel chat: a turn's project credential is verified and bound for Ren's workspace tools. Without one,
+    or with one that cannot be verified or belongs to another user, the turn still runs and the tools say so."""
+    from uuid import uuid4
+
+    from fastapi import HTTPException
+
+    from agent.api.core import projects
+    from agent.api.core.projects import ProjectIdentity
+    from agent.tests.test_panel_tools import call_tool
+
+    monkeypatch.setenv('PROJECTS_GUEST_DB', str(tmp_path / 'projects.db'))
+    workspace = {'X-Ron-Workspace': 'e' * 64}
+
+    async def scenario():
+        async with offline_api(monkeypatch) as (client, manager, builds, agents, shell, threads):
+            first = {'session_id': 'ren-chat', 'user_id': 'alice', 'provider': 'openai', 'model': 'offline', 'message': 'Hello'}
+            turn = {'session_id': 'ren-chat', 'user_id': 'alice', 'message': 'Again'}
+
+            def completed(response):
+                done = events(response)
+                assert done[-1]['type'] == 'run_finished' and done[-1]['status'] == 'completed', done
+
+            # Without a credential Ren answers as before; its workspace tools say access has not been verified.
+            completed(await client.post('/chat', json=first))
+            tools = {value.tool_name: value for value in builds[0]['extra_tools']}
+            assert tools.keys() == WORKSPACE_TOOLS
+
+            async def unverified():
+                _, result = await call_tool(tools['list_projects'], {})
+                return result['status'] == 'error' and 'has not been verified' in result['content'][0]['text']
+
+            assert await unverified()
+
+            # A credential that cannot be verified, or that is another user's, is logged and skipped, never refused.
+            real_identity = projects.project_identity
+
+            async def someone_else(request):
+                return ProjectIdentity(str(uuid4()), 'jwt', 'https://offline.invalid', 'anon')
+
+            async def supabase_down(request):
+                raise HTTPException(503, 'Unable to verify project access')
+
+            async def broken(request):
+                raise RuntimeError('identity lookup failed')
+
+            for check, headers in ((real_identity, {'X-Ron-Workspace': 'not-a-capability'}),
+                                   (real_identity, {'Authorization': 'Basic x'}),
+                                   (someone_else, {'Authorization': 'Bearer jwt'}),
+                                   (supabase_down, {'Authorization': 'Bearer jwt'}),
+                                   (broken, workspace)):
+                monkeypatch.setattr(projects, 'project_identity', check)
+                completed(await client.post('/chat', json=turn, headers=headers))
+                assert await unverified(), headers
+            monkeypatch.setattr(projects, 'project_identity', real_identity)
+
+            # The guest workspace capability, as the Projects UI sends it, binds: Ren acts in that workspace.
+            completed(await client.post('/chat', json=turn, headers=workspace))
+            _, result = await call_tool(tools['create_project'], {'name': 'Launch', 'key': 'LCH'})
+            assert result['status'] == 'success', result
+            assert [row['key'] for row in (await client.get('/projects', headers=workspace)).json()] == ['LCH']
+            # Later turns without a credential, or with one that fails, keep the verified binding.
+            completed(await client.post('/chat', json=turn))
+            completed(await client.post('/chat', json=turn, headers={'Authorization': 'Basic x'}))
+            _, result = await call_tool(tools['list_projects'], {})
+            assert [row['key'] for row in json.loads(result['content'][0]['text'])] == ['LCH']
+            # One agent served every turn; the tools read the newest binding when they run.
+            assert len(builds) == 1
     asyncio.run(scenario())

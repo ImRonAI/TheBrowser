@@ -240,7 +240,7 @@ export function AskRonPrompt({
         {/* Input area */}
         <div className="p-3">
           <div className={cn(
-            'rounded-xl overflow-hidden',
+            'ron-field rounded-xl overflow-hidden',
             'bg-surface-50 dark:bg-surface-850',
             'border border-surface-200 dark:border-surface-700',
             'focus-within:border-accent dark:focus-within:border-accent-light',

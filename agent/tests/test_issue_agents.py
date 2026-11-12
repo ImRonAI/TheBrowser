@@ -108,6 +108,8 @@ class Service:
 #: per-issue memory_manager ``search_tool_config``. Not shell/browser/delegation.
 ISSUE_AGENT_TOOLS = {'read_issue', 'update_issue', 'edit_issue', 'create_child', 'read_issue_context', 'link_issue',
                      'save_work_product', 'add_workflow_to_description',
+                     # The issue's discussion: read it, and comment as the "Issue agent".
+                     'read_comments', 'add_comment',
                      'list_learned_skills', 'use_skill', 'search_memory',
                      # Context intake: links (installed strands_tools); this lead has no catalogued vision, so media
                      # is described by RON_MEDIA_MODEL (media_understanding.media_tools).

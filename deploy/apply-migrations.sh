@@ -34,7 +34,7 @@ for f in supabase/migrations/*.sql; do
   name=$(basename "$f")
   if grep -qx "$name" <<<"$applied"; then continue; fi
   # Older migrations predate the ledger: skip any whose first created table already exists.
-  tbl=$(grep -m1 -oiE 'create table (if not exists )?(public\.)?[a-z_]+' "$f" | awk '{print $NF}' | sed 's/public\.//')
+  tbl=$({ grep -m1 -oiE 'create table (if not exists )?(public\.)?[a-z_]+' "$f" || true; } | awk '{print $NF}' | sed 's/public\.//')
   if [ -n "$tbl" ] && [ "$("${PSQL[@]}" -At -c "select count(*) from information_schema.tables where table_schema='public' and table_name='$tbl'")" = "1" ]; then
     "${PSQL[@]}" -c "insert into public.ron_migrations(name) values ('$name') on conflict do nothing" >/dev/null
     echo "[skip] $name ($tbl exists)"; continue

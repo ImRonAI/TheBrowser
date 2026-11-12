@@ -642,7 +642,7 @@ export function SuperAgentInterface() {
             disabled={isTyping}
             onChange={(model, provider, effort) => setSelection({ model, provider, effort })}
             onOpen={refreshModels}
-            className="w-[240px]"
+            className="ron-field w-[240px]"
           />
           <DeepResearchToggle enabled={isDeepResearch} onChange={setIsDeepResearch} />
           
@@ -736,7 +736,7 @@ export function SuperAgentInterface() {
               {/* Command Nexus Input */}
               <div 
                 className={cn(
-                  "command-nexus relative rounded-2xl transition-all duration-300",
+                  "ron-field command-nexus relative rounded-2xl transition-all duration-300",
                   "bg-surface-50 dark:bg-surface-850",
                   "border",
                   input 

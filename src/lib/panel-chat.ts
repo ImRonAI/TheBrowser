@@ -5,7 +5,8 @@
  * Scope: every destination remembers one session per user, except `issue`, whose agent is built per issue (on its
  * own session) and so is remembered per user AND issue. Every issue turn names the issue (`issue_id`) and carries the
  * caller's project credential, like a project agent's turns, so the server's Projects identity check and RLS decide
- * what Ron may read and change. No other destination sends either.
+ * what Ren may read and change. Ren's own Agent Panel turns carry the credential too, for its document and project
+ * tools (the server binds it when it verifies and never refuses the turn over it). No other turn sends either.
  *
  * Pure (relative imports only) so node:test can run it.
  */
@@ -35,9 +36,12 @@ export function chatScopeFields(destination: AgentDestination, issueId?: string)
   return destination === 'issue' ? { issue_id: requireIssue(destination, issueId) } : {}
 }
 
-/** Whether a `POST /chat` carries the caller's project credential (Supabase bearer token or guest workspace capability). */
+/**
+ * Whether a `POST /chat` carries the caller's project credential (Supabase bearer token or guest workspace capability):
+ * every issue turn, every project-agent turn and Ren's own Agent Panel turns (its document and project tools).
+ */
 export function sendsProjectCredential(destination: AgentDestination, agentKind: AgentKind): boolean {
-  return destination === 'issue' || agentKind === 'project'
+  return destination === 'issue' || agentKind === 'project' || (destination === 'panel' && agentKind === 'ron')
 }
 
 /** The header status line of a panel-protocol chat. */

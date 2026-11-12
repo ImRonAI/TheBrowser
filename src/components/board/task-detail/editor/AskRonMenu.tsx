@@ -310,7 +310,7 @@ Return ONLY the result text. Do not include "Here is the text" or quotes.`
             )}
             
             {/* Input Row */}
-            <div className="flex items-center gap-2 px-3 py-3">
+            <div className="ron-field flex items-center gap-2 px-3 py-3">
               <ContextPicker 
                 selectedContexts={selectedContexts} 
                 onContextsChange={setSelectedContexts} 

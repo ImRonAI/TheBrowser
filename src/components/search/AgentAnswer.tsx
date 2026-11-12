@@ -246,7 +246,7 @@ export function AgentAnswer({
         <section className="mt-8" aria-label="Follow-up conversation">
           <PromptInput
             onSubmit={handlePromptSubmit}
-            className="rounded-xl border border-surface-200 bg-surface-0 transition-colors duration-150 focus-within:border-blurple-500 dark:border-surface-800 dark:bg-surface-900 dark:focus-within:border-blurple-400 [&>[data-slot=input-group]]:rounded-xl [&>[data-slot=input-group]]:border-0 [&>[data-slot=input-group]]:shadow-none dark:[&>[data-slot=input-group]]:bg-transparent"
+            className="ron-field rounded-xl border border-surface-200 bg-surface-0 transition-colors duration-150 focus-within:border-blurple-500 dark:border-surface-800 dark:bg-surface-900 dark:focus-within:border-blurple-400 [&>[data-slot=input-group]]:rounded-xl [&>[data-slot=input-group]]:border-0 [&>[data-slot=input-group]]:shadow-none dark:[&>[data-slot=input-group]]:bg-transparent"
           >
             <PromptInputBody>
               <PromptInputTextarea

@@ -31,7 +31,7 @@ const NO_SUPERSEDED: ReadonlySet<string> = new Set()
 const noUiAction = () => {}
 
 /** The Agent Panel's composer card. */
-const composerClass = 'relative rounded-2xl border px-4 pt-3 pb-2.5 transition-all duration-200 bg-surface-0 dark:bg-surface-850/90 border-surface-200 dark:border-surface-700/80 shadow-[0_4px_20px_-4px_rgb(26_25_23/0.06)] dark:shadow-[0_8px_24px_-6px_rgb(0_0_0/0.35)] focus-within:border-accent/50 focus-within:shadow-[0_0_0_3px_rgb(169_83_46/0.12),0_8px_24px_-6px_rgb(26_25_23/0.12)] dark:focus-within:border-accent-light/50'
+const composerClass = 'ron-field relative rounded-2xl border px-4 pt-3 pb-2.5 transition-all duration-200 bg-surface-0 dark:bg-surface-850/90 border-surface-200 dark:border-surface-700/80 shadow-[0_4px_20px_-4px_rgb(26_25_23/0.06)] dark:shadow-[0_8px_24px_-6px_rgb(0_0_0/0.35)] focus-within:border-accent/50 focus-within:shadow-[0_0_0_3px_rgb(169_83_46/0.12),0_8px_24px_-6px_rgb(26_25_23/0.12)] dark:focus-within:border-accent-light/50'
 const composerInput = 'w-full min-w-0 resize-none bg-transparent py-1 text-[14px] leading-relaxed placeholder:text-ink-muted/60 outline-none disabled:opacity-60 min-h-[52px] max-h-40'
 const sendClass = 'shrink-0 rounded-xl bg-ink dark:bg-ink-inverse text-white dark:text-surface-900 px-3.5 h-8 text-xs font-semibold shadow-sm transition-all hover:opacity-90 disabled:opacity-30'
 

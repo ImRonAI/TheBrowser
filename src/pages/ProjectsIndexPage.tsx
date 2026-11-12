@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react'
-import { ArrowUpRight, FolderPlus, Grid2x2, List, Loader2, Plus, RefreshCw, Search, SearchX, X } from 'lucide-react'
+import { ArrowUpRight, FolderPlus, Grid2x2, List, Loader2, Plus, RefreshCw, Search, SearchX, Users, X } from 'lucide-react'
 import { useProjectsStore } from '@/stores/projectsStore'
 import { PROJECT_TYPE_SCHEMES, type Project } from '@/types/projects'
 import { ProjectTypeIcon } from '@/components/projects/badges'
@@ -8,6 +8,7 @@ import { PageBackground } from '@/components/shared/PageBackground'
 import { Button } from '@/components/ui/button'
 import { useElementWidth } from '@/hooks/useElementWidth'
 import { isGuestUserId, openSignIn } from '@/lib/sign-in'
+import { isSharedProject } from '@/lib/project-members'
 import {
   LIFECYCLE_FILTERS, LIFECYCLE_LABEL, inLifecycle, isLifecycleFilter, lifecycleCounts, matchesProjectQuery,
   sortByActivity, summarizeProjects, updatedLabel, type LifecycleFilter, type ProjectSummary,
@@ -185,7 +186,7 @@ export function ProjectsIndexPage() {
       <ul aria-label="Projects" className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,17.5rem),1fr))] gap-4 sm:gap-5">
         {visible.map((summary) => (
           <li key={summary.project.id} className="flex min-w-0">
-            <ProjectCard summary={summary} now={now} onOpen={openProject} />
+            <ProjectCard summary={summary} now={now} shared={isSharedProject(summary.project, userId)} onOpen={openProject} />
           </li>
         ))}
       </ul>
@@ -204,7 +205,7 @@ export function ProjectsIndexPage() {
         )}
         <ul aria-label="Projects" className="divide-y divide-surface-200 dark:divide-surface-800">
           {visible.map((summary) => (
-            <ProjectRow key={summary.project.id} summary={summary} now={now} wide={wide} onOpen={openProject} />
+            <ProjectRow key={summary.project.id} summary={summary} now={now} wide={wide} shared={isSharedProject(summary.project, userId)} onOpen={openProject} />
           ))}
         </ul>
       </div>
@@ -353,7 +354,7 @@ function clickHandlers(project: Project, onOpen: Opener) {
   }
 }
 
-function ProjectCard({ summary, now, onOpen }: { summary: ProjectSummary; now: number; onOpen: Opener }) {
+function ProjectCard({ summary, now, shared, onOpen }: { summary: ProjectSummary; now: number; shared: boolean; onOpen: Opener }) {
   const { project } = summary
   const nameId = `project-card-${project.id}`
   const typeLabel = PROJECT_TYPE_SCHEMES[project.type]?.label ?? project.type
@@ -380,7 +381,12 @@ function ProjectCard({ summary, now, onOpen }: { summary: ProjectSummary; now: n
             <button type="button" className={cn(STRETCHED, 'after:rounded-2xl')} {...clickHandlers(project, onOpen)}>{project.name}</button>
           </h3>
         </div>
-        {project.lifecycle !== 'active' && <LifecycleChip lifecycle={project.lifecycle} />}
+        {(shared || project.lifecycle !== 'active') && (
+          <div className="flex shrink-0 flex-col items-end gap-1">
+            {project.lifecycle !== 'active' && <LifecycleChip lifecycle={project.lifecycle} />}
+            {shared && <SharedChip />}
+          </div>
+        )}
       </div>
 
       <span className={cn('mt-3 line-clamp-2 min-h-10 text-[13px] leading-5', description ? 'text-ink-secondary dark:text-ink-inverse-secondary' : 'text-ink-muted dark:text-ink-inverse-muted')}>
@@ -406,7 +412,7 @@ function ProjectCard({ summary, now, onOpen }: { summary: ProjectSummary; now: n
   )
 }
 
-function ProjectRow({ summary, now, wide, onOpen }: { summary: ProjectSummary; now: number; wide: boolean; onOpen: Opener }) {
+function ProjectRow({ summary, now, wide, shared, onOpen }: { summary: ProjectSummary; now: number; wide: boolean; shared: boolean; onOpen: Opener }) {
   const { project } = summary
   const typeLabel = PROJECT_TYPE_SCHEMES[project.type]?.label ?? project.type
   const description = project.summary?.trim()
@@ -425,6 +431,7 @@ function ProjectRow({ summary, now, wide, onOpen }: { summary: ProjectSummary; n
             <button type="button" className={cn(STRETCHED, 'underline-offset-2 focus-visible:underline')} {...clickHandlers(project, onOpen)}>{project.name}</button>
           </h3>
           {project.lifecycle !== 'active' && <LifecycleChip lifecycle={project.lifecycle} />}
+          {shared && <SharedChip />}
         </div>
         <span className="mt-0.5 block truncate text-[12px] leading-4 text-ink-muted dark:text-ink-inverse-muted">
           <span className="font-mono text-[10.5px] uppercase tracking-[0.12em]">{project.key} / {typeLabel}</span>
@@ -473,6 +480,15 @@ function LifecycleChip({ lifecycle }: { lifecycle: Exclude<Project['lifecycle'],
   return (
     <span className={cn('shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium leading-4 ring-1 ring-inset', LIFECYCLE_TONE[lifecycle])}>
       {LIFECYCLE_LABEL[lifecycle]}
+    </span>
+  )
+}
+
+/** A project someone else owns that the user was invited to (src/lib/project-members.ts `isSharedProject`). */
+function SharedChip() {
+  return (
+    <span className="inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium leading-4 text-blurple-600 ring-1 ring-inset ring-blurple-600/30 dark:text-blurple-300 dark:ring-blurple-400/35">
+      <Users aria-hidden className="h-3 w-3" />Shared
     </span>
   )
 }

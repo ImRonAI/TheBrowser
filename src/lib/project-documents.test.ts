@@ -4,6 +4,8 @@ import { createProjectsRequest } from './projects-api.ts'
 import {
   createDocument, deleteDocument, documentAncestors, documentSubtree, documentTitle, documentTree,
   createDocumentConversation, getDocumentSkill, isConflict, publishDocumentSkill, skillProblems, linkDocumentToIssue, touchDocumentConversation, listAllDocuments, listDocumentLinks, listDocuments, unlinkDocument, updateDocument,
+  createProjectFromDocumentPrompt, documentErrorMessage, documentSource, documentsLibraryUrl, moveDocument, parseDocumentsLibraryUrl,
+  searchDocuments, withMovedDocument,
   type ProjectDocumentSummary,
 } from './project-documents.ts'
 
@@ -129,4 +131,91 @@ test('a page publishes as the agent’s skill through the documented route; prob
   assert.deepEqual(calls.map((call) => `${call.method} ${call.url.replace('http://localhost:8765/projects', '')}`), [
     'GET /documents/d1/skill?user_id=alice&agent_id=panel', 'POST /documents/d1/skill', 'POST /documents/d1/skill'])
   assert.deepEqual(calls[1].body, { user_id: 'alice', agent_id: 'panel' })
+})
+
+test('a personal page has no project; it is created with project_id null and opens in the library', async () => {
+  const { request, calls } = recordingRequest([
+    { status: 200, body: row({ id: 'n1', project_id: null }) },
+    { status: 200, body: [row({ id: 'n1', project_id: null, content: undefined }), row({ id: 'd1', content: undefined })] },
+  ])
+  const created = await createDocument(request, { projectId: null, title: 'Notes', content: '<p>x</p>' })
+  assert.equal(created.projectId, null)
+  assert.deepEqual(calls[0].body, { project_id: null, parent_id: null, title: 'Notes', content: '<p>x</p>' })
+  const all = await listAllDocuments(request)
+  assert.deepEqual(all.map((page) => [page.id, page.projectId]), [['n1', null], ['d1', 'p1']])
+  assert.equal(documentSource(all[0]), 'ron://documents/n1')
+  assert.equal(documentSource(all[1]), 'ron://project/p1/docs/d1')
+})
+
+test('moving a page posts the target project and answers the moved page; refusals keep their status', async () => {
+  const { request, calls } = recordingRequest([
+    { status: 200, body: row({ id: 'n1', project_id: 'p2', parent_id: null, version: 3 }) },
+    { status: 422, body: { detail: 'The page is already in that project' } },
+    { status: 403, body: { detail: 'Project not accessible' } },
+    { status: 404, body: { detail: 'Document not found or not accessible' } },
+  ])
+  const moved = await moveDocument(request, 'n1', 'p2')
+  assert.deepEqual([moved.id, moved.projectId, moved.parentId, moved.version, moved.content], ['n1', 'p2', null, 3, '<p>Hi</p>'])
+  for (const [status, detail] of [[422, /already in that project/], [403, /not accessible/], [404, /not found/]] as const) {
+    const failure = await moveDocument(request, 'n1', 'p2').catch((error: Error & { status?: number }) => error)
+    assert.equal((failure as { status?: number }).status, status)
+    assert.match((failure as Error).message, detail)
+  }
+  assert.deepEqual(calls.map((call) => `${call.method} ${call.url.replace('http://localhost:8765/projects', '')}`),
+    Array(4).fill('POST /documents/n1/move'))
+  assert.deepEqual(calls[0].body, { project_id: 'p2' })
+})
+
+test('library URLs round-trip: the library itself, one page, and nothing else', () => {
+  assert.equal(documentsLibraryUrl(), 'ron://documents')
+  assert.equal(documentsLibraryUrl(null), 'ron://documents')
+  assert.equal(documentsLibraryUrl('d1'), 'ron://documents/d1')
+  assert.deepEqual(parseDocumentsLibraryUrl('ron://documents'), { documentId: null })
+  assert.deepEqual(parseDocumentsLibraryUrl('ron://documents/'), { documentId: null })
+  assert.deepEqual(parseDocumentsLibraryUrl(documentsLibraryUrl('d1')), { documentId: 'd1' })
+  assert.deepEqual(parseDocumentsLibraryUrl('ron://documents/d1/'), { documentId: 'd1' })
+  for (const other of [undefined, null, '', 'ron://documentsx', 'ron://documents/d1/extra', 'ron://documents?id=d1', 'ron://project/p1/docs/d1', 'https://example.com/documents'])
+    assert.equal(parseDocumentsLibraryUrl(other), null)
+})
+
+test('a move carries the subtree into the project and makes the moved page a root', () => {
+  const docs = [doc('a', null, 1), doc('a1', 'a', 2), doc('a1x', 'a1', 3), doc('b', 'a', 4), doc('c', null, 5)].map((page) => ({ ...page, projectId: null }))
+  const moved = withMovedDocument(docs, 'a1', 'p2')
+  assert.deepEqual(moved.map((page) => `${page.id}:${page.projectId}:${page.parentId}`),
+    ['a:null:null', 'a1:p2:null', 'a1x:p2:a1', 'b:null:a', 'c:null:null'])
+  assert.notEqual(moved, docs)
+  assert.equal(docs[1].projectId, null)
+})
+
+test('library search matches every word of a title and keeps each match under its ancestors', () => {
+  const docs = [doc('Roadmap', null, 1), doc('Q3 launch plan', 'Roadmap', 2), doc('Launch checklist', 'Q3 launch plan', 3), doc('Notes', null, 4),
+    { ...doc('untitled', null, 5), title: '' }]
+  const plan = searchDocuments(docs, '  LAUNCH  plan ')
+  assert.deepEqual([...plan.matches], ['Q3 launch plan'])
+  assert.deepEqual(plan.shown.map((page) => page.id), ['Roadmap', 'Q3 launch plan'])
+  const launch = searchDocuments(docs, 'launch')
+  assert.deepEqual([...launch.matches].sort(), ['Launch checklist', 'Q3 launch plan'])
+  assert.deepEqual(launch.shown.map((page) => page.id), ['Roadmap', 'Q3 launch plan', 'Launch checklist'])
+  assert.deepEqual([...searchDocuments(docs, 'untitled').matches], ['untitled'])
+  assert.equal(searchDocuments(docs, '   ').shown.length, 0)
+  assert.equal(searchDocuments(docs, 'nothing like it').matches.size, 0)
+})
+
+test('Create project with Ren names the page and the workspace tools for each step', () => {
+  const prompt = createProjectFromDocumentPrompt({ id: 'n1', title: '  Garden plan ' })
+  assert.match(prompt, /^Create a project from my page "Garden plan" \(document id n1\)\./)
+  for (const tool of ['read_document', 'create_project', 'create_issue', 'add_document_to_project']) assert.ok(prompt.includes(tool), tool)
+  assert.match(prompt, /project key/)
+  assert.doesNotMatch(prompt, /moves it/)
+  assert.match(createProjectFromDocumentPrompt({ id: 'd1', title: '' }), /my page "Untitled"/)
+  assert.match(createProjectFromDocumentPrompt({ id: 'd1', title: 'Spec' }, { name: 'Apollo', key: 'APL' }),
+    /in the Apollo \(APL\) project now; adding it moves it, with the pages under it, into the new project/)
+})
+
+test('a lost sign-in reads as one; other failures keep the server’s words', () => {
+  assert.match(documentErrorMessage(Object.assign(new Error('Missing bearer token'), { status: 401 }), 'x'), /signed out\. Sign in again/)
+  assert.match(documentErrorMessage(new Error('Session changed; reload Projects.'), 'x'), /signed in or out/)
+  assert.equal(documentErrorMessage(Object.assign(new Error('Project not accessible'), { status: 403 }), 'x'), 'Project not accessible')
+  assert.equal(documentErrorMessage('nope', 'The page could not be saved.'), 'The page could not be saved.')
+  assert.equal(documentErrorMessage(new Error(''), 'Fallback'), 'Fallback')
 })

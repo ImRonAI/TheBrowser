@@ -68,7 +68,9 @@
     --radius: 0.625rem;
   }
 
-  .dark {
+  /* A Glass text field (.ron-field) is a Dark island in both inks (§ Fields below). */
+  .dark,
+  html.glass .ron-field {
     /* Ink — black and charcoal, colourless (chroma 0): the volt accent is the only colour */
     --color-bg-primary: 12 12 12;
     --color-bg-secondary: 20 20 20;
@@ -912,7 +914,8 @@ html.glass {
   --ron-glass-shadow: 0 18px 48px -18px rgb(0 0 0 / 0.28);
 }
 
-html.glass.dark {
+html.glass.dark,
+html.glass .ron-field {
   --ron-glass-chrome: rgb(0 0 0 / 0.16);
   --ron-glass-control: rgb(255 255 255 / 0.09);
   --ron-glass-content: rgb(0 0 0 / 0.24);
@@ -1016,6 +1019,114 @@ html.glass .ron-popover {
   backdrop-filter: blur(var(--ron-glass-blur));
 }
 
+/* Fields: the one solid surface in Glass. Every text field (inputs, textareas, selects and select
+   triggers, search and URL bars, composers) is black with white ink, in both inks: the black the URL
+   bar and the agent composer show in Dark (surface-850). What you type always sits on black while
+   everything around it stays glass (the user's choice, 2026-11-11).
+   - `.ron-field` marks the element that draws a field's box: a bordered control (the Input, Textarea
+     and SelectTrigger primitives) or the capsule around a transparent control (input groups, search
+     and URL bars, composers, cmdk inputs). A marked field is a Dark island in both inks: Tailwind's
+     dark: variant also matches on and inside it (darkMode in tailwind.config.ts), and the Dark theme
+     variables and glass veils apply to it (`.dark` in @layer base, `html.glass.dark` above), so its
+     icons, buttons and the suggestion, command and mention lists inside it render exactly as in Dark.
+   - A bare control that paints its own box (an input, textarea or select that is not bg-transparent)
+     is matched directly; its ink is set here.
+   - Checkboxes, radios, ranges, colour and file pickers keep their look; contenteditable documents
+     (pages, descriptions) and borderless inline title editors (bg-transparent) stay glass.
+   Specificity: html.glass .ron-field (0,2,1) and its :hover/:focus-within states (0,3,1)-(0,4,1) beat
+   the surface utilities, their dark: (0,2,0) and dark:hover:/dark:focus-within: (0,3,0) variants and
+   the glass veils above; bare controls start at (0,3,2). */
+html.glass {
+  --ron-glass-field: rgb(20 20 20);            /* surface-850 */
+  --ron-glass-field-hover: rgb(30 30 30);      /* surface-800 */
+  --ron-glass-field-ink: rgb(245 245 245);     /* ink-inverse */
+  --ron-glass-field-muted: rgb(145 145 145);   /* ink-inverse-muted */
+  --ron-glass-field-fill: rgb(255 255 255 / 0.08);
+  --ron-glass-field-hairline: rgb(255 255 255 / 0.1);
+}
+
+html.glass .ron-field,
+html.glass .ron-field:focus-within,
+html.glass :is(
+  input:not([type="checkbox"], [type="radio"], [type="range"], [type="color"], [type="file"], [type="hidden"], [type="submit"], [type="button"], [type="reset"], [type="image"]),
+  textarea,
+  select
+):not([class~="bg-transparent"], .ron-field *) {
+  background-color: var(--ron-glass-field);
+  background-image: none;
+  color-scheme: dark;
+}
+
+html.glass .ron-field:hover:not(:focus-within),
+html.glass :is(
+  input:not([type="checkbox"], [type="radio"], [type="range"], [type="color"], [type="file"], [type="hidden"], [type="submit"], [type="button"], [type="reset"], [type="image"]),
+  textarea,
+  select
+):not([class~="bg-transparent"], .ron-field *):hover:not(:focus) {
+  background-color: var(--ron-glass-field-hover);
+}
+
+/* White ink and caret. A control that hides its text (text-transparent: the URL bar under its host
+   overlay) keeps hiding it; inside a field, controls take the island's ink from their dark: classes. */
+html.glass .ron-field:not([class~="text-transparent"]),
+html.glass :is(
+  input:not([type="checkbox"], [type="radio"], [type="range"], [type="color"], [type="file"], [type="hidden"], [type="submit"], [type="button"], [type="reset"], [type="image"]),
+  textarea,
+  select
+):not([class~="bg-transparent"], [class~="text-transparent"], .ron-field *) {
+  color: var(--ron-glass-field-ink);
+}
+html.glass .ron-field,
+html.glass .ron-field :is(input, textarea, select, [contenteditable="true"]),
+html.glass :is(input, textarea, select):not([class~="bg-transparent"], .ron-field *) {
+  caret-color: var(--ron-glass-field-ink);
+}
+/* A control without its own background inside a field must not show the browser's field colour. */
+html.glass .ron-field :is(input:not([type="checkbox"], [type="radio"], [type="range"], [type="color"], [type="file"]), textarea, select):not([class*="bg-"]) {
+  background-color: transparent;
+}
+html.glass .ron-field::placeholder,
+html.glass .ron-field ::placeholder,
+html.glass :is(input, textarea):not([class~="bg-transparent"], .ron-field *)::placeholder {
+  color: var(--ron-glass-field-muted);
+  opacity: 1;
+}
+
+/* Neutral borders become a hairline at rest; focus, open, invalid and error borders still show. */
+html.glass .ron-field:not(:focus-within, [data-state="open"], [aria-expanded="true"], [aria-invalid="true"], [class~="border-destructive"], [class~="border-danger"], [class~="border-red-500"]):is([class~="border"], [class*="border-surface-"], [class~="border-input"], [class~="border-border"]),
+html.glass :is(input, textarea, select):not([class~="bg-transparent"], .ron-field *):not(:focus, [aria-invalid="true"], [class~="border-destructive"], [class~="border-danger"], [class~="border-red-500"]):is([class~="border"], [class*="border-surface-"], [class~="border-input"], [class~="border-border"]) {
+  border-color: var(--ron-glass-field-hairline);
+}
+
+/* Classes with no dark: counterpart would keep their light-ink colour on black: neutral ink becomes
+   the field ink, muted ink the field's muted ink, and a black primary button turns white with dark ink
+   (as `bg-ink dark:bg-ink-inverse dark:text-ink` buttons do). Exact tokens only, so state variants
+   (hover:, disabled:, placeholder:) keep their meaning; :where() keeps these at a utility's
+   specificity so hover and focus utilities still win. */
+:where(html.glass .ron-field) :where(:not([class*="dark:text-"])):is([class~="text-ink"], [class~="text-ink-secondary"], [class~="text-black"], [class~="text-surface-700"], [class~="text-surface-800"], [class~="text-surface-900"]) {
+  color: var(--ron-glass-field-ink);
+}
+:where(html.glass .ron-field) :where(:not([class*="dark:text-"])):is([class~="text-ink-muted"], [class~="text-surface-500"], [class~="text-surface-600"]) {
+  color: var(--ron-glass-field-muted);
+}
+:where(html.glass .ron-field) :where(:not([class*="dark:bg-"])):is([class~="bg-ink"], [class~="bg-black"], [class~="bg-surface-900"], [class~="bg-surface-950"]) {
+  background-color: var(--ron-glass-field-ink);
+  color: rgb(11 12 23); /* ink */
+}
+
+/* A field inside a field (an Input primitive inside a marked capsule): only the outer one paints. */
+html.glass .ron-field .ron-field,
+html.glass .ron-field .ron-field:hover:not(:focus-within) {
+  background-color: transparent;
+}
+
+/* Shortcut chips (⌘K) inside a field. */
+html.glass .ron-field .kbd {
+  background-color: var(--ron-glass-field-fill);
+  border-color: var(--ron-glass-field-hairline);
+  color: var(--ron-glass-field-muted);
+}
+
 /* Accessibility: System Settings › Accessibility › Display. */
 @media (prefers-contrast: more) {
   html.glass {
@@ -1026,6 +1137,7 @@ html.glass .ron-popover {
     --ron-glass-panel: rgb(255 255 255 / 0.92);
     --ron-glass-popover: rgb(255 255 255 / 0.96);
     --ron-glass-hairline: rgb(0 0 0 / 0.35);
+    --ron-glass-field-hairline: rgb(255 255 255 / 0.4);
   }
   html.glass.dark {
     --ron-glass-chrome: rgb(7 7 7 / 0.82);

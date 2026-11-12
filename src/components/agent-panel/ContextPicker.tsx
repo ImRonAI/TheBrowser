@@ -295,7 +295,7 @@ export function ContextPicker({ selectedContexts, onContextsChange, className, a
                 </div>
 
                 <div className="px-3 py-2 border-b border-surface-100 dark:border-surface-700">
-                  <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-surface-50 dark:bg-surface-850 border border-surface-200 dark:border-surface-700">
+                  <div className="ron-field flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-surface-50 dark:bg-surface-850 border border-surface-200 dark:border-surface-700">
                     <MagnifyingGlassIcon className="w-4 h-4 text-ink-muted dark:text-ink-inverse-muted" />
                     <input
                       ref={searchRef}

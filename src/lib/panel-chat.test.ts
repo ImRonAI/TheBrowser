@@ -30,12 +30,16 @@ test('only issue turns name the issue in the /chat body', () => {
   assert.throws(() => chatScopeFields('issue', ''), /issue id/)
 })
 
-test('every issue turn and every project-agent turn carries the project credential; nothing else does', () => {
+test('issue turns, project-agent turns and Ren panel turns carry the project credential; nothing else does', () => {
   assert.equal(sendsProjectCredential('issue', 'ron'), true)
   assert.equal(sendsProjectCredential('panel', 'project'), true)
-  assert.equal(sendsProjectCredential('panel', 'ron'), false)
+  // Ren's own Agent Panel chat: its document and project tools act with the user's access.
+  assert.equal(sendsProjectCredential('panel', 'ron'), true)
+  // A specialist has no workspace tools, and Ren's other destinations never send it.
   assert.equal(sendsProjectCredential('panel', 'specialist'), false)
-  assert.equal(sendsProjectCredential('build', 'ron'), false)
+  for (const destination of ['build', 'search', 'voice'] as const) {
+    assert.equal(sendsProjectCredential(destination, 'ron'), false)
+  }
 })
 
 test('the status line follows the connection first, then the run', () => {

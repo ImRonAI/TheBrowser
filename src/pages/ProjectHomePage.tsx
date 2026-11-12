@@ -35,6 +35,7 @@ import { cn } from '@/utils/cn'
 import { useAgentUi } from '@/context/AgentUiContext'
 import { usePanelAgentStore } from '@/stores/panelAgentStore'
 import { projectChoices } from '@/lib/panel-agents'
+import { ProjectPeople, useProjectMembers } from '@/components/projects/ProjectPeople'
 
 interface ProjectHomePageProps {
   projectKey: string
@@ -47,6 +48,7 @@ export function ProjectHomePage({ projectKey, documentId }: ProjectHomePageProps
   const { setActiveTab } = useNavigationStore()
   const { openPanel } = useAgentUi()
   const project = projectSelectors.getProjectByKey(projects, projectKey)
+  const projectPeople = useProjectMembers(project?.id ?? null)
   const [activeView, setActiveView] = useState<ProjectView>(documentId ? 'docs' : 'dashboard')
   const [selectedIssueId, setSelectedIssueId] = useState<string | null>(null)
   const [showCreateIssue, setShowCreateIssue] = useState(false)
@@ -84,7 +86,9 @@ export function ProjectHomePage({ projectKey, documentId }: ProjectHomePageProps
     )
   }
 
-  const ownerName = people.find((person) => person.id === project.ownerId)?.name || 'Unassigned'
+  // The people list names the owner of a shared project or guest workspace; the store knows only this account and Ren.
+  const ownerName = projectPeople.members.find((member) => member.role === 'owner')?.name
+    ?? people.find((person) => person.id === project.ownerId)?.name ?? '—'
 
   return (
     <div className="min-h-full relative overflow-hidden bg-surface-0 dark:bg-surface-900">
@@ -112,6 +116,7 @@ export function ProjectHomePage({ projectKey, documentId }: ProjectHomePageProps
               </div>
             </div>
             <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+              <ProjectPeople project={project} people={projectPeople} />
               <Button type="button" variant="outline" className="rounded-full" title="Discuss this project with its agent in the Agent Panel; it can create and edit issues"
                 onClick={() => { usePanelAgentStore.getState().requestAgent(projectChoices([project])[0]); openPanel() }}>
                 <MessagesSquare />

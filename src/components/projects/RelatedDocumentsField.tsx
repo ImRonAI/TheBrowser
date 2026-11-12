@@ -78,7 +78,7 @@ export function RelatedDocumentsField({ docs, projectName, disabled, onRelate, o
       <PopoverContent align="start" sideOffset={6} className={cn(PROPERTY_POPOVER, 'w-80 overflow-hidden p-0')}
         onOpenAutoFocus={(event) => { event.preventDefault(); (event.currentTarget as HTMLElement).querySelector('input')?.focus() }}>
         {naming === null ? <>
-          <div className="flex items-center gap-2 border-b border-border px-3">
+          <div className="ron-field flex items-center gap-2 border-b border-border px-3">
             <Search className="size-3.5 shrink-0 text-ink-muted dark:text-ink-inverse-muted" />
             <input aria-label="Search documents" value={query} placeholder={`Search ${projectName} documents…`}
               onChange={(event) => { setQuery(event.target.value); setActive(0) }}

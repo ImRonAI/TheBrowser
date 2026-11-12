@@ -256,7 +256,7 @@ function BuilderBody({ initialTitle, initialGraph, onSave, onClose }: {
                 Add a Start from the shapes on the left, then the steps that follow, and drag between the dots to connect them. Or describe the process below and let Ren draw it.
               </Panel>
             )}
-            <Panel position="bottom-center" className="mb-4 w-[min(640px,calc(100%-2rem))] rounded-2xl p-2 shadow-medium dark:shadow-dark-medium">
+            <Panel position="bottom-center" className="ron-field mb-4 w-[min(640px,calc(100%-2rem))] rounded-2xl p-2 shadow-medium dark:shadow-dark-medium">
               <form className="flex items-center gap-2" onSubmit={(event) => { event.preventDefault(); void askRon() }}>
                 <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-accent/10 text-accent dark:bg-accent-light/10 dark:text-accent-light">
                   {ronBusy ? <Loader2 className="size-4 animate-spin" /> : <RenIcon className="size-4" />}

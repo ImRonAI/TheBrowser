@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { AlertTriangle, CalendarCheck, CalendarClock, CalendarRange, Check, CircleDot, CornerLeftUp, Gauge, Loader2, MessageSquare, Plus, Shapes, Signal, Tag, Users } from 'lucide-react'
+import { AlertTriangle, CalendarCheck, CalendarClock, CalendarRange, Check, CircleDot, CornerLeftUp, Gauge, Loader2, Plus, Shapes, Signal, Tag, Users } from 'lucide-react'
 import { getProjectsState, useProjectsStore } from '@/stores/projectsStore'
 import { TaskDetailView } from '@/components/board/task-detail/TaskDetailView'
 import type { Editor } from '@tiptap/react'
@@ -11,16 +11,18 @@ import { ISSUE_STATUS_CONFIG, PROJECT_TYPE_SCHEMES, type Issue, type Project } f
 import { canPlaceIssue, issueDefinitions, validateIssueDates } from '@/lib/project-issue-utils'
 import { issueDraftPatch, rebaseIssueDraft } from '@/lib/project-issue-draft'
 import { pageSource, withDocumentContext, withoutDocumentContext } from '@/lib/issue-attachments'
-import type { DocumentIssueLink, ProjectDocumentSummary } from '@/lib/project-documents'
+import { relationCount } from '@/lib/issue-relationships'
+import { documentSource, type DocumentIssueLink, type ProjectDocumentSummary } from '@/lib/project-documents'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { ProjectFieldInput } from './ProjectFieldInput'
-import { IssueRelationships } from './IssueRelationships'
-import { IssueDocuments } from './IssueDocuments'
+import { IssueRelationshipsField, type RelationshipWrite } from './IssueRelationshipsField'
+import { LinkedIssuesList } from './LinkedIssuesList'
 import { IssueRonChat } from './IssueRonChat'
 import { IssueDescriptionRon } from './IssueDescriptionRon'
 import { IssueWorkProducts } from './IssueWorkProducts'
 import { IssueContext } from './IssueContext'
+import { IssueComments } from './IssueComments'
 import { CreateIssueDialog } from './dialogs'
 import { AssistField } from '@/components/shared/TextAssist'
 import {
@@ -28,6 +30,7 @@ import {
   StatusIcon, StatusPicker, TypeChip,
 } from './IssueProperties'
 import { RelatedDocumentsField } from './RelatedDocumentsField'
+import { useIssueComments } from './useIssueComments'
 import { useIssueDocuments } from './useIssueDocuments'
 
 /** Ren writes Markdown and draws workflows: the description editor parses both, as project pages do. */
@@ -43,7 +46,7 @@ const MUTED = 'text-ink-muted dark:text-ink-inverse-muted'
 export function CanonicalIssueWorkspace({ issue, project, onClose, onNavigate }: {
   issue: Issue; project: Project; onClose: () => void; onNavigate: (id: string) => void
 }) {
-  const { issues, people, activity, updateIssue, refreshFromServer, pendingSaves, isLoading } = useProjectsStore()
+  const { issues, issueLinks, people, activity, updateIssue, refreshFromServer, pendingSaves, isLoading } = useProjectsStore()
   const [base, setBase] = useState(issue)
   const [draft, setDraft] = useState(issue)
   /** `local`: the draft failed this form's own checks (title, dates, parent), so nothing reached the server. */
@@ -55,13 +58,17 @@ export function CanonicalIssueWorkspace({ issue, project, onClose, onNavigate }:
   const [showChild, setShowChild] = useState(false)
   const [descriptionRunning, setDescriptionRunning] = useState(false)
   const [descriptionEditor, setDescriptionEditor] = useState<Editor | null>(null)
-  /** A related page's Context entry is being written beside its link (the version moves on purpose). */
+  /**
+   * A write beside the draft is in flight and the version moves on purpose: a related page's Context entry
+   * (written beside its link), or a relationship that moves this issue's status.
+   */
   const [contextWriting, setContextWriting] = useState(false)
   const inFlight = useRef(false)
   const mounted = useRef(true)
   const baseRef = useRef(base)
   baseRef.current = base
   const docs = useIssueDocuments(issue)
+  const comments = useIssueComments(issue.id)
   const dirty = Object.keys(issueDraftPatch(base, draft)).length > 0
   const conflict = base.version !== issue.version && !contextWriting
   const disabled = saving || pendingSaves > 0 || isLoading || descriptionRunning
@@ -148,32 +155,57 @@ export function CanonicalIssueWorkspace({ issue, project, onClose, onNavigate }:
     } finally { if (mounted.current) setContextWriting(false) }
   }
   const relate = async (doc: ProjectDocumentSummary) => {
+    // The field offers this project's pages only, so a related page always has a project.
+    const projectId = doc.projectId
+    if (!projectId) return
     // One timestamp for the draft and the server copy, so the rebase sees the same entry on both sides.
     const attachedAt = new Date().toISOString()
-    if (await docs.link(doc.id)) await writeContext((context) => withDocumentContext(context, doc, attachedAt))
+    if (await docs.link(doc.id)) await writeContext((context) => withDocumentContext(context, { ...doc, projectId }, attachedAt))
   }
   const unrelate = async (link: DocumentIssueLink) => {
     if (await docs.unlink(link)) await writeContext((context) => withoutDocumentContext(context, link.documentId))
   }
-  const openDocument = (doc: ProjectDocumentSummary) => void navigate(() => { void window.electron?.browser?.navigate(pageSource(doc.projectId, doc.id)) })
+  const openDocument = (doc: ProjectDocumentSummary) => void navigate(() => { void window.electron?.browser?.navigate(documentSource(doc)) })
   /** New document from the field: save this issue, create + link the page, add it to Context, open it in Docs. */
   const createRelated = async (title: string) => {
     if (!(await save())) return false
     const page = await docs.create(title)
-    if (!page) return false
+    if (!page?.projectId) return false
+    const projectId = page.projectId
     const latest = getProjectsState().issues.find((item) => item.id === issue.id)
     if (latest) {
       setContextWriting(true)
       try {
-        const result = await updateIssue(issue.id, { context: withDocumentContext(latest.context, page) }, latest.version)
+        const result = await updateIssue(issue.id, { context: withDocumentContext(latest.context, { ...page, projectId }) }, latest.version)
         if (result.error) { if (mounted.current) setError(`The page was created and linked, but not added to Context: ${result.error}`); return false }
       } finally { if (mounted.current) setContextWriting(false) }
     }
-    void window.electron?.browser?.navigate(pageSource(page.projectId, page.id))
+    void window.electron?.browser?.navigate(pageSource(projectId, page.id))
     return true
   }
+  /**
+   * A relationship write can move this issue on the server: "Blocked by" an unfinished issue moves it to
+   * Blocked, removing its last open blocker moves it back. That is not an edit of this draft, so, as for a
+   * Context entry, the draft is rebased onto the moved version instead of reading as a conflict.
+   */
+  const writeRelationship: RelationshipWrite = async (write) => {
+    const before = getProjectsState().issues.find((item) => item.id === issue.id)
+    setContextWriting(true)
+    try {
+      const result = await write()
+      const after = getProjectsState().issues.find((item) => item.id === issue.id)
+      if (mounted.current && before && after && after.version !== before.version && baseRef.current.version === before.version) {
+        const prior = baseRef.current
+        setDraft((current) => rebaseIssueDraft(prior, current, after))
+        setBase(after)
+      }
+      return result
+    } finally { if (mounted.current) setContextWriting(false) }
+  }
+  const openRelated = (id: string) => void navigate(() => onNavigate(id))
 
   const children = issues.filter((item) => item.parentId === issue.id).sort((a, b) => a.rank - b.rank)
+  const relations = relationCount(issue.id, issueLinks)
   const parent = issues.find((item) => item.id === draft.parentId)
   const parentRequired = !canPlaceIssue(project, draft.type)
   const parentOptions = [
@@ -268,6 +300,10 @@ export function CanonicalIssueWorkspace({ issue, project, onClose, onNavigate }:
           onRelate={relate} onUnrelate={unrelate} onCreate={createRelated} onOpen={openDocument} />
       </PropertySection>
 
+      <PropertySection title="Relationships" action={relations > 0 ? <span className={cn('font-mono text-[11px] tabular-nums', MUTED)}>{relations}</span> : undefined}>
+        <IssueRelationshipsField issue={issue} disabled={disabled} onOpen={openRelated} write={writeRelationship} />
+      </PropertySection>
+
       {customFields.length > 0 && <PropertySection title="Fields">
         {customFields.map((field) => <div key={field.key} className="space-y-1.5 px-2 py-1">
           <p className={cn('font-mono text-[11.5px]', MUTED)}>{field.label}{field.required && <span className="text-red-700 dark:text-red-400"> *</span>}{field.archived && ' (archived)'}</p>
@@ -312,7 +348,6 @@ export function CanonicalIssueWorkspace({ issue, project, onClose, onNavigate }:
             onAskRon={(goal) => window.dispatchEvent(new CustomEvent('issue-description-ron', { detail: { issueId: issue.id, goal } }))} />
         </div>
       </div>
-      <IssueDocuments docs={docs} disabled={disabled || conflict} onOpenDocument={openDocument} onUnrelate={(link) => void unrelate(link)} />
       <Section title="Child issues" count={children.length} action={definitions.some((d) => canPlaceIssue(project, d.key, issue)) && (
         <Button type="button" variant="ghost" size="sm" disabled={disabled} className={cn(GHOST, 'h-7 gap-1 px-2.5 text-[12.5px] [&_svg]:size-3.5')} onClick={() => void navigate(() => setShowChild(true))}>
           <Plus className="size-3.5" />Create child
@@ -328,7 +363,7 @@ export function CanonicalIssueWorkspace({ issue, project, onClose, onNavigate }:
           </button>)}
         </div>}
       </Section>
-      <IssueRelationships issue={issue} onNavigate={(id) => void navigate(() => onNavigate(id))} />
+      <LinkedIssuesList issue={issue} disabled={disabled} onOpen={openRelated} />
       <IssueWorkProducts products={issue.workProducts} />
     </div>
   </div>
@@ -357,13 +392,9 @@ export function CanonicalIssueWorkspace({ issue, project, onClose, onNavigate }:
         onRemove={(id) => edit({ context: draft.context.filter((entry) => entry.id !== id) })} />,
       ron: <IssueRonChat issueId={issue.id} issueKey={issueKey} issue={{ title: issue.title, description: issue.description }}
         hasUnsavedChanges={dirty || saving} />,
-      comms: <div className="flex h-full items-center justify-center p-10 text-center">
-        <div className="max-w-sm">
-          <span className="mx-auto flex size-10 items-center justify-center rounded-xl bg-surface-100 text-ink-secondary dark:bg-surface-850 dark:text-ink-inverse-secondary"><MessageSquare className="size-4" /></span>
-          <h3 className="mt-4 font-display text-lg font-bold leading-tight tracking-tight text-ink dark:text-ink-inverse">Comms aren’t connected</h3>
-          <p className={cn('mt-1.5 text-[13px] leading-relaxed', MUTED)}>Canonical communications and attachment storage are not configured. Legacy messages, attachments, and conversations are not imported or written into custom fields.</p>
-        </div>
-      </div>,
+      comments: <IssueComments issueId={issue.id} projectOwnerId={project.ownerId} thread={comments}
+        onAgentSettled={() => { void refreshFromServer() }} />,
+      commentsCount: comments.comments.length,
       history,
     }} />
     {showChild && <CreateIssueDialog isOpen onClose={() => setShowChild(false)} projectId={project.id} parentId={issue.id} />}

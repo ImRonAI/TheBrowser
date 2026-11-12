@@ -43,5 +43,6 @@ journal/
 
 # research scratch
 .firecrawl/
+workspace/**/tmp/
 venv-next/
 agent/api/core/harness-sdk-next/

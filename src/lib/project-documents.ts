@@ -1,7 +1,9 @@
 /**
- * Project documents (Confluence-style pages): `public.project_documents` through the Projects API.
- * A page body is the same Tiptap HTML the issue description editor writes. Lists carry no body;
- * one page is read on open. Saves are version-checked: a stale version answers 409.
+ * Documents (Confluence-style pages): `public.project_documents` through the Projects API.
+ * A page belongs to one project (its Docs tab) or, with no project, to the person who wrote it
+ * ("My documents" in the Documents library, `ron://documents`). A page body is the same Tiptap HTML
+ * the issue description editor writes. Lists carry no body; one page is read on open. Saves are
+ * version-checked: a stale version answers 409.
  * Pure (relative imports) so node:test can run it.
  */
 import { allProjectPages, type ProjectsRequest } from './projects-api.ts'
@@ -10,7 +12,8 @@ type Row = Record<string, any>
 
 export interface ProjectDocumentSummary {
   id: string
-  projectId: string
+  /** The page's project, or null for a personal page (only its author sees it). */
+  projectId: string | null
   parentId: string | null
   title: string
   version: number
@@ -24,7 +27,7 @@ export const DOCUMENT_TITLE_MAX = 300
 export const UNTITLED = 'Untitled'
 
 export const mapDocumentSummary = (row: Row): ProjectDocumentSummary => ({
-  id: row.id, projectId: row.project_id, parentId: row.parent_id ?? null, title: row.title,
+  id: row.id, projectId: row.project_id ?? null, parentId: row.parent_id ?? null, title: row.title,
   version: row.version, createdBy: row.created_by ?? null,
   createdAt: Date.parse(row.created_at), updatedAt: Date.parse(row.updated_at),
 })
@@ -39,11 +42,80 @@ export const listDocuments = async (request: ProjectsRequest, projectId: string)
 export const getDocument = async (request: ProjectsRequest, id: string) =>
   mapDocument(await request<Row>(`/documents/${id}`))
 
+/** A new page in `projectId`, or a personal page when `projectId` is null. A child page shares its parent's project. */
 export const createDocument = async (request: ProjectsRequest,
-  input: { projectId: string; parentId?: string | null; title: string; content: string }) =>
+  input: { projectId: string | null; parentId?: string | null; title: string; content: string }) =>
   mapDocument(await request<Row>('/documents', 'POST', {
     project_id: input.projectId, parent_id: input.parentId ?? null, title: documentTitle(input.title), content: input.content,
   }))
+
+/**
+ * Moves a page, with every page under it, into a project (`POST /projects/documents/{id}/move`): a personal
+ * page is added to the project, a project page moves to another project. The page leaves its parent; its
+ * issue links and conversations stay. Answers the moved page.
+ */
+export const moveDocument = async (request: ProjectsRequest, id: string, projectId: string) =>
+  mapDocument(await request<Row>(`/documents/${encodeURIComponent(id)}/move`, 'POST', { project_id: projectId }))
+
+/** The Documents library (`ron://documents`), optionally opened on one page. */
+export const documentsLibraryUrl = (documentId?: string | null) =>
+  documentId ? `ron://documents/${documentId}` : 'ron://documents'
+
+/** Where a page opens: its project's Docs (`ron://project/<id>/docs/<page>`), or the library for a personal page. */
+export const documentSource = (document: Pick<ProjectDocumentSummary, 'id' | 'projectId'>) =>
+  document.projectId ? `ron://project/${document.projectId}/docs/${document.id}` : documentsLibraryUrl(document.id)
+
+/** Reads a library URL: the page it opens (`documentId` null for the library itself), or null for any other URL. */
+export function parseDocumentsLibraryUrl(url: string | null | undefined): { documentId: string | null } | null {
+  const match = url?.match(/^ron:\/\/documents(?:\/([^/?#]+))?\/?$/)
+  return match ? { documentId: match[1] ?? null } : null
+}
+
+/** The page list after `moveDocument`: the page and every page under it are in `projectId`, the page a root there. */
+export function withMovedDocument(documents: ProjectDocumentSummary[], id: string, projectId: string): ProjectDocumentSummary[] {
+  const moved = new Set(documentSubtree(documents, id))
+  return documents.map((doc) => (moved.has(doc.id) ? { ...doc, projectId, parentId: doc.id === id ? null : doc.parentId } : doc))
+}
+
+/**
+ * Library search: the pages whose title holds every word of `query` (any case), and `shown`, those pages plus
+ * their ancestors, so each match keeps its place in its tree. A blank query matches nothing.
+ */
+export function searchDocuments(documents: ProjectDocumentSummary[], query: string): { matches: Set<string>; shown: ProjectDocumentSummary[] } {
+  const words = query.toLowerCase().split(/\s+/).filter(Boolean)
+  const matches = new Set(words.length === 0 ? [] : documents
+    .filter((doc) => words.every((word) => (doc.title || UNTITLED).toLowerCase().includes(word))).map((doc) => doc.id))
+  const byId = new Map(documents.map((doc) => [doc.id, doc]))
+  const shown = new Set<string>()
+  for (const id of matches) {
+    for (let current: string | null = id; current && byId.has(current) && !shown.has(current); current = byId.get(current)!.parentId) shown.add(current)
+  }
+  return { matches, shown: documents.filter((doc) => shown.has(doc.id)) }
+}
+
+/**
+ * What "Create project with Ren" sends Ren in a new chat: read the page, create a project and its issues from it,
+ * then add the page to that project, with the workspace tools that do each step.
+ */
+export function createProjectFromDocumentPrompt(document: { id: string; title: string }, currentProject?: { name: string; key: string } | null): string {
+  const moves = currentProject ? ` It is in the ${currentProject.name} (${currentProject.key}) project now; adding it moves it, with the pages under it, into the new project.` : ''
+  return [
+    `Create a project from my page "${document.title.trim() || UNTITLED}" (document id ${document.id}).`,
+    '1. Read the page with read_document.',
+    '2. Create a project that fits it with create_project: a clear name, a short key and the project type that matches the work.',
+    '3. Create its issues with create_issue, top-down, following the new project\'s issue types, so the work the page describes becomes the backlog.',
+    `4. Add the page to the new project with add_document_to_project.${moves}`,
+    'Then tell me the project key and what you created.',
+  ].join('\n')
+}
+
+/** A failed Projects request as the page says it: a lost sign-in reads as one instead of a bare status. */
+export function documentErrorMessage(error: unknown, fallback: string): string {
+  if ((error as { status?: number } | null)?.status === 401) return 'You’re signed out. Sign in again to open and save documents.'
+  const message = error instanceof Error ? error.message : ''
+  if (message === 'Session changed; reload Projects.') return 'You signed in or out. Reload Documents to continue as this account.'
+  return message || fallback
+}
 
 export const updateDocument = async (request: ProjectsRequest, id: string, version: number,
   patch: { title?: string; content?: string }) =>
@@ -56,7 +128,7 @@ export const updateDocument = async (request: ProjectsRequest, id: string, versi
 export const deleteDocument = (request: ProjectsRequest, id: string) =>
   request<{ deleted: boolean }>(`/documents/${id}`, 'DELETE')
 
-/** Every page the user can access, across projects (newest first): what a page can be picked from. */
+/** Every page the user can access, across projects plus their personal pages (newest first). */
 export const listAllDocuments = async (request: ProjectsRequest) =>
   (await allProjectPages<Row>(request, '/documents')).map(mapDocumentSummary)
 

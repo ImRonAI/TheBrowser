@@ -8,14 +8,18 @@
  * It carries exactly what the drawer did, plus the vertical tab list:
  * - the search composer (context picker, article/text attachments, Brave
  *   assist, search depth, submit → ron://search?q=…&level=…), focused by ⌘K
- * - the five destinations (Discover, Execute, Calendar, Vibe, Build)
+ * - the six destinations (Discover, Execute, Documents, Calendar, Vibe, Build);
+ *   Documents opens the library (ron://documents) and is the one lit while it shows
  * - open tabs
  */
 import { useEffect, useRef, useState } from 'react'
 import { motion, useReducedMotion } from 'framer-motion'
-import { ArrowUp, Check, ChevronDown, Compass, Calendar, Columns3, Hammer, Music2, Search, X } from 'lucide-react'
+import { ArrowUp, Check, ChevronDown, Compass, Calendar, Columns3, FileText, Hammer, Music2, Search, X } from 'lucide-react'
 import { RenWordmark } from '@/components/brand'
 import { useNavigationStore, type HomeTab } from '@/stores/navigationStore'
+import { useTabStore } from '@/stores/tabStore'
+import { documentsLibraryUrl, parseDocumentsLibraryUrl } from '@/lib/project-documents'
+import { openInternalUrl } from '@/components/board/task-detail/editor/extensions/blocks/workspace'
 import { useTextAssist } from '@/hooks/useTextAssist'
 import { TextAssist, handleAssistKey } from '@/components/shared/TextAssist'
 import { useSearchStore } from '@/stores/searchStore'
@@ -115,6 +119,7 @@ function SearchDepthSelector() {
 const DESTINATIONS: { id: HomeTab; label: string; icon: typeof Compass }[] = [
   { id: 'discover', label: 'Discover', icon: Compass },
   { id: 'execute', label: 'Execute', icon: Columns3 },
+  { id: 'documents', label: 'Documents', icon: FileText },
   { id: 'calendar', label: 'Calendar', icon: Calendar },
   { id: 'vibe', label: 'Vibe', icon: Music2 },
   { id: 'build', label: 'Build', icon: Hammer },
@@ -136,6 +141,10 @@ const ROW_HOVER = 'hover:bg-ink/[0.06] hover:text-ink dark:hover:bg-ink-inverse/
 
 export function Sidebar() {
   const { isSidebarOpen, searchFocusRequest, activeTab, setActiveTab } = useNavigationStore()
+  // The library is routed by the tab's URL, so Documents is lit exactly while it shows. Off the library a
+  // leftover 'documents' destination lights Discover, the page MainContent shows for it.
+  const onDocuments = useTabStore((state) => parseDocumentsLibraryUrl(state.tabs.find((tab) => tab.id === state.activeTabId)?.url) !== null)
+  const currentDestination: HomeTab = onDocuments ? 'documents' : activeTab === 'documents' ? 'discover' : activeTab
   const { level } = useSearchStore()
   const reduced = useReducedMotion()
   const user = useAuthStore((state) => state.user?.id || 'default')
@@ -263,6 +272,10 @@ export function Sidebar() {
       navigateInternal('ron://execute')
       return
     }
+    if (tabId === 'documents') {
+      openInternalUrl(documentsLibraryUrl())
+      return
+    }
     if (tabId === 'build') {
       navigateInternal('ron://build')
       return
@@ -336,7 +349,7 @@ export function Sidebar() {
 
             <form onSubmit={handleSearch} className="relative" role="search">
               <div className={cn(
-                'rounded-xl border transition-[border-color,box-shadow,background-color] duration-150 ease-out',
+                'ron-field rounded-xl border transition-[border-color,box-shadow,background-color] duration-150 ease-out',
                 isFocused
                   ? 'border-blurple-500 bg-surface-0 ring-[3px] ring-blurple-500/15 dark:border-blurple-400 dark:bg-surface-850 dark:ring-blurple-400/20'
                   : 'border-surface-200 bg-surface-0 hover:border-surface-300 dark:border-surface-800 dark:bg-surface-850 dark:hover:border-surface-700',
@@ -399,7 +412,7 @@ export function Sidebar() {
             <SectionLabel>Ren</SectionLabel>
             <ul className="flex flex-col gap-px">
               {DESTINATIONS.map(({ id, label, icon: Icon }) => {
-                const isActive = activeTab === id
+                const isActive = currentDestination === id
                 return (
                   <li key={id}>
                     <button

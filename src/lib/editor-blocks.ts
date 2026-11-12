@@ -421,7 +421,9 @@ export const calloutVariant = (value: unknown): CalloutVariant =>
   (CALLOUT_VARIANTS as readonly string[]).includes(String(value)) ? value as CalloutVariant : 'info'
 
 /** `ron://project/<id>/docs/<page>` (the app's page deep link). */
-export const pageHref = (projectId: string, documentId: string) => `ron://project/${projectId}/docs/${documentId}`
+/** A page's address: its project's Docs, or the Documents library for a personal page (no project). */
+export const pageHref = (projectId: string | null, documentId: string) =>
+  projectId ? `ron://project/${projectId}/docs/${documentId}` : `ron://documents/${documentId}`
 export const projectHref = (projectId: string) => `ron://project/${projectId}`
 
 /** One Markdown line for an embedded issue (what Ron reads). */

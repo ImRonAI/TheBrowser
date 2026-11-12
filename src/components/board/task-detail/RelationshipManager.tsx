@@ -75,7 +75,7 @@ const RELATIONSHIP_TYPES: RelationshipConfig[] = [
 
 /** Bordered text field inside the picker card (transparent so the card's paper shows). */
 const FIELD = cn(
-  'h-9 w-full rounded-lg border border-surface-200 bg-transparent text-[13px] text-ink',
+  'ron-field h-9 w-full rounded-lg border border-surface-200 bg-transparent text-[13px] text-ink',
   'dark:border-surface-800 dark:text-ink-inverse',
   'transition-colors duration-150'
 )

@@ -712,7 +712,7 @@ export function PanelComposer({ composer, active, label, placeholder, disabled, 
 }) {
   const { input, setInput, inputRef, assist, commandSuggestions, selectedCommand } = composer
   return <>
-    <div className={cn('relative rounded-2xl border bg-surface-0 px-3.5 pb-2.5 pt-3 transition-[border-color,box-shadow] duration-200 dark:bg-surface-850',
+    <div className={cn('ron-field relative rounded-2xl border bg-surface-0 px-3.5 pb-2.5 pt-3 transition-[border-color,box-shadow] duration-200 dark:bg-surface-850',
       'focus-within:border-blurple-400 focus-within:ring-[3px] focus-within:ring-blurple-500/15 dark:focus-within:border-blurple-500/70 dark:focus-within:ring-blurple-400/15',
       large ? 'shadow-float' : 'shadow-sm',
       input ? 'border-blurple-300 dark:border-blurple-800' : 'border-surface-200 dark:border-surface-700/80')}>

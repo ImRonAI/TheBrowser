@@ -1,7 +1,8 @@
 import { create } from 'zustand'
 import { createJSONStorage, persist } from 'zustand/middleware'
 
-export type HomeTab = 'discover' | 'execute' | 'calendar' | 'vibe' | 'build'
+/** The sidebar's destinations. `documents` is the Documents library (`ron://documents`), routed by its URL. */
+export type HomeTab = 'discover' | 'execute' | 'documents' | 'calendar' | 'vibe' | 'build'
 
 interface NavigationStore {
   /**

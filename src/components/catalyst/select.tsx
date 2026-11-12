@@ -29,7 +29,7 @@ export const Select = forwardRef(function Select(
         {...props}
         className={clsx([
           // Basic layout
-          'relative block w-full appearance-none rounded-lg py-[calc(--spacing(2.5)-1px)] sm:py-[calc(--spacing(1.5)-1px)]',
+          'ron-field relative block w-full appearance-none rounded-lg py-[calc(--spacing(2.5)-1px)] sm:py-[calc(--spacing(1.5)-1px)]',
           // Horizontal padding
           multiple
             ? 'px-[calc(--spacing(3.5)-1px)] sm:px-[calc(--spacing(3)-1px)]'

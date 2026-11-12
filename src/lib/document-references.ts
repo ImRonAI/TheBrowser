@@ -58,14 +58,14 @@ export async function fetchReferenceCatalog(apiBase: string, userId: string, age
 /** Every reference the menu can offer, in menu order. */
 export function referenceItems(sources: {
   catalog?: TeachingReferenceCatalog | null
-  documents?: { id: string; title: string; projectId: string }[]
+  documents?: { id: string; title: string; projectId: string | null }[]
   projects?: { id: string; name: string; key?: string; summary?: string; lifecycle?: string }[]
   specialists?: { id: string; name: string; description?: string }[]
 }): ReferenceItem[] {
   const projectName = new Map((sources.projects ?? []).map((project) => [project.id, project.key ? `${project.key}` : project.name]))
   const items: ReferenceItem[] = []
   for (const doc of sources.documents ?? []) {
-    items.push({ kind: 'document', id: doc.id, label: doc.title || 'Untitled', description: '', group: projectName.get(doc.projectId) ?? 'Page' })
+    items.push({ kind: 'document', id: doc.id, label: doc.title || 'Untitled', description: '', group: doc.projectId ? projectName.get(doc.projectId) ?? 'Page' : 'My documents' })
   }
   const catalog = sources.catalog
   for (const entry of catalog?.tools ?? []) items.push({ kind: 'tool', ...pick(entry) })

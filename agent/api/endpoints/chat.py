@@ -443,14 +443,20 @@ async def _create_runtime_agent(*, user_id, session_id, selection, options, runt
         workspace = await asyncio.to_thread(ensure_workspace, user_id, session_id)
         runtime_options = {**runtime_options, "plugins": [*runtime_options.get("plugins", []), BuildWorkspaceGuard(workspace)]}
         build_prompt = build_agent_prompt(workspace)
-    project_prompt, project_tools = "", []
+    agent_prompt, agent_tools = "", []
     if target.get("kind") == "project":
         from agent.api.core.project_agent import project_agent_prompt, project_agent_tools
         # project_agent_tools picks the media tool from the lead model's catalogue entry (one GET per provider and
         # process), so it runs off the event loop like the construction below.
-        project_prompt = project_agent_prompt(target["id"])
-        project_tools = await asyncio.to_thread(project_agent_tools, user_id, session_id, target["id"],
-                                                provider=selection["provider"], model_id=selection["model_id"])
+        agent_prompt = project_agent_prompt(target["id"])
+        agent_tools = await asyncio.to_thread(project_agent_tools, user_id, session_id, target["id"],
+                                              provider=selection["provider"], model_id=selection["model_id"])
+    elif destination == "panel":
+        # Ren's own chat works with the user's documents and projects, with the access /chat bound for this session
+        # (_bind_workspace_access). The addendum is not part of system_prompt_for, which the Live agent shares
+        # (live_system_prompt), so Live's prompt and tools stay as they are.
+        from agent.api.core.workspace_tools import workspace_prompt, workspace_tools
+        agent_prompt, agent_tools = workspace_prompt(), workspace_tools(user_id, session_id)
     return await asyncio.to_thread(
         create_panel_agent,
         provider=selection["provider"], model_id=selection["model_id"],
@@ -466,8 +472,8 @@ async def _create_runtime_agent(*, user_id, session_id, selection, options, runt
                         "brave_news_search or brave_answer, and cite what you used as Markdown links. When the user gives feedback on a draft, "
                         "write the complete revised draft again.",
             "context": context_agent_prompt(),
-        }[destination] + project_prompt,
-        extra_tools=(context_agent_tools() if destination == "context" else []) + project_tools,
+        }[destination] + agent_prompt,
+        extra_tools=(context_agent_tools() if destination == "context" else []) + agent_tools,
         reasoning_effort=selection.get("reasoning_effort"),
         options=options, runtime_options=runtime_options,
         browser=browser,
@@ -631,10 +637,12 @@ def _require_provider_key(provider: ProviderName) -> None:
 
 
 async def _authorize_agent(target: dict[str, Any], request: ChatRequest, http_request: Request) -> None:
-    """Specialists are their owner's; a project agent acts with the caller's own project access.
+    """Specialists are their owner's; a project agent, and Ren in the Agent Panel, act with the caller's own access.
 
     Project turns carry the user's Supabase bearer token (or the guest workspace capability), verified like every
     Projects route and bound to this session for the agent's tools; RLS then decides what it may read and change.
+    Ren's panel turns may carry the same credential for its workspace tools (``_bind_workspace_access``), but Ren
+    works without one, so for Ren the check never fails the turn.
     """
     if target.get("kind") == "specialist":
         from agent.api.core.harness_agents import SignInRequired, harness_table, owner_uuid
@@ -656,6 +664,33 @@ async def _authorize_agent(target: dict[str, Any], request: ChatRequest, http_re
         if not await ProjectService(identity).rows("projects", select="id", id=f"eq.{target['id']}"):
             raise HTTPException(404, "Project not found or not accessible")
         bind_identity(request.user_id, request.session_id, identity)
+    elif request.destination == "panel":
+        await _bind_workspace_access(request, http_request)
+
+
+async def _bind_workspace_access(request: ChatRequest, http_request: Request) -> None:
+    """Bind a Ren panel turn's project credential to this session for Ren's workspace tools (``workspace_tools``).
+
+    Optional: a turn without a credential is not checked, and a credential that cannot be verified (expired or
+    malformed, Supabase down) or that belongs to another signed-in user is logged and not bound; the turn runs either
+    way and keeps any identity an earlier turn bound. The tools then say access has not been verified.
+    """
+    if not (http_request.headers.get("authorization") or http_request.headers.get("x-ron-workspace")):
+        return
+    from agent.api.core.projects import project_identity
+    from agent.api.core.workspace_tools import bind_identity
+
+    try:
+        identity = await project_identity(http_request)
+    except Exception as error:
+        logger.warning("user=<%s>, session=<%s>, error=<%s> | project credential not verified; workspace tools not bound",
+                       request.user_id, request.session_id, error)
+        return
+    if not identity.guest and identity.user_id != request.user_id:
+        logger.warning("user=<%s>, session=<%s> | project credential belongs to another user; workspace tools not bound",
+                       request.user_id, request.session_id)
+        return
+    bind_identity(request.user_id, request.session_id, identity)
 
 
 async def _authorize_issue(selection: dict[str, Any], request: ChatRequest, http_request: Request) -> tuple[Any, dict[str, Any]]:

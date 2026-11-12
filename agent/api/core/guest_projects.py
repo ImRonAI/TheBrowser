@@ -12,18 +12,21 @@ import re
 import sqlite3
 from datetime import date, datetime, timezone
 from pathlib import Path
+from typing import NoReturn
 from uuid import UUID, uuid4
 
 from fastapi import HTTPException
 
 TABLES = {"projects", "issues", "issue_links", "issue_events", "activity_log",
           "issue_agents", "issue_agent_runs", "issue_agent_blobs", "project_documents", "document_issue_links",
-          "document_conversations"}
+          "document_conversations", "issue_comments"}
+#: Inviting people needs accounts; a guest workspace has one person, its owner (023_project_members.sql).
+SIGN_IN_TO_INVITE = "Sign in to invite people to a project"
 DEFAULT_TYPES = [{"key": key, "label": key.title(), "level": level} for key, level in
                  [("initiative", 1), ("epic", 2), ("story", 3), ("task", 4), ("bug", 4), ("subtask", 5)]]
 
 
-def fail(message, status=422):
+def fail(message, status=422) -> NoReturn:
     raise HTTPException(status, message)
 
 
@@ -39,6 +42,9 @@ def matches(row, params):
                 return False
         elif str(expression).startswith("in.("):
             if str(row.get(key)) not in expression[4:-1].split(","):
+                return False
+        elif expression == "is.null":
+            if row.get(key) is not None:
                 return False
         else:
             fail("Unsupported workspace filter")
@@ -175,7 +181,8 @@ class Workspace:
                 fail(f"Invalid field: {field['label']}")
 
     def validate_document(self, row):
-        """Mirrors 015_project_documents.sql: title/content bounds, same-project parent, no cycles."""
+        """Mirrors 015/022: title/content bounds, a parent in the same project (a personal page's parent is one
+        of its author's personal pages), no cycles."""
         if not isinstance(row.get("title"), str) or not 1 <= len(row["title"].strip()) <= 300:
             fail("Page title must be 1-300 characters")
         if not isinstance(row.get("content"), str) or len(row["content"]) > 2_000_000:
@@ -185,12 +192,46 @@ class Workspace:
             if ancestor == row["id"]:
                 fail("A page cannot be nested under itself")
             parent = self.require("project_documents", ancestor)
-            if parent["project_id"] != row["project_id"]:
-                fail("Parent page must belong to the same project")
+            if parent.get("project_id") != row.get("project_id") or (
+                    row.get("project_id") is None and parent.get("created_by") != row.get("created_by")):
+                fail("Parent page must be one of your personal pages" if row.get("project_id") is None
+                     else "Parent page must belong to the same project")
             depth += 1
             if depth > 50:
                 fail("Pages are nested too deeply")
             ancestor = parent.get("parent_id")
+
+    def move_document(self, body):
+        """Mirrors public.move_document (022): the page and its subtree move into the project; the page leaves its parent."""
+        page = next((row for row in self.rows("project_documents") if row["id"] == body.get("p_document")), None)
+        if page is None:
+            fail("Document not found or not accessible", 404)
+        if not any(project["id"] == body.get("p_project") for project in self.rows("projects")):
+            fail("Project not accessible", 403)
+        if page.get("project_id") == body["p_project"]:
+            fail("The page is already in that project")
+        now = datetime.now(timezone.utc).isoformat()
+        pages = {row["id"]: row for row in self.rows("project_documents")}
+        for page_id in self.document_subtree(page["id"]):
+            moved = {**pages[page_id], "project_id": body["p_project"], "version": pages[page_id]["version"] + 1, "updated_at": now}
+            if page_id == page["id"]:
+                moved["parent_id"] = None
+                page = moved
+            self.put("project_documents", moved)
+        return page
+
+    def project_people(self, body):
+        """Mirrors public.project_people (023): a workspace has one person, the owner of all its projects."""
+        project = next((row for row in self.rows("projects") if row["id"] == body.get("p_project")), None)
+        if project is None:
+            return []
+        return [{"user_id": self.identity.user_id, "name": "You", "email": "", "role": "owner", "joined_at": project["created_at"]}]
+
+    def validate_comment(self, body):
+        """Mirrors 021_issue_comments.sql: a trimmed body of 1-20000 characters."""
+        if not isinstance(body, str) or not 1 <= len(body.strip()) <= 20_000:
+            fail("A comment must be 1 to 20000 characters")
+        return body
 
     def document_subtree(self, root_id):
         """The page and every page nested under it (deleted together, like the SQL cascade)."""
@@ -247,10 +288,24 @@ class Workspace:
                    "session_id": f"doc-{row['id']}", "title": self.conversation_title(row.get("title")),
                    "goal": bool(row.get("goal", False)), "created_at": now, "updated_at": now}
         elif table == "project_documents":
-            self.require("projects", row["project_id"])
-            row = {"parent_id": None, "title": "Untitled", "content": "", **row,
+            # No project is a personal page (022_personal_documents.sql).
+            if row.get("project_id") is not None:
+                self.require("projects", row["project_id"])
+            row = {"parent_id": None, "title": "Untitled", "content": "", **row, "project_id": row.get("project_id"),
                    "version": 1, "updated_at": now, "created_by": self.identity.user_id}
             self.validate_document(row)
+        elif table == "issue_comments":
+            # Mirrors 021_issue_comments.sql: the store stamps the author and the issue's project.
+            issue = next((issue for issue in self.rows("issues") if issue["id"] == row.get("issue_id")), None)
+            if issue is None:
+                fail("Issue not found or not accessible", 404)
+            kind, agent = row.get("author_kind", "user"), row.get("agent_name")
+            if kind not in {"user", "agent"} or (kind == "agent") != (agent is not None) or (
+                    agent is not None and not (isinstance(agent, str) and 1 <= len(agent.strip()) <= 120)):
+                fail("An agent's comment needs the agent's name (1-120 characters); a person's comment has none")
+            row = {"id": row["id"], "issue_id": issue["id"], "project_id": issue["project_id"], "author_id": self.identity.user_id,
+                   "author_name": "You", "author_kind": kind, "agent_name": agent, "body": self.validate_comment(row.get("body")),
+                   "version": 1, "created_at": now, "updated_at": now, "edited_at": None}
         else:
             fail("Unsupported workspace insert")
         self.put(table, row)
@@ -274,6 +329,12 @@ class Workspace:
             self.require("issue_agents", body["p_agent"])
             self.put("issue_agent_blobs", {"agent_id": body["p_agent"], "key": body["p_key"], "payload": body["p_payload"]})
             return None
+        if resource == "rpc/move_document":
+            return self.move_document(body)
+        if resource == "rpc/project_people":
+            return self.project_people(body)
+        if resource == "rpc/invite_project_member":
+            fail(SIGN_IN_TO_INVITE, 403)
         if resource != "rpc/start_issue_agent_run":
             fail("Unknown workspace operation")
         self.require("issues", body["p_issue"])
@@ -291,6 +352,9 @@ class Workspace:
     def request(self, method, resource, params, body):
         if resource.startswith("rpc/") and method == "POST":
             return self.rpc(resource, body)
+        if resource == "project_members":
+            # Nobody else is in a guest workspace, so there is nobody to remove and no membership to leave.
+            fail(SIGN_IN_TO_INVITE, 403)
         if resource not in TABLES:
             fail("Unknown workspace resource")
         if method == "POST":
@@ -316,11 +380,28 @@ class Workspace:
                     if conversation["document_id"] in pages:
                         self.db.execute("delete from workspace_rows where workspace=? and kind=? and id=?", (self.identity.token, "document_conversations", conversation["id"]))
             return rows
-        if method == "DELETE" and resource in {"issue_links", "issue_agent_blobs", "document_issue_links"}:
+        if method == "DELETE" and resource in {"issue_links", "issue_agent_blobs", "document_issue_links", "issue_comments"}:
             for row in rows:
                 key = row["agent_id"] + ":" + row["key"] if resource == "issue_agent_blobs" else row["id"]
                 self.db.execute("delete from workspace_rows where workspace=? and kind=? and id=?", (self.identity.token, resource, key))
             return rows
+        if method == "PATCH" and resource == "issue_comments":
+            # Mirrors 021_issue_comments.sql: the author edits the body only; agent comments are never edited.
+            if set(body) - {"body"}:
+                fail("Comment identity is immutable")
+            result = []
+            for old in rows:
+                if old["author_id"] != self.identity.user_id:
+                    continue
+                text = self.validate_comment(body.get("body", old["body"]))
+                if text != old["body"] and old["author_kind"] == "agent":
+                    fail("Agent comments can't be edited", 403)
+                now = datetime.now(timezone.utc).isoformat()
+                row = {**old, "body": text, "version": old["version"] + 1, "updated_at": now,
+                       "edited_at": now if text != old["body"] else old["edited_at"]}
+                self.put(resource, row)
+                result.append(row)
+            return result
         if method == "PATCH" and resource == "document_conversations":
             if set(body) - {"title"}:
                 fail("Conversation identity is immutable")
@@ -335,6 +416,8 @@ class Workspace:
             result = []
             for old in rows:
                 immutable = {"id", "user_id", "owner_id", "project_id", "number", "created_by", "agent_id", "issue_counter", "version", "key"}
+                if resource == "project_documents" and "project_id" in body:
+                    fail("Move pages with move_document")
                 if body.keys() & immutable:
                     fail("Record identity is immutable")
                 row = {**old, **body}

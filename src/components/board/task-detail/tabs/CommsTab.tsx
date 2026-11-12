@@ -92,7 +92,7 @@ export function CommsTab({ task }: CommsTabProps) {
       {/* Search */}
       <div className="flex-shrink-0 px-6 py-3">
         <div className="
-          relative
+          ron-field relative
           glass-subtle rounded-xl
           focus-within:border-accent dark:focus-within:border-accent-light
           focus-within:ring-1 focus-within:ring-accent/20

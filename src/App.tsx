@@ -16,6 +16,8 @@ import { ArticleReaderPage } from '@/pages/ArticleReaderPage'
 import { ExecutePage } from '@/pages/ExecutePage'
 import { ProjectsIndexPage } from '@/pages/ProjectsIndexPage'
 import { ProjectHomePage } from '@/pages/ProjectHomePage'
+import { DocumentsPage } from '@/pages/DocumentsPage'
+import { parseDocumentsLibraryUrl } from '@/lib/project-documents'
 import { BuildWorkbenchPage } from '@/components/build'
 import { SignInPage } from '@/pages/SignInPage'
 import { OnboardingPage } from '@/pages/OnboardingPage'
@@ -351,6 +353,9 @@ function MainContent({ activeTab }: { activeTab: string }) {
   }
   const projectRoute = url?.match(/^ron:\/\/project\/([^/?#]+)(?:\/docs\/([^/?#]+))?\/?$/)
   if (projectRoute) return <ProjectHomePage key={`${userId}:${projectRoute[1]}`} projectKey={projectRoute[1]} documentId={projectRoute[2]} />
+  // The Documents library (ron://documents[/<page>]); keyed by account only, so following the open page never remounts it.
+  const documentsRoute = parseDocumentsLibraryUrl(url)
+  if (documentsRoute) return <DocumentsPage key={userId} documentId={documentsRoute.documentId} />
   if (url?.startsWith('ron://read?')) return <ArticleReaderPage key={url} href={url} />
   switch (activeTab) {
     case 'execute':

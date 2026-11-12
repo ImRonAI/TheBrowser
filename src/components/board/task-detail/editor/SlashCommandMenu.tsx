@@ -547,11 +547,11 @@ function PageStep({ commit, onBack }: StepProps) {
   const [query, setQuery] = useState('')
   const names = useMemo(() => new Map(projects.map((project) => [project.id, project.name])), [projects])
   const items = useMemo(() => [...pages.data].sort((a, b) => b.updatedAt - a.updatedAt)
-    .filter((page) => matchesAll([page.title || UNTITLED, names.get(page.projectId)], query)).slice(0, 60), [pages.data, names, query])
-  return <SearchList title="Link to page" placeholder="Search pages in your projects…" query={query} setQuery={setQuery} items={items} getKey={(page) => page.id}
+    .filter((page) => matchesAll([page.title || UNTITLED, page.projectId ? names.get(page.projectId) : 'My documents'], query)).slice(0, 60), [pages.data, names, query])
+  return <SearchList title="Link to page" placeholder="Search your documents…" query={query} setQuery={setQuery} items={items} getKey={(page) => page.id}
     loading={pages.status === 'loading'} error={pages.status === 'error' ? pages.error : ''} onBack={onBack}
     empty={pages.data.length ? 'No page matches.' : 'There are no project pages yet.'}
     onChoose={(page) => commit((chain) => chain.insertPageLink({ documentId: page.id, projectId: page.projectId, title: page.title || UNTITLED }))}
     renderItem={(page) => <><FileText className="size-4 shrink-0 text-ink-muted" />
-      <RowText title={page.title || UNTITLED} detail={names.get(page.projectId) ?? 'Project page'} /></>} />
+      <RowText title={page.title || UNTITLED} detail={page.projectId ? names.get(page.projectId) ?? 'Project page' : 'My documents'} /></>} />
 }

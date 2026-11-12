@@ -110,7 +110,7 @@ export function UrlBar() {
   }
 
   const handleSubmit = async (e: KeyboardEvent<HTMLInputElement>) => {
-    if (handleAssistKey(e, assist, (text) => { setUrl(text); assist.dismiss(); void commitInput(text) })) return
+    if (handleAssistKey(e, assist, (text) => { setUrl(text); assist.dismiss(); void commitInput(text) }, (text) => { setUrl(text); assist.dismiss() })) return
     if (e.key === 'Enter') {
       assist.dismiss()
       await commitInput(url)
@@ -156,7 +156,7 @@ export function UrlBar() {
     <div className="relative">
       <div
         className={cn(
-          'group relative flex h-8 items-center overflow-hidden rounded-full border transition-[background-color,border-color,box-shadow] duration-150 ease-out',
+          'ron-field group relative flex h-8 items-center overflow-hidden rounded-full border transition-[background-color,border-color,box-shadow] duration-150 ease-out',
           isFocused
             ? 'border-blurple-500 bg-surface-0 ring-[3px] ring-blurple-500/15 dark:border-blurple-400 dark:bg-surface-850 dark:ring-blurple-400/20'
             : 'border-surface-200 bg-surface-0 hover:border-surface-300 dark:border-surface-800 dark:bg-surface-850 dark:hover:border-surface-700',

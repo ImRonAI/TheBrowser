@@ -663,7 +663,7 @@ function ProjectTypeSelect({ id, value, onChange }: { id?: string; value: Projec
         id={id}
         aria-label="Project type"
         className={cn(
-          "group flex w-full items-center gap-3 px-3 py-2.5 rounded-xl text-left",
+          "ron-field group flex w-full items-center gap-3 px-3 py-2.5 rounded-xl text-left",
           "bg-surface-0 dark:bg-surface-900",
           "border border-surface-200 dark:border-surface-800",
           "hover:border-surface-300 dark:hover:border-surface-700",

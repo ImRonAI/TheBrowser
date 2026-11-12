@@ -694,7 +694,7 @@ export function RonTab({ task }: RonTabProps) {
               {/* Command Nexus Input */}
               <div 
                 className={cn(
-                  "command-nexus relative rounded-2xl transition-all duration-300",
+                  "ron-field command-nexus relative rounded-2xl transition-all duration-300",
                   "bg-surface-900/60",
                   "border",
                   input 

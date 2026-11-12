@@ -40,18 +40,20 @@ export function AssistField({ value, onChange, children, placement = 'below', cl
       onKeyDown: (event) => { handleAssistKey(event, assist, apply) },
       onFocus: () => setFocused(true),
       onBlur: () => setFocused(false),
-      ...assistComboboxProps(assist, false),
+      // The field may be a textarea (whose only role is textbox): textbox-safe properties, never the combobox role.
+      ...assistFieldAria(assist.id, focused ? assist.options.length : 0, assist.active, false),
     })}
     {focused && <TextAssist assist={assist} placement={placement} onPick={apply} onCorrect={apply} />}
   </div>
 }
 
 /**
- * Suggestions popover + spelling-correction chip for any free-text field, driven by
- * `useTextAssist`. Positioned by the parent (`placement`): below for single-line bars, above for
- * composers that sit at the bottom of a panel. Mouse-down is prevented so picking a suggestion
- * does not blur the field first. Entity suggestions show Brave's title/description/image when the
- * Autosuggest plan returns them (`rich`); plain `query` suggestions are one line.
+ * The assist listbox for any free-text field, driven by `useTextAssist`: the spelling correction leads, then Brave's
+ * suggestions (`assist.options`). Positioned by the parent (`placement`): below for single-line bars, above for
+ * composers that sit at the bottom of a panel. Focus stays in the field, which points at the highlighted row
+ * (`aria-activedescendant`); mouse-down is prevented so picking a row does not blur the field first. Entity
+ * suggestions show Brave's title/description/image when the Autosuggest plan returns them (`rich`); plain `query`
+ * suggestions are one line. A polite status region says what appeared.
  */
 export function TextAssist({ assist, onPick, onCorrect, placement = 'below', className, compact = false }: {
   assist: TextAssistState
@@ -61,57 +63,75 @@ export function TextAssist({ assist, onPick, onCorrect, placement = 'below', cla
   className?: string
   compact?: boolean
 }) {
-  const { suggestions, correction, active, setActive, pick } = assist
-  if (!suggestions.length && !correction) return null
-  return <div role="group" aria-label="Text assist"
-    className={cn('absolute left-0 right-0 z-[80] overflow-hidden rounded-xl border border-border bg-popover text-[13px] text-popover-foreground shadow-float',
-      placement === 'below' ? 'top-full mt-1.5' : 'bottom-full mb-1.5', className)}>
-    {correction && <button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => onCorrect(correction)}
-      className="flex w-full items-center gap-2 border-b border-border px-3 py-2 text-left transition-colors duration-150 hover:bg-muted focus-visible:ring-inset focus-visible:ring-offset-0"
-      aria-label={`Replace with corrected spelling: ${correction}`}>
-      <SpellCheck className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
-      <span className="text-muted-foreground">Did you mean</span>
-      <span className="min-w-0 truncate font-semibold text-blurple-700 dark:text-blurple-300">{correction}</span>
-    </button>}
-    {suggestions.length > 0 && <ul role="listbox" aria-label="Suggestions" className="max-h-72 overflow-y-auto p-1">
-      {suggestions.map((suggestion, index) => <li key={`${suggestion.type}:${suggestion.query}`} role="option" aria-selected={active === index}>
-        <button type="button" onMouseDown={(event) => event.preventDefault()} onMouseEnter={() => setActive(index)}
-          onClick={() => onPick(pick(suggestion), suggestion)}
-          className={cn('group/suggestion flex w-full items-center gap-2.5 rounded-lg px-2.5 text-left transition-colors duration-100',
+  const { id, options, suggestions, correction, active, setActive, pick } = assist
+  const list = useRef<HTMLUListElement>(null)
+  // The field keeps focus, so the list keeps the highlighted row in view itself (it scrolls past max-h-72).
+  useEffect(() => {
+    const scroller = list.current
+    const row = scroller && active >= 0 ? scroller.children[active] : null
+    if (!scroller || !(row instanceof HTMLElement)) return
+    scroller.scrollTop += revealDelta(row.offsetTop, row.offsetHeight, scroller.scrollTop, scroller.clientHeight, 4)
+  }, [active, options])
+  return <Fragment>
+    <span role="status" className="sr-only">{assistAnnouncement(correction, suggestions.length)}</span>
+    {options.length > 0 && <div
+      className={cn('absolute left-0 right-0 z-[80] overflow-hidden rounded-xl border border-border bg-popover text-[13px] text-popover-foreground shadow-float',
+        placement === 'below' ? 'top-full mt-1.5' : 'bottom-full mb-1.5', className)}>
+      <ul ref={list} id={assistListboxId(id)} role="listbox" aria-label="Suggestions" className="relative max-h-72 overflow-y-auto p-1">
+        {options.map((option, index) => <li key={assistOptionKey(option)} id={assistOptionId(id, index)} role="option" aria-selected={active === index}
+          onMouseDown={(event) => event.preventDefault()} onMouseEnter={() => setActive(index)}
+          onClick={() => option.kind === 'correction' ? onCorrect(option.text) : onPick(pick(option.suggestion), option.suggestion)}
+          className={cn('flex w-full cursor-pointer items-center gap-2.5 rounded-lg px-2.5 transition-colors duration-100',
             compact ? 'min-h-8 py-1' : 'min-h-9 py-1.5',
             active === index ? 'bg-muted text-foreground' : 'hover:bg-muted/60')}>
-          {suggestion.img
-            ? <img src={suggestion.img} alt="" className="size-6 shrink-0 rounded-md object-cover" />
-            : <Search className="size-3.5 shrink-0 text-muted-foreground" strokeWidth={2} aria-hidden />}
-          <span className="min-w-0 flex-1">
-            <span className="block truncate">{suggestion.title ?? suggestion.query}</span>
-            {suggestion.description && <span className="block truncate text-[12px] text-muted-foreground">{suggestion.description}</span>}
-          </span>
-          {suggestion.type !== 'query' && <span className="shrink-0 rounded-full border border-border px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-[0.08em] text-muted-foreground">{suggestion.type}</span>}
+          {option.kind === 'correction' ? <>
+            <SpellCheck className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
+            <span className="shrink-0 text-muted-foreground">Did you mean</span>
+            <span className="min-w-0 flex-1 truncate font-semibold text-blurple-700 dark:text-blurple-300">{option.text}</span>
+          </> : <>
+            {option.suggestion.img
+              ? <img src={option.suggestion.img} alt="" className="size-6 shrink-0 rounded-md object-cover" />
+              : <Search className="size-3.5 shrink-0 text-muted-foreground" strokeWidth={2} aria-hidden />}
+            <span className="min-w-0 flex-1">
+              <span className="block truncate">{option.suggestion.title ?? option.suggestion.query}</span>
+              {option.suggestion.description && <span className="block truncate text-[12px] text-muted-foreground">{option.suggestion.description}</span>}
+            </span>
+            {option.suggestion.type !== 'query' && <span className="shrink-0 rounded-full border border-border px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-[0.08em] text-muted-foreground">{option.suggestion.type}</span>}
+          </>}
           {active === index && <CornerDownLeft className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />}
-        </button>
-      </li>)}
-    </ul>}
-  </div>
+        </li>)}
+      </ul>
+    </div>}
+  </Fragment>
 }
 
 /**
- * Keyboard handling shared by every host: ↑/↓ move through suggestions, Enter/Tab accept the
- * highlighted one, Escape dismisses. Returns true when the key was consumed.
+ * Keyboard handling shared by every host (`assistKeyAction`): ↑/↓ move the highlight through the correction and the
+ * suggestions, Enter/Tab accept the highlighted row, Escape closes the list; in a textarea the arrows stay with the
+ * caret until the list is in use. Consumed keys are `defaultPrevented`; returns true when the key was consumed. An
+ * accepted correction goes to `onCorrect`, which defaults to `onPick` for hosts that treat both alike.
  */
-export function handleAssistKey(event: React.KeyboardEvent, assist: TextAssistState, onPick: (text: string, suggestion: Suggestion) => void): boolean {
-  if (!assist.suggestions.length) {
-    if (event.key === 'Escape' && assist.correction) { event.preventDefault(); assist.dismiss(); return true }
-    return false
+export function handleAssistKey(event: React.KeyboardEvent, assist: TextAssistState,
+  onPick: (text: string, suggestion?: Suggestion) => void, onCorrect: (text: string) => void = onPick): boolean {
+  // An IME composition owns the arrows and Enter until it commits.
+  if (event.nativeEvent.isComposing) return false
+  const field = event.currentTarget
+  const editable = field instanceof HTMLInputElement || field instanceof HTMLTextAreaElement ? field : null
+  const action = assistKeyAction(event.key, {
+    options: assist.options.length,
+    active: assist.active,
+    hasSuggestions: assist.suggestions.length > 0,
+    multiline: field instanceof HTMLTextAreaElement,
+    caretAtEnd: !!editable && editable.selectionStart === editable.value.length && editable.selectionEnd === editable.value.length,
+  })
+  if (!action) return false
+  event.preventDefault()
+  if (action.type === 'move') assist.move(action.delta)
+  else if (action.type === 'dismiss') assist.dismiss()
+  else {
+    const option = assist.options[assist.active]
+    if (option?.kind === 'correction') onCorrect(option.text)
+    else if (option) onPick(assist.pick(option.suggestion), option.suggestion)
   }
-  if (event.key === 'ArrowDown') { event.preventDefault(); assist.move(1); return true }
-  if (event.key === 'ArrowUp') { event.preventDefault(); assist.move(-1); return true }
-  if ((event.key === 'Enter' || event.key === 'Tab') && assist.active >= 0) {
-    event.preventDefault()
-    const suggestion = assist.suggestions[assist.active]
-    onPick(assist.pick(suggestion), suggestion)
-    return true
-  }
-  if (event.key === 'Escape') { event.preventDefault(); assist.dismiss(); return true }
-  return false
+  return true
 }

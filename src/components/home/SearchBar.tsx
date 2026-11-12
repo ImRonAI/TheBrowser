@@ -38,7 +38,7 @@ export function SearchBar() {
       <form onSubmit={handleSearch}>
         <motion.div
           className={`
-            relative overflow-hidden
+            ron-field relative overflow-hidden
             rounded-2xl
             transition-all duration-400 ease-smooth
             ${isFocused 

@@ -247,7 +247,7 @@ export function ModelSelector({ value, provider = '', effort = '', models, provi
           if (event.key === 'Enter' && first?.provider) { event.preventDefault(); onChange(first.id, first.provider, '') }
         }}
         aria-label="Search models" placeholder="Search models…"
-        className="shrink-0 border-b border-surface-200 bg-transparent px-3.5 py-2.5 text-xs outline-none placeholder:text-ink-muted/70 dark:border-surface-700 dark:placeholder:text-ink-inverse-muted/70" />
+        className="ron-field shrink-0 border-b border-surface-200 bg-transparent px-3.5 py-2.5 text-xs outline-none placeholder:text-ink-muted/70 dark:border-surface-700 dark:placeholder:text-ink-inverse-muted/70" />
 
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-1.5">
         {/* The model in use leads the list, so it is in view however long the catalogue is. */}
