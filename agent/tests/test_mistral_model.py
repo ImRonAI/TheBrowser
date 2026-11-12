@@ -10,21 +10,32 @@ from agent.api.core.panel_agent import build_model
 
 
 @pytest.mark.parametrize("tool_count", [1, 2])
+@pytest.mark.parametrize("inline_context", [False, True])
 @pytest.mark.parametrize("context", [None, "Browser context for this request", "User steering note"])
-def test_tool_results_precede_injected_user_text(monkeypatch, tool_count, context):
+def test_tool_results_precede_injected_user_text(monkeypatch, tool_count, inline_context, context):
     monkeypatch.setenv("MISTRAL_API_KEY", "offline-test-key")
-    model = build_model("mistral", "mistral-large-latest")
+    model = build_model("mistral", "mistral-vibe-cli-latest", "high")
     ids = [f"call0000{i}" for i in range(tool_count)]
+    tool_result_blocks = [
+        {"toolResult": {"toolUseId": id, "status": "success", "content": [{"text": "done"}]}}
+        for id in ids
+    ]
+    if context and inline_context:
+        # SDK dynamic_trailing_blocks (ContextInjector, memory injection) appends text to the trailing
+        # user toolResult message itself rather than creating a second user message.
+        trailing = [{"role": "user", "content": [*tool_result_blocks, {"text": context}]}]
+    else:
+        trailing = [
+            {"role": "user", "content": tool_result_blocks},
+            *([{"role": "user", "content": [{"text": context}]}] if context else []),
+        ]
     messages = [
         {"role": "user", "content": [{"text": "Check the browser"}]},
         {"role": "assistant", "content": [
-            {"toolUse": {"toolUseId": id, "name": "inspect", "input": {}}} for id in ids
+            {"reasoningContent": {"reasoningText": {"text": "Inspecting first"}}},
+            *[{"toolUse": {"toolUseId": id, "name": "inspect", "input": {}}} for id in ids],
         ]},
-        {"role": "user", "content": [
-            {"toolResult": {"toolUseId": id, "status": "success", "content": [{"text": "done"}]}}
-            for id in ids
-        ]},
-        *([{"role": "user", "content": [{"text": context}]}] if context else []),
+        *trailing,
     ]
     original = copy.deepcopy(messages)
     assert isinstance(model, MistralModel)  # RonMistralModel subclass keeps the vended formatter
@@ -33,6 +44,7 @@ def test_tool_results_precede_injected_user_text(monkeypatch, tool_count, contex
     assert [message["role"] for message in formatted] == [
         "system", "user", "assistant", *(["tool"] * tool_count), *(["user"] if context else [])
     ]
+    assert formatted[2]["content"] == [{"type": "thinking", "thinking": [{"type": "text", "text": "Inspecting first"}]}]
     assert [message["tool_call_id"] for message in formatted if message["role"] == "tool"] == ids
     if context:
         assert formatted[-1]["content"] == context

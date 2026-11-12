@@ -296,6 +296,7 @@ class RonMistralModel(MistralModel):
         if self.reasoning_effort:
             # Values outside the SDK literal (``max``) are added on the wire by the hook.
             request["reasoning_effort"] = self.reasoning_effort
+        self._tool_results_before_user_messages(messages, request["messages"])
         self._replay_reasoning(messages, request["messages"])
         return request
 
@@ -325,7 +326,45 @@ class RonMistralModel(MistralModel):
             await load_capability("mistral", self.config["model_id"])
 
     @staticmethod
-    def _replay_reasoning(messages: Messages, formatted: list[dict[str, Any]]) -> None:
+    def _yields_vended_role_message(blocks: Sequence[Mapping[str, Any]]) -> bool:
+        for b in blocks:
+            if "cachePoint" in b:
+                continue
+            if "image" in b and "location" in (b["image"].get("source") or {}):
+                continue
+            if "text" in b or "image" in b or "toolUse" in b:
+                return True
+        return False
+
+    @classmethod
+    def _tool_results_before_user_messages(cls, messages: Messages, formatted: list[dict[str, Any]]) -> None:
+        """Keep ``role: "tool"`` messages ahead of ``role: "user"`` when one source message holds both.
+
+        During a tool loop, SDK injection middleware (``ContextInjector``, memory injection) appends
+        ``dynamic_trailing_blocks`` ``text`` onto the trailing ``user`` message that carries ``toolResult``
+        blocks. The vended ``MistralModel._format_request_messages`` appends the ``user`` message before
+        extending ``tool_messages``, producing ``assistant -> user -> tool``, which Mistral rejects with
+        HTTP 400 code 3230 (``Unexpected role 'tool' after role 'user'``).
+        """
+        cursor = 1 if formatted and formatted[0].get("role") == "system" else 0
+        for source in messages:
+            blocks = list(source["content"])
+            has_role_msg = cls._yields_vended_role_message(blocks)
+            tool_results = sum(1 for b in blocks if "toolResult" in b)
+            span = (1 if has_role_msg else 0) + tool_results
+            if cursor + span > len(formatted):
+                return
+            if source["role"] == "user" and has_role_msg and tool_results:
+                if (
+                    formatted[cursor].get("role") == "user"
+                    and all(formatted[cursor + 1 + i].get("role") == "tool" for i in range(tool_results))
+                ):
+                    user_msg = formatted[cursor]
+                    formatted[cursor : cursor + span] = [*formatted[cursor + 1 : cursor + span], user_msg]
+            cursor += span
+
+    @classmethod
+    def _replay_reasoning(cls, messages: Messages, formatted: list[dict[str, Any]]) -> None:
         """Replay stored ``reasoningContent`` as ``thinking`` chunks on assistant messages.
 
         The vended formatter skips ``reasoningContent`` blocks. Mistral asks callers to replay
@@ -336,24 +375,22 @@ class RonMistralModel(MistralModel):
         assistant message are passed through from the vended rendering. ``redactedContent``
         has no Mistral representation and is skipped.
         """
-        # Re-derive the vended formatter's source -> target mapping instead of counting roles:
-        # each source message yields one role message iff it has text/image/toolUse, then one
-        # ``tool`` message per toolResult.
-        cursor = 0
+        cursor = 1 if formatted and formatted[0].get("role") == "system" else 0
         for source in messages:
             blocks = list(source["content"])
-            yields_role_message = any(("text" in b or "image" in b or "toolUse" in b) for b in blocks)
+            yields_role_message = cls._yields_vended_role_message(blocks)
             tool_results = sum(1 for b in blocks if "toolResult" in b)
+            if source["role"] != "assistant":
+                cursor += (1 if yields_role_message else 0) + tool_results
+                continue
             target: dict[str, Any] | None = None
             if yields_role_message:
-                if cursor >= len(formatted) or formatted[cursor].get("role") != source["role"]:
+                if cursor >= len(formatted) or formatted[cursor].get("role") != "assistant":
                     return  # unexpected shape: leave the vended request untouched
                 target = formatted[cursor]
                 cursor += 1
             insert_at = cursor
             cursor += tool_results
-            if source["role"] != "assistant":
-                continue
             rendered = _reasoning_aware_content(blocks, target.get("content") if target else None)
             if rendered is None:
                 continue

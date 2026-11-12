@@ -2,6 +2,7 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState, type FormEven
 import { Check, Loader2, LogOut, UserPlus, Users, X } from 'lucide-react'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Button } from '@/components/ui/button'
+import { openInternalUrl } from '@/components/board/task-detail/editor/extensions/blocks/workspace'
 import { projectsRequestFor, useProjectsStore } from '@/stores/projectsStore'
 import {
   EMAIL_MAX, emailProblem, initials, inviteMember, isCurrentMember, listMembers, orderMembers, removeMember, withMember,
@@ -154,7 +155,7 @@ export function ProjectPeople({ project, people }: { project: Project; people: P
       }
       close()
       // The project left this account: go back to the list and reload it without the project.
-      void window.electron?.browser?.navigate('ron://projects')
+      openInternalUrl('ron://projects')
       void refreshFromServer()
     } catch (cause) {
       setActionError(messageOf(cause))
