@@ -22,6 +22,9 @@ NVIDIA_NIM_API_KEY = os.getenv("NVIDIA_NIM_API_KEY")
 # NVIDIA NIM hosted endpoint (OpenAI-compatible chat completions): https://docs.api.nvidia.com/nim/reference/
 NVIDIA_NIM_BASE_URL = os.getenv("NVIDIA_NIM_BASE_URL") or "https://integrate.api.nvidia.com/v1"
 NIM_DEFAULT_MODEL = os.getenv("NIM_MODEL") or "z-ai/glm-5.3-flash"
+#: Seconds any NIM chat-completions call may go without sending a byte (first byte included) before raising
+#: APITimeoutError into Strands' retry/router strategy (`max_retries=0` on AsyncOpenAI). 0 = unbounded.
+NIM_READ_TIMEOUT = float(os.getenv("NIM_READ_TIMEOUT", "60"))
 PERPLEXITY_API_KEY = os.getenv("PERPLEXITY_API_KEY")
 MISTRAL_API_KEY = os.getenv("MISTRAL_API_KEY")
 

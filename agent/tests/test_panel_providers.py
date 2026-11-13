@@ -340,17 +340,25 @@ def test_config_schema_and_hosted_tool_separation(provider):
 
 
 def test_nim_is_the_default_provider_and_builds_the_sdk_openai_model(monkeypatch):
+    import httpx
     from strands.models.openai import OpenAIModel
 
     from agent.api.core import config as app_config
+    from agent.api.core.nim_model import RonNIMModel
 
     monkeypatch.setattr(app_config, "NVIDIA_NIM_API_KEY", "nvapi-test")
     monkeypatch.setattr(app_config, "MISTRAL_API_KEY", "mistral-test")
+    monkeypatch.delenv("NIM_READ_TIMEOUT", raising=False)
     assert panel_agent.default_selection() == ("nim", "z-ai/glm-5.3-flash")
 
     model = panel_agent.build_model("nim", "z-ai/glm-5.3-flash", "max")
-    assert type(model) is OpenAIModel
-    assert model.client_args == {"api_key": "nvapi-test", "base_url": "https://integrate.api.nvidia.com/v1"}
+    assert type(model) is RonNIMModel and isinstance(model, OpenAIModel)
+    assert model.client_args == {
+        "api_key": "nvapi-test",
+        "base_url": "https://integrate.api.nvidia.com/v1",
+        "max_retries": 0,
+        "timeout": httpx.Timeout(app_config.NIM_READ_TIMEOUT, connect=10.0),
+    }
     config = model.get_config()
     assert config["model_id"] == "z-ai/glm-5.3-flash" and config["params"] == {"reasoning_effort": "max"}
     assert config["context_window_limit"] == 1_048_576
