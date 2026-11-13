@@ -21,11 +21,11 @@ export const DEFAULT_AGENT_MODEL = ''
 
 const API = API_BASE_URL
 const PROVIDERS = [
+  { id: 'gemini', label: 'Gemini AI Studio' },
   { id: 'nim', label: 'NVIDIA NIM' },
   { id: 'perplexity', label: 'Perplexity' },
   { id: 'openai', label: 'OpenAI' },
   { id: 'anthropic', label: 'Anthropic' },
-  { id: 'gemini', label: 'Gemini AI Studio' },
   { id: 'xai', label: 'xAI' },
   { id: 'mistral', label: 'Mistral' },
 ] as const

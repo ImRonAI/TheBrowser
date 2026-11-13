@@ -22,7 +22,7 @@ export interface AgentChoice {
 export const RON_AGENT: AgentChoice = { kind: 'ron', id: '', name: 'Ren', description: 'Your browser agent, with every tool.' }
 
 /** Providers the panel can run (mirrors ModelSelector's list and the backend's PROVIDERS). */
-const PROVIDERS = new Set(['nim', 'perplexity', 'openai', 'anthropic', 'gemini', 'xai', 'mistral'])
+const PROVIDERS = new Set(['gemini', 'nim', 'perplexity', 'openai', 'anthropic', 'xai', 'mistral'])
 
 export function agentTarget(agent: AgentChoice): { kind: AgentKind; id: string } {
   return { kind: agent.kind, id: agent.kind === 'ron' ? '' : agent.id }

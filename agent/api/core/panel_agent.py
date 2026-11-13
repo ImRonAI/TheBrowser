@@ -61,6 +61,7 @@ from strands.tools import ToolProvider
 from strands.tools.mcp import MCPClient
 from strands.types.tools import AgentTool, ToolContext
 
+from agent.api.core import config as app_config
 from agent.api.core.render_ui_tool import render_ui_directive
 from agent.api.core.config import DEFAULT_MEMORY_MODEL
 from agent.api.core.config import (
@@ -425,8 +426,6 @@ def config_path(provider: ProviderName) -> Path:
 
 
 def provider_api_key(provider: ProviderName) -> str | None:
-    from agent.api.core import config as app_config
-
     if provider == "perplexity":
         return app_config.PERPLEXITY_API_KEY if app_config.perplexity_agent_api_enabled() else None
     if provider in ("openai", "anthropic"):
@@ -442,8 +441,6 @@ def provider_api_key(provider: ProviderName) -> str | None:
 
 def provider_default_model(provider: ProviderName) -> str:
     if provider in ("openai", "anthropic"):
-        from agent.api.core import config as app_config
-
         fallback = OPENAI_DEFAULT_MODEL if provider == "openai" else ANTHROPIC_DEFAULT_MODEL
         return (
             os.getenv(f"{provider.upper()}_MODEL")
@@ -661,7 +658,6 @@ def _provider_model(
     if provider == "nim":
         if not provider_api_key("nim"):
             raise ValueError("NVIDIA_NIM_API_KEY is not configured.")
-        from agent.api.core import config as app_config
         from agent.api.core.nim_model import RonNIMModel
 
         supported = NIM_REASONING_EFFORTS_BY_MODEL.get(model_id, ())
@@ -1424,6 +1420,7 @@ def list_provider_models(provider: ProviderName) -> list[dict[str, str]]:
             if actions and "generateContent" not in actions:
                 continue
             models.append({"id": model_id, "owned_by": "google", "provider": "gemini"})
+        models.sort(key=lambda item: 0 if item["id"] == GEMINI_DEFAULT_MODEL else 1)
         return models or [
             {"id": model_id, "owned_by": "google", "provider": "gemini"}
             for model_id in GEMINI_FALLBACK_MODELS

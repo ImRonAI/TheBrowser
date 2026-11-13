@@ -2,6 +2,8 @@
   "venvPath": "/Users/tims-stuff/RonBrowserRebuild",
   "venv": "venv",
   "extraPaths": [
+    "/Users/tims-stuff/RonBrowserRebuild",
+    "/Users/tims-stuff/RonBrowserRebuild/agent/api/core/harness-sdk/strands-py/src",
     "/Users/tims-stuff/RonBrowserRebuild/venv/lib/python3.14/site-packages"
   ]
 }
