@@ -36,7 +36,8 @@ google-genai==2.24.0
 strands-harness==0.1.2
 strands-agents-evals==1.4.0
 huggingface_hub==1.20.1
-strands-agents-tools>=0.8.5
+# 0.9.0 removed strands_tools.editor (and other tools the panel loads); stay on 0.8.x.
+strands-agents-tools>=0.8.5,<0.9
 strands-xai==0.6.1
 xai-sdk==1.19.0
 perplexityai==0.43.5
@@ -52,3 +53,7 @@ playwright==1.57.0
 
 # MCP (Model Context Protocol)
 mcp==1.26.0
+
+# Tests (./venv/bin/python -m pytest agent/tests -q)
+pytest==9.2.0
+pytest-asyncio==1.4.1.post1
