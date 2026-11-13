@@ -48,8 +48,8 @@ from agent.api.core import config as app_config
 from agent.api.core.brave_answers_tool import answers_client
 from agent.api.core.brave_search import BraveSearchError
 from agent.api.core.panel_agent import (
-    NIM_REASONING_EFFORTS_BY_MODEL, PROVIDERS, build_model, mistral_reasoning_efforts, provider_api_key,
-    xai_reasoning_efforts,
+    NIM_REASONING_EFFORTS_BY_MODEL, PROVIDERS, build_model, gemini_thinking_levels, mistral_reasoning_efforts,
+    provider_api_key, xai_reasoning_efforts,
 )
 from agent.api.core.xai_model import XAIStatePruner
 
@@ -149,7 +149,7 @@ def resolve_search_effort(
     if desired in ("auto", "off", "none", ""):
         desired = LEVEL_REASONING_EFFORT.get(level, "low")  # type: ignore[arg-type]
     supported = {
-        "xai": xai_reasoning_efforts, "mistral": mistral_reasoning_efforts,
+        "xai": xai_reasoning_efforts, "mistral": mistral_reasoning_efforts, "gemini": gemini_thinking_levels,
         "nim": lambda model: NIM_REASONING_EFFORTS_BY_MODEL.get(model, ()),
     }.get(provider, lambda model: ())(model_id)
     if not supported:

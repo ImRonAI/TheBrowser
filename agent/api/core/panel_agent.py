@@ -102,14 +102,14 @@ from agent.api.core.panel_tools import (
 
 logger = logging.getLogger(__name__)
 
-ProviderName = Literal["nim", "perplexity", "xai", "mistral", "gemini", "openai", "anthropic"]
+ProviderName = Literal["gemini", "nim", "perplexity", "xai", "mistral", "openai", "anthropic"]
 #: Order is preference: the first configured provider is the default (``default_selection``).
 PROVIDERS: tuple[ProviderName, ...] = (
+    "gemini",
     "nim",
     "perplexity",
     "xai",
     "mistral",
-    "gemini",
     "openai",
     "anthropic",
 )
@@ -185,7 +185,9 @@ ANTHROPIC_HOSTED_TOOLS_DEFAULT = ("web_search", "web_fetch")
 
 # https://ai.google.dev/gemini-api/docs/{google-search,url-context,code-execution,tool-combination}
 GEMINI_HOSTED_TOOLS = ("google_search", "url_context", "code_execution")
-GEMINI_HOSTED_TOOLS_DEFAULT = GEMINI_HOSTED_TOOLS
+# Temporarily commented out due to Gemini free tier until bill can be paid:
+# GEMINI_HOSTED_TOOLS_DEFAULT = GEMINI_HOSTED_TOOLS
+GEMINI_HOSTED_TOOLS_DEFAULT: tuple[str, ...] = ()
 
 NATIVE_PROVIDER_CAPABILITIES = {
     "perplexity": {
@@ -352,6 +354,7 @@ MISTRAL_REASONING_EFFORTS_EXCLUDED: tuple[str, ...] = (
 #: ``400 "Thinking level is not supported for this model"`` and return no efforts.
 #: Ordered lowest to highest. Longest prefix wins.
 GEMINI_THINKING_LEVELS_BY_MODEL: dict[str, tuple[str, ...]] = {
+    "gemini-4-hydrogen": ("low", "medium", "high"),
     "gemini-3.8-flash": ("low", "medium", "high"),
     "gemini-3.7-flash": ("low", "medium", "high"),
     "gemini-3.6-flash": ("minimal", "low", "medium", "high"),
@@ -391,6 +394,7 @@ GEMINI_THINKING_LEVELS_EXCLUDED_SUFFIXES: tuple[str, ...] = (
 
 #: Documented popular Gemini models used when live listing is unavailable.
 GEMINI_FALLBACK_MODELS = (
+    "gemini-4-hydrogen",
     "gemini-2.5-pro",
     "gemini-2.5-flash",
     "gemini-2.5-flash-lite",
@@ -607,15 +611,17 @@ def anthropic_hosted_tools() -> list[dict[str, Any]]:
 
 def gemini_hosted_tools() -> list[Any]:
     """Gemini built-in tools as genai Tool objects for the `gemini_tools` adapter config."""
-    from google import genai
-
-    builders = {
-        "google_search": lambda: genai.types.Tool(google_search=genai.types.GoogleSearch()),
-        "url_context": lambda: genai.types.Tool(url_context=genai.types.UrlContext()),
-        "code_execution": lambda: genai.types.Tool(code_execution=genai.types.ToolCodeExecution()),
-    }
-    return [builders[name]() for name in
-            _hosted_tool_names("GEMINI_HOSTED_TOOLS", GEMINI_HOSTED_TOOLS, GEMINI_HOSTED_TOOLS_DEFAULT)]
+    # Temporarily commented out due to Gemini free tier until bill can be paid:
+    # from google import genai
+    #
+    # builders = {
+    #     "google_search": lambda: genai.types.Tool(google_search=genai.types.GoogleSearch()),
+    #     "url_context": lambda: genai.types.Tool(url_context=genai.types.UrlContext()),
+    #     "code_execution": lambda: genai.types.Tool(code_execution=genai.types.ToolCodeExecution()),
+    # }
+    # return [builders[name]() for name in
+    #         _hosted_tool_names("GEMINI_HOSTED_TOOLS", GEMINI_HOSTED_TOOLS, GEMINI_HOSTED_TOOLS_DEFAULT)]
+    return []
 
 
 def build_model(
@@ -799,22 +805,24 @@ def _provider_model(
 
         from agent.api.core.gemini_model import RonGeminiModel
 
-        gemini_tools = gemini_hosted_tools() if hosted_tools else []
-        if model_id.startswith("gemma"):
-            # Gemma on the Gemini API answers 400 "Url Context as tool is not enabled for this model".
-            gemini_tools = [item for item in gemini_tools if item.url_context is None]
+        # Temporarily commented out due to Gemini free tier until bill can be paid:
+        # gemini_tools = gemini_hosted_tools() if hosted_tools else []
+        # if model_id.startswith("gemma"):
+        #     # Gemma on the Gemini API answers 400 "Url Context as tool is not enabled for this model".
+        #     gemini_tools = [item for item in gemini_tools if item.url_context is None]
         return RonGeminiModel(
             client_args={"api_key": provider_api_key("gemini")},
             model_id=model_id,
-            gemini_tools=gemini_tools,
+            # gemini_tools=gemini_tools,
             params={
                 # Gemini rejects built-in tools combined with function calling
                 # unless this is set (400 INVALID_ARGUMENT). The adapter honours
                 # an explicit tool_config in params over its tool_choice mapping.
-                "tool_config": genai.types.ToolConfig(
-                    include_server_side_tool_invocations=True,
-                    function_calling_config=genai.types.FunctionCallingConfig(mode="AUTO"),
-                ),
+                # Temporarily commented out due to Gemini free tier until bill can be paid:
+                # "tool_config": genai.types.ToolConfig(
+                #     include_server_side_tool_invocations=True,
+                #     function_calling_config=genai.types.FunctionCallingConfig(mode="AUTO"),
+                # ),
                 # Stream thought summaries; the adapter maps part.thought=True to
                 # reasoningContent deltas, which the panel renders as chain of thought.
                 # thinking_level is the panel's reasoning effort for Gemini.

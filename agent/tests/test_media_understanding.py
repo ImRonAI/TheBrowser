@@ -136,12 +136,13 @@ def test_media_tools_lets_a_seeing_lead_look_itself():
 
     assert names("mistral", "zai-glm-5-3-flash") == ["view_media"]
     assert names("xai", "grok-4.7") == ["view_media"]
+    assert names("gemini", "gemini-4-hydrogen") == ["view_media"]
     assert names("gemini", "gemini-3.8-flash") == ["view_media"]
     assert names("mistral", "zai-glm-5-3") == ["understand_media"]
     assert names("gemini", "gemini-2.5-pro") == ["understand_media"]
     assert names("perplexity", "openai/gpt-6.1-sol") == ["understand_media"]
     assert "view_media" in media.CONTEXT_READING and "understand_media" in media.CONTEXT_READING
-    assert media.media_model() == ("mistral", "zai-glm-5-3-flash")
+    assert media.media_model() == ("gemini", "gemini-4-hydrogen")
 
 
 # --- a seeing lead gets native image blocks -------------------------------------------------------------
@@ -259,6 +260,7 @@ def test_a_gemini_3_lead_gets_function_response_parts_and_gemini_2_5_keeps_the_v
 def test_understand_media_sends_the_image_to_glm_5_3_flash(monkeypatch, png):
     _serve_attachment(monkeypatch, png, "image/png")
     wire = MistralWire(_chunk({"content": "A solid red rectangle with no text."}, "stop"))
+    monkeypatch.setattr(media, "MEDIA_MODEL", "mistral/zai-glm-5-3-flash")
     monkeypatch.setattr(media, "build_media_model", lambda: wire.model("zai-glm-5-3-flash"))
     [understand_media] = media.media_tools(lambda: None, provider="openai", model_id="offline")
 

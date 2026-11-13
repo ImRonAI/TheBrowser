@@ -317,6 +317,8 @@ def test_mistral_efforts_are_documented_not_probed(monkeypatch, model, expected)
 @pytest.mark.parametrize("model,expected", [
     # https://ai.google.dev/gemini-api/docs/thinking "Controlling thinking" table +
     # image-generation guide, confirmed live on generateContent 2026-10-09.
+    ("gemini-4-hydrogen", ["low", "medium", "high"]),
+    ("models/gemini-4-hydrogen", ["low", "medium", "high"]),
     ("gemini-3.8-flash", ["low", "medium", "high"]),
     ("gemini-3.7-flash", ["low", "medium", "high"]),
     ("gemini-3.6-flash", ["minimal", "low", "medium", "high"]),

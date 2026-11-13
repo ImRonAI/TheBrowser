@@ -73,7 +73,7 @@ GEMINI_INPUTS: dict[str, frozenset[str]] = {
     **{model: _ALL for model in (
         "gemini-3.8-flash", "gemini-3.7-flash", "gemini-3.6-flash", "gemini-3.5-flash", "gemini-3.5-flash-lite",
         "gemini-3.1-pro-preview", "gemini-3.1-flash-lite", "gemini-3.1-flash-lite-preview", "gemini-3-flash-preview",
-        "gemini-4-argon",
+        "gemini-4-hydrogen", "gemini-4-argon",
     )},
     # Documented as a separate endpoint of Gemini 3.1 Pro Preview (gemini-3.1-pro-preview#gemini-31-pro-preview-customtools).
     "gemini-3.1-pro-preview-customtools": _ALL,
@@ -212,7 +212,7 @@ def media_capability(provider: str, model_id: str) -> MediaCapability:
         if model_id not in GEMINI_INPUTS:
             return _unknown(provider, model_id, f"no model page under {GEMINI_MODEL_DOCS}")
         inputs = GEMINI_INPUTS[model_id]
-        native = "image" in inputs and model_id.startswith("gemini-3")
+        native = "image" in inputs and model_id.startswith(("gemini-3", "gemini-4"))
         return MediaCapability(provider, model_id, inputs, tool_result_images=native,
                                source=f"{GEMINI_MODEL_DOCS}{model_id}; {GEMINI_MULTIMODAL_FUNCTION_RESPONSES}")
     if provider == "anthropic":

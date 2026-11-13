@@ -86,7 +86,7 @@ XAI_MODEL = os.getenv("XAI_MODEL", "grok-4.5")
 XAI_DEFAULT_MODEL = XAI_MODEL
 
 # Gemini AI Studio / Mistral defaults from the Strands provider docs.
-GEMINI_DEFAULT_MODEL = os.getenv("GEMINI_MODEL") or "gemini-flash-latest"
+GEMINI_DEFAULT_MODEL = os.getenv("GEMINI_MODEL") or "gemini-4-hydrogen"
 
 # --- Live Music (Lyria RealTime) for the Live agent's music_* tools (core/live_music.py) ---
 #: ``client.aio.live.music.connect(model=...)`` model resource name (experimental preview model).
@@ -214,9 +214,8 @@ DEFAULT_MEMORY_MODEL = "google/gemini-3.5-flash-lite"
 
 # --- Media intake (core/media_understanding.py, core/media_capabilities.py) ---
 #: `<provider>/<model id>` that looks at media for a lead model that cannot see images (`understand_media`).
-#: GLM 5.3 Flash on Mistral: input "text, image" (docs.mistral.ai/models/zai-glm-5-3-flash), `capabilities.vision`
-#: true in GET /v1/models. A multimodal lead never uses it: it gets `view_media` and looks itself.
-RON_MEDIA_MODEL = os.getenv("RON_MEDIA_MODEL", "mistral/zai-glm-5-3-flash")
+#: Defaults to `gemini/gemini-4-hydrogen`. A multimodal lead never uses it: it gets `view_media` and looks itself.
+RON_MEDIA_MODEL = os.getenv("RON_MEDIA_MODEL", "gemini/gemini-4-hydrogen")
 #: Still frames sampled from a video (ffmpeg). Mistral vision accepts at most 8 images per request
 #: (docs.mistral.ai/studio/conversations/vision).
 RON_MEDIA_MAX_FRAMES = max(1, int(os.getenv("RON_MEDIA_MAX_FRAMES", "8")))
@@ -260,12 +259,12 @@ RON_TOOL_REPAIR_TIMEOUT_S = int(os.getenv("RON_TOOL_REPAIR_TIMEOUT_S", "900"))
 
 # --- Browser search (`endpoints/search.py`, `core/search_agent.py`) ---
 #: Model provider for the Strands Harness search agent (follow-up conversation) and the shopping
-#: agent (default: NVIDIA NIM). The first answer to a query is Brave Answers, not this model.
-RON_SEARCH_PROVIDER = os.getenv("RON_SEARCH_PROVIDER", "nim").strip().lower() or "nim"
-#: Search agent model id (default: GLM-5.3-Flash on NIM).
-RON_SEARCH_AGENT_MODEL = os.getenv("RON_SEARCH_AGENT_MODEL", "z-ai/glm-5.3-flash")
-#: Shopping agent model id (default: GLM-5.3-Flash on NIM).
-RON_SEARCH_SHOPPING_MODEL = os.getenv("RON_SEARCH_SHOPPING_MODEL", "z-ai/glm-5.3-flash")
+#: agent (default: Gemini AI Studio). The first answer to a query is Brave Answers, not this model.
+RON_SEARCH_PROVIDER = os.getenv("RON_SEARCH_PROVIDER", "gemini").strip().lower() or "gemini"
+#: Search agent model id (default: gemini-4-hydrogen).
+RON_SEARCH_AGENT_MODEL = os.getenv("RON_SEARCH_AGENT_MODEL", "gemini-4-hydrogen")
+#: Shopping agent model id (default: gemini-4-hydrogen).
+RON_SEARCH_SHOPPING_MODEL = os.getenv("RON_SEARCH_SHOPPING_MODEL", "gemini-4-hydrogen")
 #: Default search level when the client omits one (see search_agent.SEARCH_LEVELS).
 RON_SEARCH_DEFAULT_LEVEL = os.getenv("RON_SEARCH_DEFAULT_LEVEL", "low")
 #: Optional domain allowlist; defaults to [] (unrestricted online + brick-and-mortar search).

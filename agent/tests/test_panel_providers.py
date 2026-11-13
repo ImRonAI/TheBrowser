@@ -296,19 +296,28 @@ def test_gemini_xai_mistral_hosted_tools(monkeypatch):
     monkeypatch.setattr(app_config, "MISTRAL_API_KEY", "test-key")
     monkeypatch.setattr(panel_agent, "XAI_NATIVE_TOOLS_ENABLED", True)
     monkeypatch.delenv("GEMINI_HOSTED_TOOLS", raising=False)  # the default, whatever the local .env says
-    gemini = panel_agent.build_model("gemini", "gemini-flash-latest")
-    assert [t.model_dump(exclude_none=True) for t in gemini.config["gemini_tools"]] == [
-        {"google_search": {}}, {"url_context": {}}, {"code_execution": {}},
-    ]
-    assert gemini.config["params"]["tool_config"].include_server_side_tool_invocations is True
+    gemini = panel_agent.build_model("gemini", "gemini-4-hydrogen")
+    # Temporarily commented out due to Gemini free tier until bill can be paid:
+    # assert [t.model_dump(exclude_none=True) for t in gemini.config["gemini_tools"]] == [
+    #     {"google_search": {}}, {"url_context": {}}, {"code_execution": {}},
+    # ]
+    # assert gemini.config["params"]["tool_config"].include_server_side_tool_invocations is True
+    assert panel_agent.gemini_hosted_tools() == []
+    assert "gemini_tools" not in gemini.config
+    assert "tool_config" not in gemini.config["params"]
     assert gemini.config["params"]["thinking_config"].include_thoughts is True
     # Gemma on the Gemini API rejects url_context (400 "Url Context as tool is not enabled for this model").
     gemma = panel_agent.build_model("gemini", "gemma-4-31b-it")
-    assert [t.model_dump(exclude_none=True) for t in gemma.config["gemini_tools"]] == [
-        {"google_search": {}}, {"code_execution": {}},
-    ]
+    # Temporarily commented out due to Gemini free tier until bill can be paid:
+    # assert [t.model_dump(exclude_none=True) for t in gemma.config["gemini_tools"]] == [
+    #     {"google_search": {}}, {"code_execution": {}},
+    # ]
+    # monkeypatch.setenv("GEMINI_HOSTED_TOOLS", "google_search")
+    # assert len(panel_agent.build_model("gemini", "gemini-flash-latest").config["gemini_tools"]) == 1
+    assert "gemini_tools" not in gemma.config
     monkeypatch.setenv("GEMINI_HOSTED_TOOLS", "google_search")
-    assert len(panel_agent.build_model("gemini", "gemini-flash-latest").config["gemini_tools"]) == 1
+    assert panel_agent.gemini_hosted_tools() == []
+    assert "gemini_tools" not in panel_agent.build_model("gemini", "gemini-4-hydrogen").config
     xai = panel_agent.build_model("xai", "grok-4.6")
     assert xai.config["include"] == ["inline_citations", "web_search_call_output", "x_search_call_output"]
     assert len(xai.config["xai_tools"]) == 3
@@ -348,3 +357,24 @@ def test_nim_is_the_default_provider_and_builds_the_sdk_openai_model(monkeypatch
     assert "params" not in panel_agent.build_model("nim", "z-ai/glm-5.3-flash").get_config()
     with pytest.raises(ValueError, match="supported: low, high, max"):
         panel_agent.build_model("nim", "z-ai/glm-5.3-flash", "medium")
+
+
+def test_gemini_4_hydrogen_is_the_primary_default_text_agent_and_live_stays_3_8_live(monkeypatch):
+    from agent.api.core import config as app_config
+    from agent.api.core.gemini_model import RonGeminiModel
+    from agent.api.endpoints import bidi
+
+    monkeypatch.setattr(app_config, "GEMINI_API_KEY", "gemini-free-tier-test")
+    monkeypatch.setattr(app_config, "NVIDIA_NIM_API_KEY", "nvapi-test")
+    monkeypatch.setattr(app_config, "MISTRAL_API_KEY", "mistral-test")
+    assert panel_agent.provider_default_model("gemini") == "gemini-4-hydrogen"
+    assert panel_agent.default_selection() == ("gemini", "gemini-4-hydrogen")
+    assert bidi.DEFAULT_MODEL == "gemini-3.8-live"
+
+    model = panel_agent.build_model("gemini", "gemini-4-hydrogen", "high")
+    assert type(model) is RonGeminiModel
+    assert model.config["model_id"] == "gemini-4-hydrogen"
+    assert "gemini_tools" not in model.config
+    assert model.config["params"]["thinking_config"].thinking_level == "HIGH"
+    with pytest.raises(ValueError, match="supported: low, medium, high"):
+        panel_agent.build_model("gemini", "gemini-4-hydrogen", "minimal")

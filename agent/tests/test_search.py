@@ -82,6 +82,7 @@ def _offline_answers(monkeypatch):
     from agent.api.core import brave_answers_tool
 
     monkeypatch.setattr(brave_answers_tool, "_CLIENT", answers(None))
+    monkeypatch.setattr(sa.app_config, "GEMINI_API_KEY", None)
     sa.clear_search_sessions()
 
 
@@ -104,8 +105,7 @@ def parse_sse(text: str) -> list[tuple[str, dict]]:
 def test_agent_request_preset_with_model_override():
     request = sa.build_agent_request("best ebikes", "medium")
     assert request["preset"] == "medium" and request["model"] == sa.RON_SEARCH_AGENT_MODEL
-    # GLM-5.3-Flash accepts low | high | max: medium maps up to high.
-    assert request["provider"] == "nim" and request["effort"] == "high"
+    assert request["provider"] == "gemini" and request["effort"] == "medium"
     assert request["stream"] is True and request["input"] == "best ebikes"
     tool_types = [tool["type"] for tool in request["tools"]]
     assert tool_types == ["web_search", "image_search", "fetch_url", "subagent"]
@@ -115,7 +115,7 @@ def test_shopping_request_unrestricted_online_and_local_by_default():
     request = sa.build_shopping_request("ebike")
     assert "preset" not in request
     assert request["model"] == sa.RON_SEARCH_SHOPPING_MODEL
-    assert request["provider"] == "nim"
+    assert request["provider"] == "gemini"
     tools = {tool["type"]: tool for tool in request["tools"]}
     assert set(tools) == {"web_search", "local_search", "fetch_url", "image_search"}
     # Unrestricted by default so both online retailers and brick-and-mortar stores are returned.
@@ -127,21 +127,21 @@ def test_shopping_request_unrestricted_online_and_local_by_default():
 
 
 def test_native_strands_harness_configs_and_progressive_efforts(monkeypatch, tmp_path):
-    from strands.models.openai import OpenAIModel
+    from agent.api.core.gemini_model import RonGeminiModel
 
-    monkeypatch.setattr(sa.app_config, "NVIDIA_NIM_API_KEY", "nvapi-test-key")
+    monkeypatch.setattr(sa.app_config, "GEMINI_API_KEY", "gemini-test-key")
 
-    # level -> (config effort, the effort GLM-5.3-Flash is sent: low | high | max)
+    # level -> (config effort, the thinking_level gemini-4-hydrogen is sent: LOW | MEDIUM | HIGH)
     expected_efforts = {
-        "fast": ("low", "low"),
-        "low": ("low", "low"),
-        "medium": ("medium", "high"),
-        "high": ("high", "high"),
-        "xhigh": ("xhigh", "max"),
+        "fast": ("low", "LOW"),
+        "low": ("low", "LOW"),
+        "medium": ("medium", "MEDIUM"),
+        "high": ("high", "HIGH"),
+        "xhigh": ("xhigh", "HIGH"),
     }
     for level, (config_effort, expected_effort) in expected_efforts.items():
         cfg = sa.load_search_harness_config(level)
-        assert cfg["model"] == "nim/z-ai/glm-5.3-flash"
+        assert cfg["model"] == "gemini/gemini-4-hydrogen"
         assert cfg["effort"] == config_effort
         assert cfg["instructions"] and len(cfg["instructions"]) > 80
         assert "xAI" not in cfg["instructions"] and "x_search" not in cfg["instructions"]
@@ -152,9 +152,10 @@ def test_native_strands_harness_configs_and_progressive_efforts(monkeypatch, tmp
             session_id=f"test-{level}",
             session_dir=tmp_path,
         )
-        assert type(agent.model) is OpenAIModel
-        assert agent.model.config["model_id"] == "z-ai/glm-5.3-flash"
-        assert agent.model.config["params"] == {"reasoning_effort": expected_effort}
+        assert type(agent.model) is RonGeminiModel
+        assert agent.model.config["model_id"] == "gemini-4-hydrogen"
+        assert "gemini_tools" not in agent.model.config
+        assert agent.model.config["params"]["thinking_config"].thinking_level == expected_effort
         assert not any(name.startswith("x_") or name == "web_search" for name in agent.tool_names)
         assert "subagent" in agent.tool_names
         assert "brave_web_search" in agent.tool_names
@@ -163,13 +164,15 @@ def test_native_strands_harness_configs_and_progressive_efforts(monkeypatch, tmp
         assert agent._session_manager is not None
 
     shop_cfg = sa.load_search_harness_config("shopping")
-    assert shop_cfg["model"] == "nim/z-ai/glm-5.3-flash"
+    assert shop_cfg["model"] == "gemini/gemini-4-hydrogen"
     assert "xAI" not in shop_cfg["instructions"]
     assert shop_cfg["effort"] == "medium"
     assert shop_cfg["session"] is False
     shop_agent = sa.build_shopping_harness(location={"location": "Seattle, WA"}, country="US")
-    assert shop_agent.model.config["model_id"] == "z-ai/glm-5.3-flash"
-    assert shop_agent.model.config["params"] == {"reasoning_effort": "high"}
+    assert type(shop_agent.model) is RonGeminiModel
+    assert shop_agent.model.config["model_id"] == "gemini-4-hydrogen"
+    assert "gemini_tools" not in shop_agent.model.config
+    assert shop_agent.model.config["params"]["thinking_config"].thinking_level == "MEDIUM"
     assert "brave_local_search" in shop_agent.tool_names
     assert "Seattle, WA" in (shop_agent.system_prompt or "")
 
@@ -330,7 +333,7 @@ def test_search_status(monkeypatch):
 
     monkeypatch.setattr(search_ep, "PERPLEXITY_API_KEY", "pplx-test")
     monkeypatch.setattr(search_ep, "XAI_API_KEY", "xai-test")
-    monkeypatch.setattr(sa.app_config, "NVIDIA_NIM_API_KEY", "nvapi-test")
+    monkeypatch.setattr(sa.app_config, "GEMINI_API_KEY", "gemini-test")
     monkeypatch.setattr(brave_answers_tool, "_CLIENT", answers())
 
     async def scenario():
@@ -343,7 +346,7 @@ def test_search_status(monkeypatch):
     body = asyncio.run(scenario())
     assert body["configured"] == {"brave": True, "xai": True, "answers": True, "search_provider": True,
                                   "perplexity": True}
-    assert body["provider"] == "nim"
+    assert body["provider"] == "gemini"
     assert body["levels"] == list(sa.SEARCH_LEVELS)
     assert body["reasoning_efforts"] == dict(sa.LEVEL_REASONING_EFFORT)
     assert body["models"] == {"agent": sa.RON_SEARCH_AGENT_MODEL, "shopping": sa.RON_SEARCH_SHOPPING_MODEL}
@@ -392,7 +395,7 @@ def test_new_search_is_brave_answers_plus_glm_shopping_and_follow_up_is_the_glm_
     from agent.api.core import brave_answers_tool
 
     asked: list[dict] = []
-    monkeypatch.setattr(sa.app_config, "NVIDIA_NIM_API_KEY", "nvapi-test")
+    monkeypatch.setattr(sa.app_config, "GEMINI_API_KEY", "gemini-test")
     monkeypatch.setattr(brave_answers_tool, "_CLIENT", answers(recorded=asked))
 
     SHOPPING_REPORT = (
@@ -465,7 +468,7 @@ def test_new_search_is_brave_answers_plus_glm_shopping_and_follow_up_is_the_glm_
         by_initial.setdefault(name, []).append(data)
 
     assert by_initial["meta"][0]["session_id"] == "sess-42"
-    assert by_initial["meta"][0]["provider"] == "nim"
+    assert by_initial["meta"][0]["provider"] == "gemini"
     assert len(by_initial["section"]) == 5 and "source_error" not in by_initial
     # The answer is the Brave Answers stream itself: the documented body, its text and its citation.
     assert asked[0]["messages"] == [{"role": "user", "content": "breville bambino plus"}] and asked[0]["stream"] is True
@@ -473,9 +476,9 @@ def test_new_search_is_brave_answers_plus_glm_shopping_and_follow_up_is_the_glm_
     assert by_initial["agent.citation"] == [{"url": "https://www.breville.com/bes500", "title": "breville.com"}]
     assert by_initial["agent.sources"][0]["results"][0]["snippet"] == "ThermoJet heating"
     assert by_initial["agent.done"][0]["model"] == "brave/brave"
-    # Shopping is the GLM shopping agent, run directly.
-    assert built and built[0]["provider"] == "nim" and built[0]["model_id"] == "z-ai/glm-5.3-flash"
-    assert by_initial["shopping.done"][0]["model"] == "nim/z-ai/glm-5.3-flash"
+    # Shopping is the default shopping agent, run directly.
+    assert built and built[0]["provider"] == "gemini" and built[0]["model_id"] == "gemini-4-hydrogen"
+    assert by_initial["shopping.done"][0]["model"] == "gemini/gemini-4-hydrogen"
     shopping_sources = [item for batch in by_initial.get("shopping.sources", []) for item in batch["results"]]
     kinds = {item["url"]: item.get("kind") for item in shopping_sources}
     assert kinds.get("https://www.seattlecoffeegear.com/breville-bambino-plus") == "online"
@@ -494,9 +497,9 @@ def test_new_search_is_brave_answers_plus_glm_shopping_and_follow_up_is_the_glm_
     ]
     assert fake_agent.prompts == ["Does it have a 3-way solenoid valve?"]
     assert "Follow-up answer for: Does it have a 3-way solenoid valve?" in by_follow["agent.delta"][0]["text"]
-    assert by_follow["agent.done"][0]["model"] == "nim/z-ai/glm-5.3-flash" and by_follow["agent.done"][0]["effort"] == "high"
+    assert by_follow["agent.done"][0]["model"] == "gemini/gemini-4-hydrogen" and by_follow["agent.done"][0]["effort"] == "high"
     # Its shopping subagent still streams into the shopping lane.
-    assert by_follow["shopping.delta"] and by_follow["shopping.done"][0]["model"] == "nim/z-ai/glm-5.3-flash"
+    assert by_follow["shopping.delta"] and by_follow["shopping.done"][0]["model"] == "gemini/gemini-4-hydrogen"
 
 
 def test_a_failing_answer_lane_does_not_stop_shopping(monkeypatch):
@@ -505,7 +508,7 @@ def test_a_failing_answer_lane_does_not_stop_shopping(monkeypatch):
     def refuse(request: httpx.Request) -> httpx.Response:
         return httpx.Response(429, json={"error": {"code": "RATE_LIMITED", "detail": "slow down"}})
 
-    monkeypatch.setattr(sa.app_config, "NVIDIA_NIM_API_KEY", "nvapi-test")
+    monkeypatch.setattr(sa.app_config, "GEMINI_API_KEY", "gemini-test")
     monkeypatch.setattr(brave_answers_tool, "_CLIENT", bs.BraveAnswersClient(
         "answers-key", transport=httpx.MockTransport(refuse), limiter=bs.RateLimiter(1000)))
 
