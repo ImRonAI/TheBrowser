@@ -629,16 +629,22 @@ def build_model(
     model_id: str,
     reasoning_effort: str | None = None,
     *, hosted_tools: bool = True,
+    read_timeout: float | None = None,
 ) -> Any:
     """Construct the SDK (or community) model instance for ``provider``.
 
     Server-side tools stay on the model object, not on ``Agent.tools``. ``context_window_limit``
     is the model's real window from its provider's own metadata (``context_windows``) when the
     provider publishes one; otherwise the SDK's own resolution applies.
+
+    ``read_timeout`` (NIM and Mistral only) bounds every read of the HTTP exchange, the wait for the
+    first byte included: a provider that goes silent that long fails the call with its client's
+    timeout error instead of holding the stream open, and the client does not retry it. Unset, each
+    client keeps its own default.
     """
     from agent.api.core.context_windows import provider_context_window
 
-    model = _provider_model(provider, model_id, reasoning_effort, hosted_tools=hosted_tools)
+    model = _provider_model(provider, model_id, reasoning_effort, hosted_tools=hosted_tools, read_timeout=read_timeout)
     window = provider_context_window(provider, model_id)
     if window:
         model.update_config(context_window_limit=window)
@@ -650,19 +656,34 @@ def _provider_model(
     model_id: str,
     reasoning_effort: str | None,
     *, hosted_tools: bool,
+    read_timeout: float | None = None,
 ) -> Any:
     if provider == "nim":
         if not provider_api_key("nim"):
             raise ValueError("NVIDIA_NIM_API_KEY is not configured.")
-        from strands.models.openai import OpenAIModel
+        from agent.api.core import config as app_config
+        from agent.api.core.nim_model import RonNIMModel
 
         supported = NIM_REASONING_EFFORTS_BY_MODEL.get(model_id, ())
         if reasoning_effort and reasoning_effort not in supported:
             raise ValueError(f"{model_id} does not accept reasoning_effort={reasoning_effort!r}; "
                              + (f"supported: {', '.join(supported)}" if supported else "no efforts are documented"))
-        # The SDK's OpenAI chat-completions model against NIM's OpenAI-compatible endpoint.
-        return OpenAIModel(
-            client_args={"api_key": provider_api_key("nim"), "base_url": NVIDIA_NIM_BASE_URL},
+        raw_timeout = os.getenv("NIM_READ_TIMEOUT")
+        effective_timeout = (
+            read_timeout
+            if read_timeout is not None
+            else (float(raw_timeout) if raw_timeout is not None else app_config.NIM_READ_TIMEOUT)
+        )
+        client_args: dict[str, Any] = {
+            "api_key": provider_api_key("nim"),
+            "base_url": NVIDIA_NIM_BASE_URL,
+            "max_retries": 0,  # retries belong to the Strands retry strategy, not the HTTP client
+        }
+        if effective_timeout > 0:
+            # openai.AsyncOpenAI takes an httpx.Timeout; its own retries (2 by default) would repeat a silent call.
+            client_args["timeout"] = httpx.Timeout(effective_timeout, connect=min(10.0, effective_timeout))
+        return RonNIMModel(
+            client_args=client_args,
             model_id=model_id,
             **({"params": {"reasoning_effort": reasoning_effort}} if reasoning_effort else {}),
         )
@@ -755,6 +776,9 @@ def _provider_model(
             api_key=provider_api_key("mistral"),
             model_id=model_id,
             reasoning_effort=reasoning_effort or None,
+            # mistralai's per-operation ``timeout_ms`` is the httpx timeout of every phase, streaming reads
+            # included; the SDK retries nothing unless ``retry_config`` is set.
+            **({"client_args": {"timeout_ms": int(read_timeout * 1000)}} if read_timeout else {}),
         )
 
     if provider == "xai":
@@ -1335,7 +1359,12 @@ def list_provider_models(provider: ProviderName) -> list[dict[str, str]]:
             return []
         from openai import OpenAI
 
-        with OpenAI(api_key=provider_api_key("nim"), base_url=NVIDIA_NIM_BASE_URL) as client:
+        with OpenAI(
+            api_key=provider_api_key("nim"),
+            base_url=NVIDIA_NIM_BASE_URL,
+            timeout=15.0,
+            max_retries=0,
+        ) as client:
             return [{"id": item.id, "owned_by": getattr(item, "owned_by", None) or "nvidia", "provider": "nim"}
                     for item in client.models.list()]
 

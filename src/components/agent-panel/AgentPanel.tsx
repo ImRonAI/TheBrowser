@@ -51,6 +51,9 @@ export const MODEL_SELECTOR_CLASS = 'h-8 min-w-0 max-w-[210px] rounded-full bord
 const headerIconButton = 'inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-ink-secondary transition-colors hover:bg-surface-100 hover:text-ink dark:text-ink-inverse-secondary dark:hover:bg-surface-800 dark:hover:text-ink-inverse'
 /** What the header calls each conversation (the panel names the agent itself). */
 const HEADER_TITLES: Partial<Record<AgentDestination, string>> = { build: 'Build', search: 'Search' }
+/** GLM 5.3 Flash on NVIDIA NIM and on Mistral: the Build Agent runs it at max reasoning unless another level is picked. */
+const GLM_53_FLASH = new Set(['z-ai/glm-5.3-flash', 'zai-glm-5-3-flash'])
+const defaultEffort = (destination: AgentDestination, model: string) => destination === 'build' && GLM_53_FLASH.has(model) ? 'max' : ''
 /** Prompt starters for an empty conversation: they fill the composer, they never send on their own. */
 const STARTERS: Partial<Record<AgentDestination, string[]>> = {
   panel: ['Summarize this page', 'Research a topic and cite sources', 'Fill in this form for me', 'Make me a song to focus to'],
@@ -230,8 +233,8 @@ export function AgentConversation({ destination, embedded = false, onChat, hero,
 
   useEffect(() => {
     setSelection((current) => current.model === DEFAULT_AGENT_MODEL && !current.provider
-      ? { model: defaultModel, provider: defaultProvider, effort: '' } : current)
-  }, [defaultModel, defaultProvider])
+      ? { model: defaultModel, provider: defaultProvider, effort: defaultEffort(destination, defaultModel) } : current)
+  }, [defaultModel, defaultProvider, destination])
 
   useEffect(() => {
     if (!isPanelOpen) return
@@ -333,7 +336,7 @@ export function AgentConversation({ destination, embedded = false, onChat, hero,
     }
     setModeNotice('')
     // Every agent starts on the default model (GLM 5.3 Flash); a plain new chat is with Ren and keeps the model in use.
-    setSelection(startWith ? { model: defaultModel, provider: defaultProvider, effort: '' } : { model, provider, effort })
+    setSelection(startWith ? { model: defaultModel, provider: defaultProvider, effort: defaultEffort(destination, defaultModel) } : { model, provider, effort })
     setAgentChoice(startWith ?? RON_AGENT)
     setOptions(runtimeOptions)
     sessionRef.current = ''

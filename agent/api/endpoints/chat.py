@@ -31,6 +31,7 @@ from agent.api.core.articles import ArticleAttachment, article_message
 from agent.api.core.prompt_attachments import (
     ATTACHMENTS_MAX, ATTACHMENTS_TOTAL_MAX, PromptAttachment, message_content as attachment_message_content,
 )
+from agent.api.core.build_agent import build_model_router, build_side_model, create_build_agent
 from agent.api.core.context_agent import context_agent_prompt, context_agent_tools
 from agent.api.core.config import (
     PERPLEXITY_MODELS_URL,
@@ -426,6 +427,11 @@ async def _create_runtime_agent(*, user_id, session_id, selection, options, runt
         # would only start fixers.
         return await _create_issue_agent(user_id=user_id, session_id=session_id, selection=selection,
                                          options=options, runtime_options=runtime_options)
+    if destination == "build":
+        # Its own create_harness agent (core/build_agent.py). Routed before the repair trigger for the reason above:
+        # its shell/editor are not catalog tools, so a repaired revision could never be activated for them.
+        return await _create_build_agent(user_id=user_id, session_id=session_id, selection=selection,
+                                         options=options, runtime_options=runtime_options, browser=browser)
     target = selection.get("agent") or {}
     service = repair_service()
     if service is not None:
@@ -435,15 +441,6 @@ async def _create_runtime_agent(*, user_id, session_id, selection, options, runt
     if target.get("kind") == "specialist":
         return await _create_specialist_agent(user_id=user_id, session_id=session_id, agent_id=target["id"],
                                               selection=selection, runtime_options=runtime_options, browser=browser)
-    build_prompt = ""
-    if destination == "build":
-        # The Build Agent's project is its own workspace (core/build_workspace.py): BuildWorkspaceGuard, a native
-        # BeforeToolCallEvent plugin beside the runtime's ContextInjector, defaults shell/editor there, and the prompt
-        # names it. The workbench (endpoints/build.py) shows the same directory.
-        from agent.api.core.build_workspace import BuildWorkspaceGuard, build_agent_prompt, ensure_workspace
-        workspace = await asyncio.to_thread(ensure_workspace, user_id, session_id)
-        runtime_options = {**runtime_options, "plugins": [*runtime_options.get("plugins", []), BuildWorkspaceGuard(workspace)]}
-        build_prompt = build_agent_prompt(workspace)
     agent_prompt, agent_tools = "", []
     if target.get("kind") == "project":
         from agent.api.core.project_agent import project_agent_prompt, project_agent_tools
@@ -465,7 +462,6 @@ async def _create_runtime_agent(*, user_id, session_id, selection, options, runt
         system_prompt=system_prompt_for(selection["provider"], browser=browser) + {
             "panel": "",
             "search": "\nYou are Search Agent. Research the user's question, verify claims with search tools, and cite original sources.",
-            "build": build_prompt,
             "document": "\nYou are Document Agent. You are Ren working inside one page of a project's documentation in Ren Projects, not in the Agent Panel. "
                         "Each request names the project and the page and includes the page's current content. Your reply is the draft the user "
                         "reviews and then inserts into the page or uses to overwrite it, so every word you write goes into the page: reply with "
@@ -530,12 +526,38 @@ async def _create_issue_agent(*, user_id, session_id, selection, options, runtim
         create_issue_chat_agent,
         user_id=user_id, session_id=session_id, issue_id=selection["issue_id"], project_id=selection["project_id"],
         owner_id=selection["owner_id"], provider=provider, model_id=model_id, model=model,
-        side_model_factory=lambda _name: build_model(provider, model_id, effort, hosted_tools=False),
+        # The summarizer is an Agent, so it routes and fails over like the Build Agent (its own router: a router
+        # is a plugin of one agent); the goal judge takes the chosen model alone, read-bounded the same way.
+        side_model_factory=lambda name: (build_model_router(provider, model_id, effort) if name == "summarizer"
+                                         else build_side_model(provider, model_id, effort)),
         options=options, plugins=plugins, **runtime,
     )
     for hook in hooks:
         agent.hooks.add_hook(hook)
     return agent
+
+
+async def _create_build_agent(*, user_id, session_id, selection, options, runtime_options, browser):
+    """The Build Agent: a create_harness agent on a NIM/Mistral GLM 5.3 Flash ModelRouter (``core/build_agent.py``).
+
+    As for the issue agent, the runtime's ContextInjector is a consumer plugin, ``agent_id``/``session_manager``/
+    ``callback_handler`` go to ``Agent`` and the runtime hooks are added after construction.
+    """
+    provider, model_id, effort = selection["provider"], selection["model_id"], selection.get("reasoning_effort")
+    runtime = dict(runtime_options)
+    hooks = runtime.pop("hooks", [])
+    plugins = runtime.pop("plugins", [])
+    # Provider metadata (context windows) is network I/O: built off the event loop like the agent.
+    model = await asyncio.to_thread(build_model_router, provider, model_id, effort)
+    return await asyncio.to_thread(
+        create_build_agent,
+        user_id=user_id, session_id=session_id, model=model, browser=browser,
+        # The summarizer is an Agent, so it routes and fails over like the Build Agent (its own router: a router
+        # is a plugin of one agent); the goal judge takes the chosen model alone, read-bounded the same way.
+        side_model_factory=lambda name: (build_model_router(provider, model_id, effort) if name == "summarizer"
+                                         else build_side_model(provider, model_id, effort)),
+        options=options, plugins=plugins, hooks=hooks, **runtime,
+    )
 
 
 def create_runtime_manager() -> PanelRuntimeManager:

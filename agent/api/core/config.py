@@ -22,6 +22,9 @@ NVIDIA_NIM_API_KEY = os.getenv("NVIDIA_NIM_API_KEY")
 # NVIDIA NIM hosted endpoint (OpenAI-compatible chat completions): https://docs.api.nvidia.com/nim/reference/
 NVIDIA_NIM_BASE_URL = os.getenv("NVIDIA_NIM_BASE_URL") or "https://integrate.api.nvidia.com/v1"
 NIM_DEFAULT_MODEL = os.getenv("NIM_MODEL") or "z-ai/glm-5.3-flash"
+#: Seconds any NIM chat-completions call may go without sending a byte (first byte included) before raising
+#: APITimeoutError into Strands' retry/router strategy (`max_retries=0` on AsyncOpenAI). 0 = unbounded.
+NIM_READ_TIMEOUT = float(os.getenv("NIM_READ_TIMEOUT", "60"))
 PERPLEXITY_API_KEY = os.getenv("PERPLEXITY_API_KEY")
 MISTRAL_API_KEY = os.getenv("MISTRAL_API_KEY")
 
@@ -128,6 +131,13 @@ PANEL_ENVIRONMENT_CONTEXT = os.getenv("PANEL_ENVIRONMENT_CONTEXT", "1") != "0"
 #: Build Agent workspaces (`core/build_workspace.py`): one private project directory per (user, session),
 #: ``<RON_BUILD_ROOT>/<sha256(user_id \n session_id)[:32]>``. Read per call, so tests can repoint it.
 RON_BUILD_ROOT = Path(os.getenv("RON_BUILD_ROOT", "~/.ron/build")).expanduser()
+#: Build Agent (`core/build_agent.py`): seconds a candidate may go without sending a byte (the first one included)
+#: before its call fails and the ModelRouter moves to the next candidate. NIM's hosted endpoint held requests open
+#: with nothing sent (2026-11-11); Mistral's GLM 5.3 Flash queue took ~20 s to its first byte under load. 0 = unbounded.
+RON_BUILD_NIM_READ_TIMEOUT = float(os.getenv("RON_BUILD_NIM_READ_TIMEOUT", "20"))
+RON_BUILD_MISTRAL_READ_TIMEOUT = float(os.getenv("RON_BUILD_MISTRAL_READ_TIMEOUT", "60"))
+#: Seconds a Build model candidate that failed is not the one a new turn opens on (RecentFailureStrategy).
+RON_BUILD_MODEL_COOLDOWN = float(os.getenv("RON_BUILD_MODEL_COOLDOWN", "300"))
 #: Optional interventions gate ("ask" | "smart" | natural-language policy | .cedar path), resolved
 #: with strands_harness.resolve_interventions onto Agent(interventions=...). Default off: an
 #: interrupt-based approval gate parks unattended runs.
