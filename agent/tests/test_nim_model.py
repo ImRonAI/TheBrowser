@@ -416,3 +416,122 @@ def test_end_to_end_strands_agent_loop_against_strict_nim_server(monkeypatch):
     finally:
         server.shutdown()
         server.server_close()
+
+
+class _StalledOrErroredNIMHandler(BaseHTTPRequestHandler):
+    """Simulates NVIDIA NVCF stalled sockets (0 bytes) and empty-body 504s with nvcf-* headers."""
+
+    calls: list[str] = []
+    release = threading.Event()
+
+    def do_POST(self) -> None:  # noqa: N802
+        body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+        model = body["model"]
+        type(self).calls.append(model)
+        if model == "deepseek-ai/deepseek-v4.1-flash":
+            type(self).release.wait(timeout=5.0)
+            return
+        self.send_response(504)
+        self.send_header("Content-Length", "0")
+        self.send_header("nvcf-status", "errored")
+        self.send_header("nvcf-error-source", "upstream_status")
+        self.send_header("nvcf-reqid", "req-nvcf-504")
+        self.end_headers()
+
+    def log_message(self, format: str, *args: Any) -> None:  # noqa: A002
+        del format, args
+
+
+def test_stalled_or_504_nim_endpoint_fails_once_without_retry_loops(monkeypatch, tmp_path):
+    from strands import ModelRetryStrategy
+    from strands.storage import InMemoryStorage
+
+    from agent.api.core.panel_runtime import PanelRuntimeManager
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), _StalledOrErroredNIMHandler)
+    server.daemon_threads = True
+    _StalledOrErroredNIMHandler.calls = []
+    _StalledOrErroredNIMHandler.release.clear()
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+
+    monkeypatch.setattr(app_config, "NVIDIA_NIM_API_KEY", "nvapi-offline-test")
+    monkeypatch.setattr(panel_agent, "NVIDIA_NIM_BASE_URL", f"http://127.0.0.1:{server.server_port}/v1")
+    monkeypatch.setenv("NIM_READ_TIMEOUT", "0.3")
+    monkeypatch.setenv("PANEL_STORAGE", "file")
+    monkeypatch.setattr(app_config, "SESSION_STORAGE_DIR", tmp_path / "sessions")
+
+    assert panel_agent.build_model("nim", "deepseek-ai/deepseek-v4.1-flash").get_config()["context_window_limit"] == 1_048_576
+
+    constructed: list[tuple[Agent, Any]] = []
+
+    async def factory(*, user_id, session_id, selection, options, runtime_options):
+        agent = await asyncio.to_thread(
+            panel_agent.create_panel_agent,
+            provider=selection["provider"],
+            model_id=selection["model_id"],
+            reasoning_effort=selection.get("reasoning_effort"),
+            browser="user",
+            session_id=session_id,
+            user_id=user_id,
+            system_prompt="Be concise.",
+            extra_tools=[],
+            options=options,
+            runtime_options=runtime_options,
+        )
+        constructed.append((agent, getattr(agent, "_retry_strategy", None)))
+        return agent
+
+    async def scenario() -> None:
+        stores: dict[str, InMemoryStorage] = {}
+        manager = PanelRuntimeManager(
+            factory=factory,
+            storage_factory=lambda user: stores.setdefault(user, InMemoryStorage()),
+            max_recoveries=2,
+        )
+        try:
+            # 1. Stalled socket (0 bytes): exactly ONE HTTP call, native ModelRetryStrategy (not TimeoutRetryStrategy),
+            #    zero retry events, zero runtime respawns, and a clear error naming the model + timeout.
+            session = await manager.start(
+                "u1",
+                "s-stalled",
+                "Hello are you there?",
+                selection={"provider": "nim", "model_id": "deepseek-ai/deepseek-v4.1-flash", "browser": "user"},
+            )
+            await session.wait()
+            events = [event async for event in session.events(0, run_id=session.run_id)]
+            assert session.status == "failed"
+            assert _StalledOrErroredNIMHandler.calls == ["deepseek-ai/deepseek-v4.1-flash"]
+            assert len(constructed) == 1
+            assert type(constructed[0][1]) is ModelRetryStrategy
+            assert [e for e in events if e.get("type") == "retry"] == []
+            error_events = [e for e in events if e.get("type") == "error"]
+            assert len(error_events) == 1
+            err_msg = json.dumps(error_events[0]["error"])
+            assert "deepseek-ai/deepseek-v4.1-flash" in err_msg
+            assert "sent 0 bytes" in err_msg
+
+            # 2. Empty-body NVCF 504: surfaces nvcf-status and nvcf-error-source immediately in one attempt.
+            _StalledOrErroredNIMHandler.calls.clear()
+            session_504 = await manager.start(
+                "u1",
+                "s-504",
+                "Hello",
+                selection={"provider": "nim", "model_id": "z-ai/glm-5.3-flash", "browser": "user"},
+            )
+            await session_504.wait()
+            events_504 = [event async for event in session_504.events(0, run_id=session_504.run_id)]
+            assert session_504.status == "failed"
+            assert _StalledOrErroredNIMHandler.calls == ["z-ai/glm-5.3-flash"]
+            err_504 = json.dumps([e for e in events_504 if e.get("type") == "error"][0]["error"])
+            assert "HTTP 504" in err_504
+            assert "nvcf-status=errored" in err_504
+            assert "nvcf-error-source=upstream_status" in err_504
+        finally:
+            await manager.shutdown()
+
+    try:
+        asyncio.run(scenario())
+    finally:
+        _StalledOrErroredNIMHandler.release.set()
+        server.shutdown()
+        server.server_close()

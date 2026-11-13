@@ -27,6 +27,8 @@ sections cannot exceed the per-second quota, and 429s surface as a typed
 from __future__ import annotations
 
 import asyncio
+import html
+import re
 import time
 from typing import Any, Literal
 from urllib.parse import urlsplit
@@ -107,6 +109,16 @@ class DiscoverItem(BaseModel):
     place: dict[str, Any] | None = None
     discussion: dict[str, Any] | None = None
     rich: dict[str, Any] | None = None
+    # Everything else Brave sends that a reader can use. ``None`` (not ``[]``/``False``) when absent, because
+    # the agent search tools dump items with ``exclude_none``.
+    snippets: list[str] | None = None  # ``extra_snippets`` as clean, de-duplicated fragments
+    author: str | None = None  # ``article.author`` names
+    paywalled: bool | None = None  # ``article.isAccessibleForFree`` is false
+    language: str | None = None
+    live: bool | None = None  # ``is_live``
+    breaking: bool | None = None  # news ``breaking``
+    original_thumbnail: str | None = None  # ``thumbnail.original``: full size where Brave proxies a 200px copy as ``src``
+    answers: list[dict[str, str]] | None = None  # ``faq`` / ``qa``: [{question, answer}]
 
 
 class RichAnswer(BaseModel):
@@ -133,8 +145,63 @@ def _favicon(raw: dict[str, Any]) -> str | None:
     return (raw.get("meta_url") or {}).get("favicon") or (raw.get("profile") or {}).get("img") or None
 
 
+_TAGS = re.compile(r"<[^>]+>")
+_C1 = re.compile(r"[\x80-\x9f]")
+_ELLIPSIS_JOIN = re.compile(r"\s+\.\.\.\s+")
+MAX_SNIPPETS = 6
+MAX_SNIPPET_CHARS = 600
+
+
+def clean_text(value: Any) -> str:
+    """Plain text from Brave's markup-bearing strings: tags dropped, entities decoded, whitespace collapsed, and
+    stray C1 control characters (Windows-1252 bytes mis-decoded as Latin-1, e.g. U+0097 where a dash belongs) repaired."""
+    if not isinstance(value, str):
+        return ""
+    text = html.unescape(_TAGS.sub("", value))
+    text = _C1.sub(lambda m: bytes([ord(m.group(0))]).decode("cp1252", errors="ignore"), text)
+    return " ".join(text.split())
+
+
+def _fold(text: str) -> str:
+    return re.sub(r"\W+", " ", text.lower()).strip()
+
+
+def clean_snippets(raw: dict[str, Any]) -> list[str]:
+    """``extra_snippets`` as separate fragments. Brave joins several page excerpts into one string with `` ... ``;
+    each fragment is kept once, and anything already said by the description or an earlier fragment is dropped."""
+    known = [_fold(clean_text(raw.get("description")))]
+    out: list[str] = []
+    for snippet in raw.get("extra_snippets") or []:
+        for fragment in _ELLIPSIS_JOIN.split(clean_text(snippet)):
+            fragment = fragment.strip(" .")[:MAX_SNIPPET_CHARS].strip()
+            folded = _fold(fragment)
+            if len(folded) < 20 or any(folded in other or other in folded for other in known if other):
+                continue
+            known.append(folded)
+            out.append(fragment)
+            if len(out) == MAX_SNIPPETS:
+                return out
+    return out
+
+
+def _answers(raw: dict[str, Any]) -> list[dict[str, str]]:
+    """FAQ items (``faq.items``) and the community answer (``qa``) as clean question/answer pairs."""
+    pairs: list[dict[str, str]] = []
+    for item in (raw.get("faq") or {}).get("items") or []:
+        question, answer = clean_text(item.get("question")), clean_text(item.get("answer"))
+        if question and answer:
+            pairs.append({"question": question, "answer": answer})
+    qa = raw.get("qa") or {}
+    question, answer = clean_text(qa.get("question")), clean_text((qa.get("answer") or {}).get("text"))
+    if question and answer:
+        pairs.append({"question": question, "answer": answer})
+    return pairs[:4]
+
+
 def _base(kind: ItemKind, raw: dict[str, Any], prefix: str) -> dict[str, Any]:
     url = raw.get("url") or ""
+    article = raw.get("article") or {}
+    authors = [a.get("name") for a in article.get("author") or [] if isinstance(a, dict) and a.get("name")]
     return {
         "kind": kind,
         "id": f"{prefix}:{raw.get('id') or url}",
@@ -146,7 +213,16 @@ def _base(kind: ItemKind, raw: dict[str, Any], prefix: str) -> dict[str, Any]:
         "favicon": _favicon(raw),
         "published": raw.get("page_age"),
         "age": raw.get("age"),
+        "snippets": clean_snippets(raw) or None,
+        "author": ", ".join(clean_text(name) for name in authors) or None,
+        "paywalled": True if article.get("isAccessibleForFree") is False else None,
+        "language": raw.get("language") or None,
+        "live": True if raw.get("is_live") else None,
+        "breaking": True if raw.get("breaking") else None,
+        "original_thumbnail": (raw.get("thumbnail") or {}).get("original") or None,
+        "answers": _answers(raw) or None,
     }
+
 
 def normalize_news(raw: dict[str, Any]) -> DiscoverItem:
     return DiscoverItem(**_base("article", raw, "news"))
@@ -189,8 +265,8 @@ def normalize_discussion(raw: dict[str, Any]) -> DiscoverItem:
         "forum": data.get("forum_name"),
         "answers": data.get("num_answers"),
         "score": data.get("score"),
-        "question": data.get("question"),
-        "top_comment": data.get("top_comment"),
+        "question": clean_text(data.get("question")) or None,
+        "top_comment": clean_text(data.get("top_comment")) or None,
     })
 
 
@@ -405,9 +481,10 @@ class BraveClient:
         raise BraveSearchError("upstream", message, status=response.status_code)
 
     async def news(self, q: str, *, count: int = 10, freshness: Freshness | None = None, country: str = "US",
-                   safesearch: SafeSearch = "moderate") -> list[DiscoverItem]:
+                   safesearch: SafeSearch = "moderate", extra_snippets: bool = True) -> list[DiscoverItem]:
         body = await self.get("/news/search", {"q": q, "count": count, "freshness": freshness, "country": country,
-                                               "safesearch": safesearch, "spellcheck": False})
+                                               "safesearch": safesearch, "extra_snippets": extra_snippets,
+                                               "spellcheck": False})
         return [normalize_news(r) for r in body.get("results", [])]
 
     async def videos(self, q: str, *, count: int = 10, freshness: Freshness | None = None, country: str = "US",
@@ -752,6 +829,8 @@ async def run_section(client: BraveClient, section: SectionRequest, location: Fe
                 kwargs["safesearch"] = section.safesearch
             if section.kind != "images":
                 kwargs["freshness"] = section.freshness
+            if section.kind == "web":
+                kwargs["extra_snippets"] = True
             items = await getattr(client, section.kind)(section.q, **kwargs)
         return FeedSection(kind=section.kind, q=section.q, status="ok", items=items)
     except BraveSearchError as error:

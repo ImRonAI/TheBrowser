@@ -594,6 +594,8 @@ export function reducePanelEvent(state: PanelState, event: PanelEvent): PanelSta
     if (last?.kind === kind && !last.discarded && JSON.stringify(last.path) === pathKey &&
         last.modelAttempt === event.model_attempt && last.cycle === event.cycle) {
       parts[parts.length - 1] = { ...last, text: last.text + event.data }
+    } else if (kind === 'reasoning' && !event.data.trim()) {
+      return next
     } else parts.push({ kind, key, path: event.node_path, text: event.data, modelAttempt: event.model_attempt, cycle: event.cycle })
   } else {
     let text = displayValue(event.event ?? event.message ?? event.error)
@@ -699,7 +701,7 @@ export function hydratePanelSession(sessionId: string, value: unknown): PanelSta
           path: [], input: tool.input ?? {}, progress: [], finished: false })
       } else if (block.reasoningContent) {
         const reasoning = record(record(block.reasoningContent).reasoningText)
-        if (typeof reasoning.text === 'string') assistant.parts.push({ kind: 'reasoning', key, path: [], text: reasoning.text })
+        if (typeof reasoning.text === 'string' && reasoning.text.trim()) assistant.parts.push({ kind: 'reasoning', key, path: [], text: reasoning.text })
       } else assistant.parts.push({ kind: 'activity', key, path: [], text: displayValue(block) })
     })
   })

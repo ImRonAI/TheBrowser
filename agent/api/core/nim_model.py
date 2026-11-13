@@ -33,13 +33,16 @@ to enforce OpenAI Chat Completions and NVIDIA NIM wire invariants:
 """
 from __future__ import annotations
 
+from collections.abc import AsyncGenerator
 import logging
 from typing import Any
 
+import openai
 from strands.agent.agent_metadata import AgentMetadata
 from strands.models._validation import _has_location_source
 from strands.models.openai import OpenAIModel
 from strands.types.content import ContentBlock, Messages, SystemContentBlock
+from strands.types.streaming import StreamEvent
 from strands.types.tools import ToolChoice, ToolResult, ToolResultContent, ToolSpec
 from typing_extensions import override
 
@@ -196,6 +199,50 @@ class RonNIMModel(OpenAIModel):
             request.pop("tools", None)
             request.pop("tool_choice", None)
         return request
+
+    @override
+    async def stream(
+        self,
+        messages: Messages,
+        tool_specs: list[ToolSpec] | None = None,
+        system_prompt: str | None = None,
+        *,
+        tool_choice: ToolChoice | None = None,
+        agent_metadata: AgentMetadata | None = None,
+        **kwargs: Any,
+    ) -> AsyncGenerator[StreamEvent, None]:
+        model_id = str(self.config.get("model_id", ""))
+        try:
+            async for chunk in super().stream(
+                messages,
+                tool_specs,
+                system_prompt,
+                tool_choice=tool_choice,
+                agent_metadata=agent_metadata,
+                **kwargs,
+            ):
+                yield chunk
+        except openai.APITimeoutError as error:
+            timeout = self.client_args.get("timeout")
+            read_s = getattr(timeout, "read", None)
+            bound = f" after {read_s:g}s" if isinstance(read_s, (int, float)) else ""
+            raise RuntimeError(
+                f"NVIDIA NIM endpoint timed out{bound} waiting for {model_id!r} "
+                "(integrate.api.nvidia.com accepted the request and sent 0 bytes; "
+                "upstream model container is stalled or out of capacity)."
+            ) from error
+        except openai.APIStatusError as error:
+            headers = getattr(error.response, "headers", None) or {}
+            nvcf_bits = [
+                f"{key}={headers[key]}"
+                for key in ("nvcf-status", "nvcf-error-source", "nvcf-reqid")
+                if key in headers
+            ]
+            if nvcf_bits and not getattr(error, "body", None):
+                raise RuntimeError(
+                    f"NVIDIA NIM HTTP {error.status_code} for {model_id!r} ({', '.join(nvcf_bits)})."
+                ) from error
+            raise
 
 
 __all__ = ["OMITTED_TOOL_IMAGE_NOTE", "RonNIMModel"]

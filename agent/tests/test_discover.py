@@ -368,3 +368,58 @@ def test_brave_tools_verticals_and_error_handling():
         bt.set_search_client(None)
 
 
+
+
+# Shapes copied from live responses (2026-11-13): ScienceDaily's C1 dash, Brave's " ... " joins, `article` with
+# `isAccessibleForFree`, a web `faq` and `qa` (HTML), `thumbnail.original`, `is_live`/`breaking`/`language`.
+RICH_NEWS = {
+    "type": "news_result", "title": "AI Futures Project pulls forecast into 2027", "url": "https://www.forbes.com/sites/a/2026/11/12/x/",
+    "description": "A forecasting group now says a superhuman AI researcher could arrive next year.", "age": "19 hours ago",
+    "page_age": "2026-11-12T11:06:01", "profile": {"name": "Forbes"}, "language": "en", "is_live": True, "breaking": True,
+    "thumbnail": {"src": "https://imgs.search.brave.com/t", "original": "https://i.forbesimg.com/x.jpg"},
+    "article": {"author": [{"type": "person", "name": "Anisha Sircar", "url": "https://forbes.com/a"}, {"name": "J. Poe"}],
+                "date": "Nov 12, 2026", "isAccessibleForFree": False},
+    "extra_snippets": [
+        "Oct. 13, 2026 \x97 A new study reveals that people draw a sharp line between human consciousness and AI.",
+        "A forecasting group now says a superhuman AI researcher could arrive next year. ... On X, Kokotajlo wrote that the intelligence "
+        "explosion will be happening in 2027 after all. ... The AI Impacts survey found a median expectation of 2047 for human-level AI.",
+        "On X, Kokotajlo wrote that the intelligence explosion will be happening in 2027 after all.",
+        "Short.",
+    ],
+}
+RICH_WEB = {
+    "type": "search_result", "title": "Learn Python", "url": "https://example.com/python", "description": "A <strong>Python</strong> guide",
+    "profile": {"name": "Example"}, "extra_snippets": [],
+    "faq": {"items": [{"question": "How long does it take?", "answer": "About <b>three</b> months.", "title": "t", "url": "https://example.com/faq"}]},
+    "qa": {"question": "<p>\n  Best way to learn python for free?\n </p>", "answer": {"text": "<span>Start simple &amp; build things.</span>\n", "upvoteCount": 81}},
+}
+
+
+def test_normalizers_carry_everything_a_reader_can_use():
+    item = bs.normalize_news(RICH_NEWS)
+    assert (item.author, item.paywalled, item.language, item.live, item.breaking) == ("Anisha Sircar, J. Poe", True, "en", True, True)
+    assert item.original_thumbnail == "https://i.forbesimg.com/x.jpg"
+    assert item.snippets == [
+        "Oct. 13, 2026 — A new study reveals that people draw a sharp line between human consciousness and AI",  # C1 dash repaired
+        "On X, Kokotajlo wrote that the intelligence explosion will be happening in 2027 after all",  # " ... " split, kept once
+        "The AI Impacts survey found a median expectation of 2047 for human-level AI",
+    ]  # the description's own sentence and "Short." are dropped
+    web = bs.normalize_web(RICH_WEB)
+    assert web.snippets is None and web.answers == [
+        {"question": "How long does it take?", "answer": "About three months."},
+        {"question": "Best way to learn python for free?", "answer": "Start simple & build things."},
+    ]
+
+
+def test_plain_items_dump_without_the_new_fields_so_agent_tool_results_stay_lean():
+    dumped = bs.normalize_news(NEWS).model_dump(exclude_none=True)
+    for key in ("snippets", "author", "paywalled", "language", "live", "breaking", "original_thumbnail", "answers"):
+        assert key not in dumped
+
+
+def test_news_and_web_feed_sections_request_extra_snippets():
+    seen: list[httpx.Request] = []
+    asyncio.run(bs.build_feed(client(seen), bs.FeedRequest(sections=[{"kind": "news", "q": "ai"}, {"kind": "web", "q": "ai"}])))
+    news = next(r for r in seen if r.url.path.endswith("/news/search"))
+    web = next(r for r in seen if r.url.path.endswith("/web/search"))
+    assert news.url.params["extra_snippets"] == "true" and web.url.params["extra_snippets"] == "true"

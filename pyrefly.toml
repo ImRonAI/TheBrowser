@@ -1,0 +1,22 @@
+python-interpreter-path = "venv/bin/python"
+search-path = ["."]
+disable-search-path-heuristics = true
+site-package-path = [
+  "venv/lib/python3.14/site-packages",
+  "agent/api/core/harness-sdk/strands-py/src",
+  "../electron-playwright-mcp/src",
+]
+project-includes = ["agent"]
+project-excludes = [
+  "**/__pycache__",
+  "agent/api/core/harness-sdk",
+  "agent/api/core/harness-sdk-next",
+  "agent/tools/strands_tools",
+  "venv",
+  ".venv",
+  "venv-next",
+  "node_modules",
+  "dist",
+]
+permissive-ignores = true
+infer-with-first-use = false

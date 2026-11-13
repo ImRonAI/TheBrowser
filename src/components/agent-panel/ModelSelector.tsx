@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { CheckIcon, ChevronDownIcon } from '@heroicons/react/24/outline'
+import { CheckIcon, ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon } from '@heroicons/react/24/outline'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { API_BASE_URL } from '@/lib/api-base'
 import { cn } from '@/utils/cn'
@@ -193,15 +193,17 @@ interface ModelSelectorProps {
 }
 
 /**
- * The model picker: one searchable list of the configured providers' models, and the chosen model's reasoning
- * levels along the bottom. Picking a model applies it at once with the provider's default reasoning ("Auto");
- * picking a level applies it and closes. The levels are whatever `GET /models/{id}/efforts` reports for the chosen model,
- * and the row is absent for a model with none.
+ * The model picker: opens with the configured providers, drills into a provider's models on click (or searches
+ * across all models when typing), and shows the chosen model's reasoning levels along the bottom. Picking a model
+ * applies it at once with the provider's default reasoning ("Auto"); picking a level applies it and closes. The
+ * levels are whatever `GET /models/{id}/efforts` reports for the chosen model, and the row is absent for a model
+ * with none.
  */
 export function ModelSelector({ value, provider = '', effort = '', models, providers = {}, providersLoading = false,
   providersError = '', modelsLoading = false, modelsError = '', providerErrors = {}, disabled, className, onChange, onOpen }: ModelSelectorProps) {
   const [open, setOpen] = useState(false)
   const [search, setSearch] = useState('')
+  const [selectedProvider, setSelectedProvider] = useState<string | null>(null)
   const searchBox = useRef<HTMLInputElement>(null)
   const capabilities = useModelEfforts(value, provider, open && !disabled && Boolean(value && provider))
   const modelName = value ? provider === 'perplexity' ? value : readableModelName(value) : 'Default model'
@@ -209,15 +211,19 @@ export function ModelSelector({ value, provider = '', effort = '', models, provi
   const summary = [modelName, level && capitalize(level)].filter(Boolean).join(' · ')
   const loading = providersLoading || modelsLoading
   const failure = providersError || modelsError
+  const query = search.trim().toLowerCase()
   const sections = useMemo(() => {
-    const query = search.trim().toLowerCase()
     return PROVIDERS.filter((item) => providers[item.id] === true).map((item) => ({
       ...item,
       error: providerErrors[item.id] ?? '',
       models: models.filter((model) => model.provider === item.id &&
         (!query || `${model.id} ${readableModelName(model.id)}`.toLowerCase().includes(query))),
     })).filter((section) => section.models.length || (section.error && !query))
-  }, [models, providers, providerErrors, search])
+  }, [models, providers, providerErrors, query])
+
+  const activeSection = selectedProvider ? sections.find((section) => section.id === selectedProvider) ?? null : null
+  const showModels = Boolean(selectedProvider || query)
+  const visibleSections = selectedProvider ? (activeSection ? [activeSection] : []) : sections
 
   useEffect(() => {
     if (disabled) setOpen(false)
@@ -225,7 +231,7 @@ export function ModelSelector({ value, provider = '', effort = '', models, provi
 
   return <Popover modal open={open && !disabled} onOpenChange={(next) => {
     if (next && disabled) return
-    if (next) { setSearch(''); onOpen?.() }
+    if (next) { setSearch(''); setSelectedProvider(null); onOpen?.() }
     setOpen(next)
   }}>
     <PopoverTrigger asChild>
@@ -243,24 +249,42 @@ export function ModelSelector({ value, provider = '', effort = '', models, provi
       style={{ maxHeight: 'min(440px, var(--radix-popover-content-available-height))' }}>
       <input ref={searchBox} type="search" value={search} onChange={(event) => setSearch(event.target.value)}
         onKeyDown={(event) => {
-          const first = sections[0]?.models[0]
-          if (event.key === 'Enter' && first?.provider) { event.preventDefault(); onChange(first.id, first.provider, '') }
+          const first = visibleSections[0]?.models[0]
+          if (event.key === 'Enter' && showModels && first?.provider) { event.preventDefault(); onChange(first.id, first.provider, '') }
         }}
-        aria-label="Search models" placeholder="Search models…"
+        aria-label="Search models" placeholder={selectedProvider ? `Search ${providerLabel(selectedProvider)} models…` : 'Search models…'}
         className="ron-field shrink-0 border-b border-surface-200 bg-transparent px-3.5 py-2.5 text-xs outline-none placeholder:text-ink-muted/70 dark:border-surface-700 dark:placeholder:text-ink-inverse-muted/70" />
 
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-1.5">
+        {selectedProvider && <button type="button"
+          onClick={() => { setSelectedProvider(null); setSearch(''); searchBox.current?.focus() }}
+          className={cn('mb-1 flex w-full items-center gap-1.5 rounded-lg px-2 py-1.5 text-left text-xs font-medium transition-colors hover:bg-surface-100 dark:hover:bg-surface-800', muted, focus)}>
+          <ChevronLeftIcon aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
+          <span>All providers</span>
+        </button>}
         {/* The model in use leads the list, so it is in view however long the catalogue is. */}
-        {value && !search && <div title={value} className="flex items-center gap-2 rounded-lg bg-indigo-50 px-2.5 py-1.5 text-xs font-semibold text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-200">
+        {value && !query && !selectedProvider && <div title={value} className="mb-1 flex items-center gap-2 rounded-lg bg-indigo-50 px-2.5 py-1.5 text-xs font-semibold text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-200">
           <span className="min-w-0 flex-1 truncate">{modelName}</span>
           <span className="shrink-0 text-[10px] font-medium opacity-70">{providerLabel(provider)}</span>
           <CheckIcon aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
         </div>}
         {loading && !sections.length && <p role="status" className={cn('px-2.5 py-2 text-xs', muted)}>Loading models…</p>}
         {failure && <RequestError message={failure} onRetry={onOpen} />}
-        {!loading && !failure && !sections.length && <p role="status" className={cn('px-2.5 py-2 text-xs', muted)}>
-          {search ? 'No models match.' : 'No model provider is configured.'}</p>}
-        {sections.map((section) => <div key={section.id} role="group" aria-label={section.label}>
+        {!loading && !failure && !visibleSections.length && <p role="status" className={cn('px-2.5 py-2 text-xs', muted)}>
+          {query ? 'No models match.' : 'No model provider is configured.'}</p>}
+        {!showModels ? sections.map((section) => {
+          const isCurrentProvider = section.id === provider
+          return <button type="button" key={section.id}
+            onClick={() => { setSelectedProvider(section.id); setSearch(''); searchBox.current?.focus() }}
+            className={cn('flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs font-medium transition-colors hover:bg-surface-100 dark:hover:bg-surface-800', focus,
+              isCurrentProvider && 'bg-indigo-50/70 font-semibold text-indigo-700 hover:bg-indigo-50 dark:bg-indigo-950/30 dark:text-indigo-200 dark:hover:bg-indigo-950/40')}>
+            <span className="min-w-0 flex-1 truncate">{section.label}</span>
+            <span className={cn('shrink-0 text-[10px] font-normal', muted)}>
+              {section.error && !section.models.length ? 'Error' : section.models.length}
+            </span>
+            <ChevronRightIcon aria-hidden="true" className="h-3.5 w-3.5 shrink-0 opacity-60" />
+          </button>
+        }) : visibleSections.map((section) => <div key={section.id} role="group" aria-label={section.label}>
           <p className={cn('px-2.5 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider', muted)}>{section.label}</p>
           {section.error && <RequestError message={section.error} onRetry={onOpen} />}
           {section.models.map((model) => {

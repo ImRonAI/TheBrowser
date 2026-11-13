@@ -1,5 +1,4 @@
 import { ArrowLeft, ArrowRight, Home, RotateCcw, PanelLeft, Plus } from 'lucide-react'
-import { RenIcon } from '@/components/brand'
 import { UrlBar } from './UrlBar'
 import { UserMenu } from './UserMenu'
 import { ThemeToggle } from './ThemeToggle'
@@ -172,23 +171,27 @@ export function ChromeToolbar() {
         <ThemeToggle />
         <TeachSkill key={user} userId={user} agentId="panel" chrome />
 
-        {/* Agent Panel trigger — the chrome's one volt control. Pressed (panel open) it turns ink. */}
+        {/* Agent Panel trigger — styled like the ren. logo: display font, ink ground/text, volt dot. */}
         <button
           type="button"
           onClick={togglePanel}
           aria-label="Open Agent Panel"
           aria-pressed={isPanelOpen}
-          title={`Ask Ren  ${MOD_KEY}J`}
+          title={`ask ren.  ${MOD_KEY}J`}
           className={cn(
-            'ml-1 flex h-8 items-center gap-1.5 rounded-lg pl-2.5 pr-1.5 text-[13px] font-semibold tracking-[-0.01em] transition-colors duration-150 ease-out',
+            'ml-1 flex h-8 items-center gap-1.5 rounded-lg pl-2.5 pr-1.5 font-display text-[13.5px] font-extrabold tracking-[-0.03em] transition-colors duration-150 ease-out',
             isPanelOpen
               ? 'bg-ink text-white hover:bg-surface-800 dark:bg-ink-inverse dark:text-ink dark:hover:bg-white'
-              : 'bg-blurple-600 text-white hover:bg-blurple-700 active:bg-blurple-800 dark:bg-blurple-400 dark:text-ink dark:hover:bg-blurple-300',
+              : 'border border-surface-200 bg-surface-0 text-ink hover:bg-surface-100 dark:border-surface-700 dark:bg-surface-850 dark:text-ink-inverse dark:hover:bg-surface-800',
           )}
         >
-          <RenIcon className="h-3.5 w-3.5" strokeWidth={2.25} aria-hidden />
-          <span>Ask Ren</span>
-          <kbd className="ml-0.5 rounded-[5px] bg-white/15 px-1 font-mono text-[10px] font-medium leading-4 text-white dark:bg-ink/10 dark:text-ink">
+          <span>ask ren<span className="text-volt">.</span></span>
+          <kbd className={cn(
+            'ml-0.5 rounded-[5px] px-1 font-mono text-[10px] font-medium leading-4 tracking-normal',
+            isPanelOpen
+              ? 'bg-white/15 text-white dark:bg-ink/10 dark:text-ink'
+              : 'bg-ink/5 text-ink-muted dark:bg-white/10 dark:text-ink-inverse-muted',
+          )}>
             {MOD_KEY}J
           </kbd>
         </button>

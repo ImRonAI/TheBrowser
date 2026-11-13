@@ -13,7 +13,7 @@ import type { BundledLanguage } from 'shiki'
 
 const CODE_BLOCK_LANGUAGE = /language-([^\s]+)/i
 
-const MARKDOWN_COMPONENTS: NonNullable<ComponentProps<typeof Streamdown>['components']> = {
+export const MARKDOWN_COMPONENTS: NonNullable<ComponentProps<typeof Streamdown>['components']> = {
   code: ({ className, children, ...props }) => {
     const raw = Array.isArray(children) ? children.join('') : String(children ?? '')
     const match = typeof className === 'string' ? className.match(CODE_BLOCK_LANGUAGE) : null

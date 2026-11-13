@@ -99,3 +99,21 @@ test('feed store records backend errors without dropping the last good feed', as
   assert.equal(state.loading, false)
 })
 
+test('itemToStory carries everything Brave sent, and nothing when it sent nothing', () => {
+  const plain = itemToStory(item({}), 'AI')!
+  for (const key of ['snippets', 'author', 'paywalled', 'live', 'breaking', 'language', 'heroImage', 'answers', 'video', 'discussion']) assert.equal(key in plain, false, key)
+  const rich = itemToStory(item({
+    snippets: ['An <strong>excerpt</strong>', ''], author: 'Anisha Sircar', paywalled: true, live: true, breaking: true, language: 'en',
+    original_thumbnail: 'https://i.example/full.jpg', answers: [{ question: 'q', answer: 'a' }],
+    discussion: { forum: 'r/hiking', answers: 19, score: '6', question: 'Q <b>x</b>', top_comment: 'Reply' },
+  }), 'AI')!
+  assert.deepEqual(rich.snippets, ['An excerpt'])
+  assert.deepEqual([rich.author, rich.paywalled, rich.live, rich.breaking, rich.language, rich.heroImage],
+    ['Anisha Sircar', true, true, true, 'en', 'https://i.example/full.jpg'])
+  assert.deepEqual(rich.answers, [{ question: 'q', answer: 'a' }])
+  assert.deepEqual(rich.discussion, { forum: 'r/hiking', answers: 19, score: '6', question: 'Q x', topComment: 'Reply' })
+  const video = itemToStory(item({ kind: 'video', video: { duration: '01:27', creator: 'NASA', publisher: 'YouTube', views: 14000000, original_thumbnail: 'https://i.ytimg.com/vi/x/maxresdefault.jpg' } }), 'V')!
+  assert.deepEqual(video.video, { duration: '01:27', creator: 'NASA', publisher: 'YouTube', views: '14000000' })
+  assert.equal(video.heroImage, 'https://i.ytimg.com/vi/x/maxresdefault.jpg')
+  assert.equal('heroImage' in itemToStory(item({ original_thumbnail: 'http://insecure.example/x.jpg' }), 'x')!, false)
+})

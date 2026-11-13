@@ -32,10 +32,47 @@ def test_reader_rejects_private_dns(monkeypatch, address):
     asyncio.run(scenario())
 
 
-def test_extraction_keeps_text_not_executable_markup():
-    parser = articles.ArticleParser()
-    parser.feed('<nav>Ignore</nav><article><h1>Title</h1><p>Hello &amp; <b>world</b>.</p><script>evil()</script><aside>advertisement</aside><p>Next.</p></article>')
-    assert parser.text() == 'Title\n\nHello & world.\n\nNext.'
+PARA = ("The city council voted on Tuesday to approve a long-debated transit plan, ending nearly three years of argument "
+        "over routes, funding and the pace of construction across the metropolitan region. ")
+PAGE_HTML = f"""<html lang="en"><head><title>Council approves transit plan | Example Times</title>
+<meta property="og:image" content="/img/hero.jpg"><meta property="og:site_name" content="Example Times">
+<meta name="author" content="Jane Roe; John Poe"><meta property="article:published_time" content="2026-11-12T08:00:00Z">
+<meta name="description" content="A summary of the vote."></head><body><nav><a href="/home">Home</a><a href="/sports">Sports</a></nav>
+<article><h1>Council approves transit plan</h1><p class="byline">By <a href="/authors/jane">Jane Roe</a></p>
+<p>{PARA}See <a href="/2026/plan">the plan</a>, the <a href="https://sec.example.org/filing#p4">filing</a> and <a href="javascript:alert(1)">this</a>.</p>
+<figure><img src="/img/map.png" alt="Route map"><figcaption>The approved routes.</figcaption></figure>
+<h2>What changes</h2><ol><li>Faster <b>buses</b></li><li>A new <a href="/rail">rail line</a></li></ol>
+<blockquote><p>"This is overdue," said the mayor.</p><p>Second paragraph of the quote.</p></blockquote>
+<table><tr><th>Line</th><th>Year</th></tr><tr><td>Blue</td><td>2029</td></tr></table>
+<p>{PARA}</p><script>stealCookies()</script><aside>Advertisement: buy now</aside>
+<img src="data:image/gif;base64,R0lGODlhAQABAAAAACw=" alt="pixel"></article><footer>Copyright</footer></body></html>"""
+
+
+def test_the_real_pipeline_turns_a_page_into_safe_rich_markdown_with_metadata():
+    article = articles.article_from_html(PAGE_HTML.encode(), "https://news.example.com/2026/11/story")
+    text = article["text"]
+    # structure the old plain-text extractor flattened
+    assert "[the plan](https://news.example.com/2026/plan)" in text            # relative link made absolute
+    assert "[filing](https://sec.example.org/filing#p4)" in text               # external fragment link kept
+    assert "![Route map](https://news.example.com/img/map.png)" in text
+    assert "\n## What changes\n" in text and "1. Faster **buses**" in text and "2. A new [rail line](https://news.example.com/rail)" in text
+    assert '> "This is overdue," said the mayor.\n>\n> Second paragraph of the quote.' in text
+    assert "| Blue | 2029 |" in text
+    # what must never reach the renderer, an agent attachment or a Context item
+    assert "javascript:" not in text and "stealCookies" not in text and "Advertisement: buy now" not in text
+    assert "data:image" not in text and "Copyright" not in text and "Home" not in text
+    assert not text.lstrip().startswith("#")                                   # the headline is the reader's, not the body's
+    assert article["format"] == "markdown" and article["status"] == "extracted" and not article["truncated"]
+    assert article["authors"] == ["Jane Roe", "John Poe"] and article["published"] == "2026-11-12"
+    assert article["site_name"] == "Example Times" and article["description"] == "A summary of the vote."
+    assert article["image"] == "https://news.example.com/img/hero.jpg"
+
+
+def test_metadata_image_must_be_https_and_text_must_be_substantial():
+    insecure = PAGE_HTML.replace('content="/img/hero.jpg"', 'content="http://cdn.example.com/hero.jpg"')
+    assert articles.article_from_html(insecure, "https://news.example.com/s")["image"] is None
+    with pytest.raises(ValueError):
+        articles.article_from_html("<html><body><article><p>Too short to be an article.</p></article></body></html>", "https://news.example.com/s")
 
 
 def test_fetch_pins_ip_and_revalidates_redirect(monkeypatch):

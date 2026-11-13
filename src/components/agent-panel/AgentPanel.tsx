@@ -96,7 +96,7 @@ export function AgentConversation({ destination, embedded = false, onChat, hero,
   const liveHandOff = useRef<(() => Promise<boolean>) | null>(null)
   const registerHandOff = useCallback((handOff: (() => Promise<boolean>) | null) => { liveHandOff.current = handOff }, [])
   const [modeNotice, setModeNotice] = useState('')
-  const { panelWidth, setPanelWidth, setPanelMode, requestedAgent, requestAgent, requestedThread, requestThread } = usePanelAgentStore()
+  const { panelWidth, setPanelWidth, setPanelMode, requestedAgent, requestAgent, requestedThread, requestThread, requestedSend, requestSend } = usePanelAgentStore()
   const user = useAuthStore((state) => state.user?.id || 'default')
   const draftKey = articleDraftKey(user, destination)
   const draft = useArticleDraftStore((state) => state.drafts[draftKey] || EMPTY_ARTICLE_DRAFT)
@@ -364,6 +364,28 @@ export function AgentConversation({ destination, embedded = false, onChat, hero,
     requestThread(null)
     void openRequested.current(requestedThread)
   }, [destination, requestedThread, requestThread, chat.connection])
+  // Ask Ren on an article: a new chat with the requested agent, then exactly that message and article. The composer
+  // keeps what the user was writing. The message goes only once the new chat is the one shown (its session changed).
+  const sendStarted = useRef<{ id: string; from: string } | null>(null)
+  useEffect(() => {
+    if (!requestedSend || requestedSend.destination !== destination || voice || chat.connection === 'loading') return
+    if (sendStarted.current?.id !== requestedSend.id) {
+      sendStarted.current = { id: requestedSend.id, from: chat.sessionId }
+      void startRequested.current(requestedSend.agent)
+      return
+    }
+    if (chat.sessionId === sendStarted.current.from || chat.messages.length || unavailable) return
+    requestSend(null)
+    followOutput.current = true
+    const { text, articles } = requestedSend
+    void sendLatest(text, 'message', undefined, undefined, articles).then((sent) => {
+      if (sent) return
+      // Not accepted: the request lands in the composer instead of being lost.
+      const store = useArticleDraftStore.getState()
+      for (const article of articles) store.attach(draftKey, article)
+      setInput((current) => current || text)
+    })
+  }, [requestedSend, requestSend, destination, voice, chat.connection, chat.sessionId, chat.messages.length, unavailable, sendLatest, draftKey, setInput])
   // Attachments go with a new message, never with steering.
   const attachmentCount = draft.articles.length + attachments.count
   const message = attachments.messageFor(input)
@@ -1299,6 +1321,7 @@ function reasoningSteps(text: string): { label: string; body: string }[] {
 
 function ReasoningChain({ text, path, streaming }: { text: string; path: string; streaming: boolean }) {
   const steps = useMemo(() => reasoningSteps(text), [text])
+  if (!steps.length) return null
   return <ChainOfThought className="my-3 space-y-2 text-xs" defaultOpen={streaming} isStreaming={streaming}>
     <ChainOfThoughtHeader>{streaming ? 'Thinking…' : 'Chain of Thought'}{path ? ` · ${path}` : ''}</ChainOfThoughtHeader>
     <ChainOfThoughtContent>

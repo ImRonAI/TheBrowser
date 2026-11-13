@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef, type CSSProperties } from 'react'
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
-import { ArrowRight, Check } from 'lucide-react'
+import { ArrowRight, Check, X } from 'lucide-react'
 import { RenWordmark } from '@/components/brand'
 import { Shimmer } from '@/components/ai-elements/shimmer'
 import { useOnboardingStore, INTERVIEW } from '@/stores/onboardingStore'
@@ -42,6 +42,7 @@ export function OnboardingPage() {
     nextQuestion,
     setAnswer,
     completeOnboarding,
+    cancelRedo,
     addReasoningStep
   } = useOnboardingStore()
   const reduceMotion = useReducedMotion()
@@ -49,11 +50,16 @@ export function OnboardingPage() {
   const [inputValue, setInputValue] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
 
-  // Opened via #onboarding while a previous run is already complete → start a fresh interview.
+  // Opened via #onboarding while a previous run is already complete → back it up and start a fresh interview.
   useEffect(() => {
-    const { isComplete, resetOnboarding } = useOnboardingStore.getState()
-    if (isComplete && window.location.hash === '#onboarding') resetOnboarding()
+    const { isComplete, startRedo } = useOnboardingStore.getState()
+    if (isComplete && window.location.hash === '#onboarding') startRedo()
   }, [])
+
+  const handleCancel = () => {
+    cancelRedo()
+    if (window.location.hash === '#onboarding') window.location.hash = ''
+  }
 
   // Focus input on step change
   useEffect(() => {
@@ -196,18 +202,28 @@ export function OnboardingPage() {
                       </div>
                     </div>
 
-                    <div className="flex items-center justify-end gap-4">
-                      <span className="hidden items-center gap-1.5 text-[12px] text-ink-secondary dark:text-ink-inverse-muted sm:inline-flex">
-                        Press <kbd className="kbd">Enter</kbd>
-                      </span>
+                    <div className="flex items-center justify-between gap-4">
                       <button
-                        type="submit"
-                        disabled={!inputValue.trim()}
-                        className="group inline-flex h-11 items-center gap-2 rounded-lg bg-blurple-600 px-5 text-[14px] font-semibold text-white transition-colors duration-150 hover:bg-blurple-700 active:translate-y-px active:bg-blurple-800 disabled:pointer-events-none disabled:opacity-40 dark:bg-blurple-400 dark:text-ink dark:hover:bg-blurple-300"
+                        type="button"
+                        onClick={handleCancel}
+                        className="inline-flex h-11 items-center gap-2 rounded-lg border border-surface-200 px-4 text-[14px] font-medium text-ink-secondary transition-colors duration-150 hover:bg-surface-100 hover:text-ink dark:border-surface-700 dark:text-ink-inverse-secondary dark:hover:bg-surface-800 dark:hover:text-ink-inverse"
                       >
-                        Next
-                        <ArrowRight className="h-4 w-4 transition-transform duration-200 ease-out group-hover:translate-x-0.5" />
+                        <X className="h-4 w-4" />
+                        Cancel
                       </button>
+                      <div className="flex items-center gap-4">
+                        <span className="hidden items-center gap-1.5 text-[12px] text-ink-secondary dark:text-ink-inverse-muted sm:inline-flex">
+                          Press <kbd className="kbd">Enter</kbd>
+                        </span>
+                        <button
+                          type="submit"
+                          disabled={!inputValue.trim()}
+                          className="group inline-flex h-11 items-center gap-2 rounded-lg bg-blurple-600 px-5 text-[14px] font-semibold text-white transition-colors duration-150 hover:bg-blurple-700 active:translate-y-px active:bg-blurple-800 disabled:pointer-events-none disabled:opacity-40 dark:bg-blurple-400 dark:text-ink dark:hover:bg-blurple-300"
+                        >
+                          Next
+                          <ArrowRight className="h-4 w-4 transition-transform duration-200 ease-out group-hover:translate-x-0.5" />
+                        </button>
+                      </div>
                     </div>
                   </form>
                 </motion.div>

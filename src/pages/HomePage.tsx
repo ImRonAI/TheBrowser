@@ -98,9 +98,9 @@ function DiscoverContent() {
   const recordInteraction = useInterestsStore((state) => state.recordInteraction)
   const addContext = useContextAgentStore((state) => state.addContext)
   const hasAnswers = useOnboardingStore((state) => state.answers.length > 0)
-  const resetOnboarding = useOnboardingStore((state) => state.resetOnboarding)
-  // Re-run the interview: clear answers, then route via #onboarding (App.tsx shows the page for guests too).
-  const personalize = () => { resetOnboarding(); window.location.hash = '#onboarding' }
+  const startRedo = useOnboardingStore((state) => state.startRedo)
+  // Re-run the interview: back up current answers so Cancel can restore them, then route via #onboarding.
+  const personalize = () => { startRedo(); window.location.hash = '#onboarding' }
   useEffect(() => { void load(profile) }, [profile, load])
   const liveGroups = useMemo(() => sectionsToStoryGroups(sections), [sections])
   const groups = useMemo(() => {

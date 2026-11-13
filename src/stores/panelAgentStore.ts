@@ -1,7 +1,20 @@
 import { create } from 'zustand'
+import type { AgentDestination, ArticleAttachment } from '@/lib/articles'
 import type { AgentChoice } from '@/lib/panel-agents'
 
 export type PanelMode = 'narrow' | 'wide' | 'fullscreen'
+
+/**
+ * A message another surface sends for the user (Ask Ren on an article): the conversation for `destination` starts a
+ * new chat with `agent` and sends exactly `text` with `articles`. Its composer keeps whatever the user was writing.
+ */
+export interface PanelSendRequest {
+  id: string
+  destination: AgentDestination
+  agent: AgentChoice
+  text: string
+  articles: ArticleAttachment[]
+}
 
 export interface ChatMessage {
   id: string
@@ -23,6 +36,8 @@ interface PanelAgentState {
   /** A thread (session id) another surface asks the Agent Panel to open, e.g. a chat referenced in a page. */
   requestedThread: string | null
   requestThread: (sessionId: string | null) => void
+  requestedSend: PanelSendRequest | null
+  requestSend: (request: PanelSendRequest | null) => void
 }
 
 export const usePanelAgentStore = create<PanelAgentState>((set) => ({
@@ -36,4 +51,6 @@ export const usePanelAgentStore = create<PanelAgentState>((set) => ({
   requestAgent: (requestedAgent) => set({ requestedAgent }),
   requestedThread: null,
   requestThread: (requestedThread) => set({ requestedThread }),
+  requestedSend: null,
+  requestSend: (requestedSend) => set({ requestedSend }),
 }))

@@ -274,11 +274,15 @@ export function usePanelChat(selection: Selection) {
     action: 'message' | 'checkpoint_resume' | 'interrupt_response' = 'message',
     responses?: { interruptId: string; response: unknown }[],
     onAccepted?: () => void,
+    /** Send exactly these articles instead of the composer's; the composer's articles, pastes and context stay for later. */
+    articles?: ArticleAttachment[],
   ): Promise<boolean> => {
     if (!ready.current || !browserHydrated || current.current.recoveryRequired) return false
+    const sentArticles = articles ?? selection.attachments ?? []
+    const composerAttachments = articles ? undefined : selection.promptAttachments
     if (current.current.status === 'running') {
       // Steering is text only: attachments wait for the next message.
-      const sent = action === 'message' && Boolean(text.trim()) && !selection.attachments?.length && !selection.promptAttachments?.count
+      const sent = action === 'message' && Boolean(text.trim()) && !sentArticles.length && !composerAttachments?.count
         ? await sendControl('steer', text.trim()) : false
       if (sent) onAccepted?.()
       return sent
@@ -289,9 +293,9 @@ export function usePanelChat(selection: Selection) {
     const token = generation.current
     // Attachments are read before the message shows, so it shows exactly what the agent receives.
     let promptAttachments: PromptAttachment[] = []
-    if (action === 'message' && selection.promptAttachments?.count) {
+    if (action === 'message' && composerAttachments?.count) {
       try {
-        promptAttachments = await selection.promptAttachments.resolve()
+        promptAttachments = await composerAttachments.resolve()
       } catch (error) {
         if (token === generation.current) {
           posting.current = false
@@ -316,7 +320,7 @@ export function usePanelChat(selection: Selection) {
     commit({ ...previous, status: 'running', configuration, configurationLocked: true, error: undefined, errorDetails: undefined, stopReason: undefined,
       messages: action === 'message' ? [...previous.messages, {
         id: `user-${crypto.randomUUID()}`, role: 'user', parts: [{ kind: 'text', key: crypto.randomUUID(), path: [], text: text.trim() },
-          ...(selection.attachments ?? []).map((article) => ({ kind: 'text' as const, key: article.id, path: [], text: ARTICLE_PREFIX + JSON.stringify(article) })),
+          ...sentArticles.map((article) => ({ kind: 'text' as const, key: article.id, path: [], text: ARTICLE_PREFIX + JSON.stringify(article) })),
           ...promptAttachments.map((attachment) => ({ kind: 'text' as const, key: `attachment-${attachment.id}`, path: [], text: attachmentBlock(attachment) }))],
       }] : previous.messages })
     let accepted = false
@@ -329,7 +333,7 @@ export function usePanelChat(selection: Selection) {
         method: 'POST', headers: { 'Content-Type': 'application/json', ...auth }, signal: abort.signal,
         body: JSON.stringify({
           session_id: id, user_id: userId, message: action === 'message' ? text.trim() : '', action,
-          destination, attachments: action === 'message' ? selection.attachments ?? [] : [],
+          destination, attachments: action === 'message' ? sentArticles : [],
           ...(promptAttachments.length ? { prompt_attachments: promptAttachments } : {}),
           ...chatScopeFields(destination, issueId),
           ...(!previous.configurationLocked ? { model: configuration.model, provider: configuration.provider,

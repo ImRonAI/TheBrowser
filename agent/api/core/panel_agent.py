@@ -1070,8 +1070,10 @@ def create_panel_agent(
     if not isinstance(goal, str) and not callable(goal):
         raise ValueError("goal must be text or an application validator")
     # Perplexity stream stalls are surfaced as throttles by the adapter; a short
-    # first backoff keeps the visible pause brief. Other providers keep native 4s.
-    retry = TimeoutRetryStrategy(
+    # first backoff keeps the visible pause brief. NIM uses native ModelRetryStrategy
+    # (throttles only, never timeouts) so stalled NVCF endpoints fail once instead of looping.
+    retry_cls = ModelRetryStrategy if provider == "nim" else TimeoutRetryStrategy
+    retry = retry_cls(
         max_attempts=_env_integer("PANEL_RETRY_MAX_ATTEMPTS", 6, minimum=1),
         initial_delay=_env_integer("PANEL_RETRY_INITIAL_DELAY", 1 if provider == "perplexity" else 4),
         max_delay=_env_integer("PANEL_RETRY_MAX_DELAY", 240),
@@ -1345,6 +1347,19 @@ def _strip_model_prefix(name: str) -> str:
     return name.removeprefix("models/") if name.startswith("models/") else name
 
 
+NIM_MODELS: tuple[str, ...] = (
+    "minimaxai/minimax-m3.1-flash",
+    "nvidia/nemotron-3-ultra-550b-a55b",
+    "nvidia/nemotron-3.5-super-vl-120b-a12b",
+    "mistralai/mistral-large-4-1t-a52b",
+    "nvidia/nemotron-3.5-lightning-30b-a3b",
+    "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
+    "nvidia/nemotron-3.5-bolt-e4b",
+    "meta/muse-glimmer-30b",
+    "poolside/laguna-xs-2.1",
+)
+
+
 def list_provider_models(provider: ProviderName) -> list[dict[str, str]]:
     """Live catalogue for one provider. Raises on hard failures; callers log and skip."""
     if provider == "perplexity":
@@ -1353,16 +1368,14 @@ def list_provider_models(provider: ProviderName) -> list[dict[str, str]]:
     if provider == "nim":
         if not provider_api_key("nim"):
             return []
-        from openai import OpenAI
-
-        with OpenAI(
-            api_key=provider_api_key("nim"),
-            base_url=NVIDIA_NIM_BASE_URL,
-            timeout=15.0,
-            max_retries=0,
-        ) as client:
-            return [{"id": item.id, "owned_by": getattr(item, "owned_by", None) or "nvidia", "provider": "nim"}
-                    for item in client.models.list()]
+        return [
+            {
+                "id": model_id,
+                "owned_by": model_id.split("/", 1)[0] if "/" in model_id else "nvidia",
+                "provider": "nim",
+            }
+            for model_id in NIM_MODELS
+        ]
 
     if provider in ("openai", "anthropic"):
         if not provider_api_key(provider):

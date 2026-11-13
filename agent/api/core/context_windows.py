@@ -40,7 +40,10 @@ MISTRAL_MODELS_URL = "https://api.mistral.ai/v1/models"
 GEMINI_MODEL_URL = "https://generativelanguage.googleapis.com/v1beta/models/"
 
 #: NIM publishes no window in its model list; these come from each model's card on build.nvidia.com.
-NIM_CONTEXT_WINDOWS = {"z-ai/glm-5.3-flash": 1_048_576}
+NIM_CONTEXT_WINDOWS = {
+    "z-ai/glm-5.3-flash": 1_048_576,
+    "deepseek-ai/deepseek-v4.1-flash": 1_048_576,
+}
 
 #: Transport for metadata requests; ``None`` is the network. Tests set an ``httpx.MockTransport``.
 HTTP_TRANSPORT: httpx.BaseTransport | None = None

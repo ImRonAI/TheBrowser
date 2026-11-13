@@ -835,7 +835,8 @@ class SessionRun:
                     recovery = ("overflow", overflow)
                 except Exception as failure:
                     # Timeouts reach here after the native retry strategy's attempts.
-                    if not is_model_timeout(failure) or not self._can_recover():
+                    # NIM timeouts indicate a stalled NVCF container and must surface immediately without respawning.
+                    if not is_model_timeout(failure) or self.selection.get("provider") == "nim" or not self._can_recover():
                         raise
                     recovery = ("timeout", failure)
             async with self._lock:
