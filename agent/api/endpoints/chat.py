@@ -65,6 +65,7 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 #: surfaces served by the running Electron app. Browser targets, their server
 #: configs and the availability policy are owned by panel_browser; the prompt
 #: loads the selected server through tool_catalog(action="load", name=<server>).
+from agent.api.core.ren_mcp import phone_prompt_section  # noqa: E402
 from agent.api.core.panel_browser import (  # noqa: E402
     ELECTRON_MCP_COMMAND,
     default_browser,
@@ -212,7 +213,7 @@ def _compose(browser: str) -> str:
             "\n- perplexity_search: search the live web via Perplexity Search.", ""
         )
     )
-    return base + browser_prompt_section(browser) + WORKSPACE_ADDENDUM
+    return base + browser_prompt_section(browser) + phone_prompt_section() + WORKSPACE_ADDENDUM
 
 
 #: Live (BidiAgent) deltas from the text agent: the browser server is pre-loaded and declared, and the
