@@ -1,10 +1,11 @@
 # Build Agent workbench — contract
 
-The Build destination (`ChatRequest.destination="build"`) is Ren's Build Agent: the panel composition working in
-one private project directory per (user, session). The IDE workbench beside the chat shows that directory's files,
-a live preview and its git history through the `/build` routes. Code: `agent/api/core/build_workspace.py`,
-`agent/api/endpoints/build.py`, wiring in `agent/api/endpoints/chat.py` (`_create_runtime_agent`) and
-`agent/api/core/panel_agent.py` (`create_panel_agent`).
+The Build destination (`ChatRequest.destination="build"`) is Ren's Build Agent: one strands_harness
+`create_harness` agent per build session, working in one private project directory per (user, session). The IDE
+workbench beside the chat shows that directory's files, a live preview and its git history through the `/build`
+routes. Code: `agent/api/core/build_agent.py` (agent + model router), `agent/api/core/build_workspace.py`,
+`agent/api/endpoints/build.py`, wiring in `agent/api/endpoints/chat.py` (`_create_runtime_agent` →
+`_create_build_agent`).
 
 ## Workspace
 
@@ -23,18 +24,70 @@ when its target is inside the workspace (and never descends into it); one that l
 
 ## The agent
 
-`chat._create_runtime_agent`, for `destination == "build"`:
+`chat._create_runtime_agent` routes `destination == "build"` to `_create_build_agent` (before the panel
+composition and the tool-repair trigger: `shell`/`editor` here are not catalog tools, so a repaired revision could
+never be activated for them). It pops the runtime's `hooks` and `plugins` out of `runtime_options`, builds the model
+router and calls `build_agent.create_build_agent`, both offloaded with `asyncio.to_thread`. Every agent construction,
+including a stall/overflow respawn, builds a fresh router and guard.
 
-1. `ensure_workspace(user_id, session_id)`.
-2. Appends `BuildWorkspaceGuard(root)` to `runtime_options["plugins"]` (next to the runtime's `ContextInjector`;
-   `create_panel_agent` passes runtime plugins to the native `Agent(plugins=…)`). Rebuilt on every agent
-   construction, including a stall/overflow respawn.
-3. Replaces the old one-line addendum with `build_agent_prompt(root)`.
+**Model: `ModelRouter`** (native `strands.models.routing`), from `build_model_router(provider, model_id, effort)`:
 
-`create_panel_agent` keeps `Todos` (`todo_write`) and **skips `EnvironmentContext` when `agent_scope == "build"`**:
-the plugin probes `pwd` and reads `AGENTS.md` through `agent.sandbox` (`strands_harness/plugins/environment.py`
-`_gather`), and the default `NotASandboxLocalEnvironment` resolves both against `os.getcwd()` — the API's cwd, the Ron
-repository — so it would hand Ron's own AGENTS.md to the Build Agent as its project's.
+| Candidate | Model | Effort |
+|---|---|---|
+| 1 | the session's chosen model (default NIM `z-ai/glm-5.3-flash`) | the picked level; none picked → `max` when the model offers it |
+| 2… | GLM 5.3 Flash on every other offered chat provider, in `RON_CHAT_PROVIDERS` order (NIM `z-ai/glm-5.3-flash`, Mistral `zai-glm-5-3-flash`) | the picked level when that candidate offers it, else `max` |
+| last | GLM 5.3 on Mistral (`zai-glm-5-3`, `BUILD_LAST_RESORT`), when Mistral is offered | same rule |
+
+All of them report a 1,048,576-token window (`context_windows.py`); the router requires comparable windows because
+proactive compression sizes against the first candidate.
+
+**Read bounds.** NIM and Mistral candidates are built with `build_model(..., read_timeout=…)`:
+`RON_BUILD_NIM_READ_TIMEOUT` (default **20 s**) and `RON_BUILD_MISTRAL_READ_TIMEOUT` (default **60 s**; `0`
+disables either). NIM's `OpenAIModel` gets `client_args.timeout = httpx.Timeout(t, connect=min(10, t))` and
+`max_retries = 0` (the openai client's own two retries would repeat a silent call). Mistral's `RonMistralModel` gets
+`client_args.timeout_ms` (mistralai's per-operation httpx timeout, streaming reads included; it retries nothing
+without `retry_config`). A candidate that accepts the request and then sends nothing fails that call with its
+client's timeout error. The agent's native `ModelRetryStrategy(max_attempts=3, initial_delay=2, max_delay=8)` claims
+only throttling, so the router (`AfterModelCallEvent`, order `MODEL_ROUTING`) sees the timeout or any other provider
+error and continues the same call on the next candidate; a throttled candidate (Mistral's 429
+`backend_out_of_capacity`) gets two short retries first.
+
+**Routing strategy: `RecentFailureStrategy`** (NOT NATIVE: the SDK's `RoutingStrategy` protocol,
+`models/routing/strategy.py`, wrapping the native `FallbackStrategy`). After a failed call it is `FallbackStrategy`
+unchanged. On a new invocation's opening ask it returns the first candidate that has not failed within
+`RON_BUILD_MODEL_COOLDOWN` seconds (default **300**); when every candidate has, the one whose failure is oldest. A
+candidate that answers after failing is cleared. One instance is shared by every Build router in the API process, so
+the memory survives turns, sessions and runtime respawns (it is per process: each API process learns on its own).
+The SDK's strategies see only the current invocation's attempts, so without it every turn and every respawn opened
+on a dead provider and paid its read bound again.
+
+**Why** (2026-11-11). NVIDIA's hosted `integrate.api.nvidia.com/v1/chat/completions` held requests open with zero
+bytes (every model, while `/v1/models` answered). With no client timeout (openai's default is 600 s × 3 attempts) and
+no fallback, every Build turn sat silent until the runtime's stall watchdog (`PANEL_RUN_STALL_SECONDS`, 120 s)
+cancelled it, respawned twice, then failed the run: about six minutes of nothing. At the same time Mistral's GLM 5.3
+Flash answered 429 `backend_out_of_capacity` at `max` and took ~20 s to its first byte, while Mistral's GLM 5.3
+answered in under 2 s; hence the 60 s Mistral bound and the GLM 5.3 last resort.
+
+The renderer (`AgentPanel.tsx` `defaultEffort`) preselects **Max** for GLM 5.3 Flash on the Build page, so the
+picker shows what the agent runs.
+
+**Agent: `create_harness`** (`build_agent.create_build_agent`), with the choices `create_issue_chat_agent` documents
+for a multi-tenant host:
+
+| Option | Value | Why |
+|---|---|---|
+| `tools` | installed `strands_tools` `shell` and `editor`, `http_request`, the Brave search tools | the names the workbench reads (`src/lib/build-insights.ts`); docs lookups |
+| `builtin_tools` | `[]` | the harness `shell`/`read`/`write`/`edit` run in `agent.sandbox`, whose local default is the API's cwd (this repository) |
+| `builtin_plugins` | `["todos"]` | `todo_write`, the Plan pane; no `environment` (it reads the API cwd's `AGENTS.md`) |
+| `plugins` | the runtime's `ContextInjector`, `BuildWorkspaceGuard(root)`, a `ContextOffloader` on the user's session storage (not with `agentic`), and a `GoalLoop(preserve_context=True)` when a goal is set | |
+| context (`context` option) | the panel composition's modes: `auto` = `context_manager=False` + `SummarizingConversationManager(preserve_recent_messages=4, proactive_compression=PANEL_CONTEXT_COMPRESSION_THRESHOLD)` whose summarizer is a separate `Agent` on its own `build_model_router`; `sliding` = `SlidingWindowConversationManager`; `agentic` = the native agentic `ContextManager` | a thread's snapshot stores its conversation manager's state under the class name and the SDK refuses another class ("Invalid conversation manager state."), so these keep every Build thread saved before `build_agent.py` restorable |
+| `background_tasks` | off unless the `background` option is on (then `wait_for_completion=True`, `editor` never backgrounded) | |
+| `session`, `skills`, `memory`, `mcp_servers`, `interventions`, `caching` | off | the runtime's `ThreadSessionManager` arrives through the agent kwargs; models are pre-built |
+| agent kwargs | `agent_id`, `session_manager`, `callback_handler` from the runtime; `retry_strategy`, `tool_executor`, `checkpointing`, `trace_attributes` | |
+
+After construction it adds `ToolObservation`, `ThreadProjection(destination="build")` (guests are never projected)
+and the runtime's hooks with `agent.hooks.add_hook`. The Build Agent has no browser tools, memory, workspace
+(projects/documents) tools, A2A or specialist tools: it builds software in its workspace.
 
 **`BuildWorkspaceGuard`** (`ron:build-workspace-guard`) is a native `Plugin` registering one `BeforeToolCallEvent`
 hook that rewrites the writable `tool_use["input"]` (the `ThinkToolsGuard` pattern; the executor runs
@@ -198,5 +251,5 @@ Studio. A Studio narrower than 680px shows its tabs as icons, with the open tab'
 
 `agent/tests/test_build_workspace.py` (real tmp filesystem, real `git`, the real router and app, real Strands
 `BeforeToolCallEvent`s and a real agent run of the installed `editor`/`shell` with a scripted model) and
-`agent/tests/test_panel_composition.py::test_build_agent_works_in_its_workspace_without_environment_context`.
+`agent/tests/test_build_agent.py` (candidates and efforts, the NIM/Mistral read bounds, the `create_harness` composition and its context modes, a thread saved by the panel composition restoring into the Build Agent, and a real fail-over: the real `openai` client, `ModelRouter` and harness agent against a local chat-completions server where one model never answers).
 `agent/tests/conftest.py` points `RON_BUILD_ROOT` at pytest's temp dir for every test.

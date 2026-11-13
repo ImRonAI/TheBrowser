@@ -832,24 +832,3 @@ def test_harness_plugins_gated_and_interventions_resolved(offline, monkeypatch):
     assert not any(isinstance(p, (Todos, EnvironmentContext)) for p in kwargs["plugins"])
     # strands_harness intervention sugar resolved onto the native Agent kwarg.
     assert kwargs["interventions"]
-
-
-def test_build_agent_works_in_its_workspace_without_environment_context(offline):
-    """Build destination: Todos stays, EnvironmentContext (Ron's cwd + AGENTS.md) goes, the workspace guard joins."""
-    from strands_harness.plugins import EnvironmentContext, Todos
-    from agent.api.core.build_workspace import BuildWorkspaceGuard, workspace_root
-    from agent.api.endpoints import chat
-
-    _build, _models, _catalogs, constructed, _storage = offline
-    agent = asyncio.run(chat._create_runtime_agent(
-        user_id="user", session_id="build-session", options={}, runtime_options={},
-        selection={"provider": "perplexity", "model_id": "offline", "destination": "build"}))
-    kwargs = constructed[-1][1]
-    root = workspace_root("user", "build-session")
-    assert any(isinstance(p, Todos) for p in kwargs["plugins"])
-    assert not any(isinstance(p, EnvironmentContext) for p in kwargs["plugins"])
-    guards = [p for p in kwargs["plugins"] if isinstance(p, BuildWorkspaceGuard)]
-    assert len(guards) == 1 and guards[0].root == str(root)
-    assert root.is_dir() and (root.stat().st_mode & 0o777) == 0o700
-    assert "You are Ren's Build Agent." in kwargs["system_prompt"] and str(root) in kwargs["system_prompt"]
-    assert "todo_write" in agent.tool_registry.registry

@@ -79,6 +79,11 @@ def test_article_reaches_native_model_and_restored_history(monkeypatch, destinat
         async with offline_api(monkeypatch, model=model) as (client, manager, builds, agents, shell, threads):
             monkeypatch.setattr(chat, 'infer_provider', lambda _: 'openai')
             monkeypatch.setattr(chat, 'provider_default_model', lambda _: 'offline')
+            if destination == 'build':
+                # The Build Agent is its own create_harness agent (core/build_agent.py), built for real on this model.
+                from agent.api.core import panel_storage
+                monkeypatch.setattr(panel_storage, '_storage', InMemoryStorage())
+                monkeypatch.setattr(chat, 'build_model_router', lambda *_: model)
             response = await client.post('/chat', json={'session_id': f'article-{destination}',
                 **({'provider': 'openai', 'model': 'offline'} if explicit_selection else {}),
                 'message': 'Compare this evidence.', 'destination': destination, 'attachments': [article]})
@@ -93,16 +98,21 @@ def test_article_reaches_native_model_and_restored_history(monkeypatch, destinat
             assert snapshot['messages'][0]['content'] == blocks
             if destination == 'build':
                 from agent.api.core.build_workspace import workspace_root
-                assert "You are Ren's Build Agent." in builds[0]['system_prompt']
-                assert str(workspace_root('default', 'article-build')) in builds[0]['system_prompt']
-            elif destination != 'panel':
-                assert f'You are {destination.title()} Agent.' in builds[0]['system_prompt']
-            context_tools = {tool.tool_name for tool in builds[0]['extra_tools']}
-            assert context_tools == ({'update_interest_graph', 'recommend_agent'} if destination == 'context' else
-                                     WORKSPACE_TOOLS if destination == 'panel' else set())
-            # Only Ren's own panel chat is told about its document and project tools.
-            from agent.api.core.workspace_tools import workspace_prompt
-            assert (workspace_prompt() in builds[0]['system_prompt']) == (destination == 'panel')
+                from agent.api.core.workspace_tools import workspace_prompt
+                assert not builds
+                prompt = manager._sessions[('default', 'article-build')].agent.system_prompt
+                assert "You are Ren's Build Agent." in prompt
+                assert str(workspace_root('default', 'article-build')) in prompt
+                assert workspace_prompt() not in prompt
+            else:
+                if destination != 'panel':
+                    assert f'You are {destination.title()} Agent.' in builds[0]['system_prompt']
+                context_tools = {tool.tool_name for tool in builds[0]['extra_tools']}
+                assert context_tools == ({'update_interest_graph', 'recommend_agent'} if destination == 'context' else
+                                         WORKSPACE_TOOLS if destination == 'panel' else set())
+                # Only Ren's own panel chat is told about its document and project tools.
+                from agent.api.core.workspace_tools import workspace_prompt
+                assert (workspace_prompt() in builds[0]['system_prompt']) == (destination == 'panel')
             wrong = await client.post('/chat', json={'session_id': f'article-{destination}', 'provider': 'openai',
                 'message': 'Wrong destination', 'destination': 'build' if destination != 'build' else 'search'})
             assert wrong.status_code == 409
