@@ -6,6 +6,7 @@ import type { Editor } from '@tiptap/react'
 import { Markdown } from '@tiptap/markdown'
 import { NotionEditor } from '@/components/board/task-detail/editor/NotionEditor'
 import { WorkflowBlockExtension } from '@/components/board/task-detail/editor/extensions/WorkflowBlockExtension'
+import { openInternalUrl } from '@/components/board/task-detail/editor/extensions/blocks/workspace'
 import type { Task } from '@/pages/types/task'
 import { ISSUE_STATUS_CONFIG, PROJECT_TYPE_SCHEMES, type Issue, type Project } from '@/types/projects'
 import { canPlaceIssue, issueDefinitions, validateIssueDates } from '@/lib/project-issue-utils'
@@ -165,7 +166,7 @@ export function CanonicalIssueWorkspace({ issue, project, onClose, onNavigate }:
   const unrelate = async (link: DocumentIssueLink) => {
     if (await docs.unlink(link)) await writeContext((context) => withoutDocumentContext(context, link.documentId))
   }
-  const openDocument = (doc: ProjectDocumentSummary) => void navigate(() => { void window.electron?.browser?.navigate(documentSource(doc)) })
+  const openDocument = (doc: ProjectDocumentSummary) => void navigate(() => openInternalUrl(documentSource(doc)))
   /** New document from the field: save this issue, create + link the page, add it to Context, open it in Docs. */
   const createRelated = async (title: string) => {
     if (!(await save())) return false
@@ -180,7 +181,7 @@ export function CanonicalIssueWorkspace({ issue, project, onClose, onNavigate }:
         if (result.error) { if (mounted.current) setError(`The page was created and linked, but not added to Context: ${result.error}`); return false }
       } finally { if (mounted.current) setContextWriting(false) }
     }
-    void window.electron?.browser?.navigate(pageSource(projectId, page.id))
+    openInternalUrl(pageSource(projectId, page.id))
     return true
   }
   /**
