@@ -7,6 +7,7 @@ import { CreateProjectDialog } from '@/components/projects/dialogs'
 import { PageBackground } from '@/components/shared/PageBackground'
 import { Button } from '@/components/ui/button'
 import { useElementWidth } from '@/hooks/useElementWidth'
+import { openInternalUrl } from '@/components/board/task-detail/editor/extensions/blocks/workspace'
 import { isGuestUserId, openSignIn } from '@/lib/sign-in'
 import { isSharedProject } from '@/lib/project-members'
 import {
@@ -57,7 +58,7 @@ const openProject: Opener = (project, background) => {
     void electron.tabs.create(url)
     return
   }
-  void electron?.browser?.navigate(url)
+  openInternalUrl(url)
 }
 
 /**

@@ -106,7 +106,7 @@ function AddFavorite({ onAdd }: AddFavoriteProps) {
           Add
         </button>
       </PopoverTrigger>
-      <PopoverContent align="start" className="w-72 rounded-xl border-border p-3 shadow-float">
+      <PopoverContent align="start" collisionPadding={12} className="w-72 rounded-xl border-border p-3 shadow-float">
         <form onSubmit={handleSubmit} className="flex flex-col gap-2">
           <p className="mb-1 font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground">Add a favorite</p>
           <Input
