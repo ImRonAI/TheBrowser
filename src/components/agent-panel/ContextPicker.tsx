@@ -356,7 +356,7 @@ export function ContextPicker({ selectedContexts, onContextsChange, className, a
                       {upload.error && <p role="alert" className="px-3 pb-2 text-body-xs text-rose-600 dark:text-rose-400">{upload.error}</p>}
                     </>}
                     {rows.map(({ item, label }, index) => (
-                      <ContextRow key={item.id} item={item} label={label} selected={isSelected(item.id)} active={index === activeIndex}
+                      <ContextRow key={item.id} id={`${listId}-${index}`} item={item} label={label} selected={isSelected(item.id)} active={index === activeIndex}
                         onPick={() => toggleContext(item)} onHover={() => setActiveIndex(index)} />
                     ))}
                     {!rows.length && (category?.loading ? <Note>Loading…</Note>
@@ -392,6 +392,7 @@ export function ContextMentionList({ query, results, activeIndex, loading, onPic
   selectedIds: Set<string>
 }) {
   const listRef = useRef<HTMLDivElement>(null)
+  const listId = useId()
   useEffect(() => { listRef.current?.querySelector('[data-active]')?.scrollIntoView({ block: 'nearest' }) }, [activeIndex])
   return (
     <div ref={listRef} role="listbox" aria-label="Mention context"
@@ -400,7 +401,7 @@ export function ContextMentionList({ query, results, activeIndex, loading, onPic
         {query ? `Context matching “${query}”` : 'Mention a chat, issue, tab, date or interest'}
       </p>
       {results.map(({ category, item }, index) => (
-        <ContextRow key={item.id} item={item} label={category.name} active={index === activeIndex} selected={selectedIds.has(item.id)}
+        <ContextRow key={item.id} id={`${listId}-${index}`} item={item} label={category.name} active={index === activeIndex} selected={selectedIds.has(item.id)}
           onPick={() => onPick(item)} onHover={() => onHover(index)} />
       ))}
       {!results.length && <Note>{loading ? 'Loading…' : query ? `Nothing matches “${query}”. Esc or Enter keeps it as text.` : 'Nothing to mention yet.'}</Note>}
