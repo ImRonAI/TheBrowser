@@ -7,14 +7,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { AlertTriangle, Code2, FileCode2, FileImage, FileJson, FileText, File as FileIcon, FilePlus2, Loader2, Save, Trash2, X } from 'lucide-react'
 import { FileTree, FileTreeFile, FileTreeFolder } from '@/components/ai-elements/file-tree'
-import { openResult } from '@/components/search/open-result'
-import { useElementWidth } from '@/hooks/useElementWidth'
-import { API_BASE_URL } from '@/lib/api-base'
-import { BuildConflict, buildDeleteFile, buildFile, buildFileUrl, buildSaveFile, buildTree, defaultBuildFile,
+import { BuildConflict, buildDeleteFile, buildFile, buildSaveFile, buildTree, defaultBuildFile,
   type BuildFile, type BuildRequest, type BuildTreeNode, type BuildWorkspace } from '@/lib/build-api'
 import { cn } from '@/utils/cn'
 import { CodeEditor, languageName } from '../CodeEditor'
-import { PaneBar, StudioEmpty, barButton, barIconButton, formatBytes, pillButton, primaryButton } from './shared'
+import { PaneBar, StudioEmpty, barButton, barIconButton, formatBytes, primaryButton } from './shared'
 
 const fileIcon = (name: string) => {
   if (/\.(png|jpe?g|gif|webp|svg|ico|avif)$/i.test(name)) return <FileImage className="size-4 text-ink-muted dark:text-ink-inverse-muted" />
@@ -70,8 +67,7 @@ export function CodePane({ request, userId, sessionId, workspace, onChanged, ope
   const deleted = useRef<string | null>(null)
   // Only the latest load fills the editor: a slower earlier one never lands under another file's name.
   const loads = useRef(0)
-  const editorRef = useRef<HTMLElement>(null)
-  const editorWidth = useElementWidth(editorRef)
+  const editorRef = useRef<HTMLDivElement>(null)
 
   /** Open a file's current version. `focus` puts the keyboard in the editor (a file just created here). */
   const load = useCallback(async (path: string, focus = false) => {
@@ -277,11 +273,11 @@ export function CodePane({ request, userId, sessionId, workspace, onChanged, ope
             {error && !conflict && !stale && <button type="button" className={barIconButton} onClick={() => setError('')} aria-label="Dismiss"><X className="h-3.5 w-3.5" /></button>}
           </div>
         )}
-        <div className="relative min-h-0 flex-1 overflow-hidden">
+        <div ref={editorRef} className="relative min-h-0 flex-1 overflow-hidden">
           {loading && !file ? <div className="flex h-full items-center justify-center"><Loader2 className="h-5 w-5 animate-spin text-ink-muted" /></div>
             : file?.binary ? <StudioEmpty icon={FileImage} title="Binary file">{file.path} · {formatBytes(file.size)}. Open it from the preview or ask Ren about it.</StudioEmpty>
             : file?.too_large ? <StudioEmpty icon={FileText} title="Too large to edit here">{file.path} is {formatBytes(file.size)}.</StudioEmpty>
-            : file ? <CodeEditor path={file.path} value={file.draft} onChange={(draft) => setFile((previous) => previous ? { ...previous, draft } : previous)} onSave={() => void save()} />
+            : file ? <CodeEditor key={loadId} autoFocus={focusEditor} path={file.path} value={file.draft} onChange={(draft) => setFile((previous) => previous ? { ...previous, draft } : previous)} onSave={() => void save()} />
             : <StudioEmpty icon={Code2} title={entries.length ? 'Pick a file' : 'No files yet'}>
                 {entries.length ? 'Choose a file on the left to read or edit it. Ren sees your saved edits.' : 'Files appear here the moment Ren writes them.'}
               </StudioEmpty>}
