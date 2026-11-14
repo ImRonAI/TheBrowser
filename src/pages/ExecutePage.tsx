@@ -17,6 +17,7 @@ import {
   DEFAULT_FILTERS, ISSUE_PRIORITIES, ISSUE_STATUSES, activeFilterCount, assigneeOptions, filterIssues, projectOptions, summarize, typeOptions,
   type DueFilter, type ExecuteFilters,
 } from '@/lib/execute-issues'
+import { openInternalUrl } from '@/components/board/task-detail/editor/extensions/blocks/workspace'
 import { isGuestUserId, openSignIn } from '@/lib/sign-in'
 import { cn } from '@/utils/cn'
 
@@ -93,9 +94,6 @@ export function ExecutePage() {
   const phase = !userId ? (error ? 'failed' : 'opening') : !isInitialized ? (error && !isLoading ? 'failed' : 'loading') : 'ready'
 
   const clearFilters = () => setFilters(DEFAULT_FILTERS)
-  const navigateInternal = (url: string) => {
-    if (typeof window !== 'undefined' && window.electron?.browser) window.electron.browser.navigate(url)
-  }
 
   const body = (() => {
     if (phase === 'opening') return <StatusPanel busy title="Opening your workspace…" />
@@ -257,7 +255,7 @@ export function ExecutePage() {
 
               <button
                 type="button"
-                onClick={() => navigateInternal('ron://projects')}
+                onClick={() => openInternalUrl('ron://projects')}
                 className="flex items-center gap-2 rounded-xl px-4 py-2.5 text-body-sm font-medium text-ink-muted transition-colors hover:bg-indigo-500/5 hover:text-indigo-600 dark:text-ink-inverse-muted dark:hover:text-indigo-400"
               >
                 <FolderKanban className="h-4 w-4" />
