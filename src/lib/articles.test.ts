@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { ARTICLE_PREFIX, cleanTitle, formatPublished, mdEscape, parseArticle, previewArticle, previewMarkdown, readStoryUrl, storyFromReadUrl, type Story } from './articles.ts'
+import { ARTICLE_PREFIX, cleanTitle, formatPublished, mdEscape, parseArticle, previewArticle, previewMarkdown, readStoryUrl, storyFromReadUrl, youtubeEmbedUrl, youtubeVideoId, type Story } from './articles.ts'
 import { hydratePanelSession } from './panel-stream.ts'
 
 const article = { id: 'a', title: 'Source', url: 'https://example.com/story', source: 'example.com', text: 'Full extracted reference', status: 'extracted' }
@@ -107,4 +107,13 @@ test('cleanTitle removes only a trailing site name', () => {
   assert.equal(cleanTitle('Drip coffee - Wikipedia', ['Wikipedia']), 'Drip coffee - Wikipedia')   // too short to be a headline
   assert.equal(cleanTitle('A long headline | Another Publisher', ['Example Times']), 'A long headline | Another Publisher')
   assert.equal(cleanTitle('Plain headline with no site', ['Example Times']), 'Plain headline with no site')
+})
+test('youtubeVideoId extracts 11-char IDs from watch, youtu.be, shorts, live and embed URLs', () => {
+  assert.equal(youtubeVideoId('https://www.youtube.com/watch?v=T5-2oqy0vSg&t=42s'), 'T5-2oqy0vSg')
+  assert.equal(youtubeVideoId('https://youtu.be/dQw4w9WgXcQ?si=xyz'), 'dQw4w9WgXcQ')
+  assert.equal(youtubeVideoId('https://www.youtube.com/shorts/abcdefghijk'), 'abcdefghijk')
+  assert.equal(youtubeVideoId('https://www.youtube-nocookie.com/embed/1234567890_'), '1234567890_')
+  assert.equal(youtubeVideoId('https://vimeo.com/12345678901'), null)
+  assert.equal(youtubeVideoId('https://www.youtube.com/channel/UC12345678901'), null)
+  assert.equal(youtubeEmbedUrl('T5-2oqy0vSg'), 'https://www.youtube-nocookie.com/embed/T5-2oqy0vSg?rel=0&modestbranding=1')
 })

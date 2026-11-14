@@ -1,6 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { descriptionRequestMessage, descriptionRetryMessage, draftParts, issueRunMessage, issueRunStatus } from './ron-draft.ts'
+import { withWorkflowBlocks, youtubeEmbedUrl, type DocNode } from './document-ron.ts'
 import type { PanelMessage } from './panel-stream.ts'
 
 const tool = (id: string, name: string, input: unknown = {}) =>
@@ -46,4 +47,56 @@ test('description messages open with the sentence the issue agent recognises, an
   const retry = descriptionRetryMessage('  shorter please ')
   assert.match(retry, /^Write the description for this issue\. Revise your last draft with this feedback: shorter please\n/)
   assert.match(retry, /Do not edit the issue with tools/)
+})
+
+test('youtubeEmbedUrl and withWorkflowBlocks convert standalone YouTube lines/links/fences into youtube nodes while preserving inline links and images', () => {
+  assert.equal(youtubeEmbedUrl('https://www.youtube.com/watch?v=dQw4w9WgXcQ'), 'https://www.youtube.com/watch?v=dQw4w9WgXcQ')
+  assert.equal(youtubeEmbedUrl('https://youtu.be/dQw4w9WgXcQ?t=12'), 'https://www.youtube.com/watch?v=dQw4w9WgXcQ')
+  assert.equal(youtubeEmbedUrl('https://www.youtube.com/shorts/dQw4w9WgXcQ'), 'https://www.youtube.com/watch?v=dQw4w9WgXcQ')
+  assert.equal(youtubeEmbedUrl('https://example.com/not-youtube'), null)
+
+  const doc: DocNode = {
+    type: 'doc',
+    content: [
+      { type: 'image', attrs: { src: 'https://upload.wikimedia.org/banksy.jpg', alt: 'Banksy Mural' } },
+      {
+        type: 'paragraph',
+        content: [{
+          type: 'text',
+          text: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+          marks: [{ type: 'link', attrs: { href: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' } }],
+        }],
+      },
+      {
+        type: 'paragraph',
+        content: [{
+          type: 'text',
+          text: 'Watch the BBC report',
+          marks: [{ type: 'link', attrs: { href: 'https://youtu.be/abcDEF123_-' } }],
+        }],
+      },
+      {
+        type: 'codeBlock',
+        attrs: { language: 'youtube' },
+        content: [{ type: 'text', text: 'https://www.youtube.com/embed/xyz98765432' }],
+      },
+      {
+        type: 'paragraph',
+        content: [
+          { type: 'text', text: 'Read more in ' },
+          { type: 'text', text: 'this video', marks: [{ type: 'link', attrs: { href: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' } }] },
+          { type: 'text', text: ' for context.' },
+        ],
+      },
+    ],
+  }
+
+  const transformed = withWorkflowBlocks(doc, () => 'wf-1')
+  assert.deepEqual(transformed.content?.slice(0, 4), [
+    { type: 'image', attrs: { src: 'https://upload.wikimedia.org/banksy.jpg', alt: 'Banksy Mural' } },
+    { type: 'youtube', attrs: { src: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' } },
+    { type: 'youtube', attrs: { src: 'https://www.youtube.com/watch?v=abcDEF123_-' } },
+    { type: 'youtube', attrs: { src: 'https://www.youtube.com/watch?v=xyz98765432' } },
+  ])
+  assert.equal(transformed.content?.[4]?.type, 'paragraph')
 })

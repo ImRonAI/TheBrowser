@@ -2,16 +2,19 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { RenIcon } from '@/components/brand'
 import type { Editor } from '@tiptap/react'
 import { nanoid } from 'nanoid'
-import { CornerDownRight, Loader2, Replace, RotateCcw, Square, Target, X } from 'lucide-react'
+import { CornerDownRight, Loader2, Monitor, Replace, RotateCcw, Square, Target, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Attachments } from '@/components/ai-elements/attachments'
 import { Message, MessageContent } from '@/components/ai-elements/message'
 import { MessageResponse } from '@/components/ai-elements/response'
 import { ChainOfThought, ChainOfThoughtContent, ChainOfThoughtHeader } from '@/components/ai-elements/chain-of-thought'
 import { MessageBubble } from '@/components/agent-panel/AgentPanel'
+import { PromptAttachmentCard, SentAttachments } from '@/components/agent-panel/PromptAttachments'
 import { WorkflowDiagram } from '@/components/workflow/WorkflowCanvas'
 import { AssistField } from '@/components/shared/TextAssist'
 import { documentContent, hasDraft, unwrapMarkdown, type DocNode } from '@/lib/document-ron'
 import { insertionTarget } from '@/lib/document-placement'
+import type { PromptAttachment } from '@/lib/prompt-attachments'
 import { draftParts, type DraftTurn } from '@/lib/ron-draft'
 import type { RonSegment } from '@/lib/ron-run'
 import { workflowOutline } from '@/lib/workflow'
@@ -23,7 +26,7 @@ export interface DraftAgent {
   running: boolean
   error: string | null
   /** A request (first turn, optionally in Goal mode) or feedback on the last draft (Try again). */
-  send: (ask: string, kind: 'request' | 'feedback', goal: boolean) => Promise<void>
+  send: (ask: string, kind: 'request' | 'feedback', goal: boolean, attachments?: PromptAttachment[]) => Promise<void>
   stop: () => Promise<void>
 }
 
@@ -64,7 +67,13 @@ function TurnView({ turn }: { turn: DraftTurn }) {
   const ask = { id: `${turn.id}:ask`, role: 'user' as const, parts: [{ kind: 'text' as const, key: `${turn.id}:ask`, path: [], text: turn.ask }] }
   return (
     <div className="space-y-3">
+      {turn.attachments && turn.attachments.length > 0 && <SentAttachments attachments={turn.attachments} />}
       <MessageBubble message={ask} status="completed" onUiAction={noUiAction} superseded={NO_SUPERSEDED} />
+      {turn.screenShared && (
+        <p className="flex justify-end px-1 text-[11px] text-ink-muted dark:text-ink-inverse-muted">
+          <span className="inline-flex items-center gap-1.5"><Monitor className="size-3 text-emerald-600 dark:text-emerald-400" />Document screen shared with Ren</span>
+        </p>
+      )}
       {(tracing.length > 0 || (running && !hasDraft(segments))) && (
         <ChainOfThought open={open} onOpenChange={setOpen} className="rounded-xl border border-surface-200 px-3 py-2 dark:border-surface-700">
           <ChainOfThoughtHeader>
@@ -92,13 +101,34 @@ function TurnView({ turn }: { turn: DraftTurn }) {
  * editor when the user chooses Insert (at the cursor; nothing is overwritten) or Overwrite; either one
  * ends the chat (`onApplied`) for good. Try again sends feedback in the same conversation.
  */
-export function RonDraftChat({ agent, editor, noun, suggestions, initialGoal = false, onApplied, onClose, disabled, headerExtra, idleNote }: {
+export function RonDraftChat({
+  agent,
+  editor,
+  noun,
+  suggestions,
+  initialGoal = false,
+  initialPrompt = '',
+  initialAttachments,
+  autoSend = false,
+  autoApply = false,
+  screenShare,
+  onApplied,
+  onClose,
+  disabled,
+  headerExtra,
+  idleNote,
+}: {
   agent: DraftAgent
   editor: Editor | null
   /** What Ron writes: “page” or “description”. */
   noun: string
   suggestions: string[]
   initialGoal?: boolean
+  initialPrompt?: string
+  initialAttachments?: PromptAttachment[]
+  autoSend?: boolean
+  autoApply?: boolean
+  screenShare?: { enabled: boolean; onToggle: () => void }
   /** The draft went into the editor: the chat ends. */
   onApplied: (how: 'inserted' | 'overwritten') => void
   onClose?: () => void
@@ -107,13 +137,16 @@ export function RonDraftChat({ agent, editor, noun, suggestions, initialGoal = f
   /** Shown under the composer before the first request. */
   idleNote?: ReactNode
 }) {
-  const [prompt, setPrompt] = useState('')
+  const [prompt, setPrompt] = useState(initialPrompt)
+  const [attachments, setAttachments] = useState<PromptAttachment[]>(() => initialAttachments ?? [])
   const [goal, setGoal] = useState(initialGoal)
   const [stage, setStage] = useState<'review' | 'feedback'>('review')
   const [feedback, setFeedback] = useState('')
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const feedbackRef = useRef<HTMLTextAreaElement>(null)
   const endRef = useRef<HTMLDivElement>(null)
+  const autoSentRef = useRef(false)
+  const autoAppliedRef = useRef(false)
   useEffect(() => { setGoal(initialGoal) }, [initialGoal])
 
   const started = agent.turns.length > 0
@@ -121,16 +154,28 @@ export function RonDraftChat({ agent, editor, noun, suggestions, initialGoal = f
   const latestSegments = useMemo(() => draftParts(latest?.message ?? null).segments, [latest?.message])
   const drafted = !agent.running && latest !== undefined && hasDraft(latestSegments)
 
-  useEffect(() => { if (!started) inputRef.current?.focus() }, [started])
+  useEffect(() => { if (!started && !autoSend) inputRef.current?.focus() }, [started, autoSend])
   useEffect(() => { if (stage === 'feedback') feedbackRef.current?.focus() }, [stage])
   useEffect(() => { endRef.current?.scrollIntoView({ block: 'nearest' }) }, [agent.turns.length, drafted, stage])
 
-  const send = (text = prompt) => {
+  const send = (text = prompt, attached = attachments) => {
     const ask = text.trim()
     if (!ask || agent.running || started || disabled) return
     setPrompt(ask)
-    void agent.send(ask, 'request', goal)
+    void agent.send(ask, 'request', goal, attached)
   }
+
+  useEffect(() => {
+    if (!autoSend || autoSentRef.current || started || agent.running || disabled || !editor) return
+    const ask = initialPrompt.trim()
+    if (!ask) return
+    autoSentRef.current = true
+    // Wait one animation frame after the page renders so `browser:screenshot` sees the mounted document canvas.
+    const frame = window.requestAnimationFrame(() => {
+      void agent.send(ask, 'request', initialGoal, initialAttachments ?? [])
+    })
+    return () => window.cancelAnimationFrame(frame)
+  }, [autoSend, started, agent, disabled, editor, initialPrompt, initialGoal, initialAttachments])
   const retry = () => {
     const note = feedback.trim()
     if (!note || agent.running || disabled) return
@@ -159,6 +204,15 @@ export function RonDraftChat({ agent, editor, noun, suggestions, initialGoal = f
     onApplied('overwritten')
   }
 
+  useEffect(() => {
+    if (!autoApply || autoAppliedRef.current || !drafted || agent.running || disabled || !editor || editor.isDestroyed) return
+    const content = documentContent(latestSegments, (text) => editor.markdown!.parse(text) as DocNode, () => nanoid(10))
+    if (!content.length) return
+    autoAppliedRef.current = true
+    editor.chain().focus().setContent({ type: 'doc', content }).run()
+    onApplied('overwritten')
+  }, [autoApply, drafted, agent.running, disabled, editor, latestSegments, onApplied])
+
   return (
     <section aria-label="Ask Ren to write" className="not-prose rounded-2xl border border-surface-200 bg-surface-0 shadow-subtle dark:border-surface-700 dark:bg-surface-900 dark:shadow-dark-subtle">
       <header className="flex items-center gap-2 border-b border-surface-200/80 px-3 py-2 dark:border-surface-800">
@@ -168,6 +222,26 @@ export function RonDraftChat({ agent, editor, noun, suggestions, initialGoal = f
           <p className="truncate text-xs text-ink-muted dark:text-ink-inverse-muted">Ren researches and drafts this {noun}; nothing changes until you insert or overwrite.</p>
         </div>
         {headerExtra}
+        {screenShare && (
+          <button
+            type="button"
+            role="switch"
+            aria-checked={screenShare.enabled}
+            onClick={screenShare.onToggle}
+            disabled={disabled}
+            title="Share the live document screen with Ren (uses MiniMax M3.1 Flash as visual eyes when the active model has no vision)"
+            className={cn(
+              'flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium transition-colors disabled:opacity-50',
+              screenShare.enabled
+                ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:border-emerald-400/40 dark:bg-emerald-400/10 dark:text-emerald-300'
+                : 'border-surface-200 text-ink-muted hover:text-ink dark:border-surface-700 dark:text-ink-inverse-muted dark:hover:text-ink-inverse',
+            )}
+          >
+            <span aria-hidden className={cn('size-1.5 rounded-full', screenShare.enabled ? 'bg-emerald-500 motion-safe:animate-pulse' : 'bg-surface-300 dark:bg-surface-600')} />
+            <Monitor className="size-3.5" />
+            {screenShare.enabled ? 'Screen shared' : 'Share screen'}
+          </button>
+        )}
         {!started && (
           <button type="button" role="switch" aria-checked={goal} onClick={() => setGoal((value) => !value)} disabled={disabled}
             title="Goal mode: Ren keeps working until a judge agrees the request is met"
@@ -192,6 +266,19 @@ export function RonDraftChat({ agent, editor, noun, suggestions, initialGoal = f
         {!started && (
           <>
             <form className={composerClass} onSubmit={(event) => { event.preventDefault(); send() }}>
+              {attachments.length > 0 && (
+                <Attachments variant="inline" aria-label="Attached context" className="mb-2 gap-2">
+                  {attachments.map((item) => (
+                    <PromptAttachmentCard
+                      key={item.id}
+                      attachment={item}
+                      editable
+                      onRemove={() => setAttachments((current) => current.filter((entry) => entry.id !== item.id))}
+                      onTextChange={(nextText) => setAttachments((current) => current.map((entry) => (entry.id === item.id ? { ...entry, text: nextText } : entry)))}
+                    />
+                  ))}
+                </Attachments>
+              )}
               <AssistField value={prompt} onChange={setPrompt} suggest count={5} className="min-w-0">
                 {(field) => (
                   <textarea ref={inputRef} aria-label={`What should Ren write in this ${noun}?`} rows={2} maxLength={8000} value={prompt} disabled={disabled}

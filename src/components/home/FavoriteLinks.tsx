@@ -20,6 +20,43 @@ interface FavoriteBadgeProps {
   onRemove: () => void
 }
 
+/** `section`: a labelled row of badges. `dial`: centered favicon tiles with the title underneath (home page). */
+export type FavoriteLinksVariant = 'section' | 'dial'
+
+const REMOVE_BUTTON = 'absolute -right-1.5 -top-1.5 hidden h-5 w-5 items-center justify-center rounded-full bg-ink text-white shadow-sm transition-colors duration-150 hover:bg-red-600 group-hover:flex group-focus-within:flex dark:bg-ink-inverse dark:text-ink dark:hover:bg-red-400'
+
+function FavoriteTile({ favorite, onOpen, onRemove }: FavoriteBadgeProps) {
+  const [iconOk, setIconOk] = useState(true)
+  const { title, url } = favorite
+
+  return (
+    <li className="group relative">
+      <button
+        type="button"
+        onClick={onOpen}
+        title={url}
+        className="flex w-[72px] flex-col items-center gap-2 rounded-xl p-1 text-center focus-visible:ring-offset-0"
+      >
+        <span className={cn(
+          'ron-field flex h-12 w-12 items-center justify-center rounded-xl border border-surface-200 bg-surface-0 transition-colors duration-150 ease-out',
+          'group-hover:border-surface-300 group-hover:bg-surface-50',
+          'dark:border-surface-800 dark:bg-surface-850/80 dark:group-hover:border-surface-700 dark:group-hover:bg-surface-800',
+        )}>
+          {iconOk ? (
+            <img src={faviconFor(url)} alt="" className="h-5 w-5 object-contain" onError={() => setIconOk(false)} />
+          ) : (
+            <Globe className="h-5 w-5 text-ink-muted dark:text-ink-inverse-muted" />
+          )}
+        </span>
+        <span className="w-full truncate text-[12px] font-medium text-ink-secondary group-hover:text-ink dark:text-ink-inverse-secondary dark:group-hover:text-ink-inverse">{title}</span>
+      </button>
+      <button type="button" aria-label={`Remove ${title} from favorites`} onClick={onRemove} className={cn(REMOVE_BUTTON, 'right-1.5 top-0')}>
+        <X className="h-3 w-3" strokeWidth={2.5} />
+      </button>
+    </li>
+  )
+}
+
 function FavoriteBadge({ favorite, onOpen, onRemove }: FavoriteBadgeProps) {
   const [iconOk, setIconOk] = useState(true)
   const { title, url } = favorite
@@ -54,7 +91,7 @@ function FavoriteBadge({ favorite, onOpen, onRemove }: FavoriteBadgeProps) {
         type="button"
         aria-label={`Remove ${title} from favorites`}
         onClick={onRemove}
-        className="absolute -right-1.5 -top-1.5 hidden h-5 w-5 items-center justify-center rounded-full bg-ink text-white shadow-sm transition-colors duration-150 hover:bg-red-600 group-hover:flex group-focus-within:flex dark:bg-ink-inverse dark:text-ink dark:hover:bg-red-400"
+        className={REMOVE_BUTTON}
       >
         <X className="h-3 w-3" strokeWidth={2.5} />
       </button>
@@ -64,9 +101,10 @@ function FavoriteBadge({ favorite, onOpen, onRemove }: FavoriteBadgeProps) {
 
 interface AddFavoriteProps {
   onAdd: (input: { title: string; url: string }) => Favorite | null
+  variant: FavoriteLinksVariant
 }
 
-function AddFavorite({ onAdd }: AddFavoriteProps) {
+function AddFavorite({ onAdd, variant }: AddFavoriteProps) {
   const [open, setOpen] = useState(false)
   const [title, setTitle] = useState('')
   const [url, setUrl] = useState('')
@@ -97,16 +135,29 @@ function AddFavorite({ onAdd }: AddFavoriteProps) {
   return (
     <Popover open={open} onOpenChange={handleOpenChange}>
       <PopoverTrigger asChild>
-        <button
-          type="button"
-          aria-label="Add a favorite"
-          className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-dashed border-surface-300 px-3.5 text-[13px] font-medium text-ink-secondary transition-colors duration-150 ease-out hover:border-blurple-500 hover:text-blurple-700 dark:border-surface-700 dark:text-ink-inverse-secondary dark:hover:border-blurple-400 dark:hover:text-blurple-300"
-        >
-          <Plus className="h-4 w-4" />
-          Add
-        </button>
+        {variant === 'dial' ? (
+          <button
+            type="button"
+            aria-label="Add a favorite"
+            className="group flex w-[72px] flex-col items-center gap-2 rounded-xl p-1 text-center focus-visible:ring-offset-0"
+          >
+            <span className="flex h-12 w-12 items-center justify-center rounded-xl border border-dashed border-surface-300 text-ink-muted transition-colors duration-150 ease-out group-hover:border-blurple-500 group-hover:text-blurple-700 dark:border-surface-700 dark:text-ink-inverse-muted dark:group-hover:border-blurple-400 dark:group-hover:text-blurple-300">
+              <Plus className="h-4 w-4" />
+            </span>
+            <span className="text-[12px] font-medium text-ink-muted group-hover:text-ink dark:text-ink-inverse-muted dark:group-hover:text-ink-inverse">Add</span>
+          </button>
+        ) : (
+          <button
+            type="button"
+            aria-label="Add a favorite"
+            className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-dashed border-surface-300 px-3.5 text-[13px] font-medium text-ink-secondary transition-colors duration-150 ease-out hover:border-blurple-500 hover:text-blurple-700 dark:border-surface-700 dark:text-ink-inverse-secondary dark:hover:border-blurple-400 dark:hover:text-blurple-300"
+          >
+            <Plus className="h-4 w-4" />
+            Add
+          </button>
+        )}
       </PopoverTrigger>
-      <PopoverContent align="start" className="w-72 rounded-xl border-border p-3 shadow-float">
+      <PopoverContent align={variant === 'dial' ? 'center' : 'start'} className="w-72 rounded-xl border-border p-3 shadow-float">
         <form onSubmit={handleSubmit} className="flex flex-col gap-2">
           <p className="mb-1 font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground">Add a favorite</p>
           <Input
@@ -146,7 +197,7 @@ function AddFavorite({ onAdd }: AddFavoriteProps) {
   )
 }
 
-export function FavoriteLinks() {
+export function FavoriteLinks({ variant = 'section' }: { variant?: FavoriteLinksVariant }) {
   const favorites = useFavoritesStore((s) => s.favorites)
   const add = useFavoritesStore((s) => s.add)
   const remove = useFavoritesStore((s) => s.remove)
@@ -159,6 +210,24 @@ export function FavoriteLinks() {
     } catch (error) {
       console.error('Failed to open favorite', error)
     }
+  }
+
+  if (variant === 'dial') {
+    return (
+      <nav aria-label="Favorite links">
+        <ul className="flex flex-wrap justify-center gap-x-2 gap-y-3">
+          {favorites.map((favorite) => (
+            <FavoriteTile
+              key={favorite.id}
+              favorite={favorite}
+              onOpen={() => void openInNewTab(favorite.url)}
+              onRemove={() => remove(favorite.id)}
+            />
+          ))}
+          <li><AddFavorite onAdd={add} variant="dial" /></li>
+        </ul>
+      </nav>
+    )
   }
 
   return (
@@ -178,7 +247,7 @@ export function FavoriteLinks() {
             onRemove={() => remove(favorite.id)}
           />
         ))}
-        <AddFavorite onAdd={add} />
+        <AddFavorite onAdd={add} variant="section" />
       </div>
     </nav>
   )

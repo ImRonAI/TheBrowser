@@ -10,6 +10,7 @@
  */
 import type { DiscoverItem, FeedSection } from './discover-feed.ts'
 import type { FeedRequestBody } from './discover-profile.ts'
+import type { PromptAttachment } from './prompt-attachments.ts'
 
 export type SearchLevel = 'fast' | 'low' | 'medium' | 'high' | 'xhigh'
 export const SEARCH_LEVELS: readonly SearchLevel[] = ['fast', 'low', 'medium', 'high', 'xhigh']
@@ -42,6 +43,8 @@ export interface SearchRequestBody {
   shopping?: boolean
   session_id?: string | null
   follow_up?: boolean
+  /** Context attached on the home page; the backend answers such a search with the Search agent. */
+  prompt_attachments?: PromptAttachment[]
 }
 
 export interface AgentSearchResult {
@@ -208,8 +211,8 @@ export function beginFollowUpState(state: SearchRunState, question: string): Sea
 }
 
 /** Which query and level a stored run belongs to; the results page starts a run only when this changes. */
-export function searchRunKey(q: string, level: string): string {
-  return `${level}:${q}`
+export function searchRunKey(q: string, level: string, contextId?: string | null): string {
+  return contextId ? `${level}:${contextId}:${q}` : `${level}:${q}`
 }
 
 export const CANCELLED_ANSWER_MESSAGE = 'Stopped before an answer was written.'

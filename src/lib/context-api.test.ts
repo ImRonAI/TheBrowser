@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
-  agentServesInterest, approveAgentTurn, browsingDue, browsingTurn, contextAddedTurn, contextResults, createContextClient, dataUrlBlob, discoverTopics,
-  formatBytes, interestsFromOutput, isObservable, latestReply, recommendationFromOutput, recordVisit, searchMarkdown,
-  type ContextItem,
+  agentServesInterest, agoLabel, approveAgentTurn, browsingDue, browsingTurn, cadenceLabel, contextAddedTurn, contextResults, createContextClient, dataUrlBlob, defaultCadence, discoverTopics,
+  formatBytes, interestsFromOutput, isObservable, latestReply, plainSummary, recommendationFromOutput, recordVisit, runErrorLine, runHeadline, runNotifications, runStatusLabel, searchMarkdown,
+  type AgentRun, type ContextItem,
 } from './context-api.ts'
 import type { PanelMessage, PanelState } from './panel-stream.ts'
 
@@ -144,4 +144,36 @@ test('agentServesInterest matches the interest an agent was built for or names a
   assert.equal(agentServesInterest({ ...f1, config: {} }, 'formula 1', 'Formula 1'), true)
   assert.equal(agentServesInterest(f1, 'C++ (lang)'), false)
   assert.equal(agentServesInterest(f1, '  '), false)
+})
+
+test('scheduled runs: cadence labels, notifications, plain summaries and headlines', () => {
+  assert.equal(cadenceLabel({ every: 'hours', hours: 1, time: '08:00', weekday: 0, timezone: 'UTC' }), 'Every hour')
+  assert.equal(cadenceLabel({ every: 'hours', hours: 6, time: '08:00', weekday: 0, timezone: 'UTC' }), 'Every 6 hours')
+  assert.equal(cadenceLabel({ every: 'day', hours: 24, time: '08:00', weekday: 0, timezone: 'UTC' }, 'en-US'), 'Daily at 8:00 AM')
+  assert.equal(cadenceLabel({ every: 'week', hours: 24, time: '18:30', weekday: 4, timezone: 'UTC' }, 'en-US'), 'Fridays at 6:30 PM')
+  assert.deepEqual(defaultCadence('America/New_York'), { every: 'day', hours: 24, time: '08:00', weekday: 0, timezone: 'America/New_York' })
+
+  const run = (id: string, patch: Partial<AgentRun>): AgentRun => ({ id, agent_id: 'a', agent_name: 'Scout', session_id: `agent-${id}`, trigger: 'schedule',
+    status: 'completed', summary: '', error: '', started_at: '2026-11-13T08:00:00Z', finished_at: '2026-11-13T08:05:00Z', seen_at: null, ...patch })
+  const runs = [
+    run('running', { status: 'running', finished_at: null }),
+    run('seen', { seen_at: '2026-11-13T09:00:00Z' }),
+    run('older', { finished_at: '2026-11-13T08:01:00Z' }),
+    run('newer', { status: 'failed', finished_at: '2026-11-13T08:30:00Z' }),
+  ]
+  assert.deepEqual(runNotifications(runs).map((entry) => entry.id), ['newer', 'older'])
+
+  assert.equal(plainSummary('## Deals\n- **Niche Zero** at [$499](https://x.test)\n- `DF64`  restocked'), 'Deals Niche Zero at $499 DF64 restocked')
+  // The provider error recorded by a real failed run (Gemini free-tier quota), shortened to its lead sentence.
+  assert.equal(runErrorLine(`429 Too Many Requests. {'message': '{\\n  "error": {\\n    "code": 429, "message": "You exceeded your current quota"}}'}`), '429 Too Many Requests.')
+  assert.equal(runErrorLine("The run's session could not be found."), "The run's session could not be found.")
+  assert.equal(runHeadline({ status: 'completed', trigger: 'schedule' }), 'Finished its scheduled run')
+  assert.equal(runHeadline({ status: 'completed', trigger: 'manual' }), 'Finished its run')
+  assert.equal(runHeadline({ status: 'interrupted', trigger: 'schedule' }), 'Needs your answer')
+  assert.equal(runStatusLabel('cancelled'), 'Stopped')
+  const now = Date.parse('2026-11-13T12:00:00Z')
+  assert.equal(agoLabel('2026-11-13T11:59:50Z', now), 'just now')
+  assert.equal(agoLabel('2026-11-13T11:55:00Z', now), '5 min ago')
+  assert.equal(agoLabel('2026-11-13T09:00:00Z', now), '3 h ago')
+  assert.equal(agoLabel('2026-11-10T12:00:00Z', now), '3 d ago')
 })

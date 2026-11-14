@@ -15,6 +15,8 @@ import { InterestDiscoveryPanel } from './InterestDiscoveryPanel'
 import { ContextTray } from './ContextTray'
 import { ContextAgents } from './ContextAgents'
 import { ContextAsk } from './ContextAsk'
+import { AgentRunNotice } from './AgentRuns'
+import { runNotifications } from '@/lib/context-api'
 
 const TABS: { id: ContextTab; label: string }[] = [
   { id: 'interests', label: 'Interests' },
@@ -75,6 +77,8 @@ export function InterestsWidget() {
           </div>
         )}
       </AnimatePresence>
+      {/* A specialist's finished run (scheduled or Run now): Review opens its session in the Agent Panel. */}
+      {!isExpanded && !hidden && <AgentRunNotice />}
       <AnimatePresence>
         {isExpanded && <ExpandedPanel key="expanded" onClose={close} />}
       </AnimatePresence>
@@ -89,11 +93,13 @@ function CollapsedOrb({ onClick }: { onClick: () => void }) {
   const recordingSince = useContextAgentStore((state) => state.recordingSince)
   // An add, upload or capture in flight ("Adding to your context…") counts as work too.
   const busy = useContextAgentStore((state) => state.busy)
+  const finishedRuns = useContextAgentStore((state) => runNotifications(state.runs).length)
   const top = useInterestsStore((state) => [...state.nodes].sort((a, b) => b.weight - a.weight).slice(0, 2).map((node) => node.label).join('|'))
   const labels = top ? top.split('|') : []
   const working = status === 'running' || Boolean(busy)
   const state = recordingSince ? 'recording your screen'
     : busy ? busy.replace(/…$/, '')
+    : finishedRuns ? `${finishedRuns} agent run${finishedRuns === 1 ? '' : 's'} to review`
     : unseen ? 'new agent recommendation'
     : working ? 'agent working'
     : null
@@ -131,7 +137,7 @@ function CollapsedOrb({ onClick }: { onClick: () => void }) {
       )}
       {recordingSince
         ? <span className="absolute -right-1 -top-1 h-3.5 w-3.5 rounded-full bg-danger ring-2 ring-surface-0 dark:ring-surface-900" title="Recording your screen" />
-        : unseen && <span className="absolute -right-1 -top-1 h-3.5 w-3.5 rounded-full bg-blurple-600 ring-2 ring-surface-0 dark:bg-blurple-400 dark:ring-surface-900" title="New agent recommendation" />}
+        : (unseen || finishedRuns > 0) && <span className="absolute -right-1 -top-1 h-3.5 w-3.5 rounded-full bg-blurple-600 ring-2 ring-surface-0 dark:bg-blurple-400 dark:ring-surface-900" title={finishedRuns ? 'Agent runs to review' : 'New agent recommendation'} />}
     </motion.button>
   )
 }
@@ -145,7 +151,7 @@ function ExpandedPanel({ onClose }: { onClose: () => void }) {
   const pinned = useContextAgentStore((state) => state.pinned)
   const status = useContextAgentStore((state) => state.status)
   const activity = useContextAgentStore((state) => state.activity)
-  const unseen = useContextAgentStore((state) => state.unseen)
+  const unseen = useContextAgentStore((state) => state.unseen || runNotifications(state.runs).length > 0)
   const itemCount = useContextAgentStore((state) => state.items.length)
   const recordingSince = useContextAgentStore((state) => state.recordingSince)
   const { setTab, setPinned } = useContextAgentStore.getState()

@@ -139,13 +139,18 @@ function BrowserLayoutContent({ children }: BrowserLayoutProps) {
     const setChromeHeight = window.electron?.browser?.setChromeHeight
     if (!header || !setChromeHeight) return
     const report = () => {
-      let bottom = header.getBoundingClientRect().height
+      const chromeBottom = header.getBoundingClientRect().height
+      let bottom = chromeBottom
       const overlays = document.querySelectorAll<HTMLElement>(
         '[role="menu"], [role="listbox"], [data-radix-popper-content-wrapper], [data-chrome-overlay="true"]',
       )
       for (const el of overlays) {
-        if (el.closest('section[aria-label]')) continue
+        if (el.closest('section[aria-label], [data-panel-overlay]')) continue
         const rect = el.getBoundingClientRect()
+        // Only a menu hanging from the chrome moves the website down. Anything else (the agent panel's
+        // portalled context picker, a composer's model list) sits outside the website view, and pushing
+        // the view to its bottom edge used to collapse the website to nothing while the menu was open.
+        if (rect.top > chromeBottom + 24) continue
         if (rect.width > 0 && rect.height > 0 && rect.bottom > bottom) {
           bottom = Math.min(window.innerHeight, Math.ceil(rect.bottom + 8))
         }

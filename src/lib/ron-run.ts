@@ -9,6 +9,7 @@
  * Pure (fetch + relative imports, no React) so node:test can run it.
  */
 import { emptyPanelState, readPanelStream, reducePanelEvent, responseError, type PanelEvent, type PanelMessage, type PanelState, type ToolPart } from './panel-stream.ts'
+import type { PromptAttachment } from './prompt-attachments.ts'
 import { normalizeWorkflow, type WorkflowGraph } from './workflow.ts'
 
 /** `ChatRequest.destination`: which scoped agent answers (agent/api/endpoints/chat.py). */
@@ -22,6 +23,10 @@ export interface RonRunRequest {
   message: string
   /** Native GoalLoop objective; only honoured on a session's first message, so pass a fresh session. */
   goal?: string
+  /** Attached reference context cards (`ChatRequest.prompt_attachments`). */
+  promptAttachments?: PromptAttachment[]
+  /** Live `data:image/...;base64,...` screenshot of the open Document workspace (`ChatRequest.screen_frame`). */
+  screenFrame?: string
   signal?: AbortSignal
   onState?: (state: PanelState) => void
   fetcher?: typeof fetch
@@ -34,7 +39,9 @@ export function ronSessionId(prefix: string, key: string): string {
   return `${prefix}-${key}`.replace(/[^A-Za-z0-9_.-]/g, '-').replace(/^[^A-Za-z0-9]+/, '').slice(0, 128) || prefix
 }
 
-export async function runRon({ apiBase, destination, sessionId, userId, message, goal, signal, onState, fetcher = fetch }: RonRunRequest): Promise<PanelState> {
+export async function runRon({
+  apiBase, destination, sessionId, userId, message, goal, promptAttachments, screenFrame, signal, onState, fetcher = fetch,
+}: RonRunRequest): Promise<PanelState> {
   let state = emptyPanelState(sessionId)
   const accept = (event: PanelEvent) => {
     if (signal?.aborted || event.session_id !== sessionId || event.sequence <= state.sequence) return false
@@ -43,7 +50,15 @@ export async function runRon({ apiBase, destination, sessionId, userId, message,
   }
   const response = await fetcher(`${apiBase}/chat`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, signal,
-    body: JSON.stringify({ session_id: sessionId, user_id: userId, message, destination, ...(goal ? { options: { goal } } : {}) }),
+    body: JSON.stringify({
+      session_id: sessionId,
+      user_id: userId,
+      message,
+      destination,
+      ...(goal ? { options: { goal } } : {}),
+      ...(promptAttachments && promptAttachments.length > 0 ? { prompt_attachments: promptAttachments } : {}),
+      ...(screenFrame ? { screen_frame: screenFrame } : {}),
+    }),
   })
   if (!response.ok) throw await responseError(response)
   let terminal = await readPanelStream(response, accept)

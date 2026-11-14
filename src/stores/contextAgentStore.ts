@@ -11,8 +11,9 @@ import { createJSONStorage, persist } from 'zustand/middleware'
 import { API_BASE_URL } from '@/lib/api-base'
 import { cancelRon, ronSessionId, runRon } from '@/lib/ron-run'
 import {
-  approveAgentTurn, browsingDue, browsingTurn, contextAddedTurn, contextResults, createContextClient, dataUrlBlob, latestReply,
-  recordVisit, type AgentRecommendation, type ContextItem, type NewContextFile, type NewContextItem, type SpecialistAgent, type Visit,
+  approveAgentTurn, browsingDue, browsingTurn, cadenceLabel, contextAddedTurn, contextResults, createContextClient, dataUrlBlob, latestReply,
+  recordVisit, whenLabel, type AgentCadence, type AgentRecommendation, type AgentRun, type ContextItem, type NewContextFile, type NewContextItem,
+  type SpecialistAgent, type Visit,
 } from '@/lib/context-api'
 import { startScreenRecording, type ScreenRecording } from '@/lib/screen-recorder'
 import { isGuestUserId } from '@/lib/sign-in'
@@ -49,6 +50,11 @@ interface ContextAgentState {
   building: string | null
   recordingSince: number | null
   busy: string | null
+  /** The specialists' runs, newest first (`/context/runs`); finished unseen ones are the widget's notifications. */
+  runs: AgentRun[]
+  /** Agent id whose schedule is being saved, or whose Run now is starting. */
+  scheduling: string | null
+  starting: string | null
 
   setUser: (userId: string) => void
   setTab: (tab: ContextTab) => void
@@ -69,6 +75,12 @@ interface ContextAgentState {
   stopRecording: () => Promise<void>
   approve: (recommendation: AgentRecommendation) => Promise<void>
   dismiss: (id: string) => void
+  refreshRuns: () => Promise<void>
+  /** Run the specialist on its own at `cadence` (null = stop its schedule). */
+  saveSchedule: (agent: SpecialistAgent, cadence: AgentCadence | null, task: string) => Promise<void>
+  runNow: (agent: SpecialistAgent) => Promise<void>
+  /** The user opened or dismissed this run's notification. */
+  markRunSeen: (runId: string) => Promise<void>
   ask: (question: string) => Promise<void>
   cancel: () => Promise<void>
 }
@@ -127,13 +139,14 @@ export const useContextAgentStore = create<ContextAgentState>()(persist((set, ge
   return {
     userId: 'default', watchBrowsing: true, visits: [], recommendations: [], handled: [], agentInterests: {}, tab: 'interests', pinned: false, asks: [], unseen: false,
     status: 'idle', activity: '', error: '', notice: '', items: [], itemsLoaded: false, agents: [], agentsSignInRequired: false,
-    building: null, recordingSince: null, busy: null,
+    building: null, recordingSince: null, busy: null, runs: [], scheduling: null, starting: null,
 
     setUser: (userId) => {
       if (userId === get().userId && get().itemsLoaded) return
-      set({ userId, items: [], itemsLoaded: false, agents: [], agentsSignInRequired: false, error: '', notice: '' })
+      set({ userId, items: [], itemsLoaded: false, agents: [], agentsSignInRequired: false, runs: [], error: '', notice: '' })
       void get().refreshItems()
       void get().refreshAgents()
+      void get().refreshRuns()
     },
     setTab: (tab) => set({ tab, ...(tab === 'agents' ? { unseen: false } : {}) }),
     setPinned: (pinned) => set({ pinned }),
@@ -287,6 +300,55 @@ export const useContextAgentStore = create<ContextAgentState>()(persist((set, ge
     },
 
     dismiss: (id) => set({ handled: [...get().handled, id], recommendations: get().recommendations.filter((item) => item.id !== id) }),
+
+    refreshRuns: async () => {
+      const userId = get().userId
+      if (isGuestUserId(userId)) return
+      try {
+        const { runs } = await client(userId).runs()
+        if (get().userId === userId) set({ runs })
+      } catch {
+        // Notifications are best effort: the next poll tries again (the API may be restarting).
+      }
+    },
+
+    saveSchedule: async (agent, cadence, task) => {
+      set({ scheduling: agent.id, error: '', notice: '' })
+      try {
+        const schedule = await client(get().userId).setSchedule(agent.id, cadence, task)
+        set({ agents: get().agents.map((entry) => entry.id === agent.id ? { ...entry, schedule } : entry),
+          notice: schedule
+            ? `${agent.name} runs ${cadenceLabel(schedule.cadence).toLowerCase()}${schedule.next_run_at ? `. Next run ${whenLabel(schedule.next_run_at)}` : ''}.`
+            : `${agent.name} no longer runs on a schedule.` })
+      } catch (error) {
+        set({ error: `${agent.name}'s schedule was not saved: ${messageOf(error)}` })
+      } finally {
+        set({ scheduling: null })
+      }
+    },
+
+    runNow: async (agent) => {
+      set({ starting: agent.id, error: '', notice: '' })
+      try {
+        const run = await client(get().userId).runNow(agent.id)
+        set({ runs: [run, ...get().runs.filter((entry) => entry.id !== run.id)],
+          notice: `${agent.name} is running. Ren lets you know here when it finishes.` })
+      } catch (error) {
+        set({ error: `${agent.name} did not start: ${messageOf(error)}` })
+      } finally {
+        set({ starting: null })
+      }
+    },
+
+    markRunSeen: async (runId) => {
+      const seen = new Date().toISOString()
+      set({ runs: get().runs.map((run) => run.id === runId ? { ...run, seen_at: run.seen_at ?? seen } : run) })
+      try {
+        await client(get().userId).markRunSeen(runId)
+      } catch (error) {
+        set({ error: `Could not mark the run as read: ${messageOf(error)}` })
+      }
+    },
 
     ask: async (question) => {
       const text = question.trim()

@@ -57,6 +57,8 @@ def test_native_defaults(monkeypatch, provider, default):
     ("claude-sonnet-4-5", "anthropic"),
     ("openai/gpt-5.2", "perplexity"), ("anthropic/claude-sonnet-4-5", "perplexity"),
     ("xai/grok-4.5", "perplexity"), ("grok-4.3", "xai"),
+    ("moonshotai/Kimi-K3.1-Pro", "telnyx"), ("zai-org/GLM-5.3-Flash", "telnyx"),
+    ("z-ai/glm-5.3-flash", "nim"),
     ("gemini-2.5-flash", "gemini"), ("mistral-large-latest", "mistral"),
 ])
 def test_inference_preserves_catalogue_routing(model_id, provider):

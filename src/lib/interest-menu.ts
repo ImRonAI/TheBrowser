@@ -3,6 +3,8 @@ import type { InterestCategory } from '@/stores/interestsStore'
 export const INTERESTS_ORB_INSET = 88
 export const INTERESTS_EXPANDED_INSET = 544
 export const INTERESTS_DISCOVERY_INSET = 624
+/** The orb plus a finished-run notification card above it (300 px card, 20 px margin, a little air). */
+export const INTERESTS_NOTICE_INSET = 336
 
 export type InterestMenuInterest = {
   id: string
@@ -40,12 +42,17 @@ export type InterestAction =
   | { type: 'story'; interestId: string; interestLabel: string; category: InterestCategory; url?: string }
   | { type: 'agent'; name: string; description: string; interestLabel: string }
 
-/** Width the shell keeps free on the right of every page: the orb always, more while a panel is open. */
+/**
+ * Width the shell keeps free on the right of every page: the orb always, more while a panel is open or while a
+ * finished agent run's notification card sits above the orb (`notice`).
+ */
 export function interestOverlayInset(options: {
   expanded: boolean
   discoveryOpen: boolean
+  notice?: boolean
 }): number {
   let width = INTERESTS_ORB_INSET
+  if (options.notice && !options.expanded) width = Math.max(width, INTERESTS_NOTICE_INSET)
   if (options.expanded) width = Math.max(width, INTERESTS_EXPANDED_INSET)
   if (options.discoveryOpen) width = Math.max(width, INTERESTS_DISCOVERY_INSET)
   return width

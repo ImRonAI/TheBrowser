@@ -57,7 +57,7 @@ __all__ = [
     "serializable_event", "skills_from_env",
     "accept_browser_elicitation", "load_vendored_think", "THINK_EXCLUDED_TOOLS",
     "ThinkToolsGuard", "MCPConnectionGuard", "is_parent_only_tool",
-    "CORE_TOOL_NAMES", "VENDORED_PACKAGE", "build_core_tools", "create_tool_catalog",
+    "CORE_TOOL_NAMES", "DOCUMENT_TOOL_NAMES", "VENDORED_PACKAGE", "build_core_tools", "create_tool_catalog",
     "import_vendored_module", "import_vendored_revision", "load_library_tool", "scan_vendored_tools", "stamp_source",
 ]
 
@@ -68,6 +68,14 @@ CORE_TOOL_NAMES = (
     "brave_answer", "brave_web_search", "brave_news_search", "brave_image_search",
     "brave_video_search", "brave_local_search", "brave_rich_answer",
     "render_ui", "render_workflow", "programmatic_tool_caller", "tool_catalog",
+)
+
+#: Scoped research + diagram tool set for the Document Agent (no host shell/editor/MCP/UI tools).
+DOCUMENT_TOOL_NAMES = (
+    "http_request", "perplexity_search",
+    "brave_answer", "brave_web_search", "brave_news_search",
+    "brave_image_search", "brave_video_search", "brave_local_search", "brave_rich_answer",
+    "render_workflow",
 )
 
 #: Synthetic import package for agent/tools/strands_tools. The directory is never
@@ -897,28 +905,33 @@ def installed_http_request() -> AgentTool:
     return loaded[0]
 
 
-def build_core_tools(project_tools_dir: Path) -> list[AgentTool]:
+def build_core_tools(project_tools_dir: Path, *, names: Sequence[str] | None = None) -> list[AgentTool]:
     """The always-registered tool set (minus `tool_catalog`, which needs the catalog).
 
     Installed strands_tools are registered as the native tools their modules export
     (``DecoratedFunctionTool``/``PythonAgentTool`` offload synchronous bodies themselves).
     ``perplexity_search`` is the vendored ``research/perplexity_search_api.py`` ``@tool`` re-declared
     under the user-facing name with ``@tool(name=...)`` over its ``__wrapped__`` function.
+    When ``names`` is given (e.g. ``DOCUMENT_TOOL_NAMES``), only matching tools are built.
     """
     from strands_tools import editor, environment, http_request, mcp_client, shell
     from agent.api.core import config as app_config
 
-    _install_mcp_client_elicitation()
+    allowed = set(names) if names is not None else None
+    if allowed is None or "mcp_client" in allowed:
+        _install_mcp_client_elicitation()
     tools: list[AgentTool] = []
     for module in (mcp_client, editor, shell, environment, http_request):
         short = module.__name__.rsplit(".", 1)[-1]
+        if allowed is not None and short not in allowed:
+            continue
         # load_tools_from_module handles both @tool modules and TOOL_SPEC modules
         # (http_request/environment are TOOL_SPEC-style in strands_tools 0.8.6).
         loaded = [t for t in load_tools_from_module(module, short) if t.tool_name == short]
         if not loaded:
             raise RuntimeError(f"strands_tools.{short} did not export a tool named {short!r}")
         tools.append(loaded[0])
-    if app_config.perplexity_search_enabled():
+    if app_config.perplexity_search_enabled() and (allowed is None or "perplexity_search" in allowed):
         root = project_tools_dir.expanduser().resolve()
         search_path = root / "research" / "perplexity_search_api.py"
         search = import_vendored_module(root, search_path).perplexity_search_api
@@ -928,15 +941,16 @@ def build_core_tools(project_tools_dir: Path) -> list[AgentTool]:
     # Brave Answers + Brave Search vertical tools for every Ron agent.
     from agent.api.core.brave_tools import brave_tools
 
-    tools.extend(brave_tools())
-    # render_ui: the agent builds HTML/JSX views the panel renders (iframe sandbox / component kit).
+    tools.extend(t for t in brave_tools() if allowed is None or t.tool_name in allowed)
+    # render_ui / render_workflow: HTML/JSX views and flowchart diagrams.
     from agent.api.core.render_ui_tool import render_ui_tools
 
-    tools.extend(render_ui_tools())
+    tools.extend(t for t in render_ui_tools() if allowed is None or t.tool_name in allowed)
     # Native strands_harness Monty Rust-VM sandboxed Python tool orchestrator.
-    from strands_harness.tools.programmatic_tool_caller import make_programmatic_tool_caller
+    if allowed is None or "programmatic_tool_caller" in allowed:
+        from strands_harness.tools.programmatic_tool_caller import make_programmatic_tool_caller
 
-    tools.append(make_programmatic_tool_caller())
+        tools.append(make_programmatic_tool_caller())
     return tools
 
 

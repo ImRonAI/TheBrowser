@@ -12,6 +12,11 @@ One ``POST /search/stream`` runs one query and merges every source onto a single
 - A follow-up (``follow_up=True``, ``session_id=<id>``) runs the Search agent
   (``configs/search/<level>.json`` via ``create_harness()`` on GLM-5.3-Flash, Brave tools only),
   which starts from the answered turn and does not re-run the Brave sections.
+- A search with ``prompt_attachments`` (the context the user attached on the home page: tabs, past
+  conversations, issues, pages…) is answered by that Search agent too, reading the query followed by
+  one block per attachment (``core/prompt_attachments.message_content``, the same as ``POST /chat``):
+  Brave Answers takes one short web question and cannot read attached text. Brave sections still run
+  on the query alone.
 """
 from __future__ import annotations
 
@@ -23,7 +28,7 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from agent.api.core.brave_search import (
     FeedLocation,
@@ -40,6 +45,7 @@ from agent.api.core.config import (
     XAI_API_KEY,
     perplexity_agent_api_enabled,
 )
+from agent.api.core.prompt_attachments import ATTACHMENTS_MAX, ATTACHMENTS_TOTAL_MAX, PromptAttachment
 from agent.api.core.search_agent import (
     LEVEL_REASONING_EFFORT,
     SEARCH_LEVELS,
@@ -72,6 +78,14 @@ class SearchRequest(BaseModel):
     shopping: bool = True
     session_id: str | None = Field(default=None, max_length=128)
     follow_up: bool = False
+    #: Context attached to this search (``src/lib/search-attachments.ts``); answered by the Search agent.
+    prompt_attachments: list[PromptAttachment] = Field(default_factory=list, max_length=ATTACHMENTS_MAX)
+
+    @model_validator(mode="after")
+    def validate_attachments(self):
+        if sum(len(item.text) for item in self.prompt_attachments) > ATTACHMENTS_TOTAL_MAX:
+            raise ValueError(f"Attachments on one search carry at most {ATTACHMENTS_TOTAL_MAX:,} characters")
+        return self
 
 
 def _frame(event: str, data: dict[str, Any]) -> str:
@@ -199,6 +213,7 @@ async def search_stream(body: SearchRequest, request: Request) -> StreamingRespo
                 shopping=body.shopping,
                 country=body.country,
                 location=body.location,
+                attachments=body.prompt_attachments,
             ):
                 await queue.put((ev_name, payload))
         except SearchAgentError as error:
@@ -261,6 +276,7 @@ async def search_stream(body: SearchRequest, request: Request) -> StreamingRespo
                 "country": body.country,
                 "session_id": session_id,
                 "follow_up": body.follow_up,
+                "attachments": len(body.prompt_attachments),
             },
         )
         runner = asyncio.create_task(run_all())

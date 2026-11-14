@@ -69,6 +69,8 @@ from agent.api.core.config import (
     MISTRAL_DEFAULT_MODEL,
     NIM_DEFAULT_MODEL,
     NVIDIA_NIM_BASE_URL,
+    TELNYX_DEFAULT_MODEL,
+    TELNYX_INFERENCE_BASE_URL,
     PANEL_ENVIRONMENT_CONTEXT,
     PANEL_CONTEXT_COMPRESSION_THRESHOLD,
     PANEL_INTERVENTIONS,
@@ -96,6 +98,7 @@ from agent.api.core.panel_runtime import is_model_timeout
 from agent.api.core.panel_storage import ThreadSessionManager, get_user_session_storage, thread_agent_id
 from agent.api.core.tool_observation import ToolObservation, trace_attributes
 from agent.api.core.panel_tools import (
+    DOCUMENT_TOOL_NAMES,
     ChildSpec, GraphSpec, ManagedMCP, MCPConnectionGuard, PanelToolCatalog, SwarmSpec, ThinkToolsGuard,
     build_core_tools, create_formation_tool,
     create_skill_tool, create_tool_catalog, load_vendored_think, skills_from_env,
@@ -103,9 +106,10 @@ from agent.api.core.panel_tools import (
 
 logger = logging.getLogger(__name__)
 
-ProviderName = Literal["gemini", "nim", "perplexity", "xai", "mistral", "openai", "anthropic"]
+ProviderName = Literal["telnyx", "gemini", "nim", "perplexity", "xai", "mistral", "openai", "anthropic"]
 #: Order is preference: the first configured provider is the default (``default_selection``).
 PROVIDERS: tuple[ProviderName, ...] = (
+    "telnyx",
     "gemini",
     "nim",
     "perplexity",
@@ -260,6 +264,17 @@ NATIVE_PROVIDER_CAPABILITIES = {
             ),
         },
     },
+    "telnyx": {
+        "adapter": "agent.api.core.telnyx_model.RonTelnyxModel (strands OpenAIResponsesModel on https://api.telnyx.com/v2/ai/openai, stateful=False; tool-result images for vision models only)",
+        "hosted_tools_configurable": (),
+        "hosted_tools_default": (),
+        "env": "TELNYX_API_KEY, TELNYX_MODEL, TELNYX_INFERENCE_BASE_URL, TELNYX_MAX_RETRIES",
+        "hosted_tool_support": {
+            "all": "none: the Responses endpoint documents model/input/instructions/stream/reasoning/service_tier/region/conversation, no built-in tools (https://developers.telnyx.com/api-reference/openai-chat/create-an-openai-compatible-response)",
+            "reasoning": "reasoning.effort per telnyx_reasoning_efforts (catalogue supported_reasoning_efforts, else TELNYX_REASONING_EFFORTS_BY_MODEL); reasoning_summary_text deltas -> reasoningContent",
+        },
+        "stateful": False,
+    },
     "mistral": {
         "adapter": "agent.api.core.mistral_model.RonMistralModel (strands MistralModel + reasoning_effort/thinking chunks, client.chat.stream)",
         "hosted_tools_configurable": (),
@@ -294,6 +309,24 @@ def _hosted_tool_names(env_name: str, allowed: tuple[str, ...], default: tuple[s
 #: ``reasoning_effort`` values of the NIM chat-completions reference for each model
 #: (https://docs.api.nvidia.com/nim/reference/z-ai-glm-5-3-flash-infer); unlisted ids take none.
 NIM_REASONING_EFFORTS_BY_MODEL: dict[str, tuple[str, ...]] = {"z-ai/glm-5.3-flash": ("low", "high", "max")}
+
+#: Telnyx ``reasoning.effort`` for models whose catalogue entry declares no ``supported_reasoning_efforts``
+#: (the catalogue wins when it declares them: ``telnyx_reasoning_efforts``). Telnyx documents the enum
+#: none|minimal|low|medium|high|xhigh|max with "unsupported values are rejected with a 400 error", but its gateway
+#: accepts the whole enum for most models, even non-reasoning ones (live 2026-11-13), so acceptance proves nothing and
+#: only these are listed. Lowercase keys; longest prefix wins.
+#: - ``zai-org/glm-5.3`` (GLM-5.3, GLM-5.3-Flash): Telnyx's own examples send ``reasoning_effort="high"`` to
+#:   GLM-5.3-Flash (https://developers.telnyx.com/docs/inference/getting-started); the model's documented values are
+#:   low|high|max (``MISTRAL_REASONING_EFFORTS_BY_MODEL["zai-glm-5-3"]``); live, low/high/max spent 36/78/146
+#:   reasoning tokens on one prompt.
+#: - ``deepseek-ai/deepseek-v4`` (V4-Flash-0731, V4.1-Flash, V4.1-Flash-1017): the model server answers 422 for
+#:   minimal/medium/xhigh on all three and accepts none/low/high/max (0/125/184/224 reasoning tokens).
+TELNYX_REASONING_EFFORTS_BY_MODEL: dict[str, tuple[str, ...]] = {
+    "zai-org/glm-5.3": ("low", "high", "max"),
+    "deepseek-ai/deepseek-v4": ("none", "low", "high", "max"),
+}
+#: Catalogue tasks the chat agent can run (the listing also carries speech-to-speech models).
+TELNYX_CHAT_TASKS = frozenset({"text-generation", "text-to-text"})
 
 XAI_REASONING_EFFORTS_BY_MODEL: dict[str, tuple[str, ...]] = {
     # grok-4.7: docs "grok-4.7, grok-4.6 and grok-4.5 support reasoning_effort ...
@@ -436,6 +469,7 @@ def provider_api_key(provider: ProviderName) -> str | None:
         "mistral": app_config.MISTRAL_API_KEY,
         "xai": app_config.XAI_API_KEY,
         "gemini": app_config.GEMINI_API_KEY,
+        "telnyx": app_config.TELNYX_API_KEY,
     }[provider]
 
 
@@ -453,6 +487,7 @@ def provider_default_model(provider: ProviderName) -> str:
         "mistral": MISTRAL_DEFAULT_MODEL,
         "xai": XAI_DEFAULT_MODEL,
         "gemini": GEMINI_DEFAULT_MODEL,
+        "telnyx": TELNYX_DEFAULT_MODEL,
     }[provider]
 
 
@@ -482,9 +517,13 @@ def infer_provider(model_id: str) -> ProviderName | None:
     if not model_id:
         ready = configured_providers()
         return ready[0] if ready else None
+    lowered = model_id.lower()
+    if lowered.startswith(("moonshotai/", "zai-org/", "poolside/", "qwen/")):
+        return "telnyx"
+    if lowered.startswith("z-ai/"):
+        return "nim"
     if "/" in model_id:
         return "perplexity"
-    lowered = model_id.lower()
     if lowered.startswith("claude-"):
         return "anthropic"
     if lowered.startswith(("gpt-", "chatgpt-", "o1", "o3", "o4")):
@@ -539,6 +578,41 @@ def gemini_thinking_levels(model_id: str) -> tuple[str, ...]:
     if lowered.endswith(GEMINI_THINKING_LEVELS_EXCLUDED_SUFFIXES) or "computer-use" in lowered:
         return ()
     return _efforts_by_family(GEMINI_THINKING_LEVELS_BY_MODEL, lowered)
+
+
+#: Telnyx's last model listing by id (``telnyx_catalogue``); replaced whole on every read.
+_TELNYX_CARDS: dict[str, dict[str, Any]] = {}
+
+
+def telnyx_catalogue(*, refresh: bool = False) -> dict[str, dict[str, Any]]:
+    """Telnyx's ``GET /v2/ai/openai/models`` entries by id, through the OpenAI SDK as Telnyx documents
+    ("clients pointed at https://api.telnyx.com/v2/ai/openai can call client.models.list()",
+    https://developers.telnyx.com/api-reference/openai-chat/get-available-models-openai-compatible). Each entry keeps
+    Telnyx's extra fields (``task``, ``context_length``, ``is_vision_supported``, ``supported_reasoning_efforts``,
+    ``service_tiers``). Kept for the process; ``refresh`` reads it again. Raises when the listing fails."""
+    global _TELNYX_CARDS
+    if _TELNYX_CARDS and not refresh:
+        return _TELNYX_CARDS
+    from openai import OpenAI
+
+    with OpenAI(**_native_client_args("telnyx"), base_url=TELNYX_INFERENCE_BASE_URL) as client:
+        # Telnyx's ``created`` is an ISO timestamp where ``openai.types.Model`` declares an int.
+        cards = {item.id: item.model_dump(warnings=False) for item in client.models.list() if item.id}
+    _TELNYX_CARDS = cards
+    return cards
+
+
+def telnyx_reasoning_efforts(model_id: str) -> tuple[str, ...] | None:
+    """A Telnyx model's ``reasoning.effort`` values: its catalogue ``supported_reasoning_efforts`` when declared,
+    else ``TELNYX_REASONING_EFFORTS_BY_MODEL``; ``None`` when the catalogue cannot be read now."""
+    try:
+        declared = (telnyx_catalogue().get(model_id) or {}).get("supported_reasoning_efforts")
+    except Exception as error:  # a listing failure leaves validation to Telnyx's own 400
+        logger.warning("model=<%s>, error=<%s> | telnyx model listing failed: reasoning efforts unknown", model_id, error)
+        return None
+    if isinstance(declared, list) and declared:
+        return tuple(str(value) for value in declared)
+    return _efforts_by_family(TELNYX_REASONING_EFFORTS_BY_MODEL, model_id)
 
 
 def _env_integer(name: str, default: int, *, minimum: int = 0) -> int:
@@ -705,6 +779,39 @@ def _provider_model(
             model_id=model_id,
             stateful=False,
             **({"params": openai_params} if openai_params else {}),
+        )
+
+    if provider == "telnyx":
+        client_args = {**_native_client_args(provider), "base_url": TELNYX_INFERENCE_BASE_URL}
+        if read_timeout is not None and read_timeout > 0:
+            client_args = {
+                **client_args,
+                "max_retries": 0,
+                "timeout": httpx.Timeout(read_timeout, connect=min(10.0, read_timeout)),
+            }
+        from agent.api.core.telnyx_model import (
+            TELNYX_CHAT_COMPLETIONS_MODELS,
+            RonTelnyxChatModel,
+            RonTelnyxModel,
+        )
+
+        if reasoning_effort:
+            supported = telnyx_reasoning_efforts(model_id)
+            if supported is not None and reasoning_effort not in supported:
+                raise ValueError(f"{model_id} does not accept reasoning_effort={reasoning_effort!r}; "
+                                 + (f"supported: {', '.join(supported)}" if supported else "no efforts are documented"))
+        if model_id in TELNYX_CHAT_COMPLETIONS_MODELS:
+            return RonTelnyxChatModel(
+                client_args=client_args,
+                model_id=model_id,
+                **({"params": {"reasoning_effort": reasoning_effort}} if reasoning_effort else {}),
+            )
+        # Telnyx keeps no response ids ("Response id parameter is not supported"): stateless, full history per call.
+        return RonTelnyxModel(
+            client_args=client_args,
+            model_id=model_id,
+            stateful=False,
+            **({"params": {"reasoning": {"effort": reasoning_effort}}} if reasoning_effort else {}),
         )
 
     if provider == "anthropic":
@@ -1018,6 +1125,69 @@ class TimeoutRetryStrategy(ModelRetryStrategy):
         return super().is_retryable(exception) or is_model_timeout(exception)
 
 
+DOCUMENT_ROUTED_MODELS: frozenset[str] = frozenset({
+    TELNYX_DEFAULT_MODEL,
+    NIM_DEFAULT_MODEL,
+    MISTRAL_DEFAULT_MODEL,
+    "moonshotai/Kimi-K3.1-Pro",
+    "zai-glm-5-3-flash",
+    "z-ai/glm-5.3-flash",
+    "zai-glm-5-3",
+})
+DOCUMENT_DEFAULT_EFFORT = "low"
+
+
+def document_uses_glm_router(provider: str, model_id: str) -> bool:
+    """True when Document Agent routes ``(provider, model_id)`` over fast 1M-window candidates."""
+    if provider not in ("telnyx", "nim", "mistral") or model_id not in DOCUMENT_ROUTED_MODELS:
+        return False
+    return bool(set(configured_providers()) & {"telnyx", "mistral", "nim"})
+
+
+def build_document_model_router(provider: ProviderName, model_id: str, reasoning_effort: str | None) -> Any:
+    """1M-window ModelRouter for Document Agent (Telnyx Kimi K3.1 Pro / GLM 5.3 Flash with automatic failover)."""
+    if not document_uses_glm_router(provider, model_id):
+        return build_model(provider, model_id, reasoning_effort)
+    from strands.models.routing import ModelRouter, RoutingCandidate
+    from agent.api.core.build_agent import _efforts, _read_timeout, routing_strategy
+
+    offered = set(configured_providers())
+    pool: list[tuple[ProviderName, str]] = []
+    explicit_lead = (provider, model_id) in {
+        ("telnyx", TELNYX_DEFAULT_MODEL),
+        ("telnyx", "moonshotai/Kimi-K3.1-Pro"),
+        ("mistral", "zai-glm-5-3-flash"),
+        ("nim", "z-ai/glm-5.3-flash"),
+        ("mistral", "zai-glm-5-3"),
+    }
+    if explicit_lead and provider in offered:
+        pool.append((provider, model_id))
+    for cand_provider, cand_model in (
+        ("mistral", "zai-glm-5-3-flash"),
+        ("nim", "z-ai/glm-5.3-flash"),
+        ("mistral", "zai-glm-5-3"),
+    ):
+        if cand_provider in offered and (cand_provider, cand_model) not in pool:
+            pool.append((cand_provider, cand_model))
+
+    candidates = []
+    for cand_provider, cand_model in pool:
+        supported = _efforts(cand_provider, cand_model) or ()
+        chosen = (
+            reasoning_effort
+            if (reasoning_effort and reasoning_effort in supported)
+            else (DOCUMENT_DEFAULT_EFFORT if DOCUMENT_DEFAULT_EFFORT in supported else None)
+        )
+        timeout = _read_timeout(cand_provider) or (25.0 if cand_provider == "telnyx" else None)
+        model = (
+            build_model(cand_provider, cand_model, chosen, read_timeout=timeout)
+            if timeout
+            else build_model(cand_provider, cand_model, chosen)
+        )
+        candidates.append(RoutingCandidate(model, name=f"{cand_provider}:{cand_model}"))
+    return ModelRouter(candidates, strategy=routing_strategy()) if len(candidates) > 1 else candidates[0].model
+
+
 def create_panel_agent(
     *,
     provider: ProviderName,
@@ -1086,6 +1256,7 @@ def create_panel_agent(
         RepairConfig, ToolRepairTrigger, adapt_tool, browser_server_env, revision_notice, revision_resolver,
     )
 
+    is_document = agent_scope == "document"
     repair_config = RepairConfig.from_env()
     # Exactly ONE browser MCP server is configured; it is staged on demand through
     # tool_catalog(action="load", name=<server>) with a prefixed, elicitation-accepting client.
@@ -1093,17 +1264,17 @@ def create_panel_agent(
     from agent.api.core.ren_mcp import PHONE_SERVER, hub_client_factory, hub_server_config
 
     # The phone (ren mobile) is one more server the agent can stage, when this desktop is joined to Ren's hub.
-    phone_server = hub_server_config()
+    phone_server = {} if is_document else hub_server_config()
     catalog = _OwnedPanelCatalog(
         tools=local_tools, managed_mcp=[ManagedMCP(client) for client in clients],
-        mcp_servers={**browser_server_config(selected_browser), **phone_server},
+        mcp_servers={} if is_document else {**browser_server_config(selected_browser), **phone_server},
         # This user's browser MCP server runs their active `server` repair (PYTHONPATH), if any.
-        mcp_client_factories={browser_server: browser_client_factory(
+        mcp_client_factories={} if is_document else {browser_server: browser_client_factory(
             selected_browser, extra_env=(lambda: browser_server_env(user_id)) if repair_config.enabled else None),
             **({PHONE_SERVER: hub_client_factory()} if phone_server else {})},
     )
     from agent.api.core.threads import ThreadProjection
-    hooks = [*hooks, BrowserAvailabilityHook(selected_browser), ToolObservation()]
+    hooks = [*hooks, *([] if is_document else [BrowserAvailabilityHook(selected_browser)]), ToolObservation()]
     if agent_scope not in ("document", "context"):
         # Mirrors this thread into Supabase (threads/thread_messages) on every message change; guests skipped.
         # Document Agent conversations belong to their page (document_conversations), not the thread list;
@@ -1128,6 +1299,8 @@ def create_panel_agent(
     summarizer: Agent | None = None
     try:
         def model_factory(_name: str) -> Any:
+            if is_document:
+                return build_document_model_router(provider, model_id, reasoning_effort)
             return build_model(provider, model_id, reasoning_effort)
 
         @tool(context=True)
@@ -1141,57 +1314,65 @@ def create_panel_agent(
             return tool_context.interrupt("ask_user", reason={"question": question})
 
         tools_dir = PROJECT_TOOLS_DIR
-        core = build_core_tools(tools_dir)
-        catalog.add_tools([*core, create_tool_catalog(catalog, tools_dir), ask_user])
-        from agent.api.core.teaching import create_learned_skill_tools, get_teaching_service
-        def skill_tools() -> list[Any]:
-            available = list(agent.tool_registry.registry.values()) if agent is not None else [*core, *local_tools]
-            excluded = {"use_skill", "list_learned_skills", "think", "ask_user", "tool_catalog", "create_harness"}
-            return [value for value in available if value.tool_name not in excluded
-                    and not value.tool_name.startswith("strands_") and not is_browser_tool(value.tool_name)]
-
-        catalog.add_tools(create_learned_skill_tools(
-            user_id, agent_scope, model_factory, additional_tools=skill_tools(), tool_supplier=skill_tools,
-        ))
-        system_prompt += SKILLS_AND_SPECIALISTS_DIRECTIVE
         storage = get_user_session_storage(user_id)
-        # Native MemoryManager (core/memory.py): search_memory, add_memory, userTurn injection,
-        # and facts extraction on aux_model (below).
-        memory = user_memory_config(user_id, agent_scope)
-        system_prompt += MEMORY_DIRECTIVE
-        # Native A2A client tools over Ron's agents (panel A2A server + RON_A2A_AGENTS).
-        from agent.api.core.a2a_tools import a2a_tools
-        catalog.add_tools(a2a_tools())
-        # Specialists built with strands_harness create_harness, stored in Supabase, served over A2A.
-        from agent.api.core.harness_agents import create_harness_tools
-        catalog.add_tools(create_harness_tools(user_id))
-        # Batch music generation (Lyria 3.5 / Clip via the Interactions API, ElevenLabs Music); saves to the songs library.
-        from agent.api.core.music_generation import music_generation_tools
-        catalog.add_tools(music_generation_tools(user_id))
-        # Native BeforeToolCallEvent cancel: an active mcp_client connection is never re-connected or re-loaded.
-        plugins: list[Any] = [MCPConnectionGuard()]
-        # Harness builtin plugins (strands_harness.plugins): Todos keeps the task list in
-        # agent.state — session-snapshotted and re-injected before every model call — so a
-        # stall-respawned instance resumes mid-task with its plan; EnvironmentContext injects
-        # platform/date/cwd/AGENTS.md before each user turn.
-        from strands_harness.plugins import EnvironmentContext, Todos
-        if PANEL_TODOS:
-            plugins.append(Todos())
-        if PANEL_ENVIRONMENT_CONTEXT and agent_scope != "build":
-            # Not for the Build Agent: EnvironmentContext probes `pwd` and reads AGENTS.md through agent.sandbox
-            # (strands_harness/plugins/environment.py `_gather`), and the default NotASandboxLocalEnvironment
-            # resolves both against os.getcwd() (strands/sandbox/not_a_sandbox_local_environment.py), which is the
-            # Ron repository: it would hand Ron's own AGENTS.md to the agent as its project's. The Build Agent's
-            # prompt names its workspace instead (core/build_workspace.py).
-            plugins.append(EnvironmentContext())
-        if repair_config.enabled:
+        if is_document:
+            # Document Agent writes Markdown directly for one document page: give it only research + workflow tools,
+            # with no host shell/editor, no MCP servers, no A2A/specialist/music tools, and no repo AGENTS.md injection.
+            core = build_core_tools(tools_dir, names=DOCUMENT_TOOL_NAMES)
+            catalog.add_tools(core)
+            memory = None
+            plugins: list[Any] = []
+        else:
+            core = build_core_tools(tools_dir)
+            catalog.add_tools([*core, create_tool_catalog(catalog, tools_dir), ask_user])
+            from agent.api.core.teaching import create_learned_skill_tools
+            def skill_tools() -> list[Any]:
+                available = list(agent.tool_registry.registry.values()) if agent is not None else [*core, *local_tools]
+                excluded = {"use_skill", "list_learned_skills", "think", "ask_user", "tool_catalog", "create_harness"}
+                return [value for value in available if value.tool_name not in excluded
+                        and not value.tool_name.startswith("strands_") and not is_browser_tool(value.tool_name)]
+
+            catalog.add_tools(create_learned_skill_tools(
+                user_id, agent_scope, model_factory, additional_tools=skill_tools(), tool_supplier=skill_tools,
+            ))
+            system_prompt += SKILLS_AND_SPECIALISTS_DIRECTIVE
+            # Native MemoryManager (core/memory.py): search_memory, add_memory, userTurn injection,
+            # and facts extraction on aux_model (below).
+            memory = user_memory_config(user_id, agent_scope)
+            system_prompt += MEMORY_DIRECTIVE
+            # Native A2A client tools over Ron's agents (panel A2A server + RON_A2A_AGENTS).
+            from agent.api.core.a2a_tools import a2a_tools
+            catalog.add_tools(a2a_tools())
+            # Specialists built with strands_harness create_harness, stored in Supabase, served over A2A.
+            from agent.api.core.harness_agents import create_harness_tools
+            catalog.add_tools(create_harness_tools(user_id))
+            # Batch music generation (Lyria 3.5 / Clip via the Interactions API, ElevenLabs Music); saves to the songs library.
+            from agent.api.core.music_generation import music_generation_tools
+            catalog.add_tools(music_generation_tools(user_id))
+            # Native BeforeToolCallEvent cancel: an active mcp_client connection is never re-connected or re-loaded.
+            plugins = [MCPConnectionGuard()]
+            # Harness builtin plugins (strands_harness.plugins): Todos keeps the task list in
+            # agent.state — session-snapshotted and re-injected before every model call — so a
+            # stall-respawned instance resumes mid-task with its plan; EnvironmentContext injects
+            # platform/date/cwd/AGENTS.md before each user turn.
+            from strands_harness.plugins import EnvironmentContext, Todos
+            if PANEL_TODOS:
+                plugins.append(Todos())
+            if PANEL_ENVIRONMENT_CONTEXT and agent_scope != "build":
+                # Not for the Build Agent: EnvironmentContext probes `pwd` and reads AGENTS.md through agent.sandbox
+                # (strands_harness/plugins/environment.py `_gather`), and the default NotASandboxLocalEnvironment
+                # resolves both against os.getcwd() (strands/sandbox/not_a_sandbox_local_environment.py), which is the
+                # Ron repository: it would hand Ron's own AGENTS.md to the agent as its project's. The Build Agent's
+                # prompt names its workspace instead (core/build_workspace.py).
+                plugins.append(EnvironmentContext())
+        if repair_config.enabled and not is_document:
             # userTurn note "<tool> was repaired and is active", once per live session (agent.state).
             plugins.append(revision_notice(user_id))
-        if provider == "perplexity":
+        if provider == "perplexity" and not is_document:
             catalog.add_tools([load_vendored_think(tools_dir)])
             plugins.append(ThinkToolsGuard())
 
-        skills = skills_from_env()
+        skills = None if is_document else skills_from_env()
         if skills is not None:
             plugins.append(skills)
         if goal:
@@ -1308,8 +1489,11 @@ def create_panel_agent(
                 tool_assignments={name: _assigned_tools(agent, names) for name, names in assignments.items()}))
         elif os.getenv("PANEL_SKILL_TOOLS"):
             raise ValueError("PANEL_SKILL_TOOLS requires PANEL_SKILLS_DIR(S)")
-        formations = [_formation_spec(raw, agent) for raw in raw_formations] \
-            if raw_formations is not None else _default_formations()
+        formations = (
+            []
+            if is_document
+            else ([_formation_spec(raw, agent) for raw in raw_formations] if raw_formations is not None else _default_formations())
+        )
         for spec in formations:
             if isinstance(spec, ChildSpec):
                 raise ValueError("Top-level formations must be graph or swarm specs")
@@ -1375,6 +1559,20 @@ def list_provider_models(provider: ProviderName) -> list[dict[str, str]]:
                 "provider": "nim",
             }
             for model_id in NIM_MODELS
+        ]
+
+    if provider == "telnyx":
+        if not provider_api_key("telnyx"):
+            return []
+        # Chat models Telnyx hosts itself. External models (openai/, anthropic/, google/gemini-, Groq/) omit
+        # ``service_tiers`` ("The service_tiers field is omitted for externally hosted models") and answer 400
+        # without a customer key (``api_key_ref``); a model without the ``default`` tier answers 400 "does not
+        # support service_tier default" unless the request names its tier (live 2026-11-13).
+        return [
+            {"id": model_id, "owned_by": str(card.get("organization") or card.get("owned_by") or "telnyx"),
+             "provider": "telnyx"}
+            for model_id, card in telnyx_catalogue(refresh=True).items()
+            if card.get("task") in TELNYX_CHAT_TASKS and "default" in (card.get("service_tiers") or ())
         ]
 
     if provider in ("openai", "anthropic"):

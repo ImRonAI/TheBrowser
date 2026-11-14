@@ -7,12 +7,17 @@
  */
 import { messageSegments, workflowFromTool, type RonSegment } from './ron-run.ts'
 import type { PanelMessage, PanelPart, RunStatus, ToolPart } from './panel-stream.ts'
+import type { PromptAttachment } from './prompt-attachments.ts'
 
 export interface DraftTurn {
   id: string
   kind: 'request' | 'feedback'
   /** What the user typed (the request or the feedback), not the context sent with it. */
   ask: string
+  /** Attached reference context cards sent with this turn (`ai-elements/attachments.tsx`). */
+  attachments?: PromptAttachment[]
+  /** True when the live Document screen screenshot was shared on this turn. */
+  screenShared?: boolean
   /** Ron's answer so far; null until anything arrives. */
   message: PanelMessage | null
   status: RunStatus

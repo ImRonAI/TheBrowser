@@ -3,6 +3,7 @@ import type { Editor } from '@tiptap/react'
 import { nanoid } from 'nanoid'
 import { useRonRun } from '@/hooks/useRonRun'
 import { documentRetryMessage, documentRonMessage, type RonWritingTarget } from '@/lib/document-ron'
+import type { PromptAttachment } from '@/lib/prompt-attachments'
 import { latestAssistant, ronSessionId } from '@/lib/ron-run'
 import type { DraftTurn } from '@/lib/ron-draft'
 import type { ProjectsRequest } from '@/lib/projects-api'
@@ -12,6 +13,16 @@ import { RonDraftChat, type DraftAgent } from './RonDraftChat'
 const SUGGESTIONS = ['Draft this page from its title', 'Add a workflow of the process', 'Summarize this page', 'Turn this into action items']
 
 const failure = (cause: unknown) => (cause instanceof Error ? cause.message : 'Ren could not be reached.')
+
+async function captureDocumentScreen(): Promise<string | undefined> {
+  if (typeof window === 'undefined' || !window.electron?.browser?.screenshot) return undefined
+  try {
+    const dataUrl = await window.electron.browser.screenshot()
+    return typeof dataUrl === 'string' && dataUrl.startsWith('data:image/') ? dataUrl : undefined
+  } catch {
+    return undefined
+  }
+}
 
 /** Where the Document Agent's conversation is saved: with its page (`document_conversations`). */
 export interface PageConversations {
@@ -27,14 +38,19 @@ export interface PageConversations {
  * writing chat. One chat is one conversation: its first request creates it on the page, Try again
  * continues it, and the messages are the runtime's native session.
  */
-function useDocumentAgent(editor: Editor | null, target: () => RonWritingTarget, conversations?: PageConversations): DraftAgent {
+function useDocumentAgent(
+  editor: Editor | null,
+  target: () => RonWritingTarget,
+  conversations: PageConversations | undefined,
+  screenShareEnabled: boolean,
+): DraftAgent {
   const ron = useRonRun('document')
   const [done, setDone] = useState<DraftTurn[]>([])
-  const [current, setCurrent] = useState<Pick<DraftTurn, 'id' | 'kind' | 'ask'> | null>(null)
+  const [current, setCurrent] = useState<Pick<DraftTurn, 'id' | 'kind' | 'ask' | 'attachments' | 'screenShared'> | null>(null)
   const [error, setError] = useState<string | null>(null)
   const session = useRef<{ sessionId: string; conversation: DocumentConversation | null } | null>(null)
 
-  const send: DraftAgent['send'] = async (ask, kind, goal) => {
+  const send: DraftAgent['send'] = async (ask, kind, goal, attachments) => {
     if (current || !editor) return
     setError(null)
     try {
@@ -53,12 +69,31 @@ function useDocumentAgent(editor: Editor | null, target: () => RonWritingTarget,
       setError(failure(cause))
       return
     }
-    const turn = { id: nanoid(8), kind, ask }
+    const currentMarkdown = editor.getMarkdown()
+    // Only screenshot the live document canvas when there is existing content on the page to inspect;
+    // a brand-new blank page has nothing visual to relay beyond an empty editor.
+    const screenFrame = screenShareEnabled && currentMarkdown.trim().length > 0
+      ? await captureDocumentScreen()
+      : undefined
+    const promptAttachments = kind === 'request' && attachments && attachments.length > 0 ? attachments : undefined
+    const turn = {
+      id: nanoid(8),
+      kind,
+      ask,
+      attachments: promptAttachments,
+      screenShared: Boolean(screenFrame),
+    }
     setCurrent(turn)
     const message = kind === 'request'
-      ? documentRonMessage({ target: target(), intent: ask, currentMarkdown: editor.getMarkdown() })
+      ? documentRonMessage({ target: target(), intent: ask, currentMarkdown })
       : documentRetryMessage(ask)
-    const final = await ron.start({ sessionId: session.current.sessionId, message, goal: kind === 'request' && goal ? ask : undefined })
+    const final = await ron.start({
+      sessionId: session.current.sessionId,
+      message,
+      goal: kind === 'request' && goal ? ask : undefined,
+      promptAttachments,
+      screenFrame,
+    })
     setDone((turns) => [...turns, {
       ...turn, message: final ? latestAssistant(final) ?? null : null,
       status: final?.status ?? 'error', error: final?.error,
@@ -76,18 +111,49 @@ function useDocumentAgent(editor: Editor | null, target: () => RonWritingTarget,
  * Ask Ron inside a project page: a temporary chat (the panel's components) that ends when the user
  * inserts Ron's draft or overwrites the page with it. The conversation stays saved with the page.
  */
-export function RonWriter({ editor, target, goal = false, onClose, disabled, conversations }: {
+export function RonWriter({
+  editor,
+  target,
+  goal = false,
+  initialPrompt,
+  initialAttachments,
+  autoSend = false,
+  autoApply = false,
+  onApplied,
+  onClose,
+  disabled,
+  conversations,
+}: {
   editor: Editor | null
   /** Read when the request is sent, so the newest title and facts are used. */
   target: () => RonWritingTarget
   goal?: boolean
+  initialPrompt?: string
+  initialAttachments?: PromptAttachment[]
+  autoSend?: boolean
+  autoApply?: boolean
+  onApplied?: () => void
   onClose: () => void
   disabled?: boolean
   conversations?: PageConversations
 }) {
-  const agent = useDocumentAgent(editor, target, conversations)
+  const [screenShareEnabled, setScreenShareEnabled] = useState(true)
+  const agent = useDocumentAgent(editor, target, conversations, screenShareEnabled)
   return (
-    <RonDraftChat agent={agent} editor={editor} noun="page" suggestions={SUGGESTIONS} initialGoal={goal}
-      onApplied={onClose} onClose={onClose} disabled={disabled} />
+    <RonDraftChat
+      agent={agent}
+      editor={editor}
+      noun="page"
+      suggestions={SUGGESTIONS}
+      initialGoal={goal}
+      initialPrompt={initialPrompt}
+      initialAttachments={initialAttachments}
+      autoSend={autoSend}
+      autoApply={autoApply}
+      screenShare={{ enabled: screenShareEnabled, onToggle: () => setScreenShareEnabled((value) => !value) }}
+      onApplied={() => (onApplied ?? onClose)()}
+      onClose={onClose}
+      disabled={disabled}
+    />
   )
 }

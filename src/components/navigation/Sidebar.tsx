@@ -8,18 +8,18 @@
  * It carries exactly what the drawer did, plus the vertical tab list:
  * - the search composer (context picker, article/text attachments, Brave
  *   assist, search depth, submit → ron://search?q=…&level=…), focused by ⌘K
- * - the six destinations (Discover, Execute, Documents, Calendar, Vibe, Build);
+ * - the destinations (Home, Discover, Execute, Documents, Calendar, Vibe, Build; `destinations.ts`);
  *   Documents opens the library (ron://documents) and is the one lit while it shows
  * - open tabs
  */
 import { useEffect, useRef, useState } from 'react'
 import { motion, useReducedMotion } from 'framer-motion'
-import { ArrowUp, Check, ChevronDown, Compass, Calendar, Columns3, FileText, Hammer, Music2, Search, X } from 'lucide-react'
+import { ArrowUp, Search, X } from 'lucide-react'
 import { RenWordmark } from '@/components/brand'
 import { useNavigationStore, type HomeTab } from '@/stores/navigationStore'
 import { useTabStore } from '@/stores/tabStore'
-import { documentsLibraryUrl, parseDocumentsLibraryUrl } from '@/lib/project-documents'
-import { openInternalUrl } from '@/components/board/task-detail/editor/extensions/blocks/workspace'
+import { parseDocumentsLibraryUrl } from '@/lib/project-documents'
+import { DESTINATIONS, openDestination } from '@/components/navigation/destinations'
 import { useTextAssist } from '@/hooks/useTextAssist'
 import { TextAssist, handleAssistKey } from '@/components/shared/TextAssist'
 import { useSearchStore } from '@/stores/searchStore'
@@ -28,10 +28,9 @@ import { articleDraftKey, EMPTY_ARTICLE_DRAFT, useArticleDraftStore } from '@/st
 import { ArticleAttachmentCard } from '@/components/interests/ArticleAttachmentCard'
 import { ContextPicker, type ContextItem } from '@/components/agent-panel/ContextPicker'
 import { TextAttachmentCard } from '@/components/ai-elements/text-attachment-card'
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { SearchDepthSelector } from '@/components/search/SearchDepthSelector'
 import { buildSearchRonUrl } from '@/components/chrome/UrlBar'
 import { VerticalTabList } from '@/components/chrome/TabBar'
-import { LEVEL_INFO } from '@/lib/search-api'
 import { MOD_KEY } from '@/lib/shortcuts'
 import { fileToDataUrl, makePastedTextFilename } from '@/utils/file-utils'
 import type { TextAttachment } from '@/components/ai-elements/types'
@@ -43,87 +42,8 @@ const EASE = [0.16, 1, 0.3, 1] as const
 const LARGE_PASTE_THRESHOLD_CHARS = 2000
 
 // ─────────────────────────────────────────────────────────────────────────────
-// SEARCH DEPTH SELECTOR
-// ─────────────────────────────────────────────────────────────────────────────
-
-/**
- * The search level: every search runs the Perplexity Agent API at this preset
- * (fast/low/medium/high/xhigh). Persisted in the search store.
- */
-function SearchDepthSelector() {
-  const { level, setLevel } = useSearchStore()
-  const [open, setOpen] = useState(false)
-  const active = LEVEL_INFO.find((info) => info.id === level)
-
-  return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <button
-          type="button"
-          aria-label={`Search depth: ${active?.label ?? level}`}
-          title="Search depth"
-          className={cn(
-            'flex h-6 flex-shrink-0 items-center gap-1 rounded-full pl-2 pr-1.5',
-            'text-[12px] font-medium text-ink-secondary transition-colors duration-150 ease-out hover:bg-surface-100 hover:text-ink data-[state=open]:bg-surface-100 data-[state=open]:text-ink',
-            'dark:text-ink-inverse-secondary dark:hover:bg-surface-800 dark:hover:text-ink-inverse dark:data-[state=open]:bg-surface-800 dark:data-[state=open]:text-ink-inverse',
-          )}
-        >
-          <span>{active?.label ?? level}</span>
-          <ChevronDown className={cn('h-3 w-3 opacity-70 transition-transform duration-200', open && 'rotate-180')} />
-        </button>
-      </PopoverTrigger>
-      {/* `data-[state=open]:shadow-float`: outranks the primitive's own shadow-md, still yields to Glass. */}
-      <PopoverContent align="end" sideOffset={8} className="z-[200] w-72 rounded-xl border-border p-1 data-[state=open]:shadow-float">
-        <p className="px-2.5 pb-1.5 pt-2 font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground">Search depth</p>
-        {LEVEL_INFO.map((info) => {
-          const isActive = info.id === level
-          return (
-            <button
-              key={info.id}
-              type="button"
-              onClick={() => {
-                setLevel(info.id)
-                setOpen(false)
-              }}
-              className={cn(
-                'flex w-full items-start gap-2.5 rounded-lg px-2.5 py-2 text-left transition-colors duration-150 ease-out focus-visible:ring-inset focus-visible:ring-offset-0',
-                isActive ? 'bg-muted' : 'hover:bg-muted/70',
-              )}
-            >
-              <span className={cn('mt-0.5 flex h-4 w-4 flex-shrink-0 items-center justify-center', !isActive && 'opacity-0')}>
-                <Check className="h-3.5 w-3.5 text-volt" strokeWidth={2.5} />
-              </span>
-              <span className="min-w-0 flex-1">
-                <span className="flex items-baseline gap-1.5 text-[13px] font-semibold text-popover-foreground">
-                  {info.label}
-                  <span className="font-mono text-[10px] font-normal uppercase tracking-[0.08em] text-muted-foreground">
-                    {info.id}
-                  </span>
-                </span>
-                <span className="mt-0.5 block text-[12px] leading-snug text-muted-foreground">
-                  {info.description}
-                </span>
-              </span>
-            </button>
-          )
-        })}
-      </PopoverContent>
-    </Popover>
-  )
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
 // DESTINATIONS
 // ─────────────────────────────────────────────────────────────────────────────
-
-const DESTINATIONS: { id: HomeTab; label: string; icon: typeof Compass }[] = [
-  { id: 'discover', label: 'Discover', icon: Compass },
-  { id: 'execute', label: 'Execute', icon: Columns3 },
-  { id: 'documents', label: 'Documents', icon: FileText },
-  { id: 'calendar', label: 'Calendar', icon: Calendar },
-  { id: 'vibe', label: 'Vibe', icon: Music2 },
-  { id: 'build', label: 'Build', icon: Hammer },
-]
 
 /** Mono micro-label. Secondary ink (not muted) so it keeps 4.5:1 on the light chrome. */
 function SectionLabel({ children }: { children: React.ReactNode }) {
@@ -140,11 +60,11 @@ const ROW_HOVER = 'hover:bg-ink/[0.06] hover:text-ink dark:hover:bg-ink-inverse/
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function Sidebar() {
-  const { isSidebarOpen, searchFocusRequest, activeTab, setActiveTab } = useNavigationStore()
+  const { isSidebarOpen, searchFocusRequest, activeTab } = useNavigationStore()
   // The library is routed by the tab's URL, so Documents is lit exactly while it shows. Off the library a
-  // leftover 'documents' destination lights Discover, the page MainContent shows for it.
+  // leftover 'documents' destination lights Home, the page MainContent shows for it.
   const onDocuments = useTabStore((state) => parseDocumentsLibraryUrl(state.tabs.find((tab) => tab.id === state.activeTabId)?.url) !== null)
-  const currentDestination: HomeTab = onDocuments ? 'documents' : activeTab === 'documents' ? 'discover' : activeTab
+  const currentDestination: HomeTab = onDocuments ? 'documents' : activeTab === 'documents' ? 'home' : activeTab
   const { level } = useSearchStore()
   const reduced = useReducedMotion()
   const user = useAuthStore((state) => state.user?.id || 'default')
@@ -258,29 +178,6 @@ export function Sidebar() {
     setTextAttachments(prev => prev.map(att =>
       att.id === id ? { ...att, ...next } : att
     ))
-  }
-
-  const navigateInternal = (url: string) => {
-    if (typeof window !== 'undefined' && window.electron?.browser?.navigate) {
-      window.electron.browser.navigate(url)
-    }
-  }
-
-  const handleTabClick = (tabId: HomeTab) => {
-    setActiveTab(tabId)
-    if (tabId === 'execute') {
-      navigateInternal('ron://execute')
-      return
-    }
-    if (tabId === 'documents') {
-      openInternalUrl(documentsLibraryUrl())
-      return
-    }
-    if (tabId === 'build') {
-      navigateInternal('ron://build')
-      return
-    }
-    navigateInternal('ron://home')
   }
 
   const canSubmit = Boolean(query.trim()) || textAttachments.length > 0
@@ -417,7 +314,7 @@ export function Sidebar() {
                   <li key={id}>
                     <button
                       type="button"
-                      onClick={() => handleTabClick(id)}
+                      onClick={() => openDestination(id)}
                       aria-current={isActive ? 'page' : undefined}
                       className={cn(
                         'relative flex h-8 w-full items-center gap-2.5 rounded-lg px-2.5 text-[13px] transition-colors duration-150 ease-out focus-visible:ring-offset-0',

@@ -30,6 +30,8 @@ import {
 import { buildSearchRonUrl } from '@/components/chrome/UrlBar'
 import { searchMarkdown } from '@/lib/context-api'
 import { useContextAgentStore } from '@/stores/contextAgentStore'
+import { searchAttachments } from '@/stores/searchAttachmentsStore'
+import { ATTACHMENT_KIND_LABELS } from '@/lib/prompt-attachments'
 import { SearchBackdrop } from '@/components/search/SearchBackdrop'
 import { SearchHeader } from '@/components/search/SearchHeader'
 import { LensBar, lensPanelId, lensTabId, type LensState } from '@/components/search/LensBar'
@@ -45,6 +47,8 @@ import { ShoppingResults } from '@/components/search/ShoppingResults'
 export interface SearchResultsPageProps {
   query: string
   level: SearchLevel
+  /** `ctx` of the search URL: the context attached on the home page (`searchAttachmentsStore`). */
+  contextId?: string | null
   onBack: () => void
 }
 
@@ -53,7 +57,9 @@ const PANEL_KEY: Record<SearchTab, string> = {
   images: 'panel-images', videos: 'panel-videos', shopping: 'panel-shopping',
 }
 
-export function SearchResultsPage({ query, level, onBack }: SearchResultsPageProps) {
+export function SearchResultsPage({ query, level, contextId = null, onBack }: SearchResultsPageProps) {
+  // Read once per id: the saved attachments never change, and a missing id is reported, never sent empty.
+  const attachments = useMemo(() => contextId ? searchAttachments(contextId) : [], [contextId])
   const { run, isRunning, followUpLoading, startedAt, fatal, start, sendFollowUp, refreshPlaces, cancel } = useSearchResultsStore()
   const [activeTab, setActiveTab] = useState<SearchTab>('agent')
   const reduced = useReducedMotion()
@@ -71,8 +77,10 @@ export function SearchResultsPage({ query, level, onBack }: SearchResultsPagePro
     start(query, level, {
       country: profile.country,
       ...(profile.location ? { location: { location: profile.location } } : {}),
+      contextId,
+      attachments: attachments ?? [],
     })
-  }, [query, level, start])
+  }, [query, level, contextId, attachments, start])
 
   const handleFollowUp = useCallback(
     async (message: string) => {
@@ -90,8 +98,8 @@ export function SearchResultsPage({ query, level, onBack }: SearchResultsPagePro
   // or a run that never got going (fatal), starts one.
   useEffect(() => {
     const stored = useSearchResultsStore.getState()
-    if (stored.runKey !== searchRunKey(query, level) || stored.fatal) fire()
-  }, [fire, query, level])
+    if (stored.runKey !== searchRunKey(query, level, contextId) || stored.fatal) fire()
+  }, [fire, query, level, contextId])
 
   /** Switch tabs from inside a panel and keep keyboard focus on the tab row. */
   const openTab = useCallback((tab: SearchTab) => {
@@ -106,7 +114,7 @@ export function SearchResultsPage({ query, level, onBack }: SearchResultsPagePro
     ? {
         label: `Search deeper (${levelLabel(deeperLevel)})`,
         onClick: () => {
-          window.electron.browser.navigate(buildSearchRonUrl(query, deeperLevel))
+          window.electron.browser.navigate(buildSearchRonUrl(query, deeperLevel, contextId))
             .catch((error: unknown) => console.error('Search deeper failed:', error))
         },
       }
@@ -189,6 +197,22 @@ export function SearchResultsPage({ query, level, onBack }: SearchResultsPagePro
           <Plus className="h-4 w-4" strokeWidth={1.75} aria-hidden />
           Add search to Ren context
         </button>
+        {attachments && attachments.length > 0 && (
+          <div aria-label="Attached context" className="ml-3 flex min-w-0 flex-wrap items-center gap-1.5">
+            <span className="text-[12px] text-ink-muted dark:text-ink-inverse-muted">Answered with</span>
+            {attachments.map((item) => (
+              <span key={item.id} title={`${ATTACHMENT_KIND_LABELS[item.kind]}: ${item.title}`}
+                className="inline-flex h-6 max-w-[14rem] items-center rounded-full border border-surface-200 bg-surface-0 px-2.5 text-[12px] font-medium text-ink-secondary dark:border-surface-800 dark:bg-surface-850 dark:text-ink-inverse-secondary">
+                <span className="truncate">{item.title}</span>
+              </span>
+            ))}
+          </div>
+        )}
+        {contextId && !attachments && (
+          <p role="status" className="ml-3 self-center text-[12px] text-amber-800 dark:text-amber-300">
+            The context attached to this search is no longer available, so it was searched without it.
+          </p>
+        )}
       </div>
 
       <LensBar active={activeTab} onChange={setActiveTab} lenses={lenses} />

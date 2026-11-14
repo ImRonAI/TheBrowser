@@ -36,10 +36,23 @@ def _offline_context_window_metadata(monkeypatch: pytest.MonkeyPatch) -> None:
 
 @pytest.fixture(autouse=True)
 def _no_nim_key_by_default(monkeypatch: pytest.MonkeyPatch) -> None:
-    """NIM is the first provider in ``PROVIDERS``; a developer's real key must not change test defaults."""
+    """NIM defaults in ``PROVIDERS``; a developer's real key or ``NIM_MODEL`` must not change test defaults."""
     from agent.api.core import config as app_config
+    from agent.api.core import panel_agent
 
     monkeypatch.setattr(app_config, "NVIDIA_NIM_API_KEY", None)
+    monkeypatch.setattr(app_config, "NIM_DEFAULT_MODEL", "z-ai/glm-5.3-flash")
+    monkeypatch.setattr(panel_agent, "NIM_DEFAULT_MODEL", "z-ai/glm-5.3-flash")
+
+
+@pytest.fixture(autouse=True)
+def _no_telnyx_key_by_default(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A developer's real Telnyx key must not make tests list Telnyx's catalogue over the network."""
+    from agent.api.core import config as app_config
+    from agent.api.core import panel_agent
+
+    monkeypatch.setattr(app_config, "TELNYX_API_KEY", None)
+    monkeypatch.setattr(panel_agent, "_TELNYX_CARDS", {})
 
 
 @pytest.fixture(autouse=True)

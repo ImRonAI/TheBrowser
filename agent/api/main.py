@@ -59,6 +59,14 @@ async def lifespan(app: FastAPI):
     repairs.bind_emitter(chat.repair_emitter(manager))
     app.state.tool_repairs = repairs
     chat.bind_repair_service(repairs)
+    # Saved specialists run at the cadence their owner picked, each run a panel session on this runtime
+    # (core/agent_schedules.py); the Context widget shows finished runs as notifications.
+    from agent.api.core.agent_schedules import AgentScheduler
+    from agent.api.core.config import AGENT_SCHEDULE_TICK_SECONDS, AGENT_SCHEDULES_ENABLED
+
+    schedules = AgentScheduler(manager, tick=AGENT_SCHEDULE_TICK_SECONDS, enabled=AGENT_SCHEDULES_ENABLED)
+    app.state.agent_scheduler = schedules
+    schedules.start()
     mounted_routes = []
     try:
         from agent.api.core.a2a_tools import a2a_enabled, panel_a2a_url
@@ -114,10 +122,15 @@ async def lifespan(app: FastAPI):
                     await asyncio.gather(link, return_exceptions=True)
     finally:
         try:
+            from agent.api.core.articles import close_article_browser
+
+            await close_article_browser()
             await get_teaching_service().shutdown()
             await public_tunnel.stop()
             await app.state.issue_agents.shutdown()
             await repairs.shutdown()
+            # Before the runtime: a run still active is kept in its journal and continues on the next start.
+            await schedules.shutdown()
             await manager.shutdown()
         finally:
             chat.bind_repair_service(None)

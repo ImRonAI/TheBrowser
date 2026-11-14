@@ -1,9 +1,9 @@
 import { useMemo, useState, type ReactNode } from 'react'
-import { ArrowUpRight, Lock, Play, TriangleAlert } from 'lucide-react'
+import { ArrowUpRight, Lock, Play, Sparkles, TriangleAlert } from 'lucide-react'
 import { RenWordmark } from '@/components/brand'
 import { ArticleBody, articleBlocks } from '@/components/home/ArticleBody'
 import { opensWith, readingMinutes, totalWords, withoutLeadImage, type AdSlot } from '@/lib/article-body'
-import { cleanTitle, formatPublished, type ArticleAttachment, type ArticleMeta, type Story } from '@/lib/articles'
+import { cleanTitle, formatPublished, youtubeEmbedUrl, youtubeVideoId, type ArticleAttachment, type ArticleMeta, type Story } from '@/lib/articles'
 
 /** A publisher image narrower than this is a logo or icon, not a lead photo: the full-width hero is for real photographs. */
 const HERO_MIN_WIDTH = 480
@@ -31,20 +31,22 @@ export function NewsArticle({ story, article, meta, loading, notice, onRetry, re
   const [thumbFailed, setThumbFailed] = useState(false)
   const [faviconFailed, setFaviconFailed] = useState(false)
   const preview = article.status === 'preview'
+  const videoId = useMemo(() => youtubeVideoId(story.url), [story.url])
+  const isYoutubeVideo = Boolean(videoId)
   const headline = cleanTitle(story.title, [story.source, story.hostname, meta?.siteName])
   // A full-width hero must be a lead photo: a video's thumbnail, or the extracted article's own og:image. Brave's
   // full-size `thumbnail.original` for any other result is often the site's default share banner (Reddit's logo), so
   // those previews keep the small thumbnail beside the text.
   const heroSource = story.kind === 'video' ? story.heroImage || meta?.image || '' : meta?.image || ''
-  const hero = heroSource && !heroFailed ? heroSource : ''
+  const hero = !isYoutubeVideo && heroSource && !heroFailed ? heroSource : ''
   const thumbSource = story.thumbnail || story.heroImage || ''
-  const thumb = !hero && thumbSource && !thumbFailed ? thumbSource : ''
+  const thumb = !isYoutubeVideo && !hero && thumbSource && !thumbFailed ? thumbSource : ''
   const allBlocks = useMemo(() => articleBlocks(article.text), [article.text])
   const blocks = useMemo(() => withoutLeadImage(allBlocks, hero || undefined), [allBlocks, hero])
   const minutes = readingMinutes(blocks)
   const sparse = totalWords(blocks) < 20
   const failed = !loading && preview && Boolean(notice)
-  const dek = !preview && meta?.description && meta.description.length <= 320 && !opensWith(blocks, meta.description) ? meta.description : ''
+  const dek = !isYoutubeVideo && !preview && meta?.description && meta.description.length <= 320 && !opensWith(blocks, meta.description) ? meta.description : ''
   const authors = meta?.authors.length ? meta.authors : story.author ? [story.author] : []
   const dateLabel = formatPublished(story.published || meta?.published || '', story.age)
   const video = story.video
@@ -76,6 +78,19 @@ export function NewsArticle({ story, article, meta, loading, notice, onRetry, re
     </p>}
     <hr className="mt-8 border-surface-200 dark:border-surface-800" />
 
+    {videoId && <div className="mt-8 overflow-hidden rounded-2xl border border-surface-200 bg-black shadow-sm dark:border-surface-800">
+      <div className="aspect-video w-full">
+        <iframe
+          src={youtubeEmbedUrl(videoId)}
+          title={headline}
+          className="h-full w-full border-0"
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+          allowFullScreen
+          referrerPolicy="strict-origin-when-cross-origin"
+        />
+      </div>
+    </div>}
+
     {hero && (story.kind === 'video'
       ? <a href={story.url} target="_blank" rel="noopener noreferrer" aria-label={`Watch: ${headline}`} className="group relative mt-8 block overflow-hidden rounded-2xl">
         <img src={hero} alt="" referrerPolicy="no-referrer" className={heroClass} onError={() => setHeroFailed(true)} onLoad={(event) => onHeroLoad(event.currentTarget.naturalWidth)} />
@@ -89,13 +104,27 @@ export function NewsArticle({ story, article, meta, loading, notice, onRetry, re
         <img src={hero} alt="" referrerPolicy="no-referrer" className={heroClass} onError={() => setHeroFailed(true)} onLoad={(event) => onHeroLoad(event.currentTarget.naturalWidth)} />
       </figure>)}
 
-    {loading && <div role="status" aria-label="Retrieving the article" className="mt-8">
+    {isYoutubeVideo && (!preview || loading) && <div className="mt-8 flex items-center justify-between gap-3 rounded-xl border border-surface-200 bg-surface-50/80 px-3.5 py-2.5 dark:border-surface-800 dark:bg-surface-850/70">
+      <span className="inline-flex items-center gap-2 font-mono text-[11px] font-semibold uppercase tracking-[0.08em] text-ink dark:text-ink-inverse">
+        <Sparkles className="h-3.5 w-3.5 text-blurple-600 dark:text-blurple-400" aria-hidden />
+        Video Writeup · GLM 5.3 Flash
+      </span>
+      {loading && <span className="inline-flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-[0.08em] text-ink-secondary dark:text-ink-inverse-secondary">
+        <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-volt motion-safe:animate-pulse" />
+        Summarizing video
+      </span>}
+    </div>}
+
+    {loading && !isYoutubeVideo && <div role="status" aria-label="Retrieving the article" className="mt-8">
       <p className={`${META_LINE} text-ink-secondary dark:text-ink-inverse-secondary`}>
         <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-volt motion-safe:animate-pulse" />Retrieving the full article
       </p>
       {sparse && <div className="mt-6 space-y-3">
         {[92, 100, 96, 88, 100, 70].map((width, index) => <div key={index} className="h-4 rounded bg-surface-100 motion-safe:animate-pulse dark:bg-surface-850" style={{ width: `${width}%` }} />)}
       </div>}
+    </div>}
+    {loading && isYoutubeVideo && sparse && <div role="status" aria-label="Summarizing video" className="mt-6 space-y-3">
+      {[94, 100, 90, 86, 98, 72].map((width, index) => <div key={index} className="h-4 rounded bg-surface-100 motion-safe:animate-pulse dark:bg-surface-850" style={{ width: `${width}%` }} />)}
     </div>}
     {failed && <p role="status" className="mt-8 flex items-start gap-2.5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3.5 text-[14px] leading-relaxed text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300">
       <TriangleAlert className="mt-[3px] h-4 w-4 shrink-0" />

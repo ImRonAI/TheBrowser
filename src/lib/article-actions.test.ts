@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
-  ARTICLE_ACTIONS, actionFilter, articleAction, articleContextEntry, articleRef, chatMessage, codeMessage, documentMessage, issueMessage, projectMessage, searchQuery,
+  ARTICLE_ACTIONS, actionFilter, articleAction, articleContextEntry, articlePromptAttachment, articleRef, chatMessage, codeMessage, documentMessage,
+  documentPromptDefault, issueMessage, projectMessage, searchQuery,
 } from './article-actions.ts'
 import type { ArticleAttachment } from './articles.ts'
 import { mergeIssueContext } from './issue-attachments.ts'
@@ -73,9 +74,23 @@ test('a coding project keeps the user’s request first, with the article as its
   assert.match(message, /attached article "Fed holds rates steady" .* is the brief\./)
 })
 
-test('the first search is the headline on one line', () => {
+test('the first search is the headline on one line, and custom questions keep article context', () => {
   assert.equal(searchQuery('  Fed holds\n rates  '), 'Fed holds rates')
   assert.equal(searchQuery('x'.repeat(500)).length, 400)
+  assert.equal(searchQuery('Fed holds rates steady', ARTICLE), 'Fed holds rates steady')
+  assert.equal(searchQuery('impact on 30-year mortgage rates', ARTICLE), 'impact on 30-year mortgage rates (Fed holds rates steady)')
+})
+
+test('articlePromptAttachment produces a valid PromptAttachment for ai-elements cards and Document handoff', () => {
+  const att = articlePromptAttachment(ARTICLE)
+  assert.equal(att.id, 'a1')
+  assert.equal(att.kind, 'tab')
+  assert.equal(att.title, 'Fed holds rates steady')
+  assert.equal(att.url, 'https://www.example.com/fed')
+  assert.equal(att.source, 'Example News')
+  assert.equal(att.text, ARTICLE.text)
+  assert.match(documentPromptDefault('', 'existing'), /Incorporate the key facts/)
+  assert.match(documentPromptDefault('', 'new'), /Write a clear, structured brief/)
 })
 
 test('Add to a project makes one Context entry per article: the note leads, links and images are https only', () => {

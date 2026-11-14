@@ -7,7 +7,7 @@ import { useOnboardingStore } from '@/stores/onboardingStore'
 import { useInterestsStore } from '@/stores/interestsStore'
 import { useSearchStore, selectShowFullResults, selectShowChat } from '@/stores/searchStore'
 import { useNavigationStore } from '@/stores/navigationStore'
-import { getSearchLevelFromRonUrl, getSearchQueryFromRonUrl } from '@/components/chrome/UrlBar'
+import { getSearchContextFromRonUrl, getSearchLevelFromRonUrl, getSearchQueryFromRonUrl } from '@/components/chrome/UrlBar'
 import { DEFAULT_SEARCH_LEVEL, SEARCH_LEVELS, type SearchLevel } from '@/lib/search-api'
 import { BrowserLayout } from '@/layouts/BrowserLayout'
 import { AuthPageLayout } from '@/layouts/AuthPageLayout'
@@ -43,7 +43,8 @@ function resetAppStorage() {
 export function App() {
   const { isDark } = useTheme()
   const { isAuthenticated, isInitialized, isLoading, initialize } = useAuthStore()
-  const { tabs, createTab } = useTabStore()
+  const { tabs, activeTabId, createTab } = useTabStore()
+  const activeTabUrl = useTabStore((state) => state.tabs.find((tab) => tab.id === state.activeTabId)?.url)
   const { isComplete } = useOnboardingStore()
   const [hasHydrated, setHasHydrated] = useState(false)
   // A fresh install (nothing in localStorage yet) launches on the sign-in page.
@@ -79,6 +80,7 @@ export function App() {
   })
   const [searchRouteQuery, setSearchRouteQuery] = useState<string | null>(null)
   const [searchRouteLevel, setSearchRouteLevel] = useState<SearchLevel | null>(null)
+  const [searchRouteContext, setSearchRouteContext] = useState<string | null>(null)
   
   useEffect(() => {
     return window.electron?.onDeepLink?.((url) => {
@@ -176,17 +178,20 @@ export function App() {
           ? (rawLevel as SearchLevel)
           : null,
       )
+      setSearchRouteContext(queryParams.get('ctx') || null)
     }
 
     const handleUrlChanged = (newUrl: string) => {
       if (!newUrl.startsWith('ron://search')) {
         setSearchRouteQuery(null)
         setSearchRouteLevel(null)
+        setSearchRouteContext(null)
         return
       }
       const query = getSearchQueryFromRonUrl(newUrl)
       setSearchRouteQuery(query && query.trim() ? query : null)
       setSearchRouteLevel(getSearchLevelFromRonUrl(newUrl))
+      setSearchRouteContext(getSearchContextFromRonUrl(newUrl))
     }
 
     updateSearchRoute()
@@ -202,6 +207,22 @@ export function App() {
       if (cleanup) cleanup()
     }
   }, [])
+
+  // Keep search route state synchronized when internal tab switches or `openInNewTab('ron://search?...')`
+  // change the active tab URL in `useTabStore` without firing an Electron IPC navigation event.
+  useEffect(() => {
+    if (!activeTabId || !activeTabUrl) return
+    if (activeTabUrl.startsWith('ron://search')) {
+      const query = getSearchQueryFromRonUrl(activeTabUrl)
+      setSearchRouteQuery(query && query.trim() ? query : null)
+      setSearchRouteLevel(getSearchLevelFromRonUrl(activeTabUrl))
+      setSearchRouteContext(getSearchContextFromRonUrl(activeTabUrl))
+    } else if (!window.location.search.includes('q=')) {
+      setSearchRouteQuery(null)
+      setSearchRouteLevel(null)
+      setSearchRouteContext(null)
+    }
+  }, [activeTabId, activeTabUrl])
 
   // Search results page exit: return the tab to home and reset legacy search state.
   const handleSearchBack = () => {
@@ -251,6 +272,7 @@ export function App() {
             <SearchResultsPage
               query={searchRouteQuery || searchQuery || ''}
               level={searchRouteLevel ?? preferredSearchLevel ?? DEFAULT_SEARCH_LEVEL}
+              contextId={searchRouteContext}
               onBack={handleSearchBack}
             />
           </div>
@@ -357,6 +379,8 @@ function MainContent({ activeTab }: { activeTab: string }) {
   const documentsRoute = parseDocumentsLibraryUrl(url)
   if (documentsRoute) return <DocumentsPage key={userId} documentId={documentsRoute.documentId} />
   if (url?.startsWith('ron://read?')) return <ArticleReaderPage key={url} href={url} />
+  if (url === 'ron://build' || url === 'ron://build/') return <BuildWorkbenchPage />
+  if (url === 'ron://execute' || url === 'ron://execute/') return <ExecutePage />
   switch (activeTab) {
     case 'execute':
       return <ExecutePage />

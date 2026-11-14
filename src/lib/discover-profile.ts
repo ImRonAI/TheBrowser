@@ -170,13 +170,13 @@ export function buildFeedRequest(profile: DiscoverProfile): FeedRequestBody {
   if (profile.location) sections.push({ kind: 'rich', q: `weather in ${profile.location}` })
   if (profile.media.articles) {
     for (const topic of profile.topics) {
-      sections.push({ kind: 'news', q: topic, count: 6, freshness: 'pw' })
+      sections.push({ kind: 'news', q: topic, count: 12, freshness: 'pw' })
       usedNews.add(topic.toLowerCase())
     }
   }
   if (profile.media.local && city) {
     const localQuery = `${city} news`
-    sections.push({ kind: 'news', q: localQuery, count: 6, freshness: 'pw' })
+    sections.push({ kind: 'news', q: localQuery, count: 12, freshness: 'pw' })
     usedNews.add(localQuery.toLowerCase())
     usedNews.add(city.toLowerCase())
   }
@@ -185,14 +185,19 @@ export function buildFeedRequest(profile: DiscoverProfile): FeedRequestBody {
   for (const coin of profile.crypto) sections.push({ kind: 'rich', q: `${coin} price` })
   const base = homeCurrency(profile.country)
   for (const code of profile.currencies) if (code !== base) sections.push({ kind: 'rich', q: `1 ${code} to ${base}` })
-  if (profile.media.videos) for (const topic of profile.topics.slice(0, 2)) sections.push({ kind: 'videos', q: topic, count: 4, freshness: 'pm' })
+  if (profile.media.videos) {
+    for (const topic of profile.topics.slice(0, 2)) {
+      sections.push({ kind: 'videos', q: `${topic} site:youtube.com`, count: 8, freshness: 'pm' })
+    }
+  }
   if (profile.media.articles) {
-    const storyCount = sections.filter((section) => section.kind === 'news' || section.kind === 'videos').length
-    if (storyCount < STORY_GRID_SLOTS) {
+    let storyCount = sections.filter((section) => section.kind === 'news' || section.kind === 'videos').length
+    while (storyCount < STORY_GRID_SLOTS && sections.length < MAX_FEED_SECTIONS) {
       const extra = extraNewsTopic(profile, usedNews)
-      if (extra) {
-        sections.push({ kind: 'news', q: extra, count: 6, freshness: 'pw' })
-      }
+      if (!extra) break
+      usedNews.add(extra.toLowerCase())
+      sections.push({ kind: 'news', q: extra, count: 12, freshness: 'pw' })
+      storyCount += 1
     }
   }
   return {

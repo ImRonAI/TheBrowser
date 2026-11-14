@@ -35,6 +35,11 @@ Sources, per provider (never guessed; anything not covered is "unknown" = text-o
 - **openai**: ``Model`` has only ``id, created, object, owned_by`` and no documented per-id table is wired here:
   unknown. (When known, tool-result images are native: ``function_call_output`` arrays,
   ``strands/models/openai_responses.py:805-817``.)
+- **telnyx**: ``GET https://api.telnyx.com/v2/ai/openai/models`` ``data[].is_vision_supported``
+  (https://developers.telnyx.com/api-reference/openai-chat/get-available-models-openai-compatible). Tool-result images
+  are native ``function_call_output`` arrays (``strands/models/openai_responses.py:805-817``): live 2026-11-13,
+  ``zai-org/GLM-5.3-Flash`` and ``deepseek-ai/DeepSeek-V4.1-Flash`` read them; ``RonTelnyxModel`` drops them for a
+  model without vision (``openai/gpt-oss-120b`` fails the response on them).
 - **perplexity**: ``GET /v1/models`` returns ids only and the model docs (https://docs.perplexity.ai/docs/agent-api/models)
   state no per-model input modalities ("Check model documentation for specific capabilities"); images in
   ``function_call_output`` are undocumented: unknown.
@@ -51,10 +56,13 @@ from typing import Any
 
 import httpx
 
+from agent.api.core import config as app_config
+
 logger = logging.getLogger(__name__)
 
 MISTRAL_MODELS_URL = "https://api.mistral.ai/v1/models"
 XAI_LANGUAGE_MODELS_URL = "https://api.x.ai/v1/language-models"
+TELNYX_MODELS_URL = f"{app_config.TELNYX_INFERENCE_BASE_URL}/models"
 GEMINI_MODEL_DOCS = "https://aistudio.google.com/docs/models/"
 GEMINI_MULTIMODAL_FUNCTION_RESPONSES = "https://aistudio.google.com/docs/function-calling?generate-content=true#multimodal"
 ANTHROPIC_VISION_DOCS = "https://platform.claude.com/docs/en/build-with-claude/vision"
@@ -104,6 +112,11 @@ ANTHROPIC_VISION_MODELS = frozenset({
     "claude-opus-5-5", "claude-opus-5", "claude-sonnet-5-5", "claude-sonnet-5", "claude-haiku-5-5",
     "claude-haiku-4-5-20251001", "claude-opus-4-8", "claude-opus-4-7", "claude-opus-4-6", "claude-sonnet-4-6",
     "claude-opus-4-5-20251101", "claude-sonnet-4-5-20250929",
+})
+
+#: NVIDIA NIM models verified to accept multimodal image inputs (live-verified on ``minimaxai/minimax-m3.1-flash``).
+NIM_VISION_MODELS = frozenset({
+    "minimaxai/minimax-m3.1-flash",
 })
 
 
@@ -159,9 +172,15 @@ def _xai_catalogue(payload: Any) -> dict[str, frozenset[str]]:
     return catalogue
 
 
+def _telnyx_catalogue(payload: Any) -> dict[str, frozenset[str]]:
+    return {str(item["id"]): frozenset({"image"}) if item.get("is_vision_supported") else frozenset()
+            for item in payload.get("data") or [] if item.get("id")}
+
+
 _FETCHERS = {
     "mistral": (MISTRAL_MODELS_URL, _mistral_catalogue),
     "xai": (XAI_LANGUAGE_MODELS_URL, _xai_catalogue),
+    "telnyx": (TELNYX_MODELS_URL, _telnyx_catalogue),
 }
 
 
@@ -224,6 +243,14 @@ def media_capability(provider: str, model_id: str) -> MediaCapability:
     if provider == "openai":
         return _unknown(provider, model_id, "the OpenAI models endpoint exposes no input modalities")
     if provider == "nim":
+        if model_id in NIM_VISION_MODELS:
+            return MediaCapability(
+                provider,
+                model_id,
+                frozenset({"image"}),
+                tool_result_images=False,
+                source="NVIDIA NIM multimodal vision model (minimaxai/minimax-m3.1-flash)",
+            )
         return _unknown(provider, model_id, "the NIM models endpoint exposes no input modalities")
     return _unknown(provider, model_id, "unknown provider")
 
@@ -249,5 +276,5 @@ def has_tool_result_images(messages: Any) -> bool:
                if "toolResult" in block for item in block["toolResult"].get("content", []))
 
 
-__all__ = ["ANTHROPIC_VISION_MODELS", "GEMINI_INPUTS", "MediaCapability", "cached_tool_result_images",
+__all__ = ["ANTHROPIC_VISION_MODELS", "GEMINI_INPUTS", "NIM_VISION_MODELS", "MediaCapability", "cached_tool_result_images",
            "has_tool_result_images", "load_capability", "media_capability"]

@@ -21,6 +21,7 @@ import {
   type SearchLevel,
   type SearchRunState,
 } from '@/lib/search-api'
+import type { PromptAttachment } from '@/lib/prompt-attachments'
 
 export interface SearchLocationHint {
   location?: string
@@ -37,7 +38,8 @@ interface SearchResultsState {
   startedAt: number | null
   /** Fatal failure before/around the stream itself (unreachable backend, 503, ...). */
   fatal: { code: string; message: string } | null
-  start: (q: string, level: SearchLevel, opts?: { country?: string; location?: SearchLocationHint }) => void
+  /** `contextId` + `attachments`: the context attached on the home page (`searchAttachmentsStore`). */
+  start: (q: string, level: SearchLevel, opts?: { country?: string; location?: SearchLocationHint; contextId?: string | null; attachments?: PromptAttachment[] }) => void
   sendFollowUp: (message: string, opts?: { country?: string; location?: SearchLocationHint }) => Promise<void>
   /** Re-run only the Places section (POST /discover/feed) for a new location; the rest of the run is kept. */
   refreshPlaces: (q: string, opts: { country: string; location?: string | null }) => Promise<void>
@@ -63,7 +65,7 @@ export const useSearchResultsStore = create<SearchResultsState>()((set, get) => 
     controller = next
     set({
       run: { ...initialRunState(), activeQuestion: q },
-      runKey: searchRunKey(q, level),
+      runKey: searchRunKey(q, level, opts?.contextId),
       isRunning: true,
       followUpLoading: false,
       startedAt: Date.now(),
@@ -75,6 +77,7 @@ export const useSearchResultsStore = create<SearchResultsState>()((set, get) => 
         level,
         ...(opts?.country ? { country: opts.country } : {}),
         ...(opts?.location ? { location: opts.location } : {}),
+        ...(opts?.attachments?.length ? { prompt_attachments: opts.attachments } : {}),
       },
       (event) => {
         if (next.signal.aborted) return

@@ -8,6 +8,7 @@
  */
 import type { ArticleAttachment } from './articles.ts'
 import type { IssueContextEntry } from './issue-attachments.ts'
+import { ATTACHMENT_TEXT_MAX, type PromptAttachment } from './prompt-attachments.ts'
 
 export type ArticleActionId = 'search' | 'chat' | 'project' | 'code' | 'document' | 'issue' | 'context'
 
@@ -46,9 +47,9 @@ export const ARTICLE_ACTIONS: readonly ArticleAction[] = [
     prompt: { label: 'What to build', placeholder: 'e.g. An interactive page that charts the numbers in this story', optional: true },
   },
   {
-    id: 'document', group: 'Create', label: 'Create a document', description: 'Ren writes a page from the article.',
-    keywords: ['page', 'doc', 'write', 'brief', 'summary', 'notes'], submit: 'Write document',
-    prompt: { label: 'What the document should be', placeholder: 'e.g. A one-page brief for the team', optional: true },
+    id: 'document', group: 'Create', label: 'Document with Ren', description: 'Create a new page or add this context to an existing document.',
+    keywords: ['page', 'doc', 'write', 'brief', 'summary', 'notes', 'existing', 'document'], submit: 'Open in Documents',
+    prompt: { label: 'What should Ren document or update?', placeholder: 'e.g. Summarize the architectural findings and add recommended next steps', optional: true },
   },
   {
     id: 'issue', group: 'Create', label: 'Create an issue', description: 'A project’s agent files the work as an issue.',
@@ -125,7 +126,29 @@ export function documentMessage(prompt: string, article: ArticleRef, project: { 
   ].join('\n')
 }
 
-/** Create an issue: the project's agent writes it with its own tools and puts the article in the issue's Context. */
+/** Default writing goal when the user submits a Document handoff with an empty prompt. */
+export function documentPromptDefault(prompt: string, mode: 'new' | 'existing' = 'new'): string {
+  return asked(
+    prompt,
+    mode === 'existing'
+      ? 'Incorporate the key facts, takeaways, and source link from the attached context into this document where they fit best.'
+      : 'Write a clear, structured brief from the attached source: what happened, why it matters, and what to do about it.',
+  )
+}
+
+/** Convert a reader article or YouTube video writeup into a `PromptAttachment` card (`ai-elements/attachments.tsx`). */
+export function articlePromptAttachment(article: ArticleAttachment): PromptAttachment {
+  return {
+    id: (article.id || `article-${article.url}`).slice(0, 200),
+    kind: 'tab',
+    title: (oneLine(article.title) || 'Article').slice(0, 300),
+    text: (article.text || oneLine(article.title) || 'Article').slice(0, ATTACHMENT_TEXT_MAX),
+    url: article.url ? article.url.slice(0, 4096) : undefined,
+    source: article.source ? oneLine(article.source).slice(0, 500) : undefined,
+  }
+}
+
+/** Create a issue: the project's agent writes it with its own tools and puts the article in the issue's Context. */
 export function issueMessage(prompt: string, article: ArticleRef): string {
   return [
     `Create an issue in this project from the attached article ${articleRef(article)}.`,
@@ -137,9 +160,14 @@ export function issueMessage(prompt: string, article: ArticleRef): string {
   ].join('\n')
 }
 
-/** The search Ren Search runs first: the story's own headline. */
-export function searchQuery(headline: string): string {
-  return oneLine(headline).slice(0, 400)
+/** The search Ren Search runs: keeps the story's context when the user types a custom question. */
+export function searchQuery(input: string, article?: Pick<ArticleRef, 'title'>): string {
+  const cleaned = oneLine(input)
+  if (!article) return cleaned.slice(0, 400)
+  const headline = oneLine(article.title)
+  if (!cleaned) return headline.slice(0, 400)
+  if (!headline || cleaned.toLowerCase().includes(headline.toLowerCase())) return cleaned.slice(0, 400)
+  return `${cleaned} (${headline})`.slice(0, 400)
 }
 
 const httpsOnly = (value: string | undefined) => {

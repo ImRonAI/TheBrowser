@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { API_BASE_URL } from '@/lib/api-base'
 import { cancelRon, runRon, type RonDestination } from '@/lib/ron-run'
 import type { PanelState } from '@/lib/panel-stream'
+import type { PromptAttachment } from '@/lib/prompt-attachments'
 import { useAuthStore } from '@/stores/authStore'
 
 /**
@@ -19,7 +20,15 @@ export function useRonRun(destination: RonDestination) {
   // Leaving the view stops reading the stream; the server-owned run finishes on its own.
   useEffect(() => () => active.current?.controller.abort(), [])
 
-  const start = useCallback(async ({ sessionId, message, goal }: { sessionId: string; message: string; goal?: string }) => {
+  const start = useCallback(async ({
+    sessionId, message, goal, promptAttachments, screenFrame,
+  }: {
+    sessionId: string
+    message: string
+    goal?: string
+    promptAttachments?: PromptAttachment[]
+    screenFrame?: string
+  }) => {
     if (active.current) return null
     const controller = new AbortController()
     active.current = { controller, sessionId }
@@ -27,7 +36,18 @@ export function useRonRun(destination: RonDestination) {
     setError(null)
     setState(null)
     try {
-      const final = await runRon({ apiBase: API_BASE_URL, destination, sessionId, userId, message, goal, signal: controller.signal, onState: setState })
+      const final = await runRon({
+        apiBase: API_BASE_URL,
+        destination,
+        sessionId,
+        userId,
+        message,
+        goal,
+        promptAttachments,
+        screenFrame,
+        signal: controller.signal,
+        onState: setState,
+      })
       if (final.status === 'error') setError(final.error || 'Ren could not finish this request.')
       return final
     } catch (cause) {

@@ -2,7 +2,7 @@
  * Renderer side of `POST /discover/feed` (agent/api/core/brave_search.py). Pure functions
  * only, so `node --experimental-strip-types` can test them; no DOM, no React.
  */
-import type { Story, StoryDiscussion, StoryVideo } from './articles.ts'
+import { youtubeVideoId, type Story, type StoryDiscussion, type StoryVideo } from './articles.ts'
 import type { FeedRequestBody } from './discover-profile.ts'
 
 export type ItemKind = 'article' | 'video' | 'image' | 'place' | 'discussion' | 'web' | 'rich'
@@ -102,7 +102,7 @@ export function stripMarkup(text: string): string {
 }
 
 export function sectionLabel(section: Pick<FeedSection, 'kind' | 'q'>): string {
-  const q = (section.q || '').trim()
+  const q = (section.q || '').trim().replace(/\s+site:youtube\.com$/i, '').trim()
   if (section.kind === 'videos') return q ? `${q} · Video` : 'Video'
   if (section.kind === 'places') return q ? `Near you · ${q}` : 'Near you'
   return q || section.kind
@@ -163,7 +163,9 @@ export function itemToStory(item: DiscoverItem, topic: string): Story | null {
   }
 }
 
-/** Story groups for the cinematic grid: one group per successful non-rich section, deduplicated by URL. */
+/** Story groups for the cinematic grid: one group per successful non-rich section, deduplicated by URL.
+ * Hard-paywalled stories and non-YouTube videos are filtered out so every card opens cleanly in-platform.
+ */
 export function sectionsToStoryGroups(sections: FeedSection[]): Story[][] {
   const seen = new Set<string>()
   const groups: Story[][] = []
@@ -174,6 +176,14 @@ export function sectionsToStoryGroups(sections: FeedSection[]): Story[][] {
     for (const item of section.items) {
       const story = itemToStory(item, topic)
       if (!story || seen.has(story.url)) continue
+      if (story.paywalled) continue
+      const ytId = youtubeVideoId(story.url)
+      if (section.kind === 'videos' || story.kind === 'video') {
+        if (!ytId) continue
+        story.kind = 'video'
+      } else if (ytId) {
+        story.kind = 'video'
+      }
       seen.add(story.url)
       group.push(story)
     }

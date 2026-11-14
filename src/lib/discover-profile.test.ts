@@ -81,9 +81,15 @@ test('buildProfile and buildFeedRequest produce a valid FeedRequest for a full p
   assert.deepEqual(body.sections.map((section) => `${section.kind}:${section.q}`), [
     'rich:weather in London, UK', 'news:AI', 'news:design', 'news:climate', 'news:London news',
     'rich:Arsenal game', 'rich:Lakers game', 'rich:TSLA stock', 'rich:bitcoin price', 'rich:1 USD to GBP',
-    'videos:AI', 'videos:design', 'news:Arsenal',
+    'videos:AI site:youtube.com', 'videos:design site:youtube.com', 'news:Arsenal', 'news:Lakers',
   ])
   assert.ok(body.sections.length <= MAX_FEED_SECTIONS)
+})
+
+test('buildFeedRequest fills all 8 story slots even on the 3-topic default profile', () => {
+  const defaultBody = buildFeedRequest(buildProfile(() => undefined))
+  const defaultStorySections = defaultBody.sections.filter((section) => section.kind === 'news' || section.kind === 'videos')
+  assert.equal(defaultStorySections.length, STORY_GRID_SLOTS)
 })
 
 test('buildFeedRequest fills the 8th story slot on the 3-row Discover grid', () => {

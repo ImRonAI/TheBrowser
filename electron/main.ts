@@ -920,6 +920,21 @@ async function createWindow() {
     callback(true)
   })
 
+  // Ensure embedded YouTube iframes inside the reader (`ron://read`) always send a valid HTTPS
+  // Referer even when the packaged app loads from `file://` (avoids YouTube player Error 153).
+  win.webContents.session.webRequest.onBeforeSendHeaders(
+    { urls: ['*://www.youtube-nocookie.com/embed/*', '*://www.youtube.com/embed/*'] },
+    (details, callback) => {
+      const requestHeaders = { ...details.requestHeaders }
+      const existing = requestHeaders.Referer || requestHeaders.referer || ''
+      if (!existing || existing.startsWith('file:')) {
+        delete requestHeaders.referer
+        requestHeaders.Referer = 'https://ren.local/'
+      }
+      callback({ requestHeaders })
+    },
+  )
+
   // Lock down permissions on the untrusted web tab partition (`persist:ron-browser`)
   // so external sites cannot auto-grant camera, microphone, geolocation, MIDI, HID, or USB.
   const tabSession = session.fromPartition(SESSION_PARTITION)

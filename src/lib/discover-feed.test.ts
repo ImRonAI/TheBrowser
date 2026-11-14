@@ -35,15 +35,26 @@ test('itemToStory keeps articles/web/video with http urls, derives hostname, dro
   assert.equal(itemToStory(item({ url: 'javascript:alert(1)' }), 'x'), null)
 })
 
-test('sectionsToStoryGroups skips failed/rich sections and dedupes urls across sections', () => {
+test('sectionsToStoryGroups skips failed/rich/paywalled/non-YouTube-video items and dedupes urls across sections', () => {
   const sections: FeedSection[] = [
-    ok('news', 'AI', [item({ id: '1' }), item({ id: '2', url: 'https://ex.com/b' })]),
-    ok('videos', 'AI', [item({ id: '3', kind: 'video', url: 'https://ex.com/a' }), item({ id: '4', kind: 'video', url: 'https://yt.com/v' })]),
+    ok('news', 'AI', [
+      item({ id: '1' }),
+      item({ id: '2', url: 'https://ex.com/b' }),
+      item({ id: 'pay', url: 'https://ex.com/locked', paywalled: true }),
+    ]),
+    ok('videos', 'AI site:youtube.com', [
+      item({ id: '3', kind: 'video', url: 'https://ex.com/a' }),
+      item({ id: 'non-yt', kind: 'video', url: 'https://vimeo.com/123456' }),
+      item({ id: '4', kind: 'video', url: 'https://www.youtube.com/watch?v=T5-2oqy0vSg' }),
+    ]),
     { kind: 'news', q: 'Design', status: 'error', items: [], error: { code: 'rate_limited', message: 'slow down' } },
     ok('rich', 'weather in Austin', [item({ id: '5', kind: 'rich', url: '', rich: { vertical: 'weather', subtype: 'weather', provider: {}, card: { temp_c: 20 }, raw: {} } })]),
   ]
   const groups = sectionsToStoryGroups(sections)
-  assert.deepEqual(groups.map((g) => g.map((s) => s.url)), [['https://ex.com/a', 'https://ex.com/b'], ['https://yt.com/v']])
+  assert.deepEqual(groups.map((g) => g.map((s) => s.url)), [
+    ['https://ex.com/a', 'https://ex.com/b'],
+    ['https://www.youtube.com/watch?v=T5-2oqy0vSg'],
+  ])
   assert.equal(groups[1][0].topic, 'AI · Video')
   assert.equal(richAnswers(sections).length, 1)
   assert.equal(failedSections(sections)[0].error?.code, 'rate_limited')

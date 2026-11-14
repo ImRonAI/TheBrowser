@@ -18,6 +18,8 @@ value from these sources instead (an explicit ``context_window_limit`` always wi
 - **nim**: ``GET https://integrate.api.nvidia.com/v1/models`` lists ``id``/``owned_by`` only, so
   ``NIM_CONTEXT_WINDOWS`` holds the window each model card documents (``z-ai/glm-5.3-flash``:
   "Context Length: 1,048,576 tokens", https://build.nvidia.com/z-ai/glm-5-3-flash).
+- **telnyx**: ``GET https://api.telnyx.com/v2/ai/openai/models`` ``data[].context_length``
+  (live 2026-11-13: ``zai-org/GLM-5.3-Flash`` 1048576, ``openai/gpt-oss-120b`` 131072).
 - **openai / anthropic**: their model metadata carries no window (``openai.types.Model``: id, created,
   object, owned_by; ``anthropic.types.ModelInfo``: id, created_at, display_name, type), so the SDK's own
   table resolves them, unchanged.
@@ -96,9 +98,13 @@ def provider_context_window(provider: str, model_id: str) -> int | None:
         return provider_context_window(upstream, bare) if upstream and bare else None
     if provider == "nim":
         return NIM_CONTEXT_WINDOWS.get(model_id)
-    if provider not in ("xai", "mistral", "gemini") or not _key(provider):
+    if provider not in ("xai", "mistral", "gemini", "telnyx") or not _key(provider):
         return None
     try:
+        if provider == "telnyx":
+            from agent.api.core.config import TELNYX_INFERENCE_BASE_URL
+
+            return _catalogue("telnyx", "context_length", f"{TELNYX_INFERENCE_BASE_URL}/models").get(model_id)
         if provider == "xai":
             return _catalogue("xai", "context_length", XAI_MODELS_URL).get(model_id.removeprefix("xai/"))
         if provider == "mistral":

@@ -12,15 +12,18 @@ import { useInterestsStore } from '@/stores/interestsStore'
 import { useTabStore } from '@/stores/tabStore'
 import { failedSections, formatRelative, richAnswers, sectionsToStoryGroups } from '@/lib/discover-feed'
 import { RichAnswerCard } from '@/components/home/RichAnswerCard'
+import { ArticleAgentActions } from '@/components/home/ArticleAgentActions'
 import { StoryCard, STORY_CARD_HEIGHT, type StoryCardSize } from '@/components/home/StoryCard'
 import { FavoriteLinks } from '@/components/home/FavoriteLinks'
+import { SearchHome } from '@/components/home/SearchHome'
+import { API_BASE_URL } from '@/lib/api-base'
 import { useNavigationStore } from '@/stores/navigationStore'
 import { ExecutePage } from '@/pages/ExecutePage'
 import { CalendarPage } from '@/pages/CalendarPage'
 import { ErrorBoundary } from '@/components/ui/ErrorBoundary'
 import { BuildWorkbenchPage } from '@/components/build'
 import { SuperAgentInterface } from '@/components/superagent/SuperAgentInterface'
-import { plainDescription, readStoryUrl, type Story } from '@/lib/articles'
+import { cleanTitle, plainDescription, previewArticle, readStoryUrl, youtubeVideoId, type ArticleAttachment, type Story } from '@/lib/articles'
 import {
   ROTATE_EVERY_MS, cardTilt, hashString, nextSlotToRotate, pickAnimation, stickerHue, swapVariants,
   type SwapAnimationName, type SwapCustom, type SwapDirection,
@@ -37,6 +40,9 @@ import localData from '../../data/local.json'
 
 export function HomePage() {
   const activeTab = useNavigationStore((state) => state.activeTab)
+  // Home is the search page; it has no surface of its own (the content area shows through, Glass included).
+  // A leftover 'documents' destination off the library shows it too.
+  if (activeTab === 'home' || activeTab === 'documents') return <ErrorBoundary componentName="SearchHome"><SearchHome /></ErrorBoundary>
   return <div className="h-full overflow-auto bg-surface-0 text-ink dark:bg-surface-900 dark:text-ink-inverse">
     {activeTab === 'discover' && <ErrorBoundary componentName="Discover"><DiscoverContent /></ErrorBoundary>}
     {/* App routes 'execute' to ExecutePage directly; if HomePage is ever shown on that tab it renders the same real view. */}
@@ -62,7 +68,8 @@ const FALLBACK_GROUPS: Story[][] = [
     return {
       title: result.title!, url: result.url!, description: plainDescription(result.description || ''), age: result.age || '', topic,
       hostname, thumbnail: result.thumbnail?.src || '',
-      source: hostname, favicon: result.meta_url?.favicon || '', published: result.page_age || '', kind: 'article' as const,
+      source: hostname, favicon: result.meta_url?.favicon || '', published: result.page_age || '',
+      kind: (youtubeVideoId(result.url!) ? 'video' : 'article') as Story['kind'],
     }
   })
 }).filter((group) => group.length > 0)
@@ -75,6 +82,60 @@ const BUTTON_SECONDARY = 'border border-surface-200 bg-surface-0 text-ink enable
 const ICON_BUTTON = 'flex h-8 w-8 items-center justify-center rounded-lg text-ink-secondary transition-colors duration-150 ease-out hover:bg-surface-100 hover:text-ink dark:text-ink-inverse-secondary dark:hover:bg-surface-850 dark:hover:text-ink-inverse'
 const CHIP = 'inline-flex h-6 items-center gap-1 rounded-full bg-surface-100 px-2.5 text-[12px] font-medium text-ink-secondary dark:bg-surface-850 dark:text-ink-inverse-secondary'
 const MICRO = 'font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-ink-muted dark:text-ink-inverse-muted'
+
+/** Lazily fetch full article text or YouTube GLM writeup when the user triggers Ask Ren directly from a Discover card. */
+async function lazyExtractStory(story: Story): Promise<ArticleAttachment | null> {
+  const base = previewArticle(story)
+  try {
+    if (youtubeVideoId(story.url)) {
+      const response = await fetch(`${API_BASE_URL}/articles/video-summary`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          url: story.url,
+          title: story.title,
+          channel: story.video?.creator || story.author || '',
+          description: story.description || '',
+          snippets: story.snippets || [],
+        }),
+      })
+      if (!response.ok || !response.body) return null
+      const reader = response.body.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ''
+      let streamed = ''
+      while (true) {
+        const { value, done } = await reader.read()
+        if (done) break
+        buffer += decoder.decode(value, { stream: true })
+        let splitAt = buffer.indexOf('\n\n')
+        while (splitAt !== -1) {
+          const frame = buffer.slice(0, splitAt).trim()
+          buffer = buffer.slice(splitAt + 2)
+          splitAt = buffer.indexOf('\n\n')
+          if (!frame.startsWith('data:')) continue
+          const event = JSON.parse(frame.slice(5).trim()) as { type: string; text?: string }
+          if (event.type === 'delta' && event.text) streamed += event.text
+          else if (event.type === 'done' && event.text) streamed = event.text
+        }
+      }
+      return streamed.trim() ? { ...base, text: streamed, status: 'extracted' } : null
+    }
+    const response = await fetch(`${API_BASE_URL}/articles/extract`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url: story.url }),
+    })
+    if (!response.ok) return null
+    const payload = await response.json() as { text?: string; status?: 'extracted' | 'preview' }
+    if (typeof payload.text === 'string' && payload.text.trim()) {
+      return { ...base, text: payload.text, status: payload.status || 'extracted' }
+    }
+  } catch {
+    // Fall back gracefully to the card's preview context if network extraction fails.
+  }
+  return null
+}
 
 /** A section's micro label on a hairline rule; decorative, the section itself carries the accessible name. */
 function SectionRule({ label }: { label: string }) {
@@ -104,22 +165,9 @@ function DiscoverContent() {
   useEffect(() => { void load(profile) }, [profile, load])
   const liveGroups = useMemo(() => sectionsToStoryGroups(sections), [sections])
   const groups = useMemo(() => {
-    if (!liveGroups.length) return FALLBACK_GROUPS.slice(0, STORY_GRID_SLOTS)
-    if (liveGroups.length >= STORY_GRID_SLOTS) return liveGroups.slice(0, STORY_GRID_SLOTS)
-    const usedTopics = new Set(liveGroups.map((g) => g[0]?.topic.toLowerCase()))
-    const usedUrls = new Set(liveGroups.flatMap((g) => g.map((s) => s.url)))
-    const padded = [...liveGroups]
-    for (const fallback of FALLBACK_GROUPS) {
-      if (padded.length >= STORY_GRID_SLOTS) break
-      const topic = fallback[0]?.topic
-      if (!topic || usedTopics.has(topic.toLowerCase())) continue
-      const filtered = fallback.filter((s) => !usedUrls.has(s.url))
-      if (filtered.length > 0) {
-        usedTopics.add(topic.toLowerCase())
-        padded.push(filtered)
-      }
-    }
-    return padded
+    // When live Brave Search results are active, never contaminate them with bundled static JSON datasets.
+    if (liveGroups.length > 0) return liveGroups.slice(0, STORY_GRID_SLOTS)
+    return FALLBACK_GROUPS.slice(0, STORY_GRID_SLOTS)
   }, [liveGroups])
   const answers = useMemo(() => richAnswers(sections), [sections])
   const failed = useMemo(() => failedSections(sections), [sections])
@@ -211,7 +259,26 @@ function DiscoverContent() {
             <AnimatePresence mode="wait" initial={false} custom={custom}>
               <motion.div key={story.url} custom={custom} variants={swapVariants} initial="initial" animate="animate" exit="exit"
                 style={{ transformStyle: 'preserve-3d' }} data-swap-animation={custom.name} data-swap-direction={custom.direction} className="h-full will-change-transform">
-                <StoryCard story={story} featured={featured} size={size} tilt={cardTilt(story.url)} hue={stickerHue(group[0].topic)} onRead={() => open(story)} onAddContext={() => void addContext({ kind: 'article', url: story.url, title: story.title })} />
+                <StoryCard
+                  story={story}
+                  featured={featured}
+                  size={size}
+                  tilt={cardTilt(story.url)}
+                  hue={stickerHue(group[0].topic)}
+                  onRead={() => open(story)}
+                  onAddContext={() => void addContext({ kind: 'article', url: story.url, title: story.title })}
+                  askRen={
+                    <ArticleAgentActions
+                      article={previewArticle(story)}
+                      headline={cleanTitle(story.title, [story.source, story.hostname])}
+                      favicon={story.favicon || undefined}
+                      image={story.heroImage || story.thumbnail || undefined}
+                      ready={true}
+                      triggerVariant="card"
+                      onEnsureArticle={() => lazyExtractStory(story)}
+                    />
+                  }
+                />
               </motion.div>
             </AnimatePresence>
           </div>

@@ -11,12 +11,14 @@ from __future__ import annotations
 import logging
 from typing import Annotated, Any, Literal
 from urllib.parse import urlsplit
+from uuid import UUID
 
 from fastapi import APIRouter, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import Response
 from pydantic import BaseModel, ConfigDict, Field
 
 from agent.api.core import context_agent
+from agent.api.core.agent_schedules import AgentBusy, AgentScheduler, Cadence
 from agent.api.endpoints.chat import Identifier
 
 logger = logging.getLogger(__name__)
@@ -163,8 +165,8 @@ async def delete_item(item_id: str, user_id: Identifier = "default") -> dict[str
 
 
 @router.get("/agents")
-async def list_agents(user_id: Identifier = "default") -> dict[str, Any]:
-    """The user's saved specialists (``harness_agents``), newest first. Guests must sign in."""
+async def list_agents(request: Request, user_id: Identifier = "default") -> dict[str, Any]:
+    """The user's saved specialists (``harness_agents``), newest first, each with its schedule. Guests must sign in."""
     from agent.api.core.harness_agents import SignInRequired, _listing, harness_table, owner_uuid
 
     try:
@@ -176,7 +178,109 @@ async def list_agents(user_id: Identifier = "default") -> dict[str, Any]:
                 .eq("owner_id", owner).order("updated_at", desc=True).execute()).data
     except RuntimeError as error:
         raise HTTPException(503, str(error)) from error
-    return {"agents": [_listing(row) for row in rows], "sign_in_required": False}
+    schedules: dict[str, Any] = {}
+    scheduler = getattr(request.app.state, "agent_scheduler", None)
+    if scheduler is not None and rows:
+        try:
+            schedules = await scheduler.schedules(owner)
+        except Exception as error:  # the agents still list; their schedules show as unset
+            logger.warning("owner=<%s>, error=<%s> | agent schedules could not be read", owner, error)
+    return {"agents": [{**_listing(row), "schedule": schedules.get(row["id"])} for row in rows], "sign_in_required": False}
+
+
+# ----------------------------------------------------------------------------- scheduled runs (core/agent_schedules.py)
+
+
+class ScheduleRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    user_id: Identifier = "default"
+    #: None removes the schedule.
+    cadence: Cadence | None = None
+    #: What to do on each run; empty = the specialist's own description of its recurring work.
+    task: str = Field(default="", max_length=4000)
+    enabled: bool = True
+
+
+class RunRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    user_id: Identifier = "default"
+    task: str = Field(default="", max_length=4000)
+
+
+class RunSeen(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    user_id: Identifier = "default"
+
+
+def _scheduler(request: Request) -> AgentScheduler:
+    scheduler = getattr(request.app.state, "agent_scheduler", None)
+    if scheduler is None:
+        raise HTTPException(503, "Agent schedules have not started")
+    return scheduler
+
+
+def _owner(user_id: str) -> str:
+    from agent.api.core.harness_agents import SignInRequired, owner_uuid
+
+    try:
+        return owner_uuid(user_id)
+    except SignInRequired as error:
+        raise HTTPException(401, str(error)) from error
+
+
+@router.put("/agents/{agent_id}/schedule")
+async def set_agent_schedule(agent_id: UUID, body: ScheduleRequest, request: Request) -> dict[str, Any]:
+    """Run this specialist at ``cadence`` (in the user's time zone); a null cadence stops its schedule."""
+    owner, scheduler = _owner(body.user_id), _scheduler(request)
+    try:
+        if body.cadence is None:
+            await scheduler.clear_schedule(owner, str(agent_id))
+            return {"schedule": None}
+        return {"schedule": await scheduler.set_schedule(owner, str(agent_id), body.cadence, task=body.task,
+                                                         enabled=body.enabled)}
+    except LookupError as error:
+        raise HTTPException(404, str(error)) from error
+    except RuntimeError as error:
+        raise HTTPException(503, str(error)) from error
+
+
+@router.post("/agents/{agent_id}/run")
+async def run_agent_now(agent_id: UUID, body: RunRequest, request: Request) -> dict[str, Any]:
+    """Start one run of this specialist now, exactly as its schedule would (a new panel session)."""
+    owner, scheduler = _owner(body.user_id), _scheduler(request)
+    try:
+        # Without a task of its own, Run now does what the schedule's runs do.
+        task = body.task or ((await scheduler.schedules(owner)).get(str(agent_id)) or {}).get("task") or ""
+        return {"run": await scheduler.run(owner, str(agent_id), trigger="manual", task=task)}
+    except LookupError as error:
+        raise HTTPException(404, str(error)) from error
+    except AgentBusy as error:
+        raise HTTPException(409, str(error)) from error
+    except RuntimeError as error:
+        raise HTTPException(503, str(error)) from error
+
+
+@router.get("/runs")
+async def list_runs(request: Request, user_id: Identifier = "default",
+                    limit: Annotated[int, Query(ge=1, le=100)] = 30) -> dict[str, Any]:
+    """The user's specialist runs, newest first: the Context widget's notifications. Guests have none."""
+    from agent.api.core.harness_agents import SignInRequired, owner_uuid
+
+    try:
+        owner = owner_uuid(user_id)
+    except SignInRequired:
+        return {"runs": [], "sign_in_required": True}
+    try:
+        return {"runs": await _scheduler(request).runs(owner, limit=limit), "sign_in_required": False}
+    except RuntimeError as error:
+        raise HTTPException(503, str(error)) from error
+
+
+@router.post("/runs/{run_id}/seen")
+async def mark_run_seen(run_id: UUID, body: RunSeen, request: Request) -> dict[str, Any]:
+    if not await _scheduler(request).mark_seen(_owner(body.user_id), str(run_id)):
+        raise HTTPException(404, "Unknown run")
+    return {"seen": str(run_id)}
 
 
 @router.get("/status")

@@ -44,7 +44,22 @@ export interface NewContextFile {
   text?: string
 }
 
-export interface SpecialistAgent { id: string; name: string; description: string; a2a_url: string; updated_at?: string; config?: Record<string, unknown> }
+export interface SpecialistAgent {
+  id: string; name: string; description: string; a2a_url: string; updated_at?: string; config?: Record<string, unknown>
+  /** When it runs on its own (`agent_schedules`); null or absent = only when the user starts it. */
+  schedule?: AgentSchedule | null
+}
+
+/** Scheduled runs (agent/api/core/agent_schedules.py). `time` and `weekday` are in `timezone`; weekday 0 = Monday. */
+export type ScheduleEvery = 'hours' | 'day' | 'weekdays' | 'week'
+export interface AgentCadence { every: ScheduleEvery; hours: number; time: string; weekday: number; timezone: string }
+export interface AgentSchedule { cadence: AgentCadence; task: string; enabled: boolean; next_run_at: string | null }
+export type AgentRunStatus = 'running' | 'completed' | 'failed' | 'cancelled' | 'interrupted' | 'checkpointed'
+/** One run of a specialist: a panel session (`session_id`) the Agent Panel opens as that specialist. */
+export interface AgentRun {
+  id: string; agent_id: string; agent_name: string; session_id: string; trigger: 'schedule' | 'manual'
+  status: AgentRunStatus; summary: string; error: string; started_at: string; finished_at: string | null; seen_at: string | null
+}
 
 export type InterestCategory = 'technology' | 'design' | 'ai' | 'privacy' | 'productivity' | 'learning' | 'entertainment' | 'news' | 'other'
 export interface AgentInterest { label: string; weight: number; category: InterestCategory; reason: string }
@@ -101,7 +116,101 @@ export function createContextClient(apiBase: string, userId: string, fetcher: ty
       const body = await json<{ agents: SpecialistAgent[]; sign_in_required: boolean }>(`/context/agents?user_id=${user}`)
       return { agents: body.agents, signInRequired: body.sign_in_required }
     },
+    /** Save when the specialist runs on its own; a null cadence stops its schedule. */
+    setSchedule: async (agentId: string, cadence: AgentCadence | null, task = ''): Promise<AgentSchedule | null> =>
+      (await json<{ schedule: AgentSchedule | null }>(`/context/agents/${encodeURIComponent(agentId)}/schedule`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user_id: userId, cadence, task }),
+      })).schedule,
+    runNow: async (agentId: string): Promise<AgentRun> => (await json<{ run: AgentRun }>(`/context/agents/${encodeURIComponent(agentId)}/run`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user_id: userId }),
+    })).run,
+    runs: async (): Promise<{ runs: AgentRun[]; signInRequired: boolean }> => {
+      const body = await json<{ runs: AgentRun[]; sign_in_required: boolean }>(`/context/runs?user_id=${user}`)
+      return { runs: body.runs, signInRequired: body.sign_in_required }
+    },
+    markRunSeen: async (runId: string): Promise<void> => {
+      await json(`/context/runs/${encodeURIComponent(runId)}/seen`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user_id: userId }),
+      })
+    },
   }
+}
+
+// ---------------------------------------------------------------- scheduled runs
+
+export const WEEKDAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'] as const
+
+/** A new schedule: every day at 08:00 in the user's own time zone. */
+export function defaultCadence(timezone: string): AgentCadence {
+  return { every: 'day', hours: 24, time: '08:00', weekday: 0, timezone: timezone || 'UTC' }
+}
+
+/** "08:00" as the user's clock shows it ("8:00 AM" in en-US). */
+export function clockLabel(time: string, locale?: string): string {
+  const [hour, minute] = time.split(':').map(Number)
+  return new Date(2000, 0, 3, hour, minute).toLocaleTimeString(locale, { hour: 'numeric', minute: '2-digit' })
+}
+
+export function cadenceLabel(cadence: AgentCadence, locale?: string): string {
+  if (cadence.every === 'hours') return cadence.hours === 1 ? 'Every hour' : `Every ${cadence.hours} hours`
+  const at = clockLabel(cadence.time, locale)
+  if (cadence.every === 'day') return `Daily at ${at}`
+  if (cadence.every === 'weekdays') return `Weekdays at ${at}`
+  return `${WEEKDAYS[cadence.weekday]}s at ${at}`
+}
+
+/** "Fri, Nov 14, 8:00 AM" for a next-run time. */
+export function whenLabel(iso: string, locale?: string): string {
+  return new Date(iso).toLocaleString(locale, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
+}
+
+/** Finished runs the user has not opened yet, newest first: what the Context widget notifies about. */
+export function runNotifications(runs: AgentRun[]): AgentRun[] {
+  return runs.filter((run) => run.status !== 'running' && !run.seen_at)
+    .sort((a, b) => (b.finished_at ?? b.started_at).localeCompare(a.finished_at ?? a.started_at))
+}
+
+export function runStatusLabel(status: AgentRunStatus): string {
+  return { running: 'Running', completed: 'Finished', failed: 'Failed', cancelled: 'Stopped',
+    interrupted: 'Waiting for you', checkpointed: 'Paused' }[status]
+}
+
+/** A run's Markdown report as one line of plain text for the notification card. */
+export function plainSummary(markdown: string): string {
+  return markdown
+    .replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1')
+    .replace(/^\s{0,3}(#{1,6}\s+|[-*+]\s+|\d+[.)]\s+|>\s?)/gm, '')
+    .replace(/(\*\*|__|\*|_|`)/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+/**
+ * A failed run's error for the notification: the provider's lead sentence, without the JSON payload that often
+ * follows it ("429 Too Many Requests. {'message': …}"). The full error stays on the run and in its thread.
+ */
+export function runErrorLine(error: string): string {
+  const lead = error.split(/[{[]/, 1)[0].replace(/\s+/g, ' ').trim()
+  return lead || plainSummary(error)
+}
+
+/** What the notification says happened, from the run's status and how it was started. */
+export function runHeadline(run: Pick<AgentRun, 'status' | 'trigger'>): string {
+  if (run.status === 'completed') return run.trigger === 'schedule' ? 'Finished its scheduled run' : 'Finished its run'
+  if (run.status === 'failed') return 'Run failed'
+  if (run.status === 'interrupted') return 'Needs your answer'
+  if (run.status === 'checkpointed') return 'Paused at a checkpoint'
+  if (run.status === 'cancelled') return 'Run stopped'
+  return 'Running'
+}
+
+/** "just now", "5 min ago", "3 h ago", "2 d ago". */
+export function agoLabel(iso: string, now: number): string {
+  const minutes = Math.max(0, Math.round((now - Date.parse(iso)) / 60_000))
+  if (minutes < 1) return 'just now'
+  if (minutes < 60) return `${minutes} min ago`
+  const hours = Math.round(minutes / 60)
+  return hours < 48 ? `${hours} h ago` : `${Math.round(hours / 24)} d ago`
 }
 
 export type ContextClient = ReturnType<typeof createContextClient>

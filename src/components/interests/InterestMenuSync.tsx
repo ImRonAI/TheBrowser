@@ -5,6 +5,7 @@ import {
   interestOverlayInset,
   type InterestAction,
 } from '@/lib/interest-menu'
+import { runNotifications } from '@/lib/context-api'
 import { useContextAgentStore } from '@/stores/contextAgentStore'
 import { agentsForInterest, useInterestDiscoveryStore } from '@/stores/interestDiscoveryStore'
 import { useInterestsStore } from '@/stores/interestsStore'
@@ -18,6 +19,7 @@ export function InterestMenuSync() {
   const storiesByLabel = useInterestDiscoveryStore((state) => state.storiesByLabel)
   const recommendations = useContextAgentStore((state) => state.recommendations)
   const agents = useContextAgentStore((state) => state.agents)
+  const notice = useContextAgentStore((state) => runNotifications(state.runs).length > 0)
   const { sendToAgentPanel } = useAgentUi()
 
   useEffect(() => {
@@ -28,8 +30,9 @@ export function InterestMenuSync() {
     void browser.setInterestInset(interestOverlayInset({
       expanded: isExpanded,
       discoveryOpen: Boolean(selectedInterestLabel),
+      notice,
     }))
-  }, [nodes, isExpanded, selectedInterestLabel, storiesByLabel, recommendations, agents])
+  }, [nodes, isExpanded, selectedInterestLabel, storiesByLabel, recommendations, agents, notice])
 
   useEffect(() => {
     const browser = window.electron?.browser

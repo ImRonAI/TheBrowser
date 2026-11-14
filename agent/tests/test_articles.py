@@ -117,3 +117,85 @@ def test_attachment_validation_and_native_blocks():
             articles.ArticleAttachment(**attachment(**updates))
     with pytest.raises(ValidationError):
         ChatRequest(session_id='session', action='checkpoint_resume', attachments=[article])
+
+
+def test_json_ld_article_body_and_hydration_fallbacks():
+    ld_body = "\n\n".join(
+        [
+            "Researchers at the Global Energy Institute released a comprehensive report detailing rapid advances in grid-scale battery storage across North America.",
+            "According to the report, utility-scale lithium iron phosphate installations grew by 64 percent over the past twelve months while round-trip efficiency improved.",
+            "Grid operators in Texas and California noted that evening peak curtailment dropped markedly during late-summer heat waves thanks to four-hour storage arrays.",
+            "Analysts projected that falling cell manufacturing costs and streamlined interconnection queues will double regional storage capacity again before 2028.",
+        ]
+    )
+    ld_doc = json.dumps({
+        "@context": "https://schema.org",
+        "@type": "NewsArticle",
+        "headline": "Grid Battery Installations Surge Across North America",
+        "author": [{"@type": "Person", "name": "Elena Rostova"}],
+        "datePublished": "2026-11-11T14:30:00Z",
+        "publisher": {"@type": "Organization", "name": "Energy Wire"},
+        "image": {"@type": "ImageObject", "url": "https://energy.example.com/assets/grid.jpg"},
+        "articleBody": ld_body,
+    })
+    shell_html = f"""<html lang="en"><head><title>Energy Wire</title>
+    <script type="application/ld+json">{ld_doc}</script></head>
+    <body><article><p>{'Teaser paragraph only. ' * 16}</p></article><div id="__next"></div></body></html>"""
+    extracted = articles.article_from_html(shell_html, "https://energy.example.com/2026/grid-batteries")
+    assert extracted["status"] == "extracted"
+    assert "64 percent over the past twelve months" in extracted["text"]
+    assert extracted["authors"] == ["Elena Rostova"]
+    assert extracted["published"] == "2026-11-11"
+    assert extracted["site_name"] == "Energy Wire"
+    assert extracted["image"] == "https://energy.example.com/assets/grid.jpg"
+
+    next_payload = json.dumps({"props": {"pageProps": {"article": {"bodyMarkdown": ld_body}}}})
+    hydration_html = f"""<html lang="en"><head><title>Energy Wire</title></head>
+    <body><div id="__next"></div><script id="__NEXT_DATA__" type="application/json">{next_payload}</script></body></html>"""
+    hydrated = articles.article_from_html(hydration_html, "https://energy.example.com/2026/hydrated")
+    assert hydrated["extractor"] == "hydration"
+    assert "four-hour storage arrays" in hydrated["text"]
+
+
+def test_semantic_dom_fallback_and_paywall_or_challenge_detection():
+    prose = (
+        "Municipal engineers completed seismic retrofits on seven historic bridges ahead of schedule, "
+        "preserving riverfront transit corridors while adding protected bicycle lanes on both approaches. "
+    )
+    custom_dom = f"""<html><head><meta property="og:title" content="Historic Bridges Retrofitted"></head>
+    <body><div itemprop="articleBody">
+      <p>{prose}</p><p>{prose}</p><p>{prose}</p>
+      <div class="newsletter">Subscribe to our daily newsletter</div>
+    </div></body></html>"""
+    res = articles.article_from_html(custom_dom, "https://city.example.com/bridges")
+    assert "Municipal engineers completed seismic retrofits" in res["text"]
+    assert "Subscribe to our daily newsletter" not in res["text"]
+
+    paywalled_html = """<html><head><script type="application/ld+json">
+    {"@type": "NewsArticle", "headline": "Locked Story", "isAccessibleForFree": false}
+    </script></head><body><article><p>Subscribe now to continue reading this subscriber-only report.</p></article></body></html>"""
+    with pytest.raises(articles.ArticleUnavailableError) as pw_err:
+        articles.article_from_html(paywalled_html, "https://locked.example.com/story")
+    assert pw_err.value.reason == "paywalled"
+
+    challenge_html = """<html><head><title>Just a moment...</title></head>
+    <body><div class="cf-turnstile"></div><p>Verify you are human</p></body></html>"""
+    with pytest.raises(articles.ArticleUnavailableError) as ch_err:
+        articles.article_from_html(challenge_html, "https://challenge.example.com/story")
+    assert ch_err.value.reason == "challenge"
+
+
+def test_extract_article_upgrades_http_and_caches_full_result(monkeypatch):
+    articles.clear_article_cache()
+    calls = []
+
+    async def fake_fetch(url):
+        calls.append(url)
+        return PAGE_HTML.encode(), url
+
+    monkeypatch.setattr(articles, "fetch_html", fake_fetch)
+    first = asyncio.run(articles.extract_article("http://news.example.com/2026/11/story"))
+    second = asyncio.run(articles.extract_article("https://news.example.com/2026/11/story"))
+    assert calls == ["https://news.example.com/2026/11/story"]
+    assert first["text"] == second["text"]
+    articles.clear_article_cache()

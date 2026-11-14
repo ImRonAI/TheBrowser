@@ -25,6 +25,11 @@ NIM_DEFAULT_MODEL = os.getenv("NIM_MODEL") or "z-ai/glm-5.3-flash"
 #: Seconds any NIM chat-completions call may go without sending a byte (first byte included) before raising
 #: APITimeoutError (`max_retries=0` on AsyncOpenAI). 0 = unbounded.
 NIM_READ_TIMEOUT = float(os.getenv("NIM_READ_TIMEOUT", "20"))
+TELNYX_API_KEY = os.getenv("TELNYX_API_KEY")
+# Telnyx Inference, OpenAI-compatible (models, responses, chat/completions):
+# https://developers.telnyx.com/api-reference/openai-chat/create-an-openai-compatible-response
+TELNYX_INFERENCE_BASE_URL = os.getenv("TELNYX_INFERENCE_BASE_URL") or "https://api.telnyx.com/v2/ai/openai"
+TELNYX_DEFAULT_MODEL = os.getenv("TELNYX_MODEL") or "moonshotai/Kimi-K3.1-Pro"
 PERPLEXITY_API_KEY = os.getenv("PERPLEXITY_API_KEY")
 MISTRAL_API_KEY = os.getenv("MISTRAL_API_KEY")
 
@@ -107,6 +112,12 @@ LIVE_TOOL_NUDGE_ENABLED = os.getenv("RON_LIVE_TOOL_NUDGE", "1") != "0"
 #: When a Live thread ends with work pending (app closed, signed out, tunnel down, Live failure) the Chat agent
 #: takes the same native session over on the cloud browser. RON_LIVE_TAKEOVER=0 disables the hand-off.
 LIVE_TAKEOVER_ENABLED = os.getenv("RON_LIVE_TAKEOVER", "1") != "0"
+# --- Scheduled specialist runs (`core/agent_schedules.py`) ---
+#: The loop that starts saved specialists at the cadence their owner picked (Supabase `agent_schedules`).
+#: RON_AGENT_SCHEDULES=0 stops starting scheduled runs; Run now and the run notifications still work.
+AGENT_SCHEDULES_ENABLED = os.getenv("RON_AGENT_SCHEDULES", "1") != "0"
+#: Seconds between checks for due schedules (a run starts at most this long after it is due).
+AGENT_SCHEDULE_TICK_SECONDS = float(os.getenv("RON_AGENT_SCHEDULE_TICK_SECONDS", "30"))
 # --- Run stall watchdog / agent respawn (`core/panel_runtime.py`, wired in `endpoints/chat.py`) ---
 #: No-activity window (seconds) before the watchdog cancels the wedged run and respawns a fresh
 #: agent instance on the same native session (ThreadSessionManager restore + a durable

@@ -113,9 +113,11 @@ interface ContextPickerProps {
   width?: number
   /** The dropdown's right edge never passes this x (px); defaults to 8px inside the window. */
   boundsRight?: number
+  /** Height cap of the scrolling list in px (default 320). */
+  maxListHeight?: number
 }
 
-export function ContextPicker({ selectedContexts, onContextsChange, className, anchor = 'top', disabled = false, width = 336, boundsRight }: ContextPickerProps) {
+export function ContextPicker({ selectedContexts, onContextsChange, className, anchor = 'top', disabled = false, width = 336, boundsRight, maxListHeight = 320 }: ContextPickerProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [activeCategory, setActiveCategory] = useState<CategoryId | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
@@ -129,6 +131,8 @@ export function ContextPicker({ selectedContexts, onContextsChange, className, a
   const dialogRef = useRef<HTMLDivElement>(null)
   const listId = useId()
   const [coords, setCoords] = useState({ bottom: 0, left: 0 })
+  // The list never makes the menu run past the window: header, search and footer take ~150px.
+  const [listCap, setListCap] = useState(maxListHeight)
 
   const handleOpen = () => {
     if (disabled) return
@@ -137,6 +141,8 @@ export function ContextPicker({ selectedContexts, onContextsChange, className, a
       const right = boundsRight ?? window.innerWidth - 8
       const left = Math.max(8, Math.min(rect.left, right - width))
       setCoords(anchor === 'bottom' ? { bottom: -(rect.bottom + 8), left } : { bottom: window.innerHeight - rect.top + 8, left })
+      const room = anchor === 'bottom' ? window.innerHeight - rect.bottom - 16 : rect.top - 16
+      setListCap(Math.max(120, Math.min(maxListHeight, room - 150)))
     }
     setIsOpen(true)
   }
@@ -264,6 +270,7 @@ export function ContextPicker({ selectedContexts, onContextsChange, className, a
                 ref={dialogRef}
                 role="dialog"
                 aria-label="Add context"
+                data-panel-overlay=""
                 initial={{ opacity: 0, y: 8, scale: 0.96 }}
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: 8, scale: 0.96 }}
@@ -317,7 +324,7 @@ export function ContextPicker({ selectedContexts, onContextsChange, className, a
                   </div>
                 </div>
 
-                <div ref={listRef} role="listbox" aria-multiselectable className="max-h-80 overflow-y-auto scrollbar-thin px-1 py-1">
+                <div ref={listRef} role="listbox" aria-multiselectable style={{ maxHeight: listCap }} className="overflow-y-auto scrollbar-thin px-1 py-1">
                   {rootRows ? categories.map((candidate, index) => {
                     const CategoryIcon = CATEGORY_ICON[candidate.id]
                     const count = selectedIn(candidate)

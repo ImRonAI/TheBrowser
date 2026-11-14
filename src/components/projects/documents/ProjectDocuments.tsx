@@ -22,6 +22,8 @@ import { cn } from '@/lib/utils'
 import { DocumentToolbar } from './DocumentToolbar'
 import { DocumentIssueLinks } from './DocumentIssueLinks'
 import { useContextAgentStore } from '@/stores/contextAgentStore'
+import { useDocumentHandoffStore } from '@/stores/documentHandoffStore'
+import type { PromptAttachment } from '@/lib/prompt-attachments'
 import { instantiateTemplate, isSkillDocument, type DocumentTemplate } from '@/lib/document-templates'
 import { TemplateGallery } from './TemplateGallery'
 import { SkillPublishBar } from './SkillPublishBar'
@@ -48,7 +50,7 @@ interface OpenPage { key: string; id: string | null; projectId: string | null; p
 interface SavedState { id: string | null; version: number; title: string; content: string }
 type Status = 'idle' | 'loading' | 'dirty' | 'saving' | 'saved' | 'error' | 'conflict'
 
-const isBlank = (html: string) => !/<(workflow-block|table|hr|img)\b/i.test(html) && html.replace(/<[^>]+>/g, '').trim() === ''
+const isBlank = (html: string) => !/<(workflow-block|table|hr|img|iframe)\b|data-youtube-video/i.test(html) && html.replace(/<[^>]+>/g, '').trim() === ''
 let sessionCounter = 0
 const nextKey = () => `page-${(sessionCounter += 1)}`
 
@@ -118,8 +120,15 @@ export function DocumentWorkspace({ scope, startWithDraft = false, onDraftStarte
   const [confirmDelete, setConfirmDelete] = useState<ProjectDocumentSummary | null>(null)
   const [deleting, setDeleting] = useState(false)
   const [editor, setEditor] = useState<Editor | null>(null)
-  const [ron, setRon] = useState<{ goal: boolean } | null>(null)
+  const [ron, setRon] = useState<{
+    goal: boolean
+    initialPrompt?: string
+    initialAttachments?: PromptAttachment[]
+    autoSend?: boolean
+    autoApply?: boolean
+  } | null>(null)
   const openRon = useCallback((goal: boolean) => setRon({ goal }), [])
+  const pendingHandoff = useDocumentHandoffStore((state) => state.pending)
   /** The template gallery: for a new page (at `target`), or to fill the empty page that is open. */
   const [gallery, setGallery] = useState<{ mode: 'new'; target: NewPageTarget } | { mode: 'apply' } | null>(null)
   const titleRef = useRef<HTMLInputElement>(null)
@@ -310,10 +319,34 @@ export function DocumentWorkspace({ scope, startWithDraft = false, onDraftStarte
 
   // Otherwise open a page once the list arrives.
   useEffect(() => {
-    if (listState !== 'ready' || pageRef.current || startWithDraft || openDocumentId || status !== 'idle') return
+    if (listState !== 'ready' || pageRef.current || startWithDraft || openDocumentId || pendingHandoff || status !== 'idle') return
     const first = firstPage(documents)
     if (first) void openDocument(first.id)
-  }, [listState, documents, startWithDraft, openDocumentId, status, openDocument])
+  }, [listState, documents, startWithDraft, openDocumentId, pendingHandoff, status, openDocument])
+
+  // Consume a Document context handoff from `ArticleAgentActions` (`ron://read` or Discover `Ask Ren`).
+  useEffect(() => {
+    if (!pendingHandoff || !request || listState !== 'ready') return
+    if (!library && scopeProjectId !== pendingHandoff.projectId) return
+    const handoff = useDocumentHandoffStore.getState().consumeHandoff()
+    if (!handoff) return
+    void (async () => {
+      if (handoff.mode === 'existing' && handoff.documentId) {
+        if (pageRef.current?.id !== handoff.documentId) {
+          await openDocument(handoff.documentId)
+        }
+      } else {
+        startDraft({ projectId: handoff.projectId, parentId: null }, { title: handoff.title, content: '' })
+      }
+      setRon({
+        goal: false,
+        initialPrompt: handoff.prompt,
+        initialAttachments: handoff.attachments,
+        autoSend: handoff.autoSend,
+        autoApply: handoff.autoApply,
+      })
+    })()
+  }, [pendingHandoff, request, listState, library, scopeProjectId, openDocument, startDraft])
 
   const edit = (patch: Partial<Pick<OpenPage, 'title' | 'content'>>) => {
     setPage((open) => {
@@ -653,9 +686,22 @@ export function DocumentWorkspace({ scope, startWithDraft = false, onDraftStarte
 
             {ron && (
               <div className="mt-3">
-                <RonWriter key={page.key} editor={editor} goal={ron.goal} onClose={() => setRon(null)}
+                <RonWriter
+                  key={`${page.key}:${ron.initialPrompt ?? 'manual'}`}
+                  editor={editor}
+                  goal={ron.goal}
+                  initialPrompt={ron.initialPrompt}
+                  initialAttachments={ron.initialAttachments}
+                  autoSend={ron.autoSend}
+                  autoApply={ron.autoApply}
+                  onApplied={() => {
+                    setRon(null)
+                    void queueSave()
+                  }}
+                  onClose={() => setRon(null)}
                   conversations={{ request, documentId: page.id, ensureDocumentId: ensurePageId }}
-                  target={writingTarget} />
+                  target={writingTarget}
+                />
               </div>
             )}
 

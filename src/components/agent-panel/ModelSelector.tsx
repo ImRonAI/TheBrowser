@@ -21,6 +21,7 @@ export const DEFAULT_AGENT_MODEL = ''
 
 const API = API_BASE_URL
 const PROVIDERS = [
+  { id: 'telnyx', label: 'Telnyx' },
   { id: 'gemini', label: 'Gemini AI Studio' },
   { id: 'nim', label: 'NVIDIA NIM' },
   { id: 'perplexity', label: 'Perplexity' },

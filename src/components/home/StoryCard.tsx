@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { motion, useReducedMotion } from 'framer-motion'
 import { ArrowRight, Play, Plus } from 'lucide-react'
 import { cn } from '@/utils/cn'
@@ -50,6 +50,8 @@ export interface StoryCardProps {
   onAddContext?: () => void
   /** Set while an add to context is in flight (e.g. "Adding to your context…"): the Context button waits. */
   addContextBusy?: string | null
+  /** Optional quick "Ask Ren" popover trigger rendered alongside + Context. */
+  askRen?: ReactNode
   /** Deterministic resting tilt in degrees; the caller derives it via `cardTilt(story.url)`. Kept as data; cards rest level. */
   tilt: number
   /** Kicker hue; the caller derives it via `stickerHue(story.topic)`. */
@@ -60,7 +62,7 @@ export interface StoryCardProps {
  * An editorial tile: the image bleeds to the card's edge, a mono kicker and byline frame a heavy
  * display headline. Hover lifts the card a pixel, scales the image and underlines the headline.
  */
-export function StoryCard({ story, featured, size = featured ? 'featured' : 'compact', onRead, onAddContext, addContextBusy, tilt, hue }: StoryCardProps) {
+export function StoryCard({ story, featured, size = featured ? 'featured' : 'compact', onRead, onAddContext, addContextBusy, askRen, tilt, hue }: StoryCardProps) {
   const reduced = useReducedMotion() ?? false
   const [imageBroken, setImageBroken] = useState(false)
   const [faviconBroken, setFaviconBroken] = useState(false)
@@ -75,21 +77,29 @@ export function StoryCard({ story, featured, size = featured ? 'featured' : 'com
       data-tilt={tilt}
       className="group/card relative h-full"
     >
-      {onAddContext && (
-        <button
-          type="button"
-          onClick={onAddContext}
-          disabled={Boolean(addContextBusy)}
-          aria-label={`Add to Ren context: ${story.title}`}
-          title={addContextBusy || 'Add to Ren context'}
-          className={cn(
-            'absolute left-2 top-2 z-10 inline-flex h-7 items-center gap-1 rounded-full bg-ink/80 pl-2 pr-2.5 text-[12px] font-semibold text-white opacity-0 backdrop-blur-sm transition-[opacity,background-color] duration-150 ease-out hover:bg-ink focus-visible:opacity-100 group-hover/card:opacity-100',
-            addContextBusy && 'cursor-wait bg-ink/50 hover:bg-ink/50',
-          )}
+      {(onAddContext || askRen) && (
+        <div
+          onClick={(event) => event.stopPropagation()}
+          className="absolute left-2 top-2 z-10 flex items-center gap-1.5 opacity-0 transition-opacity duration-150 ease-out focus-within:opacity-100 group-hover/card:opacity-100 has-[[data-state=open]]:opacity-100"
         >
-          <Plus className="h-3.5 w-3.5" strokeWidth={2.5} />
-          Context
-        </button>
+          {onAddContext && (
+            <button
+              type="button"
+              onClick={onAddContext}
+              disabled={Boolean(addContextBusy)}
+              aria-label={`Add to Ren context: ${story.title}`}
+              title={addContextBusy || 'Add to Ren context'}
+              className={cn(
+                'inline-flex h-7 items-center gap-1 rounded-full bg-ink/80 pl-2 pr-2.5 text-[12px] font-semibold text-white backdrop-blur-sm transition-colors duration-150 ease-out hover:bg-ink',
+                addContextBusy && 'cursor-wait bg-ink/50 hover:bg-ink/50',
+              )}
+            >
+              <Plus className="h-3.5 w-3.5" strokeWidth={2.5} />
+              Context
+            </button>
+          )}
+          {askRen}
+        </div>
       )}
       <button
         type="button"

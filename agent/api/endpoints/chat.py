@@ -46,12 +46,14 @@ from agent.api.core.panel_agent import (
     configured_providers,
     create_panel_agent,
     default_selection,
+    document_uses_glm_router,
     gemini_thinking_levels,
     infer_provider,
     list_provider_models,
     mistral_reasoning_efforts,
     provider_api_key,
     provider_default_model,
+    telnyx_reasoning_efforts,
     xai_reasoning_efforts,
     NIM_REASONING_EFFORTS_BY_MODEL,
 )
@@ -280,6 +282,19 @@ def system_prompt_for(provider: str, browser: str | None = None) -> str:
         PERPLEXITY_THINK_ADDENDUM if provider == "perplexity" else ""
     )
 
+
+DOCUMENT_AGENT_SYSTEM_PROMPT = """You are Document Agent. You are Ren working inside one page of Ren Documents, writing polished, publication-ready Markdown directly for that page.
+
+## Authoring Rules
+1. Output ONLY the Markdown content that goes into the document. Never write preambles ("Here is the draft...", "Sure!"), never narrate your research, and never ask follow-up questions. Your very first line must be document content (a `#` or `##` heading or opening paragraph).
+2. Read any attached `<attachment>` reference material (articles, video writeups, notes, context) thoroughly first. Use `brave_web_search`, `brave_news_search`, `brave_image_search`, `brave_video_search`, or `brave_answer` only when you need additional facts, verified `https://` image URLs, or a real YouTube video URL — keep research fast and focused (1 batch of parallel tool calls whenever possible).
+3. Rich formatting & media:
+   - Structure documents stylishly with clear `#` / `##` / `###` hierarchy, engaging prose, `>` blockquotes/pull-quotes, Markdown tables where structured comparisons help, and bullet or task lists (`- [ ]`).
+   - **Images**: Embed verified `https://` images with standard Markdown `![Descriptive caption](https://...)`. Reuse real image URLs from attached context or fetch real image URLs via `brave_image_search` (`thumbnail` or direct `https://` image URLs). Never invent or guess image URLs.
+   - **Embedded YouTube Videos**: When a video is requested or adds value, find a real YouTube video URL (from attached context or `brave_video_search` with `site:youtube.com`) and place the `https://www.youtube.com/watch?v=VIDEO_ID` URL **alone on its own line** surrounded by blank lines. Ren's document editor automatically turns a standalone YouTube URL line into a playable 16:9 embedded YouTube player. Never invent YouTube video IDs.
+   - **Workflows**: When a process, timeline, pipeline, or decision flow clarifies the subject, call `render_workflow` at the exact point in the document where the diagram belongs (write the Markdown before it, call `render_workflow`, then continue writing the Markdown after it).
+4. Cite external sources inline as clean Markdown links (`[Source Name](https://...)`). When revising after user feedback, output the complete revised draft."""
+
 Identifier = Annotated[str, Field(min_length=1, max_length=128, pattern=r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")]
 
 
@@ -334,6 +349,10 @@ class ChatRequest(BaseModel):
     issue_id: str | None = None
     agent: AgentTarget | None = None
     browser_context: dict[str, Any] | None = None
+    #: Optional ``data:image/...;base64,...`` screenshot of the live Document workspace when screen-sharing in
+    #: ``RonDraftChat`` / ``RonWriter``. Vision-capable models receive the image directly; text-only models receive
+    #: a ``minimaxai/minimax-m3.1-flash`` visual briefing tailored to what the user wants documented.
+    screen_frame: str | None = Field(default=None, max_length=7_000_000)
     model: str = ""
     provider: str = ""
     reasoning_effort: str | None = None
@@ -346,7 +365,7 @@ class ChatRequest(BaseModel):
 
     @model_validator(mode="after")
     def validate_action(self):
-        if self.action != "message" and (self.attachments or self.prompt_attachments):
+        if self.action != "message" and (self.attachments or self.prompt_attachments or self.screen_frame):
             raise ValueError("Attachments require a new message")
         if sum(len(item.text) for item in self.prompt_attachments) > ATTACHMENTS_TOTAL_MAX:
             raise ValueError(f"Attachments on one message carry at most {ATTACHMENTS_TOTAL_MAX:,} characters")
@@ -455,21 +474,20 @@ async def _create_runtime_agent(*, user_id, session_id, selection, options, runt
         # (live_system_prompt), so Live's prompt and tools stay as they are.
         from agent.api.core.workspace_tools import workspace_prompt, workspace_tools
         agent_prompt, agent_tools = workspace_prompt(), workspace_tools(user_id, session_id)
+    destination_prompt = (
+        DOCUMENT_AGENT_SYSTEM_PROMPT + agent_prompt
+        if destination == "document"
+        else system_prompt_for(selection["provider"], browser=browser) + {
+            "panel": "",
+            "search": "\nYou are Search Agent. Research the user's question, verify claims with search tools, and cite original sources.",
+            "context": context_agent_prompt(),
+        }[destination] + agent_prompt
+    )
     return await asyncio.to_thread(
         create_panel_agent,
         provider=selection["provider"], model_id=selection["model_id"],
         session_id=session_id, user_id=user_id,
-        system_prompt=system_prompt_for(selection["provider"], browser=browser) + {
-            "panel": "",
-            "search": "\nYou are Search Agent. Research the user's question, verify claims with search tools, and cite original sources.",
-            "document": "\nYou are Document Agent. You are Ren working inside one page of a project's documentation in Ren Projects, not in the Agent Panel. "
-                        "Each request names the project and the page and includes the page's current content. Your reply is the draft the user "
-                        "reviews and then inserts into the page or uses to overwrite it, so every word you write goes into the page: reply with "
-                        "only the page content in Markdown, never announce or narrate your research, and add no preamble, questions or commentary. When the topic needs facts you are not sure of, research it first with brave_web_search, "
-                        "brave_news_search or brave_answer, and cite what you used as Markdown links. When the user gives feedback on a draft, "
-                        "write the complete revised draft again.",
-            "context": context_agent_prompt(),
-        }[destination] + agent_prompt,
+        system_prompt=destination_prompt,
         extra_tools=(context_agent_tools() if destination == "context" else []) + agent_tools,
         reasoning_effort=selection.get("reasoning_effort"),
         options=options, runtime_options=runtime_options,
@@ -655,6 +673,7 @@ def _require_provider_key(provider: ProviderName) -> None:
         "gemini": "GEMINI_API_KEY",
         "openai": "OPENAI_API_KEY",
         "anthropic": "ANTHROPIC_API_KEY",
+        "telnyx": "TELNYX_API_KEY",
     }[provider]
     raise HTTPException(status_code=503, detail=f"{key_name} is not configured.")
 
@@ -797,6 +816,28 @@ async def chat(request: ChatRequest, http_request: Request) -> StreamingResponse
         message: Any = attachment_message_content(
             article_message(request.message, request.attachments), request.prompt_attachments,
         ) if action == "message" else None
+        if action == "message" and request.screen_frame:
+            from agent.api.core.document_vision import prepare_document_screen_input
+
+            context_titles = [
+                *[f"- Article: {item.title} ({item.source})" for item in request.attachments],
+                *[f"- {item.kind.title()}: {item.title}" for item in request.prompt_attachments],
+            ]
+            image_blocks, screen_note = await prepare_document_screen_input(
+                screen_frame=request.screen_frame,
+                provider=selection["provider"],
+                model_id=selection["model_id"],
+                user_goal=request.message,
+                context_summary="\n".join(context_titles),
+                force_eyes=(
+                    request.destination == "document"
+                    and document_uses_glm_router(selection["provider"], selection["model_id"])
+                ),
+            )
+            if image_blocks:
+                message = [{"text": message}, *image_blocks] if isinstance(message, str) else [*message, *image_blocks]
+            if screen_note:
+                request_context = f"{request_context}\n\n{screen_note}" if request_context else screen_note
         session = await manager.start(
             request.user_id, request.session_id, message, action=action,
             interrupt_responses=[{"interruptResponse": item.model_dump()} for item in request.interrupt_responses]
@@ -1085,6 +1126,8 @@ async def get_model_efforts(model_id: str, provider: str = "") -> dict[str, Any]
     (``MISTRAL_REASONING_EFFORTS_BY_MODEL``; most models take none/high).
     Gemini: documented + live-verified ``thinking_level`` per model
     (``GEMINI_THINKING_LEVELS_BY_MODEL``; minimal/low/medium/high subsets).
+    Telnyx: the catalogue's ``supported_reasoning_efforts``, else ``TELNYX_REASONING_EFFORTS_BY_MODEL``
+    (``telnyx_reasoning_efforts``); 502 when the catalogue cannot be read.
     OpenAI/Anthropic: no verified per-model list (empty).
     """
     resolved = (provider.strip().lower() or infer_provider(model_id) or "")
@@ -1101,6 +1144,12 @@ async def get_model_efforts(model_id: str, provider: str = "") -> dict[str, Any]
     if provider_name == "nim":
         return {"model": model_id, "provider": provider_name,
                 "efforts": list(NIM_REASONING_EFFORTS_BY_MODEL.get(model_id, ()))}
+
+    if provider_name == "telnyx":
+        efforts = await asyncio.to_thread(telnyx_reasoning_efforts, model_id)
+        if efforts is None:
+            raise HTTPException(status_code=502, detail="The Telnyx model list could not be read.")
+        return {"model": model_id, "provider": provider_name, "efforts": list(efforts)}
 
     if provider_name == "xai":
         return {"model": model_id, "provider": provider_name, "efforts": list(xai_reasoning_efforts(model_id))}

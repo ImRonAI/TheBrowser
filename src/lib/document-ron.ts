@@ -45,9 +45,10 @@ export function documentRonMessage({ target, intent, currentMarkdown }: {
     ...(target.facts?.trim() ? [`Facts to use:\n${target.facts.trim().slice(0, DOCUMENT_CONTEXT_LIMIT)}`] : []),
     page ? `${current} (Markdown, for reference):\n<current>\n${page.slice(0, DOCUMENT_CONTEXT_LIMIT)}${page.length > DOCUMENT_CONTEXT_LIMIT ? '\n…' : ''}\n</current>` : `The ${target.kind === 'page' ? 'page' : 'description'} is empty.`,
     [
-      'Reply with only the content in Markdown: headings (#, ##, ###), paragraphs, bullet and numbered lists, task lists (- [ ] item), tables, block quotes and fenced code blocks.',
+      'Reply with only the content in Markdown: headings (#, ##, ###), paragraphs, bullet and numbered lists, task lists (- [ ] item), tables, block quotes, fenced code blocks, Markdown images (![Caption](https://...)), and standalone YouTube video URLs.',
+      'When images are requested or add visual clarity, embed real https:// image URLs from attached reference material or brave_image_search using ![Descriptive caption](https://...) (never invent image URLs). When an embedded video is requested or helpful, place a real https://www.youtube.com/watch?v=VIDEO_ID URL (from attached context or brave_video_search) alone on its own line so the editor renders a playable YouTube embed (never invent video IDs).',
       'When a process, plan, pipeline, approval path or decision flow would help, call render_workflow at the point in the content where the diagram belongs (write the text before it first, then call the tool, then continue). Choose each step\'s shape (kind) and label the arrows out of decisions. Existing workflows appear above as ```workflow JSON fences: to keep one unchanged, repeat its fence exactly; to change it, call render_workflow with the whole new version.',
-      'When the topic needs facts you are not sure of, research it first with brave_web_search, brave_news_search or brave_answer and cite what you used as Markdown links.',
+      'When the topic needs facts you are not sure of, research it first with brave_web_search, brave_news_search, brave_image_search, brave_video_search or brave_answer and cite what you used as Markdown links.',
       `Write only what the request asks for. When it adds to the ${target.kind === 'page' ? 'page' : 'description'} (a section, a list, a summary, a workflow), write just that new content and do not repeat what is already there: the user inserts it where they choose. When it asks for the whole ${target.kind === 'page' ? 'page' : 'description'} (draft it, rewrite it, restructure it), write all of it: the user overwrites the ${target.kind === 'page' ? 'page' : 'description'} with it.`,
       'Every word you write goes into the draft: do not announce or narrate your research or add a preamble. Your first words are the content itself.',
     ].join('\n'),
@@ -75,7 +76,43 @@ export function unwrapMarkdown(text: string): string {
   return (status ? body.slice(status[0].length) : body).replace(/([.!?])(#{1,6} )(?=\S)/g, '$1\n\n$2')
 }
 
-export interface DocNode { type?: string; attrs?: Record<string, unknown>; content?: DocNode[]; text?: string; [key: string]: unknown }
+export interface DocNode {
+  type?: string
+  attrs?: Record<string, unknown>
+  content?: DocNode[]
+  text?: string
+  marks?: Array<{ type: string; attrs?: Record<string, unknown>; [key: string]: unknown }>
+  [key: string]: unknown
+}
+
+const YOUTUBE_ID_RE = /^[A-Za-z0-9_-]{11}$/
+
+/** Normalize a YouTube watch/short/embed/live URL to `https://www.youtube.com/watch?v=<id>`, or null. */
+export function youtubeEmbedUrl(raw: string): string | null {
+  const trimmed = raw.trim()
+  if (!trimmed) return null
+  try {
+    const parsed = new URL(trimmed)
+    if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') return null
+    const host = parsed.hostname.replace(/^www\./i, '').toLowerCase()
+    let id: string | null = null
+    if (host === 'youtu.be') {
+      id = parsed.pathname.split('/').filter(Boolean)[0] ?? null
+    } else if (host === 'youtube.com' || host === 'm.youtube.com' || host === 'youtube-nocookie.com') {
+      if (parsed.pathname === '/watch') {
+        id = parsed.searchParams.get('v')
+      } else {
+        const parts = parsed.pathname.split('/').filter(Boolean)
+        if ((parts[0] === 'embed' || parts[0] === 'shorts' || parts[0] === 'live') && parts[1]) {
+          id = parts[1]
+        }
+      }
+    }
+    return id && YOUTUBE_ID_RE.test(id) ? `https://www.youtube.com/watch?v=${id}` : null
+  } catch {
+    return null
+  }
+}
 
 /** A ```workflow fence body → workflow block attributes, or null when it is not a usable workflow. */
 export function workflowFromFence(body: string): { title: string; graph: WorkflowGraph } | null {
@@ -88,11 +125,32 @@ export function workflowFromFence(body: string): { title: string; graph: Workflo
   return { title, graph }
 }
 
-/** Replace parsed ```workflow code blocks with workflow blocks; anything else is left as parsed. */
+/** Replace parsed ```workflow code blocks with workflow blocks and standalone YouTube URLs/fences with YouTube blocks. */
 export function withWorkflowBlocks(node: DocNode, newId: () => string): DocNode {
-  if (node.type === 'codeBlock' && node.attrs?.language === WORKFLOW_FENCE) {
-    const workflow = workflowFromFence((node.content ?? []).map((child) => child.text ?? '').join(''))
-    if (workflow) return { type: 'workflow', attrs: { id: newId(), title: workflow.title, graph: workflow.graph } }
+  if (node.type === 'codeBlock') {
+    const lang = typeof node.attrs?.language === 'string' ? node.attrs.language.toLowerCase() : ''
+    const body = (node.content ?? []).map((child) => child.text ?? '').join('')
+    if (lang === WORKFLOW_FENCE) {
+      const workflow = workflowFromFence(body)
+      if (workflow) return { type: 'workflow', attrs: { id: newId(), title: workflow.title, graph: workflow.graph } }
+    }
+    if (lang === 'youtube' || lang === 'video') {
+      const firstLine = body.split(/\r?\n/).map((line) => line.trim()).find(Boolean) ?? ''
+      const yt = youtubeEmbedUrl(firstLine)
+      if (yt) return { type: 'youtube', attrs: { src: yt } }
+    }
+  }
+  if (node.type === 'image' && typeof node.attrs?.src === 'string') {
+    const yt = youtubeEmbedUrl(node.attrs.src)
+    if (yt) return { type: 'youtube', attrs: { src: yt } }
+  }
+  if (node.type === 'paragraph' && node.content?.length === 1 && node.content[0].type === 'text') {
+    const only = node.content[0]
+    const directYt = youtubeEmbedUrl(only.text ?? '')
+    if (directYt) return { type: 'youtube', attrs: { src: directYt } }
+    const linkMark = (only.marks ?? []).find((mark) => mark.type === 'link' && typeof mark.attrs?.href === 'string')
+    const linkedYt = linkMark ? youtubeEmbedUrl(String(linkMark.attrs?.href ?? '')) : null
+    if (linkedYt) return { type: 'youtube', attrs: { src: linkedYt } }
   }
   return node.content ? { ...node, content: node.content.map((child) => withWorkflowBlocks(child, newId)) } : node
 }

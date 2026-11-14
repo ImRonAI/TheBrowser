@@ -451,6 +451,7 @@ def test_config_endpoint_reports_only_panel_providers(monkeypatch):
         "gemini": False,
         "openai": False,
         "anthropic": False,
+        "telnyx": False,
     }
     assert body["features"]["event_replay"] is True
     assert body["features"]["a2a"] is False

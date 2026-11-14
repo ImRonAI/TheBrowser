@@ -1,9 +1,9 @@
-import { useEffect, useRef, useState, type UIEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type UIEvent } from 'react'
 import { ArrowLeft, ArrowUpRight, Newspaper } from 'lucide-react'
 import { ArticleAgentActions } from '@/components/home/ArticleAgentActions'
 import { NewsArticle } from '@/components/home/NewsArticle'
 import { API_BASE_URL } from '@/lib/api-base'
-import { cleanTitle, previewArticle, storyFromReadUrl, type ArticleMeta } from '@/lib/articles'
+import { cleanTitle, previewArticle, storyFromReadUrl, youtubeVideoId, type ArticleMeta } from '@/lib/articles'
 import { useTabStore } from '@/stores/tabStore'
 
 /** `POST /articles/extract`: Markdown body (`text`) plus what the page says about itself (core/articles.py). */
@@ -18,6 +18,21 @@ interface ExtractResponse {
   published?: string | null
   image?: string | null
   language?: string | null
+}
+
+interface VideoSummaryEvent {
+  type: 'meta' | 'delta' | 'done' | 'error'
+  text?: string
+  message?: string
+  meta?: {
+    title?: string | null
+    channel?: string | null
+    authors?: string[]
+    duration?: string | null
+    published?: string | null
+    image?: string | null
+    site_name?: string | null
+  }
 }
 
 function metaFrom(result: ExtractResponse): ArticleMeta {
@@ -36,7 +51,7 @@ function goHome() {
 }
 
 export function ArticleReaderPage({ href }: { href: string }) {
-  const story = storyFromReadUrl(href)
+  const story = useMemo(() => storyFromReadUrl(href), [href])
   const [article, setArticle] = useState(() => story ? previewArticle(story) : null)
   const [meta, setMeta] = useState<ArticleMeta | null>(null)
   const [loading, setLoading] = useState(Boolean(story))
@@ -51,16 +66,104 @@ export function ArticleReaderPage({ href }: { href: string }) {
   }
 
   useEffect(() => {
-    if (!story) return
+    if (!story) {
+      setArticle(null)
+      setMeta(null)
+      setLoading(false)
+      setNotice('This reader link is missing a public article URL.')
+      return
+    }
     const controller = new AbortController()
+    const basePreview = previewArticle(story)
+    setArticle(basePreview)
     setLoading(true)
     setNotice('')
     setMeta(null)
+
+    const videoId = youtubeVideoId(story.url)
+    if (videoId) {
+      void (async () => {
+        let streamed = ''
+        try {
+          const response = await fetch(`${API_BASE_URL}/articles/video-summary`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              url: story.url,
+              title: story.title,
+              channel: story.video?.creator || story.author || '',
+              description: story.description || '',
+              snippets: story.snippets || [],
+            }),
+            signal: controller.signal,
+          })
+          if (!response.ok || !response.body) {
+            throw new Error('Video writeup unavailable right now.')
+          }
+          const reader = response.body.getReader()
+          const decoder = new TextDecoder()
+          let buffer = ''
+          while (true) {
+            const { value, done } = await reader.read()
+            if (done) break
+            buffer += decoder.decode(value, { stream: true })
+            let splitAt = buffer.indexOf('\n\n')
+            while (splitAt !== -1) {
+              const rawFrame = buffer.slice(0, splitAt).trim()
+              buffer = buffer.slice(splitAt + 2)
+              splitAt = buffer.indexOf('\n\n')
+              if (!rawFrame.startsWith('data:')) continue
+              const jsonText = rawFrame.slice(5).trim()
+              if (!jsonText) continue
+              const event = JSON.parse(jsonText) as VideoSummaryEvent
+              if (controller.signal.aborted) return
+              if (event.type === 'meta' && event.meta) {
+                setMeta({
+                  title: event.meta.title || undefined,
+                  authors: Array.isArray(event.meta.authors) ? event.meta.authors : [],
+                  siteName: event.meta.site_name || 'YouTube',
+                  published: event.meta.published || undefined,
+                  image: event.meta.image || undefined,
+                  truncated: false,
+                })
+              } else if (event.type === 'delta' && event.text) {
+                streamed += event.text
+                const snapshot = streamed
+                setArticle((current) => current ? { ...current, text: snapshot, status: 'extracted' } : current)
+              } else if (event.type === 'done' && event.text) {
+                streamed = event.text
+                const finalText = streamed
+                setArticle((current) => current ? { ...current, text: finalText, status: 'extracted' } : current)
+              } else if (event.type === 'error') {
+                throw new Error(event.message || 'Video writeup unavailable.')
+              }
+            }
+          }
+        } catch (error) {
+          if (!controller.signal.aborted && !streamed) {
+            setNotice(error instanceof Error ? error.message : 'Video writeup unavailable.')
+          }
+        } finally {
+          if (!controller.signal.aborted) setLoading(false)
+        }
+      })()
+      return () => controller.abort()
+    }
+
     void fetch(`${API_BASE_URL}/articles/extract`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ url: story.url }), signal: controller.signal,
     }).then(async (response) => {
-      if (!response.ok) throw new Error('Full text unavailable. You can attach the preview or open the original.')
+      if (!response.ok) {
+        let message = 'Full text unavailable. You can attach the preview or open the original.'
+        try {
+          const payload = await response.json() as { detail?: string }
+          if (typeof payload?.detail === 'string' && payload.detail.trim()) message = payload.detail
+        } catch {
+          // keep default message
+        }
+        throw new Error(message)
+      }
       const result = await response.json() as ExtractResponse
       if (!controller.signal.aborted) {
         setArticle((current) => current ? { ...current, text: result.text, status: result.status } : current)
@@ -71,7 +174,7 @@ export function ArticleReaderPage({ href }: { href: string }) {
       if (!controller.signal.aborted) setNotice(error instanceof Error ? error.message : 'Full text unavailable.')
     }).finally(() => { if (!controller.signal.aborted) setLoading(false) })
     return () => controller.abort()
-  }, [story?.url, attempt])
+  }, [href, story, attempt])
 
   if (!story || !article) {
     return <main className="flex h-full items-center justify-center overflow-auto bg-surface-0 px-6 py-16 text-ink dark:bg-surface-900 dark:text-ink-inverse">
@@ -112,9 +215,8 @@ export function ArticleReaderPage({ href }: { href: string }) {
     </header>
     <div className="px-5 pb-24 pt-12 sm:px-8">
       <NewsArticle story={story} article={article} meta={meta} loading={loading} notice={notice} onRetry={() => setAttempt((value) => value + 1)} />
-      <section aria-label="Ask Ren about this article" className="mx-auto mt-12 flex max-w-[68ch] flex-col items-center gap-3 border-t border-surface-200 pt-8 text-center dark:border-surface-800">
-        <p className="text-[13px] leading-snug text-ink-secondary dark:text-ink-inverse-secondary">Search it, talk it through, or turn it into a project, a document or an issue.</p>
-        <ArticleAgentActions {...askRen} />
+      <section aria-label="Ask Ren about this article" className="mx-auto mt-12 flex max-w-[68ch] flex-col items-center gap-4 border-t border-surface-200 pt-8 dark:border-surface-800">
+        <ArticleAgentActions {...askRen} variant="inline" />
       </section>
     </div>
   </main>

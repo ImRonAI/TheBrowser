@@ -1,8 +1,11 @@
 import { create } from 'zustand'
 import { createJSONStorage, persist } from 'zustand/middleware'
 
-/** The sidebar's destinations. `documents` is the Documents library (`ron://documents`), routed by its URL. */
-export type HomeTab = 'discover' | 'execute' | 'documents' | 'calendar' | 'vibe' | 'build'
+/**
+ * The sidebar's destinations. `home` is the search page and `discover` the stories feed; both render on
+ * `ron://home`. `documents` is the Documents library (`ron://documents`), routed by its URL.
+ */
+export type HomeTab = 'home' | 'discover' | 'execute' | 'documents' | 'calendar' | 'vibe' | 'build'
 
 interface NavigationStore {
   /**
@@ -54,14 +57,14 @@ export const useNavigationStore = create<NavigationStore>()(
       setDrawerExpanded: (expanded) => set({ isSidebarOpen: expanded, isDrawerExpanded: expanded }),
       toggleDrawer: () => set((state) => ({ isSidebarOpen: !state.isSidebarOpen, isDrawerExpanded: !state.isSidebarOpen })),
 
-      // Default tab
-      activeTab: 'discover',
+      // Default tab: the search home page
+      activeTab: 'home',
       setActiveTab: (tab) => set({ activeTab: tab }),
     }),
     {
       name: 'ron-navigation',
       storage: createJSONStorage(() => localStorage),
-      version: 2,
+      version: 3,
       partialize: (state) => ({
         isSidebarOpen: state.isSidebarOpen,
         isDrawerExpanded: state.isSidebarOpen,
@@ -72,6 +75,8 @@ export const useNavigationStore = create<NavigationStore>()(
         if (next.activeTab === 'tasks') next.activeTab = 'execute'
         // v1 → v2: the drawer's expanded state becomes the sidebar's open state.
         if (version < 2) next.isSidebarOpen = next.isDrawerExpanded ?? true
+        // v2 → v3: the search page replaced Discover as home; Discover stays a destination.
+        if (version < 3 && (next.activeTab === 'discover' || !next.activeTab)) next.activeTab = 'home'
         return next
       },
     }

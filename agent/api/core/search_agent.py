@@ -49,7 +49,7 @@ from agent.api.core.brave_answers_tool import answers_client
 from agent.api.core.brave_search import BraveSearchError
 from agent.api.core.panel_agent import (
     NIM_REASONING_EFFORTS_BY_MODEL, PROVIDERS, build_model, gemini_thinking_levels, mistral_reasoning_efforts,
-    provider_api_key, xai_reasoning_efforts,
+    provider_api_key, telnyx_reasoning_efforts, xai_reasoning_efforts,
 )
 from agent.api.core.xai_model import XAIStatePruner
 
@@ -151,6 +151,7 @@ def resolve_search_effort(
     supported = {
         "xai": xai_reasoning_efforts, "mistral": mistral_reasoning_efforts, "gemini": gemini_thinking_levels,
         "nim": lambda model: NIM_REASONING_EFFORTS_BY_MODEL.get(model, ()),
+        "telnyx": lambda model: telnyx_reasoning_efforts(model) or (),
     }.get(provider, lambda model: ())(model_id)
     if not supported:
         return desired if provider not in PROVIDERS else None
@@ -721,14 +722,19 @@ async def stream_search_session(
     provider: str | None = None,
     model_id: str | None = None,
     shopping_model_id: str | None = None,
+    attachments: Sequence[Any] = (),
 ) -> AsyncIterator[tuple[str, dict[str, Any]]]:
     """Run the Strands Harness Search Agent (and its ``create_harness()`` shopping subagent) and yield
-    ``(sse_event_name, payload)`` pairs for ``POST /search/stream``."""
+    ``(sse_event_name, payload)`` pairs for ``POST /search/stream``.
+
+    A new search without attachments is Brave Answers beside the Shopping agent. A follow-up, or any
+    search carrying ``attachments`` (``PromptAttachment``s), runs the Search agent on the query plus one
+    block per attachment, so the attached text is read by a model with the room for it."""
     resolved_provider = (provider or app_config.RON_SEARCH_PROVIDER).strip().lower()
     resolved_model_id = model_id or app_config.RON_SEARCH_AGENT_MODEL
     resolved_shopping_model = shopping_model_id or app_config.RON_SEARCH_SHOPPING_MODEL
 
-    if not follow_up:
+    if not follow_up and not attachments:
         async for event in _stream_answer_and_shopping(
             q, session_id=session_id, shopping=shopping, country=country, location=location,
             provider=resolved_provider, shopping_model_id=resolved_shopping_model,
@@ -761,7 +767,9 @@ async def stream_search_session(
     shopping_text_parts: list[str] = []
     shopping_streamed_any = False
 
-    prompt = q
+    from agent.api.core.prompt_attachments import message_content
+
+    prompt = message_content(q, list(attachments))
 
     try:
         async for raw_event in agent.stream_async(prompt):
@@ -821,6 +829,10 @@ async def stream_search_session(
             "incomplete": False,
         }
         return
+    # A new search with attachments has no separate Shopping lane: the agent shops only through its
+    # `subagent` tool. When it did not, close the lane the results page opened for this search.
+    if not follow_up and shopping:
+        yield "shopping.done", {"model": None, "incomplete": False}
 
 
 async def _answer_events(q: str, session_id: str | None, country: str) -> AsyncIterator[tuple[str, dict[str, Any]]]:

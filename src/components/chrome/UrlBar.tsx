@@ -32,11 +32,22 @@ export function getSearchLevelFromRonUrl(value: string): SearchLevel | null {
   }
 }
 
-export function buildSearchRonUrl(query: string, level: SearchLevel): string {
-  return `${SEARCH_PROTOCOL_PREFIX}?q=${encodeURIComponent(query)}&level=${level}`
+/** `contextId`: the id under which the search's attachments are kept (`searchAttachmentsStore`). */
+export function buildSearchRonUrl(query: string, level: SearchLevel, contextId?: string | null): string {
+  return `${SEARCH_PROTOCOL_PREFIX}?q=${encodeURIComponent(query)}&level=${level}${contextId ? `&ctx=${encodeURIComponent(contextId)}` : ''}`
 }
 
-function looksLikeUrl(value: string): boolean {
+/** The attachments id of a `ron://search` URL (`ctx`), or null. */
+export function getSearchContextFromRonUrl(value: string): string | null {
+  if (!value.startsWith(SEARCH_PROTOCOL_PREFIX)) return null
+  try {
+    return new URL(value).searchParams.get('ctx') || null
+  } catch {
+    return null
+  }
+}
+
+export function looksLikeUrl(value: string): boolean {
   if (/^(https?:\/\/|ron:\/\/|file:\/\/|about:)/i.test(value)) return true
   if (/^localhost(:\d+)?(\/.*)?$/i.test(value)) return true
   if (/^\d{1,3}(\.\d{1,3}){3}(:\d+)?(\/.*)?$/.test(value)) return true
