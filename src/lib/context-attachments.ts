@@ -1,12 +1,22 @@
 import type { ContextItem } from '@/lib/chat-context'
 import {
-  documentContent, eventContent, interestContent, issueContent, projectContent, threadContent,
+  contextAskContent,
+  contextRecommendationContent,
+  contextRunContent,
+  contextVisitContent,
+  documentContent,
+  eventContent,
+  interestContent,
+  issueContent,
+  projectContent,
+  threadContent,
 } from '@/lib/chat-context'
 import { API_BASE_URL } from '@/lib/api-base'
 import { readThread } from '@/lib/threads-api'
 import { createContextClient } from '@/lib/context-api'
 import { getDocument } from '@/lib/project-documents'
 import { clipWithNote, contextAttachment, tabAttachmentText, type PromptAttachment, type TabContext } from '@/lib/prompt-attachments'
+import { useContextAgentStore } from '@/stores/contextAgentStore'
 import { getProjectsState, projectsRequestFor } from '@/stores/projectsStore'
 import { useInterestsStore } from '@/stores/interestsStore'
 
@@ -50,11 +60,40 @@ export async function contextText(item: ContextItem, userId: string): Promise<st
       return documentContent(page.title, page.content, projects.find((project) => project.id === page.projectId)?.name)
     }
     if (item.type === 'file' && ref.contextItemId) {
-      return clipWithNote(await createContextClient(API_BASE_URL, userId).markdown(ref.contextItemId), SAVED_CONTEXT_MAX)
+      try {
+        return clipWithNote(await createContextClient(API_BASE_URL, userId).markdown(ref.contextItemId), SAVED_CONTEXT_MAX)
+      } catch (err) {
+        const fallback = useContextAgentStore.getState().items.find((entry) => entry.id === ref.contextItemId)
+        if (fallback) {
+          return [
+            `# ${fallback.title || fallback.kind}`,
+            fallback.source ? `Source: ${fallback.source}` : '',
+            fallback.preview || '',
+          ].filter(Boolean).join('\n\n')
+        }
+        throw err
+      }
+    }
+    if (ref.contextAskId) {
+      const turn = useContextAgentStore.getState().asks.find((entry) => entry.id === ref.contextAskId)
+      if (turn) return contextAskContent(turn)
+    }
+    if (ref.contextVisitUrl) {
+      const visit = useContextAgentStore.getState().visits.find((entry) => entry.url === ref.contextVisitUrl)
+      if (visit) return contextVisitContent(visit)
+    }
+    if (ref.contextRunId) {
+      const run = useContextAgentStore.getState().runs.find((entry) => entry.id === ref.contextRunId)
+      if (run) return contextRunContent(run)
+    }
+    if (ref.contextRecommendationId) {
+      const rec = useContextAgentStore.getState().recommendations.find((entry) => entry.id === ref.contextRecommendationId)
+      if (rec) return contextRecommendationContent(rec)
     }
   } catch (error) {
     return `Could not load this ${item.type}: ${error instanceof Error ? error.message : String(error)}`
   }
+  if (item.content?.trim()) return item.content
   return [item.name, item.description].filter(Boolean).join('\n')
 }
 

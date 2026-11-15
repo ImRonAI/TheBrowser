@@ -175,3 +175,95 @@ export function issuesInRange(issues: Issue[], start: Date, end: Date): Issue[] 
 }
 
 export const unscheduledIssues = (issues: Issue[]) => issues.filter((issue) => !issue.startDate && !issue.endDate && !issue.dueDate)
+
+// ─── Month rows: continuous multi-day bars + single-day lines ────────────────
+
+/** Start and end local days of an issue that runs across two or more days; null otherwise. */
+function multiDaySpan(issue: Issue): { start: string; end: string } | null {
+  const start = localDayKey(issue.startDate)
+  const end = localDayKey(issue.endDate)
+  return start && end && start < end ? { start, end } : null
+}
+
+export const isMultiDay = (issue: Issue) => multiDaySpan(issue) !== null
+
+/** A multi-day issue laid on one row of consecutive days: its columns, its lane, and whether it runs past either edge. */
+export interface RowSpan {
+  issue: Issue
+  startCol: number
+  endCol: number
+  lane: number
+  continuesBefore: boolean
+  continuesAfter: boolean
+}
+
+/**
+ * Lay every multi-day issue that touches `days` (consecutive local days) on that row as one continuous bar.
+ * Bars take the lowest free lane, earliest first and longest first, so a week reads like a printed calendar.
+ */
+export function rowSpans(issues: Issue[], days: Date[]): RowSpan[] {
+  const keys = days.map(calendarDay)
+  const first = keys[0]
+  const last = keys[keys.length - 1]
+  const placed = issues.flatMap((issue) => {
+    const span = multiDaySpan(issue)
+    if (!span || span.end < first || span.start > last) return []
+    return [{
+      issue,
+      startCol: span.start < first ? 0 : keys.indexOf(span.start),
+      endCol: span.end > last ? keys.length - 1 : keys.indexOf(span.end),
+      continuesBefore: span.start < first,
+      continuesAfter: span.end > last,
+    }]
+  }).sort((a, b) => a.startCol - b.startCol || (b.endCol - b.startCol) - (a.endCol - a.startCol)
+    || issueSortKey(a.issue).localeCompare(issueSortKey(b.issue)))
+  const laneEnds: number[] = []
+  return placed.map((span) => {
+    let lane = laneEnds.findIndex((end) => end < span.startCol)
+    if (lane === -1) {
+      lane = laneEnds.length
+      laneEnds.push(span.endCol)
+    } else {
+      laneEnds[lane] = span.endCol
+    }
+    return { ...span, lane }
+  })
+}
+
+/** One line on a day: anything that is not a multi-day bar, at its local time. */
+export interface DayLine {
+  issue: Issue
+  kind: TimedKind
+  minutes: number
+}
+
+/**
+ * The single-day entries of a day, by time: a one-day start/end span, a lone start, a lone end, or a due date.
+ * A multi-day issue is drawn as a bar instead; its due date still gets a line when it falls outside the bar.
+ */
+export function dayLines(issues: Issue[], day: Date): DayLine[] {
+  const key = calendarDay(day)
+  const lines: DayLine[] = []
+  for (const issue of issues) {
+    const start = localDayKey(issue.startDate)
+    const end = localDayKey(issue.endDate)
+    const due = localDayKey(issue.dueDate)
+    const span = multiDaySpan(issue)
+    if (span) {
+      if (issue.dueDate && due === key && (due < span.start || due > span.end)) lines.push({ issue, kind: 'due', minutes: localMinutes(issue.dueDate) })
+      continue
+    }
+    if (issue.startDate && issue.endDate && start === key) lines.push({ issue, kind: 'span', minutes: localMinutes(issue.startDate) })
+    else if (issue.startDate && !issue.endDate && start === key) lines.push({ issue, kind: 'start', minutes: localMinutes(issue.startDate) })
+    else if (issue.endDate && !issue.startDate && end === key) lines.push({ issue, kind: 'end', minutes: localMinutes(issue.endDate) })
+    else if (issue.dueDate && due === key) lines.push({ issue, kind: 'due', minutes: localMinutes(issue.dueDate) })
+  }
+  return lines.sort((a, b) => a.minutes - b.minutes)
+}
+
+/** A compact clock for dense calendar lines: "9a", "2:30p" (12-hour locales) or "09:00" (24-hour). */
+export function shortTime(minutes: number, locale?: string): string {
+  const full = formatMinutes(minutes, locale)
+  const match = /^(\d{1,2}(?::\d{2})?)\s?([AaPp])\.?\s?[Mm]\.?$/.exec(full)
+  return match ? `${match[1]}${match[2].toLowerCase()}` : full
+}

@@ -20,6 +20,7 @@ import { API_BASE_URL } from '@/lib/api-base'
 import { useNavigationStore } from '@/stores/navigationStore'
 import { ExecutePage } from '@/pages/ExecutePage'
 import { CalendarPage } from '@/pages/CalendarPage'
+import { DeepResearchPage } from '@/pages/DeepResearchPage'
 import { ErrorBoundary } from '@/components/ui/ErrorBoundary'
 import { BuildWorkbenchPage } from '@/components/build'
 import { SuperAgentInterface } from '@/components/superagent/SuperAgentInterface'
@@ -43,6 +44,7 @@ export function HomePage() {
   // Home is the search page; it has no surface of its own (the content area shows through, Glass included).
   // A leftover 'documents' destination off the library shows it too.
   if (activeTab === 'home' || activeTab === 'documents') return <ErrorBoundary componentName="SearchHome"><SearchHome /></ErrorBoundary>
+  if (activeTab === 'research') return <ErrorBoundary componentName="DeepResearchPage"><DeepResearchPage sessionId={null} /></ErrorBoundary>
   return <div className="h-full overflow-auto bg-surface-0 text-ink dark:bg-surface-900 dark:text-ink-inverse">
     {activeTab === 'discover' && <ErrorBoundary componentName="Discover"><DiscoverContent /></ErrorBoundary>}
     {/* App routes 'execute' to ExecutePage directly; if HomePage is ever shown on that tab it renders the same real view. */}

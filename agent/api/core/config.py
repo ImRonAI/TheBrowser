@@ -297,3 +297,41 @@ RON_SEARCH_SHOPPING_DOMAINS = [
 #: Directory for persistent Strands Harness search sessions (SnapshotSessionManager + offloaded context).
 SEARCH_SESSIONS_DIR = SESSION_STORAGE_DIR / "search-sessions"
 SEARCH_SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
+
+
+# --- Deep Research (`core/deep_research.py`, `core/deep_research_tools.py`, `endpoints/deep_research.py`) ---
+def _env_bool(name: str, default: bool = True) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() not in {"0", "false", "no", "off"}
+
+
+_INIT_DEEP_RESEARCH_ENABLED: bool = _env_bool("RON_DEEP_RESEARCH_ENABLED", True)
+#: Kill-switch for Deep Research endpoints and async agent tools ("0"/"false" disables; default True).
+RON_DEEP_RESEARCH_ENABLED: bool = _INIT_DEEP_RESEARCH_ENABLED
+#: Optional model provider override for Deep Research formations (unset uses Ren's default selection).
+RON_DEEP_RESEARCH_PROVIDER: str | None = os.getenv("RON_DEEP_RESEARCH_PROVIDER", "").strip() or None
+#: Optional model id override for Deep Research formations (unset uses the provider's default model).
+RON_DEEP_RESEARCH_MODEL: str | None = os.getenv("RON_DEEP_RESEARCH_MODEL", "").strip() or None
+#: Overall execution timeout (seconds) for the top-level Deep Research Graph.
+RON_DEEP_RESEARCH_EXECUTION_TIMEOUT: float = float(os.getenv("RON_DEEP_RESEARCH_EXECUTION_TIMEOUT", "1200.0"))
+#: Per-node execution timeout (seconds) inside Deep Research formations.
+RON_DEEP_RESEARCH_NODE_TIMEOUT: float = float(os.getenv("RON_DEEP_RESEARCH_NODE_TIMEOUT", "300.0"))
+#: Maximum node executions before the top-level Deep Research Graph halts.
+RON_DEEP_RESEARCH_MAX_NODE_EXECUTIONS: int = int(os.getenv("RON_DEEP_RESEARCH_MAX_NODE_EXECUTIONS", "16"))
+#: Maximum verification -> investigation refinement loops per Deep Research run.
+RON_DEEP_RESEARCH_MAX_REFINEMENTS: int = int(os.getenv("RON_DEEP_RESEARCH_MAX_REFINEMENTS", "1"))
+#: Per-run Deep Research artifacts directory (`report.pdf`, `slides.md`, `slides/index.html`, `slides.pdf`).
+RON_DEEP_RESEARCH_ARTIFACTS_DIR: Path = Path(
+    os.getenv("RON_DEEP_RESEARCH_ARTIFACTS_DIR", "").strip()
+    or (Path.home() / ".ron" / "deep-research" / "artifacts")
+).expanduser()
+
+
+def deep_research_enabled() -> bool:
+    """True unless RON_DEEP_RESEARCH_ENABLED is disabled via env ('0'/'false') or attribute override."""
+    if RON_DEEP_RESEARCH_ENABLED != _INIT_DEEP_RESEARCH_ENABLED:
+        return bool(RON_DEEP_RESEARCH_ENABLED)
+    return _env_bool("RON_DEEP_RESEARCH_ENABLED", True)
+

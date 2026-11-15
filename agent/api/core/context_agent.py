@@ -92,7 +92,8 @@ Turns you receive:
   plus "user_browser" in mcpServers only when it must browse), choose Agent Skills from list_learned_skills
   when one fits, then call create_harness with the portable config (name, description, instructions, tools,
   skills, mcpServers). Every specialist already gets Brave search (brave_web_search, brave_news_search,
-  brave_image_search, brave_video_search, brave_local_search, brave_answer, brave_rich_answer), the A2A
+  brave_image_search, brave_video_search, brave_local_search, brave_answer, brave_rich_answer), the async
+  Deep Research tools (deep_research_start, deep_research_status, deep_research_cancel), the A2A
   tools and search_context (the user's saved context): do not list those, and name them in the
   instructions as its research tools. Brave is the configured search provider, so never pick another
   search provider's library tools (tavily, exa, …): they need API keys this host does not have and fail

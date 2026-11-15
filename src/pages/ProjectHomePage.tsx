@@ -16,6 +16,7 @@ import {
   PROJECT_TYPE_SCHEMES,
 } from '@/types/projects'
 import { IssueCard } from '@/components/projects/IssueCard'
+import { IssueColumn } from '@/components/projects/IssueColumn'
 import { BLOCKED_BAR, BlockedTag } from '@/components/projects/BlockedTag'
 import { useIssueBlocking } from '@/hooks/useIssueBlocking'
 import { ProjectDashboard } from '@/components/projects/dashboard/ProjectDashboard'
@@ -627,65 +628,43 @@ function ProjectBoardView({
           </button>
         ))}
       </div>
-      <div role="group" aria-label="Issues by status" className="flex gap-4 overflow-x-auto">
+      <div role="group" aria-label="Issues by status" className="flex gap-6 overflow-x-auto pb-2 pt-1 lg:gap-8">
         {columns.map((status) => {
           const items = boardIssues.filter((issue) => issue.status === status)
-          const label = ISSUE_STATUS_CONFIG[status].label
           const over = overStatus === status && draggingId !== null && items.every((item) => item.id !== draggingId)
           return (
-            <section
+            <IssueColumn
               key={status}
-              aria-label={`${label}, ${items.length} issues`}
-              className={cn(
-                'flex w-80 flex-shrink-0 flex-col rounded-3xl border p-4 shadow-soft transition-colors',
-                over ? 'border-accent/60 bg-accent/5 dark:border-accent-light/50' : 'border-surface-200 bg-surface-0 dark:border-surface-800 dark:bg-surface-900'
-              )}
+              status={status}
+              count={items.length}
+              over={over}
+              dragging={draggingId !== null}
+              onCreate={() => setCreateStatus(status)}
+              className="w-80"
               onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = 'move'; if (overStatus !== status) setOverStatus(status) }}
               onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setOverStatus(null) }}
               onDrop={(event) => void handleDrop(event, status)}
             >
-              <div className="flex items-center justify-between gap-2">
-                <div className="flex min-w-0 items-center gap-2">
-                  <IssueStatusBadge status={status} />
-                  <span className="rounded-full bg-surface-200/70 px-1.5 text-[11px] font-medium tabular-nums text-ink-muted dark:bg-surface-800 dark:text-ink-inverse-muted">{items.length}</span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setCreateStatus(status)}
-                  aria-label={`New ${label} issue`}
-                  title={`New ${label} issue`}
-                  className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-ink-muted transition-colors hover:bg-surface-200/70 hover:text-ink dark:text-ink-inverse-muted dark:hover:bg-surface-800 dark:hover:text-ink-inverse"
-                >
-                  <Plus className="h-4 w-4" />
-                </button>
-              </div>
-              <div className="mt-4 flex min-h-[5rem] flex-1 flex-col gap-3.5">
-                {items.map((issue) => (
-                  <IssueCard
-                    key={issue.id}
-                    issue={issue}
-                    issueKey={project ? `${project.key}-${issue.number}` : undefined}
-                    people={people}
-                    issues={projectIssues}
-                    dragging={draggingId === issue.id}
-                    draggable={pendingSaves === 0}
-                    aria-roledescription="Draggable issue"
-                    onDragStart={(event) => {
-                      event.dataTransfer.setData('text/plain', issue.id)
-                      event.dataTransfer.effectAllowed = 'move'
-                      setDraggingId(issue.id)
-                    }}
-                    onDragEnd={() => { setDraggingId(null); setOverStatus(null) }}
-                    onClick={() => onIssueSelect(issue.id)}
-                  />
-                ))}
-                {items.length === 0 && (
-                  <p className="flex flex-1 items-center justify-center rounded-xl border border-dashed border-surface-200 px-3 py-6 text-center text-[12px] text-ink-muted dark:border-surface-800 dark:text-ink-inverse-muted">
-                    {draggingId ? 'Drop to move here' : 'No issues'}
-                  </p>
-                )}
-              </div>
-            </section>
+              {items.map((issue) => (
+                <IssueCard
+                  key={issue.id}
+                  issue={issue}
+                  issueKey={project ? `${project.key}-${issue.number}` : undefined}
+                  people={people}
+                  issues={projectIssues}
+                  dragging={draggingId === issue.id}
+                  draggable={pendingSaves === 0}
+                  aria-roledescription="Draggable issue"
+                  onDragStart={(event) => {
+                    event.dataTransfer.setData('text/plain', issue.id)
+                    event.dataTransfer.effectAllowed = 'move'
+                    setDraggingId(issue.id)
+                  }}
+                  onDragEnd={() => { setDraggingId(null); setOverStatus(null) }}
+                  onClick={() => onIssueSelect(issue.id)}
+                />
+              ))}
+            </IssueColumn>
           )
         })}
       </div>

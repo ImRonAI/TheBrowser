@@ -4,11 +4,11 @@ import { cn } from '@/utils/cn'
 
 /** Status colours shared with the issue calendar's dots. */
 export const STATUS_FILL: Record<IssueStatus, string> = {
-  backlog: 'bg-surface-400',
-  'in-progress': 'bg-accent dark:bg-accent-light',
-  review: 'bg-info',
-  blocked: 'bg-danger',
-  done: 'bg-success',
+  backlog: 'bg-surface-300 dark:bg-surface-600',
+  'in-progress': 'bg-blurple-600 dark:bg-blurple-400',
+  review: 'bg-ink/60 dark:bg-ink-inverse/60',
+  blocked: 'bg-rose-500 dark:bg-rose-400',
+  done: 'bg-ink/25 dark:bg-ink-inverse/25',
 }
 
 export const SURFACE = 'rounded-2xl border border-surface-200 bg-surface-0 shadow-soft dark:border-surface-800 dark:bg-surface-900'

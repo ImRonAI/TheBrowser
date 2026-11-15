@@ -30,6 +30,10 @@ export interface ContextRef {
   interestId?: string
   documentId?: string
   contextItemId?: string
+  contextAskId?: string
+  contextVisitUrl?: string
+  contextRunId?: string
+  contextRecommendationId?: string
   /** ISO time of an event. */
   at?: string
   /** For events: which date of the issue (`due`, `start`, `end`) or `today`. */
@@ -53,7 +57,7 @@ export interface ContextItem {
   tab_context?: unknown
 }
 
-export type CategoryId = 'tabs' | 'conversations' | 'issues' | 'projects' | 'dates' | 'interests' | 'documents'
+export type CategoryId = 'context' | 'tabs' | 'conversations' | 'issues' | 'projects' | 'dates' | 'interests' | 'documents'
 
 export interface ContextCategory {
   id: CategoryId
@@ -156,12 +160,213 @@ export function documentItem(doc: { id: string; title: string; projectId: string
   }
 }
 
-export function savedContextItem(item: { id: string; kind: string; title: string; added: string; source: string }, now = Date.now()): ContextItem {
+export interface SavedContextRow {
+  id: string
+  kind: string
+  title: string
+  added: string
+  source: string
+  preview?: string
+}
+
+export interface ContextAskSource {
+  id: string
+  question: string
+  answer: string
+  error?: string
+}
+
+export interface ContextVisitSource {
+  url: string
+  title: string
+  at: number
+}
+
+export interface ContextRunSource {
+  id: string
+  agent_name: string
+  status: string
+  summary: string
+  error: string
+  started_at: string
+  finished_at: string | null
+  session_id?: string
+}
+
+export interface ContextRecommendationSource {
+  id: string
+  name: string
+  description: string
+  interest: string
+  rationale: string
+  tools?: string[]
+  skills?: string[]
+}
+
+export function savedContextItem(item: SavedContextRow, now = Date.now()): ContextItem {
+  const previewText = item.preview ? item.preview.replace(/\s+/g, ' ').trim() : ''
+  const detail = item.source && item.source !== item.title
+    ? item.source
+    : previewText
+      ? (previewText.length > 90 ? `${previewText.slice(0, 89)}…` : previewText)
+      : ''
   return {
-    id: `file:${item.id}`, type: 'file', name: item.title || item.source || item.kind,
-    description: `Saved ${item.kind}${item.source && item.source !== item.title ? ` · ${item.source}` : ''}`,
-    meta: relativeTime(item.added, now), ref: { contextItemId: item.id },
+    id: `file:${item.id}`,
+    type: 'file',
+    name: item.title || item.source || item.kind,
+    description: `Saved ${item.kind}${detail ? ` · ${detail}` : ''}`,
+    meta: relativeTime(item.added, now),
+    ref: { contextItemId: item.id },
   }
+}
+
+/** Merge `GET /context/items` rows with in-store Context Agent widget `items`, deduplicating by `id` newest first. */
+export function mergeSavedContextRows<T extends SavedContextRow>(
+  remoteRows: readonly T[],
+  widgetRows: readonly T[],
+): T[] {
+  const byId = new Map<string, T>()
+  for (const row of widgetRows) {
+    if (row.id) byId.set(row.id, row)
+  }
+  for (const row of remoteRows) {
+    if (row.id) byId.set(row.id, row)
+  }
+  return Array.from(byId.values()).sort((a, b) => (Date.parse(b.added) || 0) - (Date.parse(a.added) || 0))
+}
+
+export function contextAskContent(turn: ContextAskSource): string {
+  const answer = turn.answer.trim() || (turn.error ? `Error: ${turn.error}` : '(Pending answer from Context Agent)')
+  return `Context Agent Q&A:\nQuestion: ${turn.question.trim()}\n\nAnswer:\n${answer}`
+}
+
+export function contextAskItem(turn: ContextAskSource): ContextItem {
+  const question = turn.question.trim() || 'Context Agent question'
+  const answerOneLine = turn.answer.replace(/\s+/g, ' ').trim()
+  const snippet = answerOneLine
+    ? (answerOneLine.length > 90 ? `${answerOneLine.slice(0, 89)}…` : answerOneLine)
+    : turn.error
+      ? turn.error
+      : 'Thinking…'
+  return {
+    id: `context-ask:${turn.id}`,
+    type: 'file',
+    name: question,
+    description: `Context Ask · ${snippet}`,
+    meta: 'Ask',
+    color: 'bg-blurple-500',
+    ref: { contextAskId: turn.id },
+    content: contextAskContent(turn),
+  }
+}
+
+export function contextVisitContent(visit: ContextVisitSource): string {
+  const iso = new Date(visit.at).toISOString()
+  return [
+    `Recent page observed in Context:`,
+    `Title: ${visit.title.trim() || '(untitled)'}`,
+    `URL: ${visit.url}`,
+    `Visited: ${formatWhen(iso)}`,
+  ].join('\n')
+}
+
+export function contextVisitItem(visit: ContextVisitSource, now = Date.now()): ContextItem {
+  const iso = new Date(visit.at).toISOString()
+  return {
+    id: `context-visit:${visit.url}`,
+    type: 'file',
+    name: visit.title.trim() || visit.url,
+    description: `Recent browsing · ${visit.url}`,
+    meta: relativeTime(iso, now),
+    color: 'bg-sky-500',
+    url: visit.url,
+    ref: { contextVisitUrl: visit.url, at: iso },
+    content: contextVisitContent(visit),
+  }
+}
+
+export function contextRunContent(run: ContextRunSource): string {
+  const when = formatWhen(run.finished_at ?? run.started_at)
+  const body = run.summary.trim() || (run.error.trim() ? `Error: ${run.error.trim()}` : '(No summary recorded yet.)')
+  return `Specialist agent run "${run.agent_name || 'Context Specialist'}" (${run.status}, ${when}):\n\n${body}`
+}
+
+export function contextRunItem(run: ContextRunSource, now = Date.now()): ContextItem {
+  const oneLine = (run.summary || run.error).replace(/\s+/g, ' ').trim()
+  const excerpt = oneLine.length > 90 ? `${oneLine.slice(0, 89)}…` : oneLine
+  return {
+    id: `context-run:${run.id}`,
+    type: 'file',
+    name: `${run.agent_name || 'Specialist'} · ${run.status}`,
+    description: `Agent run${excerpt ? ` · ${excerpt}` : ''}`,
+    meta: relativeTime(run.finished_at ?? run.started_at, now),
+    color: run.status === 'failed' ? 'bg-rose-500' : 'bg-emerald-500',
+    ref: { contextRunId: run.id, ...(run.session_id ? { sessionId: run.session_id } : {}) },
+    content: contextRunContent(run),
+  }
+}
+
+export function contextRecommendationContent(rec: ContextRecommendationSource): string {
+  return [
+    `Recommended Context specialist: ${rec.name}`,
+    rec.interest ? `Interest: ${rec.interest}` : '',
+    rec.description ? `Description: ${rec.description}` : '',
+    rec.rationale ? `Rationale: ${rec.rationale}` : '',
+    rec.tools?.length ? `Tools: ${rec.tools.join(', ')}` : '',
+    rec.skills?.length ? `Skills: ${rec.skills.join(', ')}` : '',
+  ].filter(Boolean).join('\n')
+}
+
+export function contextRecommendationItem(rec: ContextRecommendationSource): ContextItem {
+  return {
+    id: `context-rec:${rec.id}`,
+    type: 'file',
+    name: `Recommended · ${rec.name}`,
+    description: [rec.interest, rec.description].filter(Boolean).join(' · '),
+    meta: 'Agent',
+    color: 'bg-blurple-500',
+    ref: { contextRecommendationId: rec.id },
+    content: contextRecommendationContent(rec),
+  }
+}
+
+/**
+ * Build the complete list of selectable items for the `Context` parent category (`id: 'context'`),
+ * surfacing everything currently in the Context Agent widget (`GET /context/items` merged with
+ * `useContextAgentStore` `items`, `asks`, `visits`, `runs`, and `recommendations`).
+ */
+export function widgetContextItems(
+  sources: {
+    savedItems?: readonly SavedContextRow[]
+    storeItems?: readonly SavedContextRow[]
+    asks?: readonly ContextAskSource[]
+    visits?: readonly ContextVisitSource[]
+    runs?: readonly ContextRunSource[]
+    recommendations?: readonly ContextRecommendationSource[]
+  },
+  now = Date.now(),
+): ContextItem[] {
+  const mergedSaved = mergeSavedContextRows(sources.savedItems ?? [], sources.storeItems ?? [])
+  const askItems = [...(sources.asks ?? [])].reverse().map(contextAskItem)
+  const visitByUrl = new Map<string, ContextVisitSource>()
+  for (const visit of sources.visits ?? []) {
+    if (visit.url) visitByUrl.set(visit.url, visit)
+  }
+  const visitItems = Array.from(visitByUrl.values())
+    .sort((a, b) => b.at - a.at)
+    .map((visit) => contextVisitItem(visit, now))
+  const runItems = [...(sources.runs ?? [])]
+    .sort((a, b) => (b.finished_at ?? b.started_at).localeCompare(a.finished_at ?? a.started_at))
+    .map((run) => contextRunItem(run, now))
+  const recItems = (sources.recommendations ?? []).map(contextRecommendationItem)
+
+  return [
+    ...mergedSaved.map((row) => savedContextItem(row, now)),
+    ...askItems,
+    ...visitItems,
+    ...runItems,
+    ...recItems,
+  ]
 }
 
 /** Today's date, so "this week" or "tomorrow" in a message resolves the way the user means it. */
@@ -371,4 +576,23 @@ export function eventContent(item: ContextItem, issue: Issue | undefined, projec
 export function documentContent(title: string, html: string, projectName?: string, maxChars = 12000): string {
   const text = htmlToText(html)
   return `Project page "${title || 'Untitled'}"${projectName ? ` in ${projectName}` : ''}:\n${text ? clip(text, maxChars) : '(This page is empty.)'}`
+}
+
+/**
+ * Format resolved composer `PromptAttachment`s (picked context items, `@` mentions, and long pastes)
+ * into clean Markdown passed as `context` to `POST /deep-research/runs`.
+ */
+export function formatAttachmentsForResearchContext(
+  attachments: readonly { kind: string; title: string; text: string; url?: string; source?: string }[],
+): string {
+  const blocks: string[] = []
+  for (const att of attachments) {
+    const body = att.text.trim()
+    if (!body) continue
+    const headerLines = [`### [${att.kind.toUpperCase()}] ${att.title || 'Attached Context'}`]
+    if (att.url) headerLines.push(`URL: ${att.url}`)
+    if (att.source) headerLines.push(`Source: ${att.source}`)
+    blocks.push(`${headerLines.join('\n')}\n\n${body}`)
+  }
+  return blocks.join('\n\n---\n\n')
 }

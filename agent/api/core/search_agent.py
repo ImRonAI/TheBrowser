@@ -314,6 +314,7 @@ def build_shopping_subagent_tool(
 def create_search_agent(
     level: SearchLevel = "medium",
     *,
+    user_id: str = "default",
     session_id: str | None = None,
     session_dir: Path | str | None = None,
     provider: str | None = None,
@@ -347,14 +348,17 @@ def create_search_agent(
         else False
     )
     loc_note = _location_context_note(location, country)
+    from agent.api.core.deep_research_tools import DEEP_RESEARCH_DIRECTIVE, deep_research_tools
+
+    suffix_parts = [part for part in (loc_note, DEEP_RESEARCH_DIRECTIVE.strip()) if part]
     return build_harness_from_config(
         config,
         provider=resolved_provider,
         model_id=resolved_model_id,
         effort_override=effort,
-        extra_tools=[shopping_tool],
+        extra_tools=[shopping_tool, *deep_research_tools(user_id=user_id)],
         session_override=session_opt,
-        instructions_suffix=loc_note or None,
+        instructions_suffix="\n\n".join(suffix_parts) if suffix_parts else None,
     )
 
 
@@ -394,6 +398,7 @@ def get_or_create_search_session(
     session_id: str,
     level: SearchLevel = "medium",
     *,
+    user_id: str = "default",
     provider: str | None = None,
     model_id: str | None = None,
     shopping_model_id: str | None = None,
@@ -415,10 +420,13 @@ def get_or_create_search_session(
             effort = resolve_search_effort(resolved_provider, resolved_model_id, level, str(cfg.get("effort") or "low"))
             if resolved_provider in PROVIDERS:
                 existing.agent.model = build_model(resolved_provider, resolved_model_id, reasoning_effort=effort)
+            from agent.api.core.deep_research_tools import DEEP_RESEARCH_DIRECTIVE
+
             loc_note = _location_context_note(location, country)
             instructions = str(cfg.get("instructions") or "")
-            if loc_note:
-                instructions = f"{instructions}\n\n{loc_note}"
+            for extra_note in (loc_note, DEEP_RESEARCH_DIRECTIVE.strip()):
+                if extra_note:
+                    instructions = f"{instructions}\n\n{extra_note}"
             existing.agent.system_prompt = build_system_prompt(instructions)
             existing.level = level
         return existing.agent, existing
@@ -431,6 +439,7 @@ def get_or_create_search_session(
 
     agent = create_search_agent(
         level,
+        user_id=user_id,
         session_id=session_id,
         provider=resolved_provider,
         model_id=resolved_model_id,

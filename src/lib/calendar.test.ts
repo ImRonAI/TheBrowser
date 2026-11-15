@@ -4,8 +4,8 @@ import { test } from 'node:test'
 process.env.TZ = 'America/New_York'
 
 const {
-  addDays, isCurrentPeriod, issuesInRange, issuesOnDay, layoutOverlaps, monthWeeks, periodLabel, periodRange,
-  placeIssuesOnDay, quarterMonths, startOfWeek, stepDate, unscheduledIssues, weekDays,
+  addDays, dayLines, isCurrentPeriod, isMultiDay, issuesInRange, issuesOnDay, layoutOverlaps, monthWeeks, periodLabel, periodRange,
+  placeIssuesOnDay, quarterMonths, rowSpans, shortTime, startOfWeek, stepDate, unscheduledIssues, weekDays,
 } = await import('./calendar.ts')
 const { fromLocalDateTime } = await import('./project-issue-utils.ts')
 type Issue = import('../types/projects.ts').Issue
@@ -99,4 +99,44 @@ test('overlapping blocks share columns per cluster', () => {
   const laid = layoutOverlaps([mk('a', 540, 600), mk('b', 570, 660), mk('c', 600, 630), mk('d', 720, 750)])
   const byId = Object.fromEntries(laid.map((b) => [b.issue.id, [b.column, b.columns]]))
   assert.deepEqual(byId, { a: [0, 2], b: [1, 2], c: [0, 2], d: [0, 1] })
+})
+
+test('multi-day issues become continuous bars in the lowest free lane of each week row', () => {
+  const week = weekDays(new Date(2026, 10, 1)) // Sun Nov 1 .. Sat Nov 7
+  const spans = rowSpans([
+    issue('c', { startDate: at('2026-11-05T09:00'), endDate: at('2026-11-06T17:00') }),
+    issue('a', { startDate: at('2026-11-02T09:00'), endDate: at('2026-11-04T17:00') }),
+    issue('b', { startDate: at('2026-11-03T09:00'), endDate: at('2026-11-05T17:00') }),
+    issue('d', { startDate: at('2026-10-30T09:00'), endDate: at('2026-11-02T12:00') }),
+    issue('e', { startDate: at('2026-11-06T09:00'), endDate: at('2026-11-12T12:00') }),
+    issue('oneday', { startDate: at('2026-11-03T09:00'), endDate: at('2026-11-03T10:00') }),
+    issue('later', { startDate: at('2026-11-09T09:00'), endDate: at('2026-11-10T10:00') }),
+  ], week)
+  const byId = Object.fromEntries(spans.map((s) => [s.issue.id, s]))
+  assert.deepEqual(spans.map((s) => s.issue.id), ['d', 'a', 'b', 'c', 'e'])
+  assert.deepEqual([byId.d.startCol, byId.d.endCol, byId.d.lane, byId.d.continuesBefore], [0, 1, 0, true])
+  assert.deepEqual([byId.a.startCol, byId.a.endCol, byId.a.lane], [1, 3, 1])
+  assert.deepEqual([byId.b.startCol, byId.b.endCol, byId.b.lane], [2, 4, 0])
+  assert.deepEqual([byId.c.startCol, byId.c.endCol, byId.c.lane], [4, 5, 1])
+  assert.deepEqual([byId.e.startCol, byId.e.endCol, byId.e.lane, byId.e.continuesAfter], [5, 6, 0, true])
+  assert.equal(isMultiDay(byId.a.issue), true)
+})
+
+test('day lines hold every single-day entry by time, and a bar issue only for a due date outside its bar', () => {
+  const lines = dayLines([
+    issue('meeting', { startDate: at('2026-11-05T09:00'), endDate: at('2026-11-05T10:30') }),
+    issue('due', { dueDate: at('2026-11-05T15:00') }),
+    issue('kickoff', { startDate: at('2026-11-05T07:15') }),
+    issue('handoff', { endDate: at('2026-11-05T17:00') }),
+    issue('sprint', { startDate: at('2026-11-03T09:00'), endDate: at('2026-11-06T17:00'), dueDate: at('2026-11-05T12:00') }),
+    issue('late', { startDate: at('2026-11-01T09:00'), endDate: at('2026-11-03T17:00'), dueDate: at('2026-11-05T11:00') }),
+  ], new Date(2026, 10, 5))
+  assert.deepEqual(lines.map((l) => `${l.issue.id}:${l.kind}:${l.minutes}`),
+    ['kickoff:start:435', 'meeting:span:540', 'late:due:660', 'due:due:900', 'handoff:end:1020'])
+})
+
+test('short times drop the minutes on the hour', () => {
+  assert.equal(shortTime(9 * 60, 'en-US'), '9a')
+  assert.equal(shortTime(14 * 60 + 30, 'en-US'), '2:30p')
+  assert.equal(shortTime(14 * 60 + 30, 'en-GB'), '14:30')
 })

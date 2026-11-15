@@ -1,8 +1,27 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  documentContent, htmlToText, importantDates, issueContent, issueItem, mentionAt, projectContent, projectItem, removeMention,
-  searchContexts, threadContent, threadItem, todayItem, type ContextCategory,
+  contextAskContent,
+  contextRecommendationContent,
+  contextRunContent,
+  contextVisitContent,
+  documentContent,
+  formatAttachmentsForResearchContext,
+  htmlToText,
+  importantDates,
+  issueContent,
+  issueItem,
+  mentionAt,
+  mergeSavedContextRows,
+  projectContent,
+  projectItem,
+  removeMention,
+  searchContexts,
+  threadContent,
+  threadItem,
+  todayItem,
+  widgetContextItems,
+  type ContextCategory,
 } from './chat-context.ts'
 import type { Issue, Project } from '../types/projects.ts'
 import type { Thread } from './threads-api.ts'
@@ -110,4 +129,108 @@ test('html to text and page content', () => {
   assert.equal(htmlToText('<h1>Plan</h1><p>A<br>B</p><p></p><p>C</p>'), 'Plan\nA\nB\n\nC')
   assert.match(documentContent('Spec', '<p>Hello</p>', 'Ron Browser'), /^Project page "Spec" in Ron Browser:\nHello$/)
   assert.equal(documentContent('Blank', '<p></p>'), 'Project page "Blank":\n(This page is empty.)')
+})
+
+test('Context parent category merges & deduplicates saved items, Ask turns, browsing visits, runs, and recommendations', () => {
+  const remoteRows = [
+    { id: 'c1', kind: 'note', title: 'Electrolyte benchmark note', added: at(-1), source: '', preview: 'Sulfide vs oxide conductivity' },
+    { id: 'c2', kind: 'article', title: 'Grid queue report', added: at(0), source: 'https://ferc.gov/queues' },
+  ]
+  const storeRows = [
+    { id: 'c1', kind: 'note', title: 'Stale title', added: at(-1), source: '' },
+    { id: 'c3', kind: 'screenshot', title: 'Screenshot: Architecture', added: at(1), source: 'https://arxiv.org/abs/2601.0001' },
+  ]
+
+  const merged = mergeSavedContextRows(remoteRows, storeRows)
+  assert.deepEqual(merged.map((r) => r.id), ['c3', 'c2', 'c1'])
+  assert.equal(merged[2].title, 'Electrolyte benchmark note')
+
+  const items = widgetContextItems(
+    {
+      savedItems: remoteRows,
+      storeItems: storeRows,
+      asks: [
+        { id: 'a1', question: 'What did I save on grid queues?', answer: 'You saved the FERC interconnection report.' },
+      ],
+      visits: [
+        { url: 'https://ieee.org/spectrum/grid', title: 'IEEE Grid Storage', at: NOW - 120_000 },
+      ],
+      runs: [
+        {
+          id: 'r1',
+          agent_name: 'Grid Scout',
+          status: 'completed',
+          summary: 'Three new ERCOT queue filings published.',
+          error: '',
+          started_at: at(-1),
+          finished_at: at(0),
+          session_id: 'sess-grid',
+        },
+      ],
+      recommendations: [
+        {
+          id: 'rec1',
+          name: 'Battery Supply Monitor',
+          description: 'Tracks pilot cell yields weekly',
+          interest: 'Energy storage',
+          rationale: 'Matches saved electrolyte benchmarks',
+          tools: ['brave_web_search'],
+          skills: ['market-scan'],
+        },
+      ],
+    },
+    NOW,
+  )
+
+  assert.equal(items.length, 7)
+  assert.equal(items[0].id, 'file:c3')
+  assert.equal(items[0].ref?.contextItemId, 'c3')
+  assert.equal(items[3].id, 'context-ask:a1')
+  assert.equal(items[3].ref?.contextAskId, 'a1')
+  assert.equal(items[4].id, 'context-visit:https://ieee.org/spectrum/grid')
+  assert.equal(items[5].id, 'context-run:r1')
+  assert.equal(items[6].id, 'context-rec:rec1')
+
+  const contextCategory: ContextCategory = {
+    id: 'context',
+    name: 'Context',
+    description: '7 items in your Context widget',
+    items,
+  }
+  const matches = searchContexts([contextCategory], 'ferc')
+  assert.ok(matches.length >= 1)
+  assert.equal(matches[0].category.id, 'context')
+
+  assert.match(contextAskContent({ id: 'a1', question: 'Why qLDPC?', answer: '10x lower overhead.' }), /Question: Why qLDPC\?/)
+  assert.match(contextVisitContent({ url: 'https://ieee.org', title: 'IEEE', at: NOW }), /URL: https:\/\/ieee\.org/)
+  assert.match(
+    contextRunContent({
+      id: 'r1',
+      agent_name: 'Scout',
+      status: 'completed',
+      summary: 'All clear.',
+      error: '',
+      started_at: at(-1),
+      finished_at: at(0),
+    }),
+    /Specialist agent run "Scout"/,
+  )
+  assert.match(
+    contextRecommendationContent({
+      id: 'rec1',
+      name: 'Monitor',
+      description: 'Watches filings',
+      interest: 'Grid',
+      rationale: 'Frequent topic',
+    }),
+    /Recommended Context specialist: Monitor/,
+  )
+
+  const formatted = formatAttachmentsForResearchContext([
+    { kind: 'file', title: 'Electrolyte benchmark note', text: 'Sulfide 12 mS/cm', source: 'Saved note' },
+    { kind: 'tab', title: 'IEEE Grid Storage', url: 'https://ieee.org/spectrum/grid', text: 'Full article text' },
+  ])
+  assert.match(formatted, /### \[FILE\] Electrolyte benchmark note/)
+  assert.match(formatted, /---/)
+  assert.match(formatted, /URL: https:\/\/ieee\.org\/spectrum\/grid/)
 })

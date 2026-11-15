@@ -1,5 +1,5 @@
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
-import { Calendar, Columns3, Compass, Globe, Hammer, House, Music2, Plus, Search, X, type LucideIcon } from 'lucide-react'
+import { Calendar, Columns3, Compass, Globe, Hammer, House, Microscope, Music2, Plus, Search, X, type LucideIcon } from 'lucide-react'
 import { useTabStore, type Tab } from '@/stores/tabStore'
 import { RenMark, RenWordmark } from '@/components/brand'
 import { cn } from '@/utils/cn'
@@ -80,7 +80,7 @@ export function useTabActions() {
 
 /** The icon of one of Ren's own pages (`ron://<page>`), matching the sidebar's destinations; null when unknown. */
 const INTERNAL_PAGE_ICONS: Record<string, LucideIcon> = {
-  home: House, discover: Compass, execute: Columns3, board: Columns3, projects: Columns3, calendar: Calendar,
+  home: House, discover: Compass, research: Microscope, execute: Columns3, board: Columns3, projects: Columns3, calendar: Calendar,
   vibe: Music2, build: Hammer, search: Search,
 }
 function internalPageIcon(url: string): LucideIcon | null {

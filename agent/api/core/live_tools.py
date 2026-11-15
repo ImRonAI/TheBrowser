@@ -114,6 +114,7 @@ def build_live_tools(
     resolve_agent: Callable[[], Any] | None = None,
 ) -> list[AgentTool]:
     """Host, learned-skill and memory tools; the browser ``MCPClient`` is added by ``create_live_agent``."""
+    from agent.api.core.deep_research_tools import deep_research_tools, is_deep_research_tool
     from agent.api.core.panel_agent import user_memory_tools
     from agent.api.core.teaching import create_learned_skill_tools
 
@@ -127,6 +128,7 @@ def build_live_tools(
             if value.tool_name not in {"use_skill", "list_learned_skills", "create_harness"}
             and not value.tool_name.startswith("strands_") and not is_browser_tool(value.tool_name)
             and not value.tool_name.startswith("a2a_")
+            and not is_deep_research_tool(value.tool_name)
         ]
 
     learned = create_learned_skill_tools(
@@ -138,8 +140,15 @@ def build_live_tools(
     from agent.api.core.harness_agents import create_harness_tools
     from agent.api.core.music_generation import music_generation_tools
 
-    return [*host, *learned, *user_memory_tools(user_id, agent_scope), *a2a_tools(),
-            *create_harness_tools(user_id), *music_generation_tools(user_id)]
+    return [
+        *host,
+        *learned,
+        *user_memory_tools(user_id, agent_scope),
+        *a2a_tools(),
+        *create_harness_tools(user_id),
+        *music_generation_tools(user_id),
+        *deep_research_tools(user_id=user_id),
+    ]
 
 
 def live_music_tools(emit: Callable[[dict[str, Any]], Awaitable[None]] | None, user_id: str = "default") -> tuple[list[AgentTool], str, Any]:

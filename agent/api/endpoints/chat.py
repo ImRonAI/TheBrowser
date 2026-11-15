@@ -111,6 +111,7 @@ input when a required decision or permission is genuinely missing.
 - brave_video_search: search videos via Brave Search.
 - brave_local_search: search local places and POIs (with AI descriptions) via Brave Search.
 - brave_rich_answer: fetch structured instant answers (weather, stocks, crypto, currency, calculator, sports, definitions) via Brave Search.
+- deep_research_start / deep_research_status / deep_research_cancel: launch, inspect, or cancel asynchronous multi-stage Deep Research formations (returns `ron://research/<session_id>` immediately).
 - tool_catalog: discover and load additional tools from the project library ({PROJECT_TOOLS_DIR}).
 - ask_user: pause and ask the user a question when you genuinely need their input.
 

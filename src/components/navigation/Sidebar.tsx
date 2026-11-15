@@ -19,6 +19,7 @@ import { RenWordmark } from '@/components/brand'
 import { useNavigationStore, type HomeTab } from '@/stores/navigationStore'
 import { useTabStore } from '@/stores/tabStore'
 import { parseDocumentsLibraryUrl } from '@/lib/project-documents'
+import { parseResearchUrl } from '@/lib/deep-research-api'
 import { DESTINATIONS, openDestination } from '@/components/navigation/destinations'
 import { useTextAssist } from '@/hooks/useTextAssist'
 import { TextAssist, handleAssistKey } from '@/components/shared/TextAssist'
@@ -61,10 +62,11 @@ const ROW_HOVER = 'hover:bg-ink/[0.06] hover:text-ink dark:hover:bg-ink-inverse/
 
 export function Sidebar() {
   const { isSidebarOpen, searchFocusRequest, activeTab } = useNavigationStore()
-  // The library is routed by the tab's URL, so Documents is lit exactly while it shows. Off the library a
-  // leftover 'documents' destination lights Home, the page MainContent shows for it.
-  const onDocuments = useTabStore((state) => parseDocumentsLibraryUrl(state.tabs.find((tab) => tab.id === state.activeTabId)?.url) !== null)
-  const currentDestination: HomeTab = onDocuments ? 'documents' : activeTab === 'documents' ? 'home' : activeTab
+  // The library and Deep Research are routed by the tab's URL, so they light whenever their URL shows.
+  const activeTabUrl = useTabStore((state) => state.tabs.find((tab) => tab.id === state.activeTabId)?.url)
+  const onDocuments = parseDocumentsLibraryUrl(activeTabUrl) !== null
+  const onResearch = parseResearchUrl(activeTabUrl) !== null
+  const currentDestination: HomeTab = onResearch ? 'research' : onDocuments ? 'documents' : activeTab === 'documents' ? 'home' : activeTab
   const { level } = useSearchStore()
   const reduced = useReducedMotion()
   const user = useAuthStore((state) => state.user?.id || 'default')

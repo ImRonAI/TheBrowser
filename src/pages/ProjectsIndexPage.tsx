@@ -5,6 +5,7 @@ import { PROJECT_TYPE_SCHEMES, type Project } from '@/types/projects'
 import { ProjectTypeIcon } from '@/components/projects/badges'
 import { CreateProjectDialog } from '@/components/projects/dialogs'
 import { PageBackground } from '@/components/shared/PageBackground'
+import { Marker } from '@/components/brand'
 import { Button } from '@/components/ui/button'
 import { useElementWidth } from '@/hooks/useElementWidth'
 import { isGuestUserId, openSignIn } from '@/lib/sign-in'
@@ -217,12 +218,13 @@ export function ProjectsIndexPage() {
       <PageBackground />
       <div ref={contentRef} className="relative mx-auto w-full max-w-[1360px] px-4 pb-16 pt-8 sm:px-6 sm:pt-10 lg:px-10 lg:pt-12">
         <header className="flex flex-wrap items-end justify-between gap-x-8 gap-y-5">
-          <div className="min-w-0">
-            <span className="tag-label tag-label-slash">{guest ? 'Guest workspace' : 'Workspace'}</span>
-            <h1 className="ren-display mt-3 text-[44px] text-ink dark:text-ink-inverse sm:text-[56px]">
-              Projects<span className="text-volt">.</span>
+          <div className="relative min-w-0">
+            <div aria-hidden className="halftone pointer-events-none absolute -left-16 -top-12 h-44 w-[26rem] opacity-70 dark:opacity-50" />
+            <span className="tag-label tag-label-slash relative">{guest ? 'Guest workspace' : 'Workspace'}</span>
+            <h1 className="ren-display relative mt-3 text-[44px] text-ink dark:text-ink-inverse sm:text-[56px]">
+              Plans, with{' '}<span className="spray-halo inline-block"><Marker>receipts.</Marker></span>
             </h1>
-            <p className="mt-3 text-[14px] leading-6 text-ink-secondary dark:text-ink-inverse-secondary" aria-live="polite">
+            <p className="relative mt-3 text-[14px] leading-6 text-ink-secondary dark:text-ink-inverse-secondary" aria-live="polite">
               {phase === 'ready' && projects.length > 0 ? (
                 <>
                   <Strong>{plural(visible.length, 'project')}</Strong>

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Loader2 } from 'lucide-react'
 import { PageBackground } from '@/components/shared/PageBackground'
+import { Marker } from '@/components/brand'
 import { DocumentWorkspace, type DocumentScope } from '@/components/projects/documents/ProjectDocuments'
 import { IssueDrawer } from '@/components/projects/IssueDrawer'
 import { openInternalUrl } from '@/components/board/task-detail/editor/extensions/blocks/workspace'
@@ -53,12 +54,13 @@ export function DocumentsPage({ documentId }: { documentId: string | null }) {
     <div className="relative isolate min-h-full bg-surface-50 dark:bg-surface-900">
       <PageBackground />
       <div ref={contentRef} className="relative mx-auto w-full max-w-[1360px] px-4 pb-16 pt-8 sm:px-6 sm:pt-10 lg:px-10 lg:pt-12">
-        <header className="min-w-0">
-          <span className="tag-label tag-label-slash">{guest ? 'Guest workspace' : 'Library'}</span>
-          <h1 className="ren-display mt-3 text-[44px] text-ink dark:text-ink-inverse sm:text-[56px]">
-            Documents<span className="text-volt">.</span>
+        <header className="relative min-w-0">
+          <div aria-hidden className="halftone pointer-events-none absolute -left-16 -top-12 h-44 w-[26rem] opacity-70 dark:opacity-50" />
+          <span className="tag-label tag-label-slash relative">{guest ? 'Guest workspace' : 'Library'}</span>
+          <h1 className="ren-display relative mt-3 text-[44px] text-ink dark:text-ink-inverse sm:text-[56px]">
+            Put it in{' '}<span className="spray-halo inline-block"><Marker>writing.</Marker></span>
           </h1>
-          <p className="mt-3 max-w-2xl text-[14px] leading-6 text-ink-secondary dark:text-ink-inverse-secondary">
+          <p className="relative mt-3 max-w-2xl text-[14px] leading-6 text-ink-secondary dark:text-ink-inverse-secondary">
             Your private pages and every project’s docs in one place. Add a page to a project when it’s ready, or have Ren build a project from it.
           </p>
         </header>

@@ -1,0 +1,36 @@
+Four of Strands harness’s default tools let the agent work with a machine: `shell` runs commands, and `read`, `write`, and `edit` handle files. They are on by default and cover most of what an agent needs to explore a project and change it.
+
+## The shell tool
+
+`shell` runs a command line through the Strands Harness SDK’s stateless, sandbox-routed shell. Each call runs in a fresh shell: there is no persisted working directory or environment between calls, so a command that needs a directory or a variable set must set it in the same call. The tool takes the `command` to run and an optional `timeout`.
+
+Because it is stateless, the agent chains steps within one command (`cd build && cmake ..`) rather than relying on state carrying over. This is a deliberate design: a fresh shell per call is predictable and safe to route through a sandbox.
+
+## The file tools
+
+The three file tools are thin wrappers over the agent’s sandbox:
+
+-   `read` reads a file. Text comes back as `cat -n` style numbered lines so the agent can cite `path:line` and page through a large file with `offset` and `limit` (default limit 2000 lines). Images (`png`, `jpg`, `jpeg`, `gif`, `webp`) and binary documents (`pdf`, `doc`, `docx`, `xls`, `xlsx`) are returned as media the model can view directly. An image’s format comes from its bytes, not its extension, and a file with an image extension that is not an image fails the call instead of being sent to the model.
+-   `write` creates a file or overwrites it with the content you give.
+-   `edit` replaces an exact string in a file. The `old_str` must appear exactly once, so an ambiguous edit fails rather than changing the wrong place.
+
+All three take absolute paths and reject path traversal (a `..` segment), so a tool call cannot walk outside the intended location by relative path.
+
+## Everything routes through the sandbox
+
+Both the shell and the file tools reach the filesystem through the same [sandbox](/docs/user-guide/sdk/sandbox/index.md) seam. The default is a local sandbox on the host, but the same tools work unchanged against a Docker or SSH sandbox, so the platform, working directory, and files the agent sees describe where it actually runs. To isolate what the agent can touch, run it under a [sandbox](/docs/user-guide/sdk/sandbox/index.md) rather than trying to restrict the tools themselves.
+
+## Select or disable them
+
+These tools are selected by name through `builtin_tools`, alongside the other built-ins. To run without a shell, or with only `read`, narrow the list; see [add tools and instructions](/docs/user-guide/harness/configure/tools-and-instructions/index.md) for how selection works.
+
+## Implementation
+
+### Python
+
+- [harness-sdk/harness-py/src/strands_harness/tools/file_tools.py](https://github.com/strands-agents/harness-sdk/blob/main/harness-py/src/strands_harness/tools/file_tools.py)
+- [harness-sdk/harness-py/src/strands_harness/agent.py](https://github.com/strands-agents/harness-sdk/blob/main/harness-py/src/strands_harness/agent.py)
+
+### TypeScript
+
+- [harness-sdk/harness-ts/src/tools/file-tools.ts](https://github.com/strands-agents/harness-sdk/blob/main/harness-ts/src/tools/file-tools.ts)

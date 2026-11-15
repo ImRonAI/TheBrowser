@@ -129,7 +129,14 @@ def memory_aux_model_id() -> str:
     return os.getenv("RON_MEMORY_MODEL", "").strip() or DEFAULT_MEMORY_MODEL
 
 
-#: Learned skills + create_harness specialists; appended to every panel-family prompt (text and Live).
+from agent.api.core.deep_research_tools import (
+    DEEP_RESEARCH_DIRECTIVE,
+    DEEP_RESEARCH_TOOL_NAMES,
+    deep_research_tools,
+    is_deep_research_tool,
+)
+
+#: Learned skills + create_harness specialists + async Deep Research; appended to every panel-family prompt (text and Live).
 SKILLS_AND_SPECIALISTS_DIRECTIVE = (
     "\nYou can learn workflows from the user's Teach a skill screen demonstration. "
     "Use list_learned_skills to discover this agent's saved skills, and use_skill to execute "
@@ -141,7 +148,7 @@ SKILLS_AND_SPECIALISTS_DIRECTIVE = (
     "or lyria-3-clip-preview for a 30 s clip; one shot, 1-3 minutes) or elevenlabs_compose_song "
     "(ElevenLabs Music v2.5; draft and agree a structure first with elevenlabs_composition_plan). "
     "Both save to the user's music library when they are signed in; tell them the title and length."
-) + render_ui_directive()
+) + render_ui_directive() + DEEP_RESEARCH_DIRECTIVE
 
 
 
@@ -1030,7 +1037,12 @@ def _assigned_tools(agent: Agent, names: Any) -> tuple[Any, ...]:
             raise ValueError(f"Assigned tool {name!r} is not registered")
         # Plugin tools can capture their parent state; only catalog-owned local
         # tools and MCP providers are supported as explicit child capabilities.
-        if name.startswith("strands_") or value.tool_type == "agent" or is_browser_tool(name):
+        if (
+            name.startswith("strands_")
+            or value.tool_type == "agent"
+            or is_browser_tool(name)
+            or is_deep_research_tool(name)
+        ):
             raise ValueError(f"Cannot assign parent-bound tool {name!r} to a child")
         if isinstance(value, MCPAgentTool):
             mcp_assignments.setdefault(value.mcp_client, []).append(value.tool_name)
@@ -1193,7 +1205,7 @@ def create_panel_agent(
     provider: ProviderName,
     model_id: str,
     session_id: str,
-    user_id: str,
+    user_id: str = "default",
     system_prompt: str,
     extra_tools: list[Any],
     reasoning_effort: str | None = None,
@@ -1203,6 +1215,7 @@ def create_panel_agent(
     browser: str | None = None,
     agent_scope: str = "panel",
 ) -> Agent:
+    user_id = (user_id or "").strip() or "default"
     """Compose a native 1.56 agent; callers offload this synchronous constructor.
 
     Runtime constructor overrides are trusted application objects. Their scalar
@@ -1315,22 +1328,32 @@ def create_panel_agent(
 
         tools_dir = PROJECT_TOOLS_DIR
         storage = get_user_session_storage(user_id)
+        local_tool_names = {getattr(value, "tool_name", getattr(value, "__name__", "")) for value in local_tools}
+        research_tools = [
+            value for value in deep_research_tools(user_id=user_id)
+            if getattr(value, "tool_name", "") not in local_tool_names
+        ]
         if is_document:
             # Document Agent writes Markdown directly for one document page: give it only research + workflow tools,
             # with no host shell/editor, no MCP servers, no A2A/specialist/music tools, and no repo AGENTS.md injection.
             core = build_core_tools(tools_dir, names=DOCUMENT_TOOL_NAMES)
-            catalog.add_tools(core)
+            catalog.add_tools([*core, *research_tools])
             memory = None
             plugins: list[Any] = []
         else:
             core = build_core_tools(tools_dir)
-            catalog.add_tools([*core, create_tool_catalog(catalog, tools_dir), ask_user])
+            catalog.add_tools([*core, *research_tools, create_tool_catalog(catalog, tools_dir), ask_user])
             from agent.api.core.teaching import create_learned_skill_tools
             def skill_tools() -> list[Any]:
                 available = list(agent.tool_registry.registry.values()) if agent is not None else [*core, *local_tools]
                 excluded = {"use_skill", "list_learned_skills", "think", "ask_user", "tool_catalog", "create_harness"}
-                return [value for value in available if value.tool_name not in excluded
-                        and not value.tool_name.startswith("strands_") and not is_browser_tool(value.tool_name)]
+                return [
+                    value for value in available
+                    if value.tool_name not in excluded
+                    and not value.tool_name.startswith("strands_")
+                    and not is_browser_tool(value.tool_name)
+                    and not is_deep_research_tool(value.tool_name)
+                ]
 
             catalog.add_tools(create_learned_skill_tools(
                 user_id, agent_scope, model_factory, additional_tools=skill_tools(), tool_supplier=skill_tools,
@@ -1472,7 +1495,7 @@ def create_panel_agent(
             # Meta/interactive/delegating tools stay foreground: they mutate the
             # registry, pause for the user, or run child agents.
             background["never"] = [*background.get("never", []), "tool_catalog", "mcp_client", "editor",
-                "ask_user", "think", "run_skill", "programmatic_tool_caller", *formation_names]
+                "ask_user", "think", "run_skill", "programmatic_tool_caller", *DEEP_RESEARCH_TOOL_NAMES, *formation_names]
             kwargs["background_tasks"] = background
         agent = config_to_agent(str(path), **kwargs)
         agent.add_hook(pause_gate, AfterInvocationEvent, order=200)

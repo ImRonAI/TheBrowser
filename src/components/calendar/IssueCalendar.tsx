@@ -36,7 +36,7 @@ const STATUS_DOT: Record<IssueStatus, string> = {
   blocked: 'bg-danger',
   done: 'bg-success',
 }
-const HAIRLINE = 'border-surface-200 dark:border-surface-700'
+const HAIRLINE = 'border-surface-200/70 dark:border-surface-800'
 /** Blocked issues read rose in every view: tinted chip, stop mark, hazard-striped time block. */
 const BLOCKED_CHIP = 'bg-rose-500/[0.08] ring-1 ring-inset ring-rose-500/25 dark:bg-rose-400/10 dark:ring-rose-300/20 hover:bg-rose-500/[0.14] dark:hover:bg-rose-400/[0.16]'
 const BLOCKED_BLOCK = 'border-rose-300/80 dark:border-rose-400/30 bg-[repeating-linear-gradient(135deg,rgba(244,63,94,0.07)_0_6px,transparent_6px_12px)] dark:bg-[repeating-linear-gradient(135deg,rgba(251,113,133,0.10)_0_6px,transparent_6px_12px)]'
@@ -44,7 +44,10 @@ const BLOCKED_BLOCK = 'border-rose-300/80 dark:border-rose-400/30 bg-[repeating-
 function BlockedMark() {
   return <Ban aria-hidden className="h-3 w-3 shrink-0 text-rose-500 dark:text-rose-300" strokeWidth={2.5} />
 }
-const TODAY_CIRCLE = 'bg-ink text-surface-0 dark:bg-ink-inverse dark:text-surface-900'
+const TODAY_CIRCLE = 'bg-volt text-white shadow-[0_0_0_3px_rgb(var(--ren-volt)/0.16)] dark:text-ink'
+/** A whisper of volt on today's column/cell. */
+const TODAY_TINT = 'bg-[rgb(var(--ren-volt)/0.035)] dark:bg-[rgb(var(--ren-volt)/0.06)]'
+const PREMIUM_CARD = 'shadow-[0_1px_2px_rgb(11_12_23/0.04),0_18px_40px_-20px_rgb(11_12_23/0.18)] dark:shadow-[0_1px_0_rgb(255_255_255/0.04)_inset,0_24px_48px_-24px_rgb(0_0_0/0.6)]'
 const PERIOD_NOUN: Record<CalendarMode, string> = { day: 'day', week: 'week', month: 'month', quarter: 'quarter' }
 
 type KeyFor = (issue: Issue) => string
@@ -94,19 +97,22 @@ export function IssueCalendar({ issues, onIssueSelect, mode: controlledMode, onM
     <section
       aria-label="Issue calendar"
       className={cn(
-        'flex min-h-0 flex-col overflow-hidden rounded-[20px] border',
+        'flex min-h-0 flex-col overflow-hidden rounded-[22px] border',
         HAIRLINE,
-        'bg-surface-0 dark:bg-surface-850 text-ink dark:text-ink-inverse shadow-soft dark:shadow-dark-soft',
+        'bg-surface-0 dark:bg-surface-850 text-ink dark:text-ink-inverse',
+        PREMIUM_CARD,
         className
       )}
     >
-      <header className={cn('flex shrink-0 flex-wrap items-center gap-x-4 gap-y-3 border-b px-6 py-4', HAIRLINE)}>
+      <header className={cn('flex shrink-0 flex-wrap items-center gap-x-4 gap-y-3 border-b px-6 py-5', HAIRLINE)}>
         <div className="mr-auto min-w-0">
-          <h2 className="truncate font-display text-2xl leading-tight text-ink dark:text-ink-inverse">
-            {periodLabel(cursor, mode)}
-          </h2>
-          <p className="mt-1 text-xs text-ink-muted dark:text-ink-inverse-muted">
-            {scheduled.length === 1 ? '1 scheduled issue' : `${scheduled.length} scheduled issues`} · Times in {timeZone}
+          <PeriodTitle label={periodLabel(cursor, mode)} />
+          <p className="mt-1.5 flex flex-wrap items-center gap-x-2 text-[12px] text-ink-muted dark:text-ink-inverse-muted">
+            <span className="font-medium tabular-nums text-ink-secondary dark:text-ink-inverse-secondary">
+              {scheduled.length === 1 ? '1 scheduled issue' : `${scheduled.length} scheduled issues`}
+            </span>
+            <span aria-hidden className="h-[3px] w-[3px] rounded-full bg-surface-300 dark:bg-surface-600" />
+            <span>Times in {timeZone}</span>
           </p>
         </div>
         <DateStepper
@@ -182,6 +188,20 @@ export function IssueCalendar({ issues, onIssueSelect, mode: controlledMode, onM
 }
 
 // ─── Header controls ─────────────────────────────────────────────────────────
+
+/** The period in display type; a trailing year is set lighter so the month leads. */
+function PeriodTitle({ label }: { label: string }) {
+  const match = /^(.*?)(,?\s)(\d{4})$/.exec(label)
+  return (
+    <h2 className="truncate font-display text-[28px] font-bold leading-none tracking-[-0.035em] text-ink dark:text-ink-inverse">
+      {match ? (
+        <>
+          {match[1]}{match[2]}<span className="font-medium text-ink-muted dark:text-ink-inverse-muted">{match[3]}</span>
+        </>
+      ) : label}
+    </h2>
+  )
+}
 
 function DateStepper({ noun, onPrev, onNext, onToday, todayDisabled }: {
   noun: string; onPrev: () => void; onNext: () => void; onToday: () => void; todayDisabled: boolean
@@ -276,8 +296,16 @@ function IssueChip({ issue, keyFor, onSelect, tinted }: { issue: Issue; keyFor: 
       onClick={() => onSelect(issue.id)}
       title={`${keyFor(issue)} · ${issue.title}${blocking.blocked ? ` · ${blocking.label}` : ''}`}
       className={cn(
-        'flex w-full min-w-0 items-center gap-1.5 rounded-md px-1.5 py-[3px] text-left text-[11px] leading-4 transition-colors',
-        blocking.blocked ? BLOCKED_CHIP : cn(tinted ? 'bg-surface-100 dark:bg-surface-800' : '', 'hover:bg-surface-200/70 dark:hover:bg-surface-700'),
+        'flex w-full min-w-0 items-center gap-1.5 rounded-[7px] px-1.5 py-[3px] text-left text-[11px] leading-4 transition-colors duration-150',
+        blocking.blocked
+          ? BLOCKED_CHIP
+          : cn(
+              'ring-1 ring-inset',
+              tinted
+                ? 'bg-surface-100/80 ring-surface-200/60 dark:bg-surface-800 dark:ring-surface-700/60'
+                : 'bg-surface-50 ring-surface-200/60 dark:bg-surface-800/50 dark:ring-surface-700/50',
+              'hover:bg-surface-0 hover:ring-surface-300 hover:shadow-[0_2px_6px_-2px_rgb(11_12_23/0.12)] dark:hover:bg-surface-800 dark:hover:ring-surface-600',
+            ),
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60',
         issue.status === 'done' && 'opacity-60'
       )}
@@ -300,9 +328,9 @@ function EmptyState({ noun }: { noun: string }) {
         <div className={cn('mx-auto flex h-11 w-11 items-center justify-center rounded-[14px] border bg-surface-50 dark:bg-surface-800', HAIRLINE)}>
           <CalendarDays className="h-5 w-5 text-ink-secondary dark:text-ink-inverse-secondary" strokeWidth={1.5} />
         </div>
-        <p className="mt-4 text-[15px] font-semibold text-ink dark:text-ink-inverse">No scheduled issues this {noun}</p>
-        <p className="mt-1.5 text-xs text-ink-secondary dark:text-ink-inverse-secondary">
-          Issues with a start, end or due date appear here.
+        <p className="mt-4 text-[15px] font-semibold tracking-[-0.01em] text-ink dark:text-ink-inverse">Nothing on the books this {noun}</p>
+        <p className="mt-1.5 text-xs leading-relaxed text-ink-secondary dark:text-ink-inverse-secondary">
+          Give an issue a start, end or due date and it lands here.
         </p>
       </div>
     </div>
@@ -328,7 +356,7 @@ function MonthView({ cursor, issues, keyFor, onIssueSelect, onOpenDay, now }: Vi
     <div className="flex h-full flex-col">
       <div className={cn('grid shrink-0 grid-cols-7 border-b', HAIRLINE)}>
         {weekdayNames('short').map((name) => (
-          <div key={name} className="px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-muted dark:text-ink-inverse-muted">
+          <div key={name} className="px-3 py-2.5 text-[10.5px] font-medium uppercase tracking-[0.16em] text-ink-muted dark:text-ink-inverse-muted">
             {name}
           </div>
         ))}
@@ -344,11 +372,17 @@ function MonthView({ cursor, issues, keyFor, onIssueSelect, onOpenDay, now }: Vi
             <div
               key={day.toISOString()}
               className={cn(
-                'flex min-h-0 flex-col gap-0.5 overflow-hidden p-1.5',
+                'flex min-h-0 flex-col gap-[3px] overflow-hidden p-1.5 transition-colors duration-150',
                 HAIRLINE,
                 !lastRow && 'border-b',
                 index % 7 !== 6 && 'border-r',
-                !inMonth && 'bg-surface-50/70 dark:bg-surface-900/40'
+                isToday
+                  ? TODAY_TINT
+                  : !inMonth
+                    ? 'bg-surface-50/80 dark:bg-surface-900/50'
+                    : (day.getDay() === 0 || day.getDay() === 6)
+                      ? 'bg-surface-50/40 hover:bg-surface-50 dark:bg-surface-900/20 dark:hover:bg-surface-800/40'
+                      : 'hover:bg-surface-50/70 dark:hover:bg-surface-800/30'
               )}
             >
               <button
@@ -362,7 +396,7 @@ function MonthView({ cursor, issues, keyFor, onIssueSelect, onOpenDay, now }: Vi
                     ? cn(TODAY_CIRCLE, 'font-semibold')
                     : inMonth
                       ? 'font-medium text-ink dark:text-ink-inverse hover:bg-surface-100 dark:hover:bg-surface-800'
-                      : 'text-ink-muted/70 dark:text-ink-inverse-muted/70 hover:bg-surface-100 dark:hover:bg-surface-800'
+                      : 'text-ink-muted/50 dark:text-ink-inverse-muted/50 hover:bg-surface-100 dark:hover:bg-surface-800'
                 )}
               >
                 {day.getDate()}
@@ -502,13 +536,13 @@ function TimeGrid({ days, issues, keyFor, onIssueSelect, onOpenDay, now }: ViewP
             return (
               <div
                 key={day.toISOString()}
-                className={cn('relative border-l', HAIRLINE, isToday && 'bg-surface-50/60 dark:bg-surface-800/25')}
+                className={cn('relative border-l', HAIRLINE, isToday && TODAY_TINT)}
               >
                 {Array.from({ length: 23 }, (_, i) => i + 1).map((hour) => (
                   <div
                     key={hour}
                     aria-hidden
-                    className="absolute inset-x-0 border-t border-surface-100 dark:border-surface-800"
+                    className="absolute inset-x-0 border-t border-surface-100 dark:border-surface-800/70"
                     style={{ top: hour * HOUR_HEIGHT }}
                   />
                 ))}
@@ -521,8 +555,8 @@ function TimeGrid({ days, issues, keyFor, onIssueSelect, onOpenDay, now }: ViewP
                     className="pointer-events-none absolute inset-x-0 z-10"
                     style={{ top: ((now.getHours() * 60 + now.getMinutes()) / 60) * HOUR_HEIGHT }}
                   >
-                    <div className="relative h-px bg-accent dark:bg-accent-light">
-                      <span className="absolute -left-1 -top-1 h-2 w-2 rounded-full bg-accent dark:bg-accent-light" />
+                    <div className="relative h-[1.5px] bg-volt">
+                      <span className="absolute -left-[5px] -top-[4px] h-[9px] w-[9px] rounded-full bg-volt shadow-[0_0_0_3px_rgb(var(--ren-volt)/0.18)]" />
                     </div>
                   </div>
                 )}
@@ -547,10 +581,10 @@ function TimedBlock({ block, keyFor, onSelect }: { block: PositionedBlock; keyFo
       onClick={() => onSelect(block.issue.id)}
       title={`${blockLabel(block)} · ${keyFor(block.issue)} · ${block.issue.title}${blocking.blocked ? ` · ${blocking.label}` : ''}`}
       className={cn(
-        'absolute z-[1] flex overflow-hidden rounded-lg border text-left transition-colors',
+        'absolute z-[1] flex overflow-hidden rounded-[10px] border text-left transition-[background-color,border-color,box-shadow] duration-150',
         HAIRLINE,
-        'bg-surface-0 dark:bg-surface-850 shadow-subtle dark:shadow-dark-subtle',
-        'hover:border-surface-300 dark:hover:border-surface-600 hover:bg-surface-50 dark:hover:bg-surface-800',
+        'bg-surface-0/95 dark:bg-surface-800/80 shadow-[0_1px_2px_rgb(11_12_23/0.05),0_4px_12px_-6px_rgb(11_12_23/0.12)] backdrop-blur-sm',
+        'hover:border-surface-300 dark:hover:border-surface-600 hover:shadow-[0_2px_4px_rgb(11_12_23/0.06),0_10px_24px_-10px_rgb(11_12_23/0.22)]',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60',
         blocking.blocked && BLOCKED_BLOCK,
         block.issue.status === 'done' && 'opacity-60'
@@ -587,12 +621,12 @@ function QuarterView({ cursor, issues, keyFor, onIssueSelect, onOpenDay, onOpenM
         const { start, end } = periodRange(month, 'month')
         const monthIssues = issuesInRange(issues, start, end)
         return (
-          <section key={month.toISOString()} className={cn('flex min-h-0 flex-col rounded-[16px] border p-4', HAIRLINE)}>
+          <section key={month.toISOString()} className={cn('flex min-h-0 flex-col rounded-[18px] border bg-surface-50/40 p-5 dark:bg-surface-900/30', HAIRLINE)}>
             <div className="flex items-baseline justify-between gap-2">
               <button
                 type="button"
                 onClick={() => onOpenMonth(month)}
-                className="rounded-md font-display text-lg text-ink dark:text-ink-inverse hover:text-accent dark:hover:text-accent-light focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
+                className="rounded-md font-display text-xl font-bold tracking-[-0.03em] text-ink dark:text-ink-inverse hover:text-volt focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
               >
                 {month.toLocaleDateString(undefined, { month: 'long' })}
               </button>
@@ -627,7 +661,7 @@ function QuarterView({ cursor, issues, keyFor, onIssueSelect, onOpenDay, onOpenM
                     </span>
                     <span className="mt-0.5 flex h-1 gap-0.5">
                       {Array.from({ length: Math.min(count, 3) }, (_, i) => (
-                        <span key={i} className="h-1 w-1 rounded-full bg-ink-secondary/70 dark:bg-ink-inverse-secondary/70" />
+                        <span key={i} className="h-1 w-1 rounded-full bg-[rgb(var(--ren-volt)/0.8)]" />
                       ))}
                     </span>
                   </button>

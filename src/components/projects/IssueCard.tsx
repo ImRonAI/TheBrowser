@@ -1,15 +1,13 @@
-import type { ButtonHTMLAttributes, ReactNode } from 'react'
-import { BookOpen, Bug, CalendarDays, Check, CornerDownRight, Flag, FolderClosed, Layers, SquareCheck } from 'lucide-react'
-import { ISSUE_PRIORITY_CONFIG, ISSUE_TYPE_CONFIG, RON_ASSIGNEE, type Issue, type IssuePriority, type Person } from '@/types/projects'
+import type { ButtonHTMLAttributes } from 'react'
+import { ISSUE_PRIORITY_CONFIG, ISSUE_STATUS_CONFIG, ISSUE_TYPE_CONFIG, RON_ASSIGNEE, type Issue, type IssuePriority, type Person } from '@/types/projects'
 import { BRAND } from '@/lib/brand'
 import { cn } from '@/utils/cn'
 import { useIssueBlocking } from '@/hooks/useIssueBlocking'
-import { BlockedTag } from './BlockedTag'
-import { IssueStatusBadge } from './badges'
+import { STATUS_MARK } from './issueTone'
 
 interface IssueCardProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   issue: Issue
-  /** `KEY-12`, set in mono beside the type mark. */
+  /** `KEY-12`, set in mono at the head of the dateline. */
   issueKey?: string
   /** Resolves assignee ids to names and initials. */
   people?: Person[]
@@ -23,20 +21,9 @@ interface IssueCardProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   dragging?: boolean
 }
 
-const icon = 'h-3 w-3'
-const TYPE_ICON: Record<string, ReactNode> = {
-  initiative: <Flag className={icon} strokeWidth={2.25} />,
-  epic: <Layers className={icon} strokeWidth={2.25} />,
-  story: <BookOpen className={icon} strokeWidth={2.25} />,
-  task: <SquareCheck className={icon} strokeWidth={2.25} />,
-  bug: <Bug className={icon} strokeWidth={2.25} />,
-  subtask: <CornerDownRight className={icon} strokeWidth={2.25} />,
-}
-
-const PRIORITY_LEVEL: Record<IssuePriority, number> = { low: 1, medium: 2, high: 3, critical: 4 }
 const DAY = 86_400_000
 
-/** Plain text of a stored HTML description, for a two-line excerpt. */
+/** Plain text of a stored HTML description, for a one-line standfirst. */
 function excerpt(html: string | undefined): string {
   if (!html) return ''
   return html.replace(/<(br|\/p|\/li|\/h\d)[^>]*>/gi, ' ').replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ')
@@ -46,22 +33,6 @@ function excerpt(html: string | undefined): string {
     .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1').replace(/\s*\(https?:\/\/[^)\s]*\)/g, '')
     .replace(/https?:\/\/(?:www\.)?([^/\s)]+)[^\s)]*/g, '$1')
     .replace(/\s+/g, ' ').trim()
-}
-
-function PriorityBars({ priority }: { priority: IssuePriority }) {
-  const level = PRIORITY_LEVEL[priority] ?? 2
-  const label = `${ISSUE_PRIORITY_CONFIG[priority]?.label ?? priority} priority`
-  return (
-    <span className="flex h-3 shrink-0 items-end gap-[2px]" title={label} aria-label={label} role="img">
-      {[5, 8, 11].map((height, index) => (
-        <span key={height} style={{ height }} className={cn('w-[3px] rounded-[1px]',
-          index >= Math.min(level, 3) ? 'bg-surface-200 dark:bg-surface-700'
-            : level >= 4 ? 'bg-danger'
-              : level === 3 ? 'bg-blurple-600 dark:bg-blurple-400'
-                : 'bg-surface-500 dark:bg-surface-400')} />
-      ))}
-    </span>
-  )
 }
 
 type Due = { label: string; title: string; tone: 'overdue' | 'soon' | 'plain' }
@@ -80,15 +51,24 @@ function dueOf(dueDate: string | undefined, done: boolean): Due | null {
 }
 
 const DUE_TONE: Record<Due['tone'], string> = {
-  overdue: 'rounded-full bg-red-50 px-2 py-0.5 text-red-700 ring-1 ring-inset ring-red-200 dark:bg-red-950/40 dark:text-red-300 dark:ring-red-900',
-  soon: 'rounded-full bg-amber-50 px-2 py-0.5 text-amber-800 ring-1 ring-inset ring-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:ring-amber-900',
+  overdue: 'text-rose-600 dark:text-rose-400',
+  soon: 'text-ink dark:text-ink-inverse',
   plain: 'text-ink-muted dark:text-ink-inverse-muted',
+}
+
+/** Only high and critical earn a word; low and medium stay silent. */
+const PRIORITY_WORD: Partial<Record<IssuePriority, { label: string; className: string }>> = {
+  high: { label: 'High priority', className: 'text-ink dark:text-ink-inverse' },
+  critical: { label: 'Critical', className: 'text-rose-600 dark:text-rose-400' },
 }
 
 /** People read the agent assignee by the product's name; everyone else by their own. */
 const displayName = (person: Person) => person.id === RON_ASSIGNEE.id ? `${BRAND.name} (agent)` : person.name
 
-/** The issue card: a hairline card on the surface scale. The title carries it; the border answers hover. */
+/**
+ * The issue entry, set like an index line rather than a boxed card: a mono dateline, the title in the display
+ * face, one quiet standfirst and a footnote of facts. Entries are separated by hairlines; the title answers hover.
+ */
 export function IssueCard({ issue, issueKey, people = [], issues = [], showStatus = false, projectName, dragging = false, className, ...props }: IssueCardProps) {
   const done = issue.status === 'done'
   const blocking = useIssueBlocking()(issue)
@@ -101,103 +81,105 @@ export function IssueCard({ issue, issueKey, people = [], issues = [], showStatu
     .map((id) => people.find((person) => person.id === id) ?? (id === RON_ASSIGNEE.id ? RON_ASSIGNEE : null))
     .filter((person): person is Person => !!person)
   const labels = issue.labels.filter(Boolean)
-  const hasFooter = !!due || children.length > 0 || labels.length > 0 || assignees.length > 0 || !!projectName
+  const priority = PRIORITY_WORD[issue.priority]
+  const hasFootnote = children.length > 0 || labels.length > 0 || !!projectName || !!priority || assignees.length > 0
 
   return (
     <button
       type="button"
       className={cn(
-        'group relative block w-full overflow-hidden rounded-xl text-left',
-        'border border-surface-200 bg-surface-0 dark:border-surface-800 dark:bg-surface-900',
-        'transition-[transform,border-color] duration-200 ease-out motion-reduce:transition-none',
-        'hover:-translate-y-px hover:border-surface-300 dark:hover:border-surface-700',
-        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blurple-600/70 dark:focus-visible:ring-blurple-400/70',
-        blocking.blocked && 'border-rose-300 hover:border-rose-400 dark:border-rose-400/30 dark:hover:border-rose-400/50',
-        dragging && 'opacity-40',
+        'group relative block w-full text-left',
+        'border-b border-ink/[0.08] px-3 pb-4 pt-3.5 dark:border-ink-inverse/[0.08]',
+        'transition-colors duration-200 ease-out hover:bg-ink/[0.018] dark:hover:bg-ink-inverse/[0.025]',
+        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[rgb(var(--ren-volt)/0.6)]',
+        dragging && 'opacity-35',
         className
       )}
       {...props}
     >
-      <div className="px-3.5 pb-3 pt-3">
-        <div className="flex items-center gap-2">
-          <span title={typeLabel} aria-label={typeLabel} role="img" className={cn(
-            'flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-[5px]',
-            issue.type === 'bug' ? 'bg-rose-500/10 text-rose-700 dark:bg-rose-400/15 dark:text-rose-300'
-              : 'bg-surface-100 text-ink-secondary dark:bg-surface-800 dark:text-ink-inverse-secondary'
-          )}>
-            {TYPE_ICON[issue.type] ?? TYPE_ICON.task}
-          </span>
-          {issueKey && <span className="truncate font-mono text-[10.5px] tabular-nums tracking-[0.04em] text-ink-muted dark:text-ink-inverse-muted">{issueKey}</span>}
-          {done && <Check className="h-3.5 w-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" strokeWidth={2.5} aria-label="Done" />}
-          <span className="ml-auto flex shrink-0 items-center gap-2.5">
-            {showStatus && <IssueStatusBadge status={issue.status} className="gap-1 px-2 py-0.5 text-[10.5px]" />}
-            <PriorityBars priority={issue.priority} />
-          </span>
-        </div>
+      {blocking.blocked && <span aria-hidden className="absolute bottom-4 left-0 top-4 w-[2px] rounded-full bg-rose-500 dark:bg-rose-400" />}
 
-        <p className={cn(
-          'mt-2 text-[13.5px] font-medium leading-[1.4] tracking-[-0.005em] line-clamp-3',
-          done ? 'text-ink-muted dark:text-ink-inverse-muted' : 'text-ink dark:text-ink-inverse'
-        )}>
-          {issue.title}
-        </p>
-        {blocking.blocked && <BlockedTag label={blocking.label} keys={blocking.keys} showKeys className="mt-2" />}
-        {summary && (
-          <p className="mt-1 text-[12.5px] leading-[1.5] text-ink-muted line-clamp-2 dark:text-ink-inverse-muted">{summary}</p>
+      {/* Dateline */}
+      <div className="flex items-baseline gap-2.5 text-[11px] leading-none">
+        {issueKey && (
+          <span className="font-mono text-[10.5px] font-medium tabular-nums tracking-[0.04em] text-ink-secondary transition-colors group-hover:text-volt dark:text-ink-inverse-secondary">
+            {issueKey}
+          </span>
         )}
+        <span className="text-ink-muted dark:text-ink-inverse-muted">{typeLabel}</span>
+        {showStatus && (
+          <span className="flex items-center gap-1.5 text-ink-muted dark:text-ink-inverse-muted">
+            <span aria-hidden className={cn('h-[5px] w-[5px] translate-y-[-1px] rounded-full', STATUS_MARK[issue.status])} />
+            {ISSUE_STATUS_CONFIG[issue.status]?.label ?? issue.status}
+          </span>
+        )}
+        {due && (
+          <time dateTime={issue.dueDate} title={due.title}
+            className={cn('ml-auto shrink-0 tabular-nums', due.tone !== 'plain' && 'font-medium', DUE_TONE[due.tone])}>
+            {due.tone === 'overdue' ? `Overdue, ${due.label}` : due.label}
+          </time>
+        )}
+      </div>
 
-        {hasFooter && (
-          <div className="mt-3 flex items-center gap-3 border-t border-surface-100 pt-2.5 dark:border-surface-800">
-            <div className="flex min-w-0 flex-1 items-center gap-2.5 text-[11.5px]">
-              {due && (
-                <span className={cn('flex shrink-0 items-center gap-1 font-medium tabular-nums', DUE_TONE[due.tone])} title={due.title}>
-                  <CalendarDays className="h-3 w-3" strokeWidth={2} />
-                  {due.label}
+      {/* Headline */}
+      <h4 className={cn(
+        'mt-2.5 font-display text-[16px] font-semibold leading-[1.24] tracking-[-0.022em] [text-wrap:pretty] line-clamp-3',
+        done ? 'text-ink-muted dark:text-ink-inverse-muted' : 'text-ink dark:text-ink-inverse'
+      )}>
+        {issue.title}
+      </h4>
+
+      {/* Standfirst, or what it is waiting on */}
+      {blocking.blocked ? (
+        <p title={blocking.label} className="mt-1.5 truncate text-[12.5px] text-rose-700 dark:text-rose-300">
+          {blocking.keys.length
+            ? <>Waiting on <span className="font-mono text-[11.5px] font-medium tracking-[0.02em]">{blocking.keys.join(', ')}</span></>
+            : blocking.label || 'Blocked'}
+        </p>
+      ) : summary ? (
+        <p className="mt-1.5 truncate text-[12.5px] leading-[1.5] text-ink-muted dark:text-ink-inverse-muted">{summary}</p>
+      ) : null}
+
+      {/* Footnote */}
+      {hasFootnote && (
+        <div className="mt-3.5 flex items-center gap-4 text-[11.5px] text-ink-muted dark:text-ink-inverse-muted">
+          <div className="flex min-w-0 flex-1 items-center gap-4">
+            {priority && <span className={cn('shrink-0 font-medium', priority.className)} title={ISSUE_PRIORITY_CONFIG[issue.priority]?.label}>{priority.label}</span>}
+            {children.length > 0 && (
+              <span className="flex shrink-0 items-center gap-2 tabular-nums" title={`${childrenDone} of ${children.length} child issues done`}>
+                <span className="relative h-[2px] w-8 overflow-hidden rounded-full bg-ink/10 dark:bg-ink-inverse/15">
+                  <span className={cn('absolute inset-y-0 left-0 rounded-full', childrenDone === children.length ? 'bg-ink/60 dark:bg-ink-inverse/60' : 'bg-volt')}
+                    style={{ width: `${Math.round((childrenDone / children.length) * 100)}%` }} />
                 </span>
-              )}
-              {children.length > 0 && (
-                <span className="flex shrink-0 items-center gap-1.5 font-mono tabular-nums text-ink-muted dark:text-ink-inverse-muted"
-                  title={`${childrenDone} of ${children.length} child issues done`}>
-                  <span className="relative h-1 w-7 overflow-hidden rounded-full bg-surface-200 dark:bg-surface-800">
-                    <span className="absolute inset-y-0 left-0 rounded-full bg-blurple-600 dark:bg-blurple-400"
-                      style={{ width: `${Math.round((childrenDone / children.length) * 100)}%` }} />
-                  </span>
-                  {childrenDone}/{children.length}
-                </span>
-              )}
-              {labels.slice(0, 2).map((label) => (
-                <span key={label} className="min-w-0 truncate rounded-md px-1.5 py-px text-[10.5px] text-ink-secondary ring-1 ring-inset ring-surface-200 dark:text-ink-inverse-secondary dark:ring-surface-700">
-                  {label}
-                </span>
-              ))}
-              {labels.length > 2 && <span className="shrink-0 font-mono text-[10.5px] tabular-nums text-ink-muted dark:text-ink-inverse-muted">+{labels.length - 2}</span>}
-              {projectName && (
-                <span className="flex min-w-0 items-center gap-1 text-ink-muted dark:text-ink-inverse-muted" title={projectName}>
-                  <FolderClosed className="h-3 w-3 shrink-0" strokeWidth={2} />
-                  <span className="truncate">{projectName}</span>
+                {childrenDone} of {children.length}
+              </span>
+            )}
+            {labels.length > 0 && (
+              <span className="min-w-0 truncate" title={labels.join(', ')}>
+                {labels.slice(0, 2).join(', ')}{labels.length > 2 ? `, +${labels.length - 2}` : ''}
+              </span>
+            )}
+            {projectName && <span className="min-w-0 truncate" title={projectName}>{projectName}</span>}
+          </div>
+          {assignees.length > 0 && (
+            <div className="flex shrink-0 -space-x-1" aria-label={`Assigned to ${assignees.map(displayName).join(', ')}`}>
+              {assignees.slice(0, 3).map((person) => person.avatar
+                ? <img key={person.id} src={person.avatar} alt="" title={displayName(person)}
+                    className="h-5 w-5 rounded-full object-cover ring-2 ring-surface-0 dark:ring-surface-900" />
+                : <span key={person.id} title={displayName(person)}
+                    className={cn('flex h-5 w-5 items-center justify-center rounded-full font-display text-[9px] font-bold ring-2 ring-surface-0 dark:ring-surface-900',
+                      person.id === RON_ASSIGNEE.id ? 'bg-volt text-white dark:text-ink' : 'bg-ink/[0.07] text-ink-secondary dark:bg-ink-inverse/[0.12] dark:text-ink-inverse-secondary')}>
+                    {person.initials || person.name.slice(0, 1).toUpperCase()}
+                  </span>)}
+              {assignees.length > 3 && (
+                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-ink/[0.05] text-[8.5px] font-semibold tabular-nums text-ink-muted ring-2 ring-surface-0 dark:bg-ink-inverse/[0.08] dark:text-ink-inverse-muted dark:ring-surface-900">
+                  +{assignees.length - 3}
                 </span>
               )}
             </div>
-            {assignees.length > 0 && (
-              <div className="flex shrink-0 -space-x-0.5" aria-label={`Assigned to ${assignees.map(displayName).join(', ')}`}>
-                {assignees.slice(0, 3).map((person) => person.avatar
-                  ? <img key={person.id} src={person.avatar} alt="" title={displayName(person)}
-                      className="h-[22px] w-[22px] rounded-full object-cover ring-2 ring-surface-0 dark:ring-surface-900" />
-                  : <span key={person.id} title={displayName(person)}
-                      className={cn('flex h-[22px] w-[22px] items-center justify-center rounded-full text-[9px] font-semibold tracking-wide ring-2 ring-surface-0 dark:ring-surface-900',
-                        person.id === RON_ASSIGNEE.id ? 'bg-blurple-600 text-white dark:bg-blurple-400 dark:text-ink' : 'bg-ink text-white dark:bg-ink-inverse dark:text-ink')}>
-                      {person.initials || person.name.slice(0, 1).toUpperCase()}
-                    </span>)}
-                {assignees.length > 3 && (
-                  <span className="flex h-[22px] w-[22px] items-center justify-center rounded-full bg-surface-200 font-mono text-[9px] font-semibold tabular-nums text-ink-secondary ring-2 ring-surface-0 dark:bg-surface-800 dark:text-ink-inverse-secondary dark:ring-surface-900">
-                    +{assignees.length - 3}
-                  </span>
-                )}
-              </div>
-            )}
-          </div>
-        )}
-      </div>
+          )}
+        </div>
+      )}
     </button>
   )
 }

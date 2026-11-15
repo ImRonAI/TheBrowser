@@ -28,6 +28,7 @@ from agent.api.endpoints import tool_repairs
 from agent.api.endpoints import music
 from agent.api.endpoints import context as context_endpoints
 from agent.api.endpoints import build as build_endpoints
+from agent.api.endpoints import deep_research as deep_research_endpoints
 from agent.api.core.harness_agents import harness_a2a_host
 from agent.api.core import ren_mcp
 from agent.api.core.teaching import get_teaching_service, mcp_app as skills_mcp_app
@@ -44,7 +45,13 @@ async def lifespan(app: FastAPI):
     # RON_TOOL_OBSERVATION=1: retain spans in memory (strands_evals) for tool diagnosis.
     setup_evals_exporter()
     manager = chat.create_runtime_manager()
+    from agent.api.core.deep_research import DeepResearchRuntime, set_deep_research_runtime
+    from agent.api.core.deep_research_tools import deep_research_tools
     from agent.api.core.issue_agents import IssueAgentRuntime
+
+    deep_research_runtime = DeepResearchRuntime()
+    app.state.deep_research = deep_research_runtime
+    set_deep_research_runtime(deep_research_runtime)
     app.state.issue_agents = IssueAgentRuntime()
     app.state.panel_runtime = manager
     app.state.panel_a2a = None
@@ -96,7 +103,10 @@ async def lifespan(app: FastAPI):
                         model_factory=lambda _: build_model(provider, model_id),
                         # Native A2AServer constructs a metadata agent for its card.
                         # Actual contexts each own a fresh core tool set.
-                        tools_factory=lambda context: [] if context == "__agent_card__" else build_core_tools(chat.PROJECT_TOOLS_DIR),
+                        tools_factory=lambda context: [] if context == "__agent_card__" else [
+                            *build_core_tools(chat.PROJECT_TOOLS_DIR),
+                            *deep_research_tools(user_id="default"),
+                        ],
                         name="Ren", description="Ren browser agent with core tools",
                         system_prompt=chat.AGENT_SYSTEM_PROMPT,
                     )
@@ -127,6 +137,7 @@ async def lifespan(app: FastAPI):
             await close_article_browser()
             await get_teaching_service().shutdown()
             await public_tunnel.stop()
+            await deep_research_runtime.aclose()
             await app.state.issue_agents.shutdown()
             await repairs.shutdown()
             # Before the runtime: a run still active is kept in its journal and continues on the next start.
@@ -143,6 +154,8 @@ async def lifespan(app: FastAPI):
             finally:
                 for route in mounted_routes:
                     app.routes.remove(route)
+                set_deep_research_runtime(None)
+                app.state.deep_research = None
                 app.state.panel_runtime = None
                 app.state.panel_a2a = None
                 app.state.fixer_a2a = None
@@ -178,6 +191,8 @@ app.include_router(music.router, tags=["music"])
 app.include_router(context_endpoints.router, tags=["context"])
 # Build Agent workbench (files, git, preview of the Build destination's workspace); loopback-only.
 app.include_router(build_endpoints.router, tags=["build"])
+# Deep Research formation status, background runs, and SSE stream; loopback-only.
+app.include_router(deep_research_endpoints.router, tags=["deep-research"])
 app.mount("/skills/mcp", skills_mcp_app)
 # Ren desktop as an MCP server: its browser and its agent (core/ren_mcp.py); loopback-only like the rest of the API.
 ren_mcp_server = ren_mcp.create_ren_mcp(app)

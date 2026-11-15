@@ -12,6 +12,7 @@ import { ExecuteList } from '@/components/execute/ExecuteList'
 import { SURFACE } from '@/components/execute/IssueBits'
 import { ErrorBoundary } from '@/components/ui/ErrorBoundary'
 import { PageBackground } from '@/components/shared/PageBackground'
+import { Marker } from '@/components/brand'
 import { ISSUE_PRIORITY_CONFIG, ISSUE_STATUS_CONFIG, type IssuePriority, type IssueStatus } from '@/types/projects'
 import {
   DEFAULT_FILTERS, ISSUE_PRIORITIES, ISSUE_STATUSES, activeFilterCount, assigneeOptions, filterIssues, projectOptions, summarize, typeOptions,
@@ -149,14 +150,15 @@ export function ExecutePage() {
         <div className={cn(SURFACE, 'overflow-hidden')}>
           {/* Title, counts, actions */}
           <div className="border-b border-surface-200 px-4 py-4 sm:px-6 sm:py-5 dark:border-surface-800">
-            <div className="flex flex-wrap items-center justify-between gap-4">
+            <div className="flex flex-wrap items-end justify-between gap-4">
               <div className="flex min-w-0 items-center gap-3 sm:gap-4">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 text-white">
-                  <FolderKanban className="h-5 w-5" />
-                </div>
-                <div className="min-w-0">
-                  <h1 className="text-xl font-semibold text-ink dark:text-ink-inverse">Operational Hub</h1>
-                  <p className="text-body-sm text-ink-muted dark:text-ink-inverse-muted" aria-live="polite">
+                <div className="relative min-w-0">
+                  <div aria-hidden className="halftone pointer-events-none absolute -left-16 -top-12 h-44 w-[26rem] opacity-70 dark:opacity-50" />
+                  <span className="tag-label tag-label-slash relative">Execute</span>
+                  <h1 className="ren-display relative mt-3 text-[40px] text-ink dark:text-ink-inverse sm:text-[52px]">
+                    Ship it,{' '}<span className="spray-halo inline-block"><Marker>already.</Marker></span>
+                  </h1>
+                  <p className="relative mt-2 text-body-sm text-ink-muted dark:text-ink-inverse-muted" aria-live="polite">
                     {phase === 'ready' ? (
                       <>
                         <span className="font-medium text-ink-secondary dark:text-ink-inverse-secondary">{summary.total} {summary.total === 1 ? 'issue' : 'issues'}</span>
@@ -208,7 +210,7 @@ export function ExecutePage() {
                   onChange={(event) => setFilter('query', event.target.value)}
                   placeholder="Search title, key or description…"
                   aria-label="Search issues"
-                  className="w-full rounded-xl border border-surface-200 bg-surface-0 py-2.5 pl-10 pr-10 text-body-sm text-ink transition-colors placeholder:text-ink-muted/60 focus:border-indigo-400 focus:outline-none dark:border-surface-800 dark:bg-surface-900 dark:text-ink-inverse dark:focus:border-indigo-600 [&::-webkit-search-cancel-button]:hidden"
+                  className="w-full rounded-xl border border-surface-200 bg-surface-0 py-2.5 pl-10 pr-10 text-body-sm text-ink transition-colors placeholder:text-ink-muted/60 focus:border-blurple-400 focus:outline-none dark:border-surface-800 dark:bg-surface-900 dark:text-ink-inverse dark:focus:border-blurple-600 [&::-webkit-search-cancel-button]:hidden"
                 />
                 {filters.query && (
                   <button type="button" onClick={() => setFilter('query', '')} aria-label="Clear search"
@@ -226,13 +228,13 @@ export function ExecutePage() {
                 className={cn(
                   'flex items-center gap-2 rounded-xl border px-4 py-2.5 text-body-sm font-medium transition-colors',
                   showFilters || filterCount > 0
-                    ? 'border-indigo-400 bg-indigo-500/5 text-indigo-600 dark:border-indigo-600 dark:text-indigo-400'
-                    : 'border-surface-200 text-ink-muted hover:border-indigo-300 dark:border-surface-800 dark:text-ink-inverse-muted',
+                    ? 'border-blurple-400 bg-blurple-500/5 text-blurple-600 dark:border-blurple-600 dark:text-blurple-400'
+                    : 'border-surface-200 text-ink-muted hover:border-blurple-300 dark:border-surface-800 dark:text-ink-inverse-muted',
                 )}
               >
                 <Filter className="h-4 w-4" />
                 <span>Filters</span>
-                {filterCount > 0 && <span className="ml-1 rounded-full bg-indigo-500 px-1.5 py-0.5 text-[10px] font-bold text-white">{filterCount}</span>}
+                {filterCount > 0 && <span className="ml-1 rounded-full bg-blurple-500 px-1.5 py-0.5 text-[10px] font-bold text-white">{filterCount}</span>}
                 <ChevronDown className={cn('h-4 w-4 transition-transform duration-200', showFilters && 'rotate-180')} />
               </button>
 
@@ -258,7 +260,7 @@ export function ExecutePage() {
               <button
                 type="button"
                 onClick={() => navigateInternal('ron://projects')}
-                className="flex items-center gap-2 rounded-xl px-4 py-2.5 text-body-sm font-medium text-ink-muted transition-colors hover:bg-indigo-500/5 hover:text-indigo-600 dark:text-ink-inverse-muted dark:hover:text-indigo-400"
+                className="flex items-center gap-2 rounded-xl px-4 py-2.5 text-body-sm font-medium text-ink-muted transition-colors hover:bg-blurple-500/5 hover:text-blurple-600 dark:text-ink-inverse-muted dark:hover:text-blurple-400"
               >
                 <FolderKanban className="h-4 w-4" />
                 <span>Projects</span>
@@ -370,7 +372,7 @@ function FilterSelect({ value, onChange, children }: { value: string; onChange: 
     <select
       value={value}
       onChange={(event) => onChange(event.target.value)}
-      className="w-full min-w-0 cursor-pointer rounded-lg border border-surface-200 bg-surface-0 px-3 py-2 text-body-sm text-ink transition-colors focus:border-indigo-400 focus:outline-none xl:w-auto xl:min-w-[150px] xl:max-w-[16rem] dark:border-surface-800 dark:bg-surface-900 dark:text-ink-inverse dark:focus:border-indigo-600"
+      className="w-full min-w-0 cursor-pointer rounded-lg border border-surface-200 bg-surface-0 px-3 py-2 text-body-sm text-ink transition-colors focus:border-blurple-400 focus:outline-none xl:w-auto xl:min-w-[150px] xl:max-w-[16rem] dark:border-surface-800 dark:bg-surface-900 dark:text-ink-inverse dark:focus:border-blurple-600"
     >
       {children}
     </select>
@@ -385,7 +387,7 @@ function ActionButton({ variant, className, children, ...props }: ButtonHTMLAttr
       className={cn(
         'inline-flex h-10 items-center gap-2 rounded-xl px-4 text-body-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50',
         variant === 'primary'
-          ? 'bg-indigo-500 text-white shadow-sm shadow-indigo-500/20 hover:bg-indigo-600'
+          ? 'bg-blurple-600 text-white shadow-[0_1px_0_rgb(255_255_255/0.18)_inset,0_6px_16px_-6px_rgb(var(--ren-volt)/0.55)] hover:bg-blurple-700 dark:bg-blurple-400 dark:text-ink dark:hover:bg-blurple-300'
           : 'text-ink-muted hover:bg-surface-100 hover:text-ink dark:text-ink-inverse-muted dark:hover:bg-surface-800 dark:hover:text-ink-inverse',
         className,
       )}

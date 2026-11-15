@@ -17,7 +17,9 @@ import { ExecutePage } from '@/pages/ExecutePage'
 import { ProjectsIndexPage } from '@/pages/ProjectsIndexPage'
 import { ProjectHomePage } from '@/pages/ProjectHomePage'
 import { DocumentsPage } from '@/pages/DocumentsPage'
+import { DeepResearchPage } from '@/pages/DeepResearchPage'
 import { parseDocumentsLibraryUrl } from '@/lib/project-documents'
+import { parseResearchUrl } from '@/lib/deep-research-api'
 import { BuildWorkbenchPage } from '@/components/build'
 import { SignInPage } from '@/pages/SignInPage'
 import { OnboardingPage } from '@/pages/OnboardingPage'
@@ -378,6 +380,8 @@ function MainContent({ activeTab }: { activeTab: string }) {
   // The Documents library (ron://documents[/<page>]); keyed by account only, so following the open page never remounts it.
   const documentsRoute = parseDocumentsLibraryUrl(url)
   if (documentsRoute) return <DocumentsPage key={userId} documentId={documentsRoute.documentId} />
+  const researchRoute = parseResearchUrl(url)
+  if (researchRoute) return <DeepResearchPage key={userId} sessionId={researchRoute.sessionId} />
   if (url?.startsWith('ron://read?')) return <ArticleReaderPage key={url} href={url} />
   if (url === 'ron://build' || url === 'ron://build/') return <BuildWorkbenchPage />
   if (url === 'ron://execute' || url === 'ron://execute/') return <ExecutePage />
@@ -386,6 +390,8 @@ function MainContent({ activeTab }: { activeTab: string }) {
       return <ExecutePage />
     case 'build':
       return <BuildWorkbenchPage />
+    case 'research':
+      return <DeepResearchPage key={userId} sessionId={null} />
     default:
       return <HomePage />
   }

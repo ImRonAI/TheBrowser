@@ -3,9 +3,9 @@ import { createJSONStorage, persist } from 'zustand/middleware'
 
 /**
  * The sidebar's destinations. `home` is the search page and `discover` the stories feed; both render on
- * `ron://home`. `documents` is the Documents library (`ron://documents`), routed by its URL.
+ * `ron://home`. `documents` is the Documents library (`ron://documents`), `research` is Deep Research (`ron://research`).
  */
-export type HomeTab = 'home' | 'discover' | 'execute' | 'documents' | 'calendar' | 'vibe' | 'build'
+export type HomeTab = 'home' | 'discover' | 'execute' | 'documents' | 'calendar' | 'vibe' | 'build' | 'research'
 
 interface NavigationStore {
   /**

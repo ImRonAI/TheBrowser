@@ -364,7 +364,7 @@ class TabsManager {
     const record: TabRecord = {
       id,
       url,
-      title: url.startsWith('ron://') ? 'Home' : 'New Tab',
+      title: url.startsWith('ron://research') ? 'Deep Research' : url.startsWith('ron://') ? 'Home' : 'New Tab',
       isExternal: !url.startsWith('ron://') && url !== 'about:blank'
     }
     this.tabs.set(id, record)
@@ -477,6 +477,7 @@ class TabsManager {
         tab.view = undefined
       }
       if (url.startsWith('ron://search')) tab.title = 'Search'
+      else if (url.startsWith('ron://research')) tab.title = 'Deep Research'
       else if (url.startsWith('ron://home')) tab.title = 'Home'
       else if (url.startsWith('ron://read')) {
         try { tab.title = new URL(url).searchParams.get('title') || 'Article' }

@@ -69,6 +69,7 @@ def issue_agent_prompt(issue: dict) -> str:
         "Use list_learned_skills to discover this issue agent's taught workflows and use_skill to execute their ordered SOPs. "
         "You may edit this issue and create backlog children; only humans may change status or complete it. "
         "Use save_work_product to persist deliverables and search results with nested image previews; explain edits, child creation and relationships. "
+        "For complex multi-source investigations, call deep_research_start (non-blocking) and inspect progress or completed reports with deep_research_status. "
         "When a process or decision flow helps, draw it into the description with add_workflow_to_description. "
         "The issue's `context` (from read_issue) is material the user attached for you: links, articles, searches, notes, "
         "chat threads, project pages and screenshots/recordings. " + CONTEXT_READING + " "
@@ -373,11 +374,22 @@ def create_issue_chat_agent(*, user_id: str, session_id: str, issue_id: str, pro
         # The panel runtime supports GoalLoop only with preserve_context=True (panel_runtime.py docstring).
         consumer_plugins.append(GoalLoop(goal=goal, judge=JudgeConfig(model=side_model_factory("goal-judge")),
                                          preserve_context=True))
+    from agent.api.core.deep_research_tools import deep_research_tools
+
     agent = create_harness(
         model=model,
         caching=False,
         instructions=issue_agent_prompt(issue) + ISSUE_CHAT_ADDENDUM,
-        tools=[*assigned, installed_http_request(), *media, *brave_tools(), *render_ui_tools(), *learned, *a2a_tools()],
+        tools=[
+            *assigned,
+            installed_http_request(),
+            *media,
+            *brave_tools(),
+            *deep_research_tools(user_id=user_id),
+            *render_ui_tools(),
+            *learned,
+            *a2a_tools(),
+        ],
         plugins=consumer_plugins,
         mcp_servers=None,
         builtin_tools=[],
@@ -532,6 +544,7 @@ class IssueAgentRuntime:
                     additional_tools=assigned)
                 from agent.api.core.a2a_tools import a2a_tools
                 from agent.api.core.brave_tools import brave_tools
+                from agent.api.core.deep_research_tools import deep_research_tools
                 from agent.api.core.media_understanding import media_tools
                 from agent.api.core.panel_tools import installed_http_request
                 # Context intake as the caller (their JWT, refreshed by polling): links with http_request; media seen
@@ -539,7 +552,9 @@ class IssueAgentRuntime:
                 intake = [installed_http_request(), *media_tools(lambda: service.identity,
                     provider=agent_record["provider"], model_id=agent_record["model_id"])]
                 agent = config_to_agent({"name": "Task Ren", "model": agent_record["model_id"], "prompt": prompt, "tools": []},
-                    model=model, tools=[*assigned, *intake, *brave_tools(), *learned, *a2a_tools()], description="Private canonical issue assistant",
+                    model=model,
+                    tools=[*assigned, *intake, *brave_tools(), *deep_research_tools(user_id=service.identity.user_id), *learned, *a2a_tools()],
+                    description="Private canonical issue assistant",
                     memory_manager={"stores": [get_teaching_service().get_memory_store(service.identity.user_id, agent_scope)],
                                     "search_tool_config": True, "injection": True},
                     agent_id=agent_record["id"], session_manager=session, callback_handler=None,

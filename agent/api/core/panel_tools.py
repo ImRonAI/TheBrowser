@@ -1149,10 +1149,17 @@ def is_parent_only_tool(name: str) -> bool:
     browser could bypass the unavailability policy.
     """
     from agent.api.core.a2a_tools import is_a2a_tool
+    from agent.api.core.deep_research_tools import is_deep_research_tool
     from agent.api.core.panel_browser import is_browser_tool
 
-    # A2A tools are per-agent (each agent builds its own provider), never inherited by children.
-    return name in THINK_EXCLUDED_TOOLS or name.startswith("strands_") or is_browser_tool(name) or is_a2a_tool(name)
+    # A2A and Deep Research orchestration tools are parent-only, never inherited by children.
+    return (
+        name in THINK_EXCLUDED_TOOLS
+        or name.startswith("strands_")
+        or is_browser_tool(name)
+        or is_a2a_tool(name)
+        or is_deep_research_tool(name)
+    )
 
 
 class ThinkToolsGuard(Plugin):

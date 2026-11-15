@@ -189,7 +189,9 @@ def _background(options: dict[str, Any]) -> Any:
     """Off unless the ``background`` option is on; then native ``wait_for_completion`` as the panel runtime requires."""
     if not options.get("background"):
         return False
-    return {"agentic": ["*"], "wait_for_completion": True, "never": ["editor"]}
+    from agent.api.core.deep_research_tools import DEEP_RESEARCH_TOOL_NAMES
+
+    return {"agentic": ["*"], "wait_for_completion": True, "never": ["editor", *DEEP_RESEARCH_TOOL_NAMES]}
 
 
 def create_build_agent(*, user_id: str, session_id: str, model: Any, side_model_factory: Any, browser: str,
@@ -211,6 +213,7 @@ def create_build_agent(*, user_id: str, session_id: str, model: Any, side_model_
 
     from agent.api.core.brave_tools import brave_tools
     from agent.api.core.build_workspace import BuildWorkspaceGuard, build_agent_prompt, ensure_workspace
+    from agent.api.core.deep_research_tools import deep_research_tools
     from agent.api.core.panel_storage import get_user_session_storage
     from agent.api.core.panel_tools import installed_http_request
     from agent.api.core.threads import ThreadProjection
@@ -236,7 +239,7 @@ def create_build_agent(*, user_id: str, session_id: str, model: Any, side_model_
         caching=False,
         instructions=build_agent_prompt(workspace).strip(),
         tools=[_installed_tool(shell, "shell"), _installed_tool(editor, "editor"), installed_http_request(),
-               *brave_tools()],
+               *brave_tools(), *deep_research_tools(user_id=user_id)],
         plugins=consumer_plugins,
         mcp_servers=None,
         builtin_tools=[],

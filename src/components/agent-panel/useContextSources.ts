@@ -11,10 +11,20 @@ import { createContextClient, type ContextItem as SavedContextItem } from '@/lib
 import { listAllDocuments, type ProjectDocumentSummary } from '@/lib/project-documents'
 import { isGuestUserId } from '@/lib/sign-in'
 import {
-  documentItem, importantDates, interestItem, issueItem, projectItem, savedContextItem, tabItem, threadItem, todayItem,
-  type ContextCategory, type ContextItem,
+  documentItem,
+  importantDates,
+  interestItem,
+  issueItem,
+  projectItem,
+  tabItem,
+  threadItem,
+  todayItem,
+  widgetContextItems,
+  type ContextCategory,
+  type ContextItem,
 } from '@/lib/chat-context'
 import { useAuthStore } from '@/stores/authStore'
+import { useContextAgentStore } from '@/stores/contextAgentStore'
 import { getProjectsState, projectsRequestFor, useProjectsStore } from '@/stores/projectsStore'
 import { useInterestsStore } from '@/stores/interestsStore'
 
@@ -26,6 +36,11 @@ export function useContextSources(open: boolean) {
   const userId = useAuthStore((state) => state.user?.id || 'default')
   const { userId: projectsUser, projects, issues, isLoading: projectsLoading, error: projectsError } = useProjectsStore()
   const interests = useInterestsStore((state) => state.nodes)
+  const storeItems = useContextAgentStore((state) => state.items)
+  const asks = useContextAgentStore((state) => state.asks)
+  const visits = useContextAgentStore((state) => state.visits)
+  const runs = useContextAgentStore((state) => state.runs)
+  const recommendations = useContextAgentStore((state) => state.recommendations)
 
   const [tabs, setTabs] = useState<Remote<ContextItem>>(idle)
   const [threads, setThreads] = useState<Remote<ThreadSummary>>(idle)
@@ -83,11 +98,25 @@ export function useContextSources(open: boolean) {
     const liveIssues = issues.filter((issue) => visibleIds.has(issue.projectId))
       .sort((a, b) => Number(a.status === 'done') - Number(b.status === 'done') || b.updatedAt - a.updatedAt)
     const projectNote = projectsError ? `Projects unavailable: ${projectsError}` : undefined
-    const files = [
-      ...documents.items.map((doc) => ({ at: doc.updatedAt, item: documentItem(doc, projects, now) })),
-      ...saved.items.map((row) => ({ at: Date.parse(row.added) || 0, item: savedContextItem(row, now) })),
-    ].sort((a, b) => b.at - a.at).map((entry) => entry.item)
+    const contextItems = widgetContextItems(
+      { savedItems: saved.items, storeItems, asks, visits, runs, recommendations },
+      now,
+    )
+    const pages = [...documents.items]
+      .sort((a, b) => b.updatedAt - a.updatedAt)
+      .map((doc) => documentItem(doc, projects, now))
+
     return [
+      {
+        id: 'context',
+        name: 'Context',
+        description: contextItems.length
+          ? `${contextItems.length} item${contextItems.length === 1 ? '' : 's'} in your Context widget`
+          : 'Saved notes, links, captures, Ask turns & browsing',
+        items: contextItems,
+        loading: saved.loading && !contextItems.length,
+        note: saved.note ?? (contextItems.length ? undefined : 'Nothing in Context yet. Capture a page, add a note, or upload a file above.'),
+      },
       { id: 'tabs', name: 'Open tabs', description: tabs.items.length ? `${tabs.items.length} open` : 'Pages open in Ren', items: tabs.items, loading: tabs.loading, note: tabs.note },
       { id: 'conversations', name: 'Previous chats', description: threads.items.length ? `${threads.items.length} chats` : 'Reference a past conversation',
         items: threads.items.map((thread) => threadItem(thread, now)), loading: threads.loading, note: threads.note },
@@ -101,10 +130,10 @@ export function useContextSources(open: boolean) {
       { id: 'interests', name: 'Interests', description: interests.length ? `${interests.length} interests` : 'From your interview and browsing',
         items: [...interests].sort((a, b) => b.weight - a.weight).map(interestItem),
         note: interests.length ? undefined : 'No interests yet. Finish the interview or turn on “Learn from my browsing”.' },
-      { id: 'documents', name: 'Pages & files', description: 'Project pages and saved context', items: files,
-        loading: documents.loading || saved.loading, note: [documents.note, saved.note].filter(Boolean).join(' ') || undefined },
+      { id: 'documents', name: 'Pages & files', description: pages.length ? `${pages.length} project & personal page${pages.length === 1 ? '' : 's'}` : 'Project and personal pages', items: pages,
+        loading: documents.loading, note: documents.note ?? (pages.length ? undefined : 'No project or personal pages yet.') },
     ]
-  }, [tabs, threads, documents, saved, projects, issues, projectsLoading, projectsError, interests, now])
+  }, [tabs, threads, documents, saved, storeItems, asks, visits, runs, recommendations, projects, issues, projectsLoading, projectsError, interests, now])
 
   return { categories, reload: load, userId }
 }

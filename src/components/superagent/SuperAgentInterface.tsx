@@ -12,6 +12,8 @@
 import { useState, useRef, useEffect, useMemo, useCallback, memo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { cn } from '@/utils/cn'
+import { Marker, RenIcon } from '@/components/brand'
+import { PageBackground } from '@/components/shared/PageBackground'
 import { DEFAULT_AGENT_MODEL, ModelSelector, useAgentModels } from '@/components/agent-panel/ModelSelector'
 
 // AI Elements
@@ -333,8 +335,6 @@ export function SuperAgentInterface() {
   } | null>(null)
 
   // Orchestration store
-  const { graphNodes, workflowTasks, swarmNodes } = useOrchestrationStore()
-  const hasOrchestration = graphNodes.length > 0 || workflowTasks.length > 0 || swarmNodes.length > 0
   // Preview store (for browser/project automation previews)
   const isPreviewOpen = usePreviewStore(state => state.isOpen)
 
@@ -342,7 +342,6 @@ export function SuperAgentInterface() {
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const isEmpty = messages.length === 0
-  const isAmbientActive = isTyping || hasOrchestration
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -613,24 +612,19 @@ export function SuperAgentInterface() {
   // ─────────────────────────────────────────────────────────────────────────────
 
   return (
-    <div className="h-full flex flex-col relative overflow-hidden bg-surface-0 dark:bg-surface-900">
-      <NeuralGridBackground isActive={isAmbientActive} />
-      <AmbientBreathingGlow />
+    <div className="h-full flex flex-col relative isolate overflow-hidden bg-surface-50 dark:bg-surface-900">
+      <PageBackground />
 
       {/* Header */}
       <motion.header
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ delay: 0.1 }}
-        className="relative z-10 flex-shrink-0 px-6 py-4 flex items-center justify-between border-b border-surface-100 dark:border-surface-800 bg-surface-0/90 dark:bg-surface-900/90 backdrop-blur"
+        className="relative z-10 flex-shrink-0 px-6 py-3.5 flex items-center justify-between border-b border-surface-200/70 dark:border-surface-800/80 bg-surface-0/70 dark:bg-surface-900/70 backdrop-blur-xl"
       >
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-surface-100 dark:bg-surface-800 flex items-center justify-center border border-surface-200 dark:border-surface-700">
-            <LayersIcon className="w-4 h-4 text-ink dark:text-ink-inverse" />
-          </div>
-          <span className="text-body-md font-semibold text-ink dark:text-ink-inverse">
-            SuperAgent
-          </span>
+        <div className="flex items-center gap-2.5">
+          <RenIcon aria-hidden size={18} className="text-volt" />
+          <span className="text-[13px] font-semibold tracking-[-0.01em] text-ink dark:text-ink-inverse">Vibe</span>
         </div>
 
         <div className="flex items-center gap-3">
@@ -844,76 +838,6 @@ export function SuperAgentInterface() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Neural Grid Background
-// ─────────────────────────────────────────────────────────────────────────────
-
-const NeuralGridBackground = memo(function NeuralGridBackground({ isActive }: { isActive: boolean }) {
-  return (
-    <div className="absolute inset-0 pointer-events-none overflow-hidden">
-      <svg className="w-full h-full opacity-[0.07]">
-        {Array.from({ length: 100 }).map((_, i) => (
-          <circle
-            key={i}
-            cx={`${(i % 10) * 10 + 5}%`}
-            cy={`${Math.floor(i / 10) * 10 + 5}%`}
-            r={isActive ? 2 : 1.5}
-            className={cn(
-              "fill-violet-400 dark:fill-violet-500",
-              isActive && "animate-pulse"
-            )}
-            style={{ 
-              animationDelay: `${i * 0.02}s`,
-              opacity: isActive ? 0.6 : 0.3,
-            }}
-          />
-        ))}
-      </svg>
-    </div>
-  )
-})
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Ambient Breathing Glow
-// ─────────────────────────────────────────────────────────────────────────────
-
-const AmbientBreathingGlow = memo(function AmbientBreathingGlow() {
-  return (
-    <div className="absolute inset-0 pointer-events-none overflow-hidden">
-      {/* Core glow */}
-      <motion.div 
-        className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[400px]"
-        animate={{ scale: [1, 1.05, 1], opacity: [0.06, 0.08, 0.06] }}
-        transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
-        style={{ 
-          background: 'radial-gradient(ellipse, rgba(194,106,65,0.12), transparent 70%)', 
-          filter: 'blur(80px)' 
-        }}
-      />
-      {/* Middle ring */}
-      <motion.div 
-        className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[500px]"
-        animate={{ scale: [1, 1.03, 1], opacity: [0.04, 0.06, 0.04] }}
-        transition={{ duration: 5, repeat: Infinity, ease: "easeInOut", delay: 0.5 }}
-        style={{ 
-          background: 'radial-gradient(ellipse, rgba(169,83,46,0.08), transparent 70%)', 
-          filter: 'blur(100px)' 
-        }}
-      />
-      {/* Outer haze */}
-      <motion.div 
-        className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[1000px] h-[600px]"
-        animate={{ scale: [1, 1.02, 1], opacity: [0.02, 0.04, 0.02] }}
-        transition={{ duration: 6, repeat: Infinity, ease: "easeInOut", delay: 1 }}
-        style={{ 
-          background: 'radial-gradient(ellipse, rgba(194,106,65,0.06), transparent 70%)', 
-          filter: 'blur(120px)' 
-        }}
-      />
-    </div>
-  )
-})
-
-// ─────────────────────────────────────────────────────────────────────────────
 // Empty State with Mode Selector
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -931,6 +855,18 @@ function EmptyState({ onSuggestionClick, orchestrationMode, onModeChange }: Empt
       exit={{ opacity: 0 }}
       className="flex-1 flex flex-col items-center justify-center px-6 pb-32"
     >
+      {/* Hero: the same poster `.ren-display` statement as Build and Research */}
+      <section className="relative mb-8 text-center">
+        <div aria-hidden className="halftone pointer-events-none absolute -left-20 -top-14 h-48 w-[26rem] opacity-70 dark:opacity-50" />
+        <span className="tag-label tag-label-slash relative">Vibe</span>
+        <h1 className="ren-display relative mt-4 text-[clamp(44px,5.6vw,74px)] text-ink dark:text-ink-inverse">
+          Spill it.{' '}<span className="spray-halo inline-block"><Marker>I’m listening.</Marker></span>
+        </h1>
+        <p className="relative mx-auto mt-4 max-w-[34rem] text-[15px] leading-relaxed text-ink-secondary dark:text-ink-inverse-secondary">
+          Pick how Ren’s agents team up, then say what you’re after.
+        </p>
+      </section>
+
       {/* Orchestration Mode Selector */}
       <OrchestrationModeSelector mode={orchestrationMode} onModeChange={onModeChange} />
 
@@ -940,11 +876,11 @@ function EmptyState({ onSuggestionClick, orchestrationMode, onModeChange }: Empt
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.35 }}
       >
-          <Suggestions layout="wrap" className="max-w-xl justify-center">
-            <Suggestion suggestion="Research a topic in depth" onClick={onSuggestionClick} icon="🔬" />
-            <Suggestion suggestion="Analyze and summarize documents" onClick={onSuggestionClick} icon="📄" />
-            <Suggestion suggestion="Build a workflow automation" onClick={onSuggestionClick} icon="⚡" />
-            <Suggestion suggestion="Help me code something" onClick={onSuggestionClick} icon="💻" />
+          <Suggestions layout="wrap" className="max-w-xl justify-center gap-2">
+            <Suggestion suggestion="Research a topic in depth" onClick={onSuggestionClick} />
+            <Suggestion suggestion="Analyze and summarize documents" onClick={onSuggestionClick} />
+            <Suggestion suggestion="Build a workflow automation" onClick={onSuggestionClick} />
+            <Suggestion suggestion="Help me code something" onClick={onSuggestionClick} />
           </Suggestions>
       </motion.div>
     </motion.div>
@@ -979,24 +915,27 @@ const OrchestrationModeSelector = memo(function OrchestrationModeSelector({
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: 0.25 }}
-      className="flex items-center gap-2 mb-6"
+      role="group"
+      aria-label="How Ren's agents team up"
+      className="mb-6 inline-flex items-center gap-1 rounded-full border border-surface-200/80 bg-surface-0/80 p-1 shadow-[0_1px_2px_rgb(11_12_23/0.04)] backdrop-blur dark:border-surface-800 dark:bg-surface-900/70"
     >
       {modes.map((m) => (
-        <motion.button
+        <button
           key={m.id}
+          type="button"
+          aria-pressed={mode === m.id}
+          title={m.desc}
           onClick={() => onModeChange(m.id)}
-          whileHover={{ scale: 1.02, y: -1 }}
-          whileTap={{ scale: 0.98 }}
           className={cn(
-            "flex items-center gap-2 px-4 py-2 rounded-full transition-all duration-300",
+            "flex h-8 items-center gap-2 rounded-full px-3.5 transition-colors duration-150",
             mode === m.id
-              ? "bg-surface-100 dark:bg-surface-800 text-ink dark:text-ink-inverse border border-surface-200 dark:border-surface-700"
-              : "text-ink-muted dark:text-ink-inverse-muted hover:text-ink dark:hover:text-ink-inverse border border-transparent hover:border-surface-300 dark:hover:border-surface-600"
+              ? "bg-ink text-surface-0 dark:bg-ink-inverse dark:text-surface-900"
+              : "text-ink-secondary hover:text-ink dark:text-ink-inverse-secondary dark:hover:text-ink-inverse"
           )}
         >
           {m.icon}
-          <span className="text-body-sm font-medium">{m.label}</span>
-        </motion.button>
+          <span className="text-[13px] font-medium">{m.label}</span>
+        </button>
       ))}
     </motion.div>
   )
@@ -1145,16 +1084,6 @@ function TypingIndicator() {
 // ─────────────────────────────────────────────────────────────────────────────
 // Icons
 // ─────────────────────────────────────────────────────────────────────────────
-
-function LayersIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M12 2L2 7l10 5 10-5-10-5z" />
-      <path d="M2 17l10 5 10-5" />
-      <path d="M2 12l10 5 10-5" />
-    </svg>
-  )
-}
 
 function PlusIcon({ className }: { className?: string }) {
   return (
