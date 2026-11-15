@@ -157,7 +157,7 @@ function AddFavorite({ onAdd, variant }: AddFavoriteProps) {
           </button>
         )}
       </PopoverTrigger>
-      <PopoverContent align={variant === 'dial' ? 'center' : 'start'} className="w-72 rounded-xl border-border p-3 shadow-float">
+      <PopoverContent align={variant === 'dial' ? 'center' : 'start'} collisionPadding={12} className="w-72 rounded-xl border-border p-3 shadow-float">
         <form onSubmit={handleSubmit} className="flex flex-col gap-2">
           <p className="mb-1 font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground">Add a favorite</p>
           <Input

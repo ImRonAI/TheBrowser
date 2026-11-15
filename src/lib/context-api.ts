@@ -257,6 +257,22 @@ export function browsingTurn(visits: Visit[], graph: { label: string; weight: nu
   return `[browsing]\nPages the user visited:\n${lines.join('\n')}\n\nCurrent interest graph: ${graphLine(graph)}`
 }
 
+/** What the user did on their phone between two reports (ren mobile): the apps they used and what Ren did there. */
+export interface PhoneApp { name: string; minutes: number }
+export interface PhoneAction { text: string; at: number }
+export interface PhoneActivity { since: number; until: number; apps: PhoneApp[]; actions: PhoneAction[] }
+
+const moment = (at: number) => new Date(at).toISOString().slice(0, 16).replace('T', ' ')
+
+/** Pages visited in the phone's browser are browsing turns; this is the rest of the phone. */
+export function phoneTurn(activity: PhoneActivity, graph: { label: string; weight: number }[]): string {
+  const apps = activity.apps.map((app) => `- ${app.name.trim() || '(unnamed app)'} — ${app.minutes} min`)
+  const actions = activity.actions.map((action) => `- ${moment(action.at)} ${action.text.trim()}`)
+  return `[phone]\nThe user's phone from ${moment(activity.since)} to ${moment(activity.until)} UTC.\n`
+    + `Apps they used (time on screen):\n${apps.join('\n') || '(none)'}\n\n`
+    + `What Ren did on the phone for them:\n${actions.join('\n') || '(nothing)'}\n\nCurrent interest graph: ${graphLine(graph)}`
+}
+
 export function contextAddedTurn(item: ContextItem, graph: { label: string; weight: number }[]): string {
   const source = item.source ? `\nSource: ${item.source}` : ''
   const preview = item.preview ? `\nExcerpt: ${item.preview.slice(0, 600)}` : ''

@@ -116,12 +116,14 @@ export function languageName(path: string): string {
   return LanguageDescription.matchFilename(languages, path.split('/').pop() || path)?.name ?? 'Plain text'
 }
 
-export function CodeEditor({ path, value, onChange, onSave, readOnly = false }: {
+export function CodeEditor({ path, value, onChange, onSave, readOnly = false, autoFocus = false }: {
   path: string
   value: string
   onChange: (value: string) => void
   onSave: () => void
   readOnly?: boolean
+  /** Puts the keyboard in the editor when it mounts. */
+  autoFocus?: boolean
 }) {
   const dark = useDocumentDark()
   const language = useLanguage(path)
@@ -142,6 +144,7 @@ export function CodeEditor({ path, value, onChange, onSave, readOnly = false }: 
       extensions={extensions}
       editable={!readOnly}
       readOnly={readOnly}
+      autoFocus={autoFocus}
       onChange={onChange}
       basicSetup={{ highlightActiveLine: true, highlightActiveLineGutter: true, foldGutter: true, bracketMatching: true,
         closeBrackets: true, autocompletion: true, indentOnInput: true, tabSize: 2 }}

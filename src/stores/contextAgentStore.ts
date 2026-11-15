@@ -12,8 +12,8 @@ import { API_BASE_URL } from '@/lib/api-base'
 import { cancelRon, ronSessionId, runRon } from '@/lib/ron-run'
 import {
   approveAgentTurn, browsingDue, browsingTurn, cadenceLabel, contextAddedTurn, contextResults, createContextClient, dataUrlBlob, latestReply,
-  recordVisit, whenLabel, type AgentCadence, type AgentRecommendation, type AgentRun, type ContextItem, type NewContextFile, type NewContextItem,
-  type SpecialistAgent, type Visit,
+  phoneTurn, recordVisit, whenLabel, type AgentCadence, type AgentRecommendation, type AgentRun, type ContextItem, type NewContextFile, type NewContextItem,
+  type PhoneActivity, type SpecialistAgent, type Visit,
 } from '@/lib/context-api'
 import { startScreenRecording, type ScreenRecording } from '@/lib/screen-recorder'
 import { isGuestUserId } from '@/lib/sign-in'
@@ -65,6 +65,8 @@ interface ContextAgentState {
   yieldToPanel: () => void
   observeVisit: (url: string, title: string) => void
   flushBrowsing: (force?: boolean) => Promise<void>
+  /** ren mobile: the apps the user used on the phone and what Ren did there, as one Context Agent turn. */
+  reportPhone: (activity: PhoneActivity) => Promise<void>
   refreshItems: () => Promise<void>
   refreshAgents: () => Promise<void>
   addContext: (item: NewContextItem) => Promise<ContextItem | null>
@@ -168,6 +170,15 @@ export const useContextAgentStore = create<ContextAgentState>()(persist((set, ge
         await run(browsingTurn(visits, graph()), `Reading ${visits.length} page${visits.length === 1 ? '' : 's'} you visited`)
       } catch (error) {
         set({ error: `Context Agent could not read your browsing: ${messageOf(error)}` })
+      }
+    },
+
+    reportPhone: async (activity) => {
+      if (!activity.apps.length && !activity.actions.length) return
+      try {
+        await run(phoneTurn(activity, graph()), 'Reading what you did on your phone')
+      } catch (error) {
+        set({ error: `Context Agent could not read your phone activity: ${messageOf(error)}` })
       }
     },
 
