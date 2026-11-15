@@ -346,10 +346,12 @@ class AgentScheduler:
             self._watch(row["id"], row["owner_id"], row["session_id"])
 
     async def _forever(self) -> None:
-        try:
-            await self._resume()
-        except Exception:
-            logger.exception("resuming specialist runs failed")
+        # A process with schedules off (RON_AGENT_SCHEDULES=0) leaves runs to the one that runs them.
+        if self._enabled:
+            try:
+                await self._resume()
+            except Exception:
+                logger.exception("resuming specialist runs failed")
         while True:
             if self._enabled:
                 try:
