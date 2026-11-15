@@ -288,6 +288,7 @@ class ProfileAnswer(BaseModel):
     model_config = ConfigDict(extra="forbid")
     question: str = Field(max_length=1000)
     answer: str = Field(max_length=4000)
+    timestamp: float = 0
 
 
 class ProfileOnboarding(BaseModel):
@@ -311,15 +312,15 @@ class ProfileInterest(BaseModel):
 
 
 class ProfileConnection(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
     id: str = Field(max_length=500)
+    from_: str = Field(alias="from", max_length=200)
     to: str = Field(max_length=200)
     strength: float = Field(ge=0, le=1)
-    from_: str = Field(alias="from", max_length=200)
 
 
 class ProfileInterests(BaseModel):
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    model_config = ConfigDict(extra="forbid")
     nodes: list[ProfileInterest] = Field(default_factory=list, max_length=200)
     connections: list[ProfileConnection] = Field(default_factory=list, max_length=2000)
     isInitialized: bool = False
@@ -349,7 +350,7 @@ async def read_profile(user_id: Identifier = "default") -> dict[str, Any]:
     """The account's interview and interest graph, or null before any device saved them. Guests have none."""
     _owner(user_id)
     data = await context_agent.get_user_session_storage(user_id).read(PROFILE_KEY)
-    return {"profile": Profile.model_validate_json(data).model_dump(by_alias=True) if data else None}
+    return {"profile": Profile.model_validate_json(data).model_dump(by_alias=True, exclude_none=True) if data else None}
 
 
 @router.put("/profile")
@@ -361,9 +362,9 @@ async def save_profile(body: ProfileSave) -> dict[str, Any]:
     if stored:
         current = Profile.model_validate_json(stored)
         if current.updated_at > body.profile.updated_at:
-            return {"profile": current.model_dump(by_alias=True)}
-    await storage.write(PROFILE_KEY, body.profile.model_dump_json(by_alias=True).encode())
-    return {"profile": body.profile.model_dump(by_alias=True)}
+            return {"profile": current.model_dump(by_alias=True, exclude_none=True)}
+    await storage.write(PROFILE_KEY, body.profile.model_dump_json(by_alias=True, exclude_none=True).encode())
+    return {"profile": body.profile.model_dump(by_alias=True, exclude_none=True)}
 
 
 @router.get("/status")

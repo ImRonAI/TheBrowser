@@ -74,6 +74,8 @@ interface InterestsState {
   /** Replace the graph with the Context Agent's complete revised graph (`update_interest_graph`). */
   applyAgentGraph: (interests: Array<{ label: string; weight: number; category: InterestCategory; reason: string }>) => void
   removeInterest: (id: string) => void
+  /** The account's graph from another device (`accountProfileStore`); nodes this device already shows keep their place. */
+  applyAccountGraph: (graph: { nodes: Array<Omit<InterestNode, 'position' | 'velocity'>>; connections: InterestConnection[]; isInitialized: boolean }) => void
   updateNodePosition: (id: string, position: { x: number; y: number }) => void
   updateNodeVelocity: (id: string, velocity: { x: number; y: number }) => void
   getTopInterests: (n: number) => InterestNode[]
@@ -373,6 +375,16 @@ export const useInterestsStore = create<InterestsState>()(
           nodes: nodes.filter(n => n.id !== id),
           connections: connections.filter(c => c.from !== id && c.to !== id)
         })
+      },
+
+      applyAccountGraph: (graph) => {
+        const shown = new Map(get().nodes.map((node) => [node.id, node]))
+        const nodes: InterestNode[] = []
+        for (const node of graph.nodes) {
+          const before = shown.get(node.id)
+          nodes.push({ ...node, position: before?.position ?? generateInitialPosition(nodes), velocity: before?.velocity ?? { x: 0, y: 0 } })
+        }
+        set({ nodes, connections: graph.connections, isInitialized: graph.isInitialized })
       },
 
       updateNodePosition: (id: string, position: { x: number; y: number }) => {
