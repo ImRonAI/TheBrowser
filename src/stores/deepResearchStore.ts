@@ -64,6 +64,8 @@ export interface DeepResearchState {
   depths: ResearchDepth[]
   preferredDepth: ResearchDepth
   preferredModel: AgentModelSelection
+  /** The Formation tab as the agent graph or as the stage list. */
+  formationView: 'graph' | 'list'
   runs: DeepResearchSnapshot[]
   activeSessionId: string | null
   snapshotsBySession: Record<string, DeepResearchSnapshot>
@@ -74,6 +76,7 @@ export interface DeepResearchState {
 
   setPreferredDepth: (depth: ResearchDepth) => void
   setPreferredModel: (selection: AgentModelSelection) => void
+  setFormationView: (view: 'graph' | 'list') => void
   clearError: () => void
   setActiveSession: (sessionId: string | null, syncUrl?: boolean) => void
   init: (userId?: string) => Promise<void>
@@ -215,6 +218,7 @@ export const useDeepResearchStore = create<DeepResearchState>()(
         depths: [...RESEARCH_DEPTHS],
         preferredDepth: DEFAULT_RESEARCH_DEPTH,
         preferredModel: { model: DEFAULT_AGENT_MODEL, provider: '', effort: '' },
+        formationView: 'graph',
         runs: [],
         activeSessionId: null,
         snapshotsBySession: {},
@@ -225,6 +229,7 @@ export const useDeepResearchStore = create<DeepResearchState>()(
 
         setPreferredDepth: (depth) => set({ preferredDepth: depth }),
         setPreferredModel: (selection) => set({ preferredModel: selection }),
+        setFormationView: (view) => set({ formationView: view }),
         clearError: () => set({ error: null }),
 
         setActiveSession: (sessionId, syncUrl = true) => {
@@ -260,6 +265,10 @@ export const useDeepResearchStore = create<DeepResearchState>()(
             set((state) => {
               const nextMap = { ...state.snapshotsBySession }
               const mergedRuns = listed.map((item) => {
+                // A run with a live stream attached is ahead of this poll: its events already built a
+                // newer state (and the agents' transcripts), which an older listing must not replace.
+                const streamed = activeControllers.has(item.session_id) ? nextMap[item.session_id] : undefined
+                if (streamed) return streamed
                 const merged = normalizeDeepResearchSnapshot(item, nextMap[item.session_id])
                 nextMap[item.session_id] = merged
                 return merged
@@ -425,6 +434,7 @@ export const useDeepResearchStore = create<DeepResearchState>()(
       partialize: (state) => ({
         preferredDepth: state.preferredDepth,
         preferredModel: state.preferredModel,
+        formationView: state.formationView,
       }),
     },
   ),

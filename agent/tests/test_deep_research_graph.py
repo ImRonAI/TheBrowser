@@ -140,10 +140,13 @@ class ScriptedFormationCoordinator:
         refine_once: bool = True,
         slow_gate: asyncio.Event | None = None,
         invoke_artifact_tools: bool = True,
+        reasoning: str | None = None,
     ) -> None:
         self.refine_once = refine_once
         self.slow_gate = slow_gate
         self.invoke_artifact_tools = invoke_artifact_tools
+        # When set, every model turn opens with this text as a native reasoning content block.
+        self.reasoning = reasoning
         self.lock = threading.Lock()
         self.verification_critic_visits = 0
         self.adversarial_handoffs = 0
@@ -178,6 +181,27 @@ class ScriptedFormationModel(Model):
         yield {}  # pragma: no cover
 
     async def stream(
+        self,
+        messages: Any,
+        tool_specs: list[Any] | None = None,
+        system_prompt: str | None = None,
+        **kwargs: Any,
+    ) -> AsyncIterator[StreamEvent]:
+        async for ev in self._scripted_stream(messages, tool_specs, system_prompt, **kwargs):
+            yield ev
+            if self.coordinator.reasoning and "messageStart" in ev:
+                yield cast(
+                    StreamEvent,
+                    {
+                        "contentBlockDelta": {
+                            "contentBlockIndex": 0,
+                            "delta": {"reasoningContent": {"text": self.coordinator.reasoning}},
+                        }
+                    },
+                )
+                yield cast(StreamEvent, {"contentBlockStop": {"contentBlockIndex": 0}})
+
+    async def _scripted_stream(
         self,
         messages: Any,
         tool_specs: list[Any] | None = None,
@@ -1023,6 +1047,103 @@ async def test_deep_research_runtime_sse_streaming_persistence_and_delete(
     assert await restarted_runtime.get_run(user_id="user-alpha", session_id="dr-alpha-001") is None
     assert await restarted_runtime.list_runs(user_id="user-alpha") == []
     await restarted_runtime.aclose()
+
+
+@pytest.mark.asyncio
+async def test_run_transcripts_keep_reasoning_and_tool_payloads_and_lists_leave_them_out(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("RON_SLIDEV_DISABLE_CLI", "1")
+    shared_storage = InMemoryStorage()
+    coordinator = ScriptedFormationCoordinator(refine_once=False, reasoning="Weighing which source to read first.")
+    runtime = DeepResearchRuntime(
+        storage_factory=lambda _uid: shared_storage,
+        model_builder=coordinator.make_model,
+        extra_leaf_tools=_offline_leaf_tools(),
+        artifacts_dir=tmp_path / "artifacts",
+    )
+    await runtime.start_run(
+        user_id="user-alpha",
+        query="Compare qLDPC vs surface code fault-tolerant architectures",
+        session_id="dr-transcript-001",
+        depth="standard",
+    )
+    events: list[dict[str, Any]] = []
+    async for frame in runtime.sse(user_id="user-alpha", session_id="dr-transcript-001", after=0):
+        events.append(json.loads(frame.strip().splitlines()[1][6:]))
+    await runtime.wait_run(user_id="user-alpha", session_id="dr-transcript-001", timeout=5.0)
+
+    # Reasoning streams for the node's own agent and, with `skill_id`, for its use_skill sub-agent.
+    reasoning = [ev for ev in events if ev["type"] == "reasoning_delta"]
+    assert any(not ev.get("skill_id") for ev in reasoning)
+    assert any(ev.get("skill_id") for ev in reasoning)
+    assert all(ev["delta"] == "Weighing which source to read first." for ev in reasoning)
+    assert all(ev["node_path"] for ev in reasoning)
+
+    # A finished tool call keeps its name and carries its whole result.
+    finished = [ev for ev in events if ev["type"] == "skill_tool" and ev.get("status") in ("completed", "failed")]
+    assert finished
+    assert all(ev.get("tool_name") and ev["tool_name"] != "research_tool" for ev in finished)
+    assert all(isinstance(ev.get("output"), str) and ev.get("output_truncated") is False for ev in finished)
+    started = [ev for ev in events if ev["type"] == "skill_tool" and ev.get("status") == "running"]
+    assert any(isinstance(ev.get("input"), dict) and ev["input"] for ev in started)
+
+    full = await runtime.get_run(user_id="user-alpha", session_id="dr-transcript-001")
+    assert full is not None
+    node = full["nodes"]["planning_formation/problem_framing"]
+    kinds = [part["kind"] for part in node["activity"]]
+    assert kinds[0] == "reasoning"
+    assert "skill" in kinds and kinds[-1] == "text"
+    assert node["activity"][0]["text"] == "Weighing which source to read first."
+    skill_part = next(part for part in node["activity"] if part["kind"] == "skill")
+    skill = next(sk for sk in full["skill_invocations"] if sk["id"] == skill_part["skill_id"])
+    assert skill["node_key"] == "planning_formation/problem_framing"
+    step_kinds = [step["kind"] for step in skill["steps"]]
+    assert step_kinds[0] == "reasoning" and "tool" in step_kinds and step_kinds[-1] == "text"
+    tool_step = next(step for step in skill["steps"] if step["kind"] == "tool")
+    tool_call = next(item for item in skill["tools"] if item["id"] == tool_step["tool_id"])
+    assert tool_call["tool_name"] != "research_tool"
+    assert isinstance(tool_call["input"], dict) and tool_call["input"]
+    assert tool_call["output"] and tool_call["status"] == "completed"
+    assert "".join(step["text"] for step in skill["steps"] if step["kind"] == "text") == skill["output_text"]
+    # No tool row is created for a framework plugin tool's result, and none loses its name on completion.
+    assert all(
+        item["tool_name"] != "research_tool" for sk in full["skill_invocations"] for item in sk["tools"]
+    )
+    # The node's own copy of its skills is a summary: the transcript is stored once.
+    node_skill = node["skill_invocations"][0]
+    assert "steps" not in node_skill
+    assert all("output" not in item and "input" not in item for item in node_skill["tools"])
+
+    # Lists carry status and previews only.
+    listed = next(
+        item for item in await runtime.list_runs(user_id="user-alpha") if item["session_id"] == "dr-transcript-001"
+    )
+    assert listed["status"] == "completed"
+    assert all("activity" not in listed_node for listed_node in listed["nodes"].values())
+    assert listed["skill_invocations"] and all("steps" not in sk for sk in listed["skill_invocations"])
+    assert all(
+        "output" not in item and "input" not in item and item["tool_name"]
+        for sk in listed["skill_invocations"]
+        for item in sk["tools"]
+    )
+    # Reading the list did not strip the stored run.
+    again = await runtime.get_run(user_id="user-alpha", session_id="dr-transcript-001")
+    assert again is not None and again["nodes"]["planning_formation/problem_framing"]["activity"]
+
+
+def test_tool_output_text_keeps_json_blocks_and_cuts_at_the_configured_length(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from agent.api.core import config as app_config
+    from agent.api.core.deep_research import _tool_output_text
+
+    result = {"content": [{"text": "alpha"}, {"json": {"hits": [1, 2]}}]}
+    text, truncated = _tool_output_text(result)
+    assert text.startswith("alpha\n{") and '"hits"' in text and truncated is False
+    monkeypatch.setattr(app_config, "RON_DEEP_RESEARCH_TOOL_OUTPUT_CHARS", 3)
+    assert _tool_output_text(result) == ("alp", True)
 
 
 @pytest.mark.asyncio

@@ -158,6 +158,9 @@ _OWNER_META_FILENAME: Final[str] = ".owner.json"
 _SESSION_ID_SAFE_RE: Final[re.Pattern[str]] = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$")
 _MARKDOWN_LINK_RE: Final[re.Pattern[str]] = re.compile(r"\[([^\]\n]{2,240})\]\((https?://[^\s)]+)\)")
 
+#: A tool call's full input/output in a run's transcript; lists and per-node skill copies leave them out.
+_TOOL_PAYLOAD_KEYS: Final[frozenset[str]] = frozenset({"input", "output", "output_truncated"})
+
 SYNTHESIS_PROSE_NODES: Final[frozenset[str]] = frozenset({"report_drafter", "executive_editor"})
 SYNTHESIS_ARTIFACT_NODES: Final[frozenset[str]] = frozenset({"pdf_publisher", "slidev_producer"})
 
@@ -3193,6 +3196,69 @@ def _extract_tool_result_text(tool_result: Mapping[str, Any]) -> str:
     return ""
 
 
+def _tool_output_text(tool_result: Mapping[str, Any]) -> tuple[str, bool]:
+    """A leaf tool result as the transcript keeps it: whole text and JSON blocks, cut at the configured length."""
+    content = tool_result.get("content")
+    parts: list[str] = []
+    if isinstance(content, str):
+        parts.append(content)
+    elif isinstance(content, Sequence) and not isinstance(content, (str, bytes)):
+        for block in content:
+            if not isinstance(block, Mapping):
+                continue
+            if isinstance(block.get("text"), str):
+                parts.append(block["text"])
+            elif "json" in block:
+                try:
+                    parts.append(json.dumps(block["json"], ensure_ascii=False, indent=2))
+                except (TypeError, ValueError):
+                    parts.append(str(block["json"]))
+    text = "\n".join(part for part in parts if part).strip()
+    limit = max(0, int(app_config.RON_DEEP_RESEARCH_TOOL_OUTPUT_CHARS))
+    return text[:limit], len(text) > limit
+
+
+def _append_transcript_text(parts: list[dict[str, Any]], kind: str, delta: str, sequence: int) -> None:
+    """Add streamed text to a transcript: it continues the last part when that part is the same kind."""
+    if parts and parts[-1].get("kind") == kind:
+        parts[-1]["text"] = str(parts[-1].get("text") or "") + delta
+    else:
+        parts.append({"id": f"p{sequence}", "kind": kind, "text": delta})
+
+
+def _without_transcripts(snapshot: dict[str, Any]) -> dict[str, Any]:
+    """A run snapshot for lists: status and previews only, without transcripts or tool payloads."""
+
+    def slim_skill(skill: Any) -> Any:
+        if not isinstance(skill, dict):
+            return skill
+        slim = {key: value for key, value in skill.items() if key != "steps"}
+        slim["tools"] = [
+            {key: value for key, value in tool_item.items() if key not in _TOOL_PAYLOAD_KEYS}
+            if isinstance(tool_item, dict)
+            else tool_item
+            for tool_item in skill.get("tools") or ()
+        ]
+        return slim
+
+    nodes = snapshot.get("nodes")
+    if isinstance(nodes, dict):
+        snapshot["nodes"] = {
+            key: (
+                {
+                    **{field: value for field, value in node.items() if field != "activity"},
+                    "skill_invocations": [slim_skill(skill) for skill in node.get("skill_invocations") or ()],
+                }
+                if isinstance(node, dict)
+                else node
+            )
+            for key, node in nodes.items()
+        }
+    if isinstance(snapshot.get("skill_invocations"), list):
+        snapshot["skill_invocations"] = [slim_skill(skill) for skill in snapshot["skill_invocations"]]
+    return snapshot
+
+
 def _summarize_markdown(markdown: str, fallback: str = "") -> str:
     if not markdown.strip():
         return fallback
@@ -3305,6 +3371,8 @@ class _DeepResearchRun:
                     "skills_used": [],
                     "skill_invocations": [],
                     "output_preview": "",
+                    # The agent's own work in order: text, reasoning, each use_skill call, repeat passes.
+                    "activity": [],
                     "error": None,
                 }
             elif is_leaf and node_type_hint:
@@ -3315,7 +3383,19 @@ class _DeepResearchRun:
         node = self.nodes.get(node_key)
         if node is None:
             return
-        matching = [copy.deepcopy(sk) for sk in self.skill_invocations if sk.get("node_key") == node_key]
+        # The node's copies are summaries: the transcript (`steps`, tool input/output) is kept once,
+        # in the run's `skill_invocations`.
+        matching = [
+            {
+                **{key: copy.deepcopy(value) for key, value in sk.items() if key not in ("steps", "tools")},
+                "tools": [
+                    {key: value for key, value in tool_item.items() if key not in _TOOL_PAYLOAD_KEYS}
+                    for tool_item in sk.get("tools") or ()
+                ],
+            }
+            for sk in self.skill_invocations
+            if sk.get("node_key") == node_key
+        ]
         names: list[str] = list(node.get("skills_used") or [])
         for sk in matching:
             sk_name = str(sk.get("skill_name") or "")
@@ -3394,6 +3474,9 @@ class _DeepResearchRun:
             node["completed_at"] = None
             node["execution_count"] = exec_count
             node["error"] = None
+            activity: list[dict[str, Any]] = node.setdefault("activity", [])
+            if exec_count > 1 and activity:
+                activity.append({"id": f"p{event['sequence']}", "kind": "pass", "pass": exec_count})
             self.active_node_path = list(node_path)
             self.execution_order.append(key)
             if key == "investigation_formation" and exec_count > 1:
@@ -3477,6 +3560,8 @@ class _DeepResearchRun:
                 "tools": [],
                 "output_text": "",
                 "summary": "",
+                # The sub-agent's work in order: text, reasoning, each tool call.
+                "steps": [],
             }
             if skill_id in self._skills_by_id:
                 self._skills_by_id[skill_id].update(record)
@@ -3484,6 +3569,9 @@ class _DeepResearchRun:
                 self._skills_by_id[skill_id] = record
                 self.skill_invocations.append(record)
             if node_key:
+                node_activity: list[dict[str, Any]] = self.nodes[node_key].setdefault("activity", [])
+                if not any(part.get("kind") == "skill" and part.get("skill_id") == skill_id for part in node_activity):
+                    node_activity.append({"id": f"p{event['sequence']}", "kind": "skill", "skill_id": skill_id})
                 self._sync_node_skills(node_key)
             return
 
@@ -3492,24 +3580,30 @@ class _DeepResearchRun:
             target = self._skills_by_id.get(skill_id)
             if target is not None:
                 tool_id = str(event.get("tool_use_id") or f"tool-{event['sequence']}")
-                tool_entry = {
-                    "id": tool_id,
-                    "tool_name": str(event.get("tool_name") or "research_tool"),
-                    "input_preview": str(event.get("input_preview") or ""),
-                    "status": str(event.get("status") or "running"),
-                    "output_preview": str(event.get("output_preview") or ""),
-                    "timestamp": timestamp,
-                }
                 tools_list: list[dict[str, Any]] = target["tools"]
                 existing_idx = next((i for i, item in enumerate(tools_list) if item["id"] == tool_id), -1)
+                previous: dict[str, Any] = tools_list[existing_idx] if existing_idx >= 0 else {}
+                # A result event names neither the tool nor its input: both stay as the call set them.
+                tool_entry = {
+                    "id": tool_id,
+                    "tool_name": str(event.get("tool_name") or previous.get("tool_name") or "research_tool"),
+                    "input_preview": str(event.get("input_preview") or previous.get("input_preview") or ""),
+                    "status": str(event.get("status") or "running"),
+                    "output_preview": str(event.get("output_preview") or previous.get("output_preview") or ""),
+                    "timestamp": timestamp,
+                    "input": copy.deepcopy(event["input"]) if "input" in event else previous.get("input"),
+                    "output": str(event["output"]) if "output" in event else str(previous.get("output") or ""),
+                    "output_truncated": bool(
+                        event["output_truncated"] if "output_truncated" in event else previous.get("output_truncated")
+                    ),
+                }
                 if existing_idx >= 0:
-                    if not tool_entry["input_preview"]:
-                        tool_entry["input_preview"] = tools_list[existing_idx].get("input_preview", "")
-                    if not tool_entry["output_preview"]:
-                        tool_entry["output_preview"] = tools_list[existing_idx].get("output_preview", "")
                     tools_list[existing_idx] = tool_entry
                 else:
                     tools_list.append(tool_entry)
+                    target.setdefault("steps", []).append(
+                        {"id": f"p{event['sequence']}", "kind": "tool", "tool_id": tool_id}
+                    )
                 if target.get("node_key"):
                     self._sync_node_skills(str(target["node_key"]))
             return
@@ -3521,8 +3615,26 @@ class _DeepResearchRun:
             if target is not None and delta:
                 target["output_text"] = str(target.get("output_text") or "") + delta
                 target["summary"] = str(target["output_text"]).strip()[:320]
+                _append_transcript_text(target.setdefault("steps", []), "text", delta, int(event["sequence"]))
                 if target.get("node_key"):
                     self._sync_node_skills(str(target["node_key"]))
+            return
+
+        if ev_type == "reasoning_delta":
+            delta = str(event.get("delta") or "")
+            if not delta:
+                return
+            skill_id = str(event.get("skill_id") or "")
+            if skill_id:
+                target = self._skills_by_id.get(skill_id)
+                if target is not None:
+                    _append_transcript_text(target.setdefault("steps", []), "reasoning", delta, int(event["sequence"]))
+                return
+            if node_path:
+                key = self._ensure_node(node_path, timestamp)
+                _append_transcript_text(
+                    self.nodes[key].setdefault("activity", []), "reasoning", delta, int(event["sequence"])
+                )
             return
 
         if ev_type == "skill_stop":
@@ -3553,6 +3665,9 @@ class _DeepResearchRun:
                 prev_preview = str(self.nodes[key].get("output_preview") or "")
                 if len(prev_preview) < 400:
                     self.nodes[key]["output_preview"] = (prev_preview + delta).strip()[:400]
+                _append_transcript_text(
+                    self.nodes[key].setdefault("activity", []), "text", delta, int(event["sequence"])
+                )
             leaf_id = node_path[-1] if node_path else ""
             if event.get("is_slidev") is True or leaf_id == "slidev_producer":
                 self.slidev_markdown += delta
@@ -3628,12 +3743,16 @@ class _DeepResearchRun:
                     sk["completed_at"] = timestamp
             self._done.set()
 
-    def snapshot(self, *, include_report: bool = True) -> dict[str, Any]:
+    def snapshot(self, *, include_report: bool = True, include_transcripts: bool = True) -> dict[str, Any]:
         elapsed_ms = (
             int((time.monotonic() - self._started_monotonic) * 1000)
             if self.active
             else int(self.execution_time_ms)
         )
+        snap = self._snapshot_fields(elapsed_ms, include_report)
+        return snap if include_transcripts else _without_transcripts(snap)
+
+    def _snapshot_fields(self, elapsed_ms: int, include_report: bool) -> dict[str, Any]:
         return {
             "version": 1,
             "session_id": self.session_id,
@@ -3884,6 +4003,7 @@ class DeepResearchRuntime:
         user_id: str,
         session_id: str,
         include_report: bool = True,
+        include_transcripts: bool = True,
     ) -> dict[str, Any] | None:
         storage = self._user_storage(user_id)
         raw = await storage.read(self._snapshot_key(session_id))
@@ -3907,7 +4027,7 @@ class DeepResearchRuntime:
             snap["slidev_markdown"] = None
         else:
             snap.setdefault("slidev_markdown", "")
-        return snap
+        return snap if include_transcripts else _without_transcripts(snap)
 
     async def _read_stored_events(self, *, user_id: str, session_id: str) -> list[dict[str, Any]] | None:
         storage = self._user_storage(user_id)
@@ -4041,6 +4161,8 @@ class DeepResearchRuntime:
         skill_meta: dict[str, tuple[str, float]] = {}
         completed_skill_ids: set[str] = set()
         seen_leaf_tool_completions: set[tuple[str, str]] = set()
+        # (skill id, tool use id) -> tool name, for every leaf tool call the stream has announced.
+        leaf_tool_names: dict[tuple[str, str], str] = {}
         final_graph_result: Any = None
 
         prompt_parts = [f"# Deep Research Inquiry\n{run.query}"]
@@ -4135,6 +4257,39 @@ class DeepResearchRuntime:
                         if cits:
                             await _emit_new_citations(cits, path)
 
+                # Reasoning produced by the leaf subagent (native `ReasoningTextStreamEvent`).
+                child_reasoning = child_data.get("reasoningText")
+                if isinstance(child_reasoning, str) and child_reasoning and "tool_stream_event" not in child_data:
+                    await run.emit(
+                        "reasoning_delta",
+                        node_path=path,
+                        skill_id=skill_id,
+                        skill_name=skill_name,
+                        delta=child_reasoning,
+                    )
+
+                # A leaf tool call the subagent has begun streaming (native `ToolUseStreamEvent`): it is
+                # named here, before its input is complete; the message boundary below adds the input.
+                streaming_tool = child_data.get("current_tool_use")
+                if isinstance(streaming_tool, Mapping):
+                    st_name = str(streaming_tool.get("name") or "")
+                    st_id = str(streaming_tool.get("toolUseId") or "")
+                    if (
+                        st_id
+                        and st_name
+                        and st_name not in FRAMEWORK_PLUGIN_TOOL_NAMES
+                        and (skill_id, st_id) not in leaf_tool_names
+                    ):
+                        leaf_tool_names[(skill_id, st_id)] = st_name
+                        await run.emit(
+                            "skill_tool",
+                            node_path=path,
+                            skill_id=skill_id,
+                            tool_use_id=st_id,
+                            tool_name=st_name,
+                            status="running",
+                        )
+
                 # Leaf tool invocations & results inside the leaf subagent.
                 child_msg = child_data.get("message")
                 if isinstance(child_msg, Mapping):
@@ -4150,6 +4305,7 @@ class DeepResearchRuntime:
                                 continue
                             t_id = str(tu.get("toolUseId") or "")
                             t_inp = tu.get("input")
+                            leaf_tool_names[(skill_id, t_id)] = t_name
                             await run.emit(
                                 "skill_tool",
                                 node_path=path,
@@ -4172,15 +4328,22 @@ class DeepResearchRuntime:
                             if t_id:
                                 seen_leaf_tool_completions.add(dedup_key)
                             tr_text = _extract_tool_result_text(tr)
-                            tr_status = "failed" if str(tr.get("status") or "").lower() == "error" else "completed"
-                            await run.emit(
-                                "skill_tool",
-                                node_path=path,
-                                skill_id=skill_id,
-                                tool_use_id=t_id,
-                                status=tr_status,
-                                output_preview=_preview_json_or_text(tr_text),
-                            )
+                            # A result whose call was never announced belongs to a framework plugin tool:
+                            # it is not a tool row, but its text is still read for citations.
+                            if dedup_key in leaf_tool_names:
+                                tr_status = "failed" if str(tr.get("status") or "").lower() == "error" else "completed"
+                                tr_output, tr_truncated = _tool_output_text(tr)
+                                await run.emit(
+                                    "skill_tool",
+                                    node_path=path,
+                                    skill_id=skill_id,
+                                    tool_use_id=t_id,
+                                    tool_name=leaf_tool_names[dedup_key],
+                                    status=tr_status,
+                                    output_preview=_preview_json_or_text(tr_text),
+                                    output=tr_output,
+                                    output_truncated=tr_truncated,
+                                )
                             cits = _extract_citations_from_payload(tr_text, fallback_source=skill_name)
                             if cits:
                                 await _emit_new_citations(cits, path)
@@ -4193,15 +4356,20 @@ class DeepResearchRuntime:
                         if t_id:
                             seen_leaf_tool_completions.add(dedup_key)
                         tr_text = _extract_tool_result_text(tr)
-                        tr_status = "failed" if str(tr.get("status") or "").lower() == "error" else "completed"
-                        await run.emit(
-                            "skill_tool",
-                            node_path=path,
-                            skill_id=skill_id,
-                            tool_use_id=t_id,
-                            status=tr_status,
-                            output_preview=_preview_json_or_text(tr_text),
-                        )
+                        if dedup_key in leaf_tool_names:
+                            tr_status = "failed" if str(tr.get("status") or "").lower() == "error" else "completed"
+                            tr_output, tr_truncated = _tool_output_text(tr)
+                            await run.emit(
+                                "skill_tool",
+                                node_path=path,
+                                skill_id=skill_id,
+                                tool_use_id=t_id,
+                                tool_name=leaf_tool_names[dedup_key],
+                                status=tr_status,
+                                output_preview=_preview_json_or_text(tr_text),
+                                output=tr_output,
+                                output_truncated=tr_truncated,
+                            )
                         cits = _extract_citations_from_payload(tr_text, fallback_source=skill_name)
                         if cits:
                             await _emit_new_citations(cits, path)
@@ -4283,7 +4451,11 @@ class DeepResearchRuntime:
                         summary=_preview_json_or_text(tr_text, max_chars=320),
                     )
 
-            # 3. Direct orchestrator text streaming.
+            # 3. Direct orchestrator reasoning and text streaming.
+            orch_reasoning = agent_ev.get("reasoningText")
+            if isinstance(orch_reasoning, str) and orch_reasoning:
+                await run.emit("reasoning_delta", node_path=path, delta=orch_reasoning)
+
             if isinstance(agent_ev.get("data"), str):
                 delta = agent_ev["data"]
                 if delta:
@@ -4653,7 +4825,7 @@ class DeepResearchRuntime:
 
         for (u_id, s_id), live_run in list(self._runs.items()):
             if u_id == clean_user:
-                merged[s_id] = live_run.snapshot(include_report=False)
+                merged[s_id] = live_run.snapshot(include_report=False, include_transcripts=False)
 
         storage = self._user_storage(clean_user)
         raw_index = await storage.read(_RUNS_INDEX_KEY)
@@ -4673,6 +4845,7 @@ class DeepResearchRuntime:
                         user_id=clean_user,
                         session_id=sid,
                         include_report=False,
+                        include_transcripts=False,
                     )
                     if stored is not None:
                         merged[sid] = stored

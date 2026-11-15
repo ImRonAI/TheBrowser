@@ -7,7 +7,7 @@
  *
  * Container-responsive and Ren palette-compliant using Inter (`font-sans`).
  */
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import {
   AlertCircle,
   ArrowDown,
@@ -27,7 +27,6 @@ import {
   humanizeIdentifier,
   nodePathKey,
   type DeepResearchHandoff,
-  type DeepResearchNodeSnapshot,
   type DeepResearchNodeStatus,
   type DeepResearchRunStatus,
   type DeepResearchSkillExecution,
@@ -36,6 +35,7 @@ import {
   type FormationTopology,
   type FormationTopologyNode,
 } from '@/lib/deep-research-api'
+import { deriveNodeState } from '@/lib/deep-research-graph'
 import { cn } from '@/utils/cn'
 
 export function formatDurationMs(ms: number): string {
@@ -47,7 +47,7 @@ export function formatDurationMs(ms: number): string {
   return sec > 0 ? `${min}m ${sec}s` : `${min}m`
 }
 
-function StatusIcon({ status, className }: { status: DeepResearchNodeStatus; className?: string }) {
+export function StatusIcon({ status, className }: { status: DeepResearchNodeStatus; className?: string }) {
   if (status === 'executing') {
     return <Loader2 className={cn('h-3.5 w-3.5 animate-spin text-volt', className)} aria-hidden />
   }
@@ -102,7 +102,7 @@ function runStatusPill(status: DeepResearchRunStatus, active: boolean) {
   }
 }
 
-function KindBadge({ kind }: { kind: FormationNodeKind }) {
+export function KindBadge({ kind }: { kind: FormationNodeKind }) {
   const label = kind === 'swarm' ? 'Swarm' : kind === 'graph' ? 'Graph' : 'Agent'
   const styles =
     kind === 'swarm'
@@ -120,60 +120,6 @@ function KindBadge({ kind }: { kind: FormationNodeKind }) {
       {label}
     </span>
   )
-}
-
-/** Resolve effective status of a topology node from the runtime's `nodes` map and descendant paths. */
-function deriveNodeState(
-  snapshot: DeepResearchSnapshot,
-  path: string[],
-): {
-  status: DeepResearchNodeStatus
-  nodeSnap: DeepResearchNodeSnapshot | undefined
-  skills: DeepResearchSkillExecution[]
-  handoffs: DeepResearchHandoff[]
-} {
-  const key = nodePathKey(path)
-  const prefix = `${key}/`
-  const direct = snapshot.nodes[key]
-
-  const skills = snapshot.skill_invocations.filter(
-    (s) => s.node_key === key || s.node_key.startsWith(prefix),
-  )
-  const directSkills = snapshot.skill_invocations.filter((s) => s.node_key === key)
-
-  const handoffs = snapshot.handoffs.filter((h) => {
-    const hKey = nodePathKey(h.node_path)
-    return hKey === key || hKey.startsWith(prefix)
-  })
-
-  if (direct) {
-    return {
-      status: direct.status,
-      nodeSnap: direct,
-      skills: directSkills.length > 0 ? directSkills : skills,
-      handoffs,
-    }
-  }
-
-  const activeKey = nodePathKey(snapshot.active_node_path)
-  if (activeKey === key || activeKey.startsWith(prefix)) {
-    return { status: 'executing', nodeSnap: undefined, skills, handoffs }
-  }
-
-  const descendants = Object.entries(snapshot.nodes).filter(([k]) => k.startsWith(prefix))
-  if (descendants.length > 0) {
-    if (descendants.some(([, n]) => n.status === 'executing')) {
-      return { status: 'executing', nodeSnap: undefined, skills, handoffs }
-    }
-    if (descendants.some(([, n]) => n.status === 'failed')) {
-      return { status: 'failed', nodeSnap: undefined, skills, handoffs }
-    }
-    if (descendants.every(([, n]) => n.status === 'completed')) {
-      return { status: 'completed', nodeSnap: undefined, skills, handoffs }
-    }
-  }
-
-  return { status: 'idle', nodeSnap: undefined, skills, handoffs }
 }
 
 function SkillInvocationCard({ invocation }: { invocation: DeepResearchSkillExecution }) {
@@ -569,17 +515,15 @@ function OuterFormationStage({
   )
 }
 
-export interface DeepResearchFormationViewProps {
+export interface FormationTelemetryProps {
   snapshot: DeepResearchSnapshot
-  topology: FormationTopology
   onCancel: () => void
+  /** Extra controls beside Cancel (the Graph / List switch). */
+  actions?: ReactNode
 }
 
-export function DeepResearchFormationView({
-  snapshot,
-  topology,
-  onCancel,
-}: DeepResearchFormationViewProps) {
+/** Run status, elapsed time, counters, Cancel and the path of the agent working now. */
+export function FormationTelemetry({ snapshot, onCancel, actions }: FormationTelemetryProps) {
   const [now, setNow] = useState(() => Date.now())
 
   useEffect(() => {
@@ -604,32 +548,27 @@ export function DeepResearchFormationView({
   }, [snapshot.nodes, snapshot.completed_nodes.length])
 
   const pill = runStatusPill(snapshot.status, snapshot.active)
-  const synthesisState = deriveNodeState(snapshot, ['synthesis_formation'])
-
   return (
-    <section
-      aria-label="Formation inspector"
-      className="flex h-full min-h-0 flex-col bg-surface-50/50 font-sans dark:bg-surface-900"
-    >
-      {/* Telemetry Strip */}
-      <div className="shrink-0 border-b border-surface-200 bg-surface-0 px-4 py-3 dark:border-surface-800 dark:bg-surface-900">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="flex flex-wrap items-center gap-2">
-            <span
-              className={cn(
-                'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 font-sans text-[11.5px] font-medium',
-                pill.classes,
-              )}
-            >
-              <span className={cn('h-1.5 w-1.5 rounded-full', pill.dot)} aria-hidden />
-              {pill.label}
-            </span>
+    <div className="shrink-0 border-b border-surface-200 bg-surface-0 px-4 py-3 dark:border-surface-800 dark:bg-surface-900">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <span
+            className={cn(
+              'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 font-sans text-[11.5px] font-medium',
+              pill.classes,
+            )}
+          >
+            <span className={cn('h-1.5 w-1.5 rounded-full', pill.dot)} aria-hidden />
+            {pill.label}
+          </span>
 
-            <span className="font-sans text-[12px] tabular-nums text-ink-secondary dark:text-ink-inverse-secondary">
-              {formatDurationMs(elapsedMs)}
-            </span>
-          </div>
+          <span className="font-sans text-[12px] tabular-nums text-ink-secondary dark:text-ink-inverse-secondary">
+            {formatDurationMs(elapsedMs)}
+          </span>
+        </div>
 
+        <div className="flex items-center gap-2">
+          {actions}
           {snapshot.active && (
             <button
               type="button"
@@ -641,128 +580,165 @@ export function DeepResearchFormationView({
             </button>
           )}
         </div>
+      </div>
 
-        {/* Metrics Row */}
-        <div className="mt-2.5 flex flex-wrap items-center gap-x-3.5 gap-y-1 font-sans text-[12px] text-ink-muted dark:text-ink-inverse-muted">
-          <span>
-            <strong className="font-semibold tabular-nums text-ink dark:text-ink-inverse">
-              {completedCount}
-            </strong>{' '}
-            nodes done
-          </span>
-          <span aria-hidden>·</span>
-          <span>
-            <strong className="font-semibold tabular-nums text-ink dark:text-ink-inverse">
-              {snapshot.skill_invocations.length}
-            </strong>{' '}
-            skills
-          </span>
-          <span aria-hidden>·</span>
-          <span>
-            <strong className="font-semibold tabular-nums text-ink dark:text-ink-inverse">
-              {snapshot.citations.length}
-            </strong>{' '}
-            citations
-          </span>
-          {snapshot.usage.totalTokens > 0 && (
-            <>
-              <span aria-hidden>·</span>
-              <span className="tabular-nums">
-                {snapshot.usage.totalTokens.toLocaleString()} tokens
-              </span>
-            </>
-          )}
-        </div>
-
-        {/* Active Node Path Breadcrumb */}
-        {snapshot.active && snapshot.active_node_path.length > 0 && (
-          <div className="mt-2 flex items-center gap-1.5 truncate rounded-lg bg-blurple-600/[0.07] px-2.5 py-1.5 font-sans text-[11.5px] font-medium text-volt dark:bg-blurple-400/[0.12]">
-            <Loader2 className="h-3 w-3 shrink-0 animate-spin" aria-hidden />
-            <span className="truncate">
-              {snapshot.active_node_path.map(humanizeIdentifier).join(' › ')}
+      {/* Metrics Row */}
+      <div className="mt-2.5 flex flex-wrap items-center gap-x-3.5 gap-y-1 font-sans text-[12px] text-ink-muted dark:text-ink-inverse-muted">
+        <span>
+          <strong className="font-semibold tabular-nums text-ink dark:text-ink-inverse">
+            {completedCount}
+          </strong>{' '}
+          nodes done
+        </span>
+        <span aria-hidden>·</span>
+        <span>
+          <strong className="font-semibold tabular-nums text-ink dark:text-ink-inverse">
+            {snapshot.skill_invocations.length}
+          </strong>{' '}
+          skills
+        </span>
+        <span aria-hidden>·</span>
+        <span>
+          <strong className="font-semibold tabular-nums text-ink dark:text-ink-inverse">
+            {snapshot.citations.length}
+          </strong>{' '}
+          citations
+        </span>
+        {snapshot.usage.totalTokens > 0 && (
+          <>
+            <span aria-hidden>·</span>
+            <span className="tabular-nums">
+              {snapshot.usage.totalTokens.toLocaleString()} tokens
             </span>
-          </div>
+          </>
         )}
       </div>
 
-      {/* Scrollable 3-Level Formation Graph */}
-      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 scrollbar-thin">
-        {/* Research Objective Card */}
-        <div className="mb-4 rounded-xl border border-surface-200 bg-surface-0 p-3.5 dark:border-surface-800 dark:bg-surface-850">
-          <div className="flex items-center justify-between gap-2">
-            <span className="font-sans text-[11.5px] font-medium text-volt">
-              Research objective
+      {/* Active Node Path Breadcrumb */}
+      {snapshot.active && snapshot.active_node_path.length > 0 && (
+        <div className="mt-2 flex items-center gap-1.5 truncate rounded-lg bg-blurple-600/[0.07] px-2.5 py-1.5 font-sans text-[11.5px] font-medium text-volt dark:bg-blurple-400/[0.12]">
+          <Loader2 className="h-3 w-3 shrink-0 animate-spin" aria-hidden />
+          <span className="truncate">
+            {snapshot.active_node_path.map(humanizeIdentifier).join(' › ')}
+          </span>
+        </div>
+      )}
+    </div>
+  )
+}
+
+/** The formation as a scrolling list of stages: objective, each stage's agents, skills and handoffs. */
+export function FormationStageList({
+  snapshot,
+  topology,
+  className,
+}: {
+  snapshot: DeepResearchSnapshot
+  topology: FormationTopology
+  className?: string
+}) {
+  const synthesisState = deriveNodeState(snapshot, ['synthesis_formation'])
+
+  return (
+    <div className={cn('min-h-0 flex-1 overflow-y-auto px-4 py-4 scrollbar-thin', className)}>
+      {/* Research Objective Card */}
+      <div className="mb-4 rounded-xl border border-surface-200 bg-surface-0 p-3.5 dark:border-surface-800 dark:bg-surface-850">
+        <div className="flex items-center justify-between gap-2">
+          <span className="font-sans text-[11.5px] font-medium text-volt">
+            Research objective
+          </span>
+          {snapshot.selection.model_id && (
+            <span className="truncate font-sans text-[11px] text-ink-muted dark:text-ink-inverse-muted">
+              {snapshot.selection.model_id}
             </span>
-            {snapshot.selection.model_id && (
-              <span className="truncate font-sans text-[11px] text-ink-muted dark:text-ink-inverse-muted">
-                {snapshot.selection.model_id}
-              </span>
-            )}
-          </div>
-          <p className="mt-1.5 font-sans text-[13px] font-medium leading-relaxed text-ink dark:text-ink-inverse">
-            {snapshot.query}
-          </p>
-          {snapshot.context && (
-            <p className="mt-1.5 line-clamp-3 border-t border-surface-100 pt-1.5 font-sans text-[11.5px] text-ink-secondary dark:border-surface-800 dark:text-ink-inverse-secondary">
-              <span className="font-medium text-ink-muted dark:text-ink-inverse-muted">
-                Attached context:{' '}
-              </span>
-              {snapshot.context}
-            </p>
           )}
         </div>
-
-        {/* Outer Graph Stages & Conditional Refinement Edges */}
-        <div className="space-y-1.5">
-          {topology.nodes.map((stage, idx) => {
-            const isAfterVerification = stage.id === 'verification_swarm'
-            return (
-              <div key={stage.id}>
-                <OuterFormationStage stage={stage} index={idx} snapshot={snapshot} />
-
-                {idx < topology.nodes.length - 1 && (
-                  <div className="my-2 flex flex-col items-center gap-1">
-                    {isAfterVerification ? (
-                      <div className="flex w-full flex-wrap items-center justify-center gap-2 py-0.5">
-                        <span
-                          className={cn(
-                            'inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 font-sans text-[11px] font-medium',
-                            snapshot.refinement_count > 0
-                              ? 'border-sky-500/40 bg-sky-500/10 text-sky-700 dark:text-sky-300'
-                              : 'border-surface-200 bg-surface-100 text-ink-muted dark:border-surface-800 dark:bg-surface-850 dark:text-ink-inverse-muted',
-                          )}
-                        >
-                          <Repeat className="h-2.5 w-2.5" aria-hidden />
-                          {snapshot.refinement_count > 0
-                            ? `Refinement pass ×${snapshot.refinement_count}`
-                            : 'Refinement loop'}
-                        </span>
-
-                        <span
-                          className={cn(
-                            'inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 font-sans text-[11px] font-medium',
-                            synthesisState.status !== 'idle'
-                              ? 'border-emerald-500/35 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
-                              : 'border-surface-200 bg-surface-100 text-ink-muted dark:border-surface-800 dark:bg-surface-850 dark:text-ink-inverse-muted',
-                          )}
-                        >
-                          <ArrowDown className="h-2.5 w-2.5" aria-hidden />
-                          Verified → Synthesis
-                        </span>
-                      </div>
-                    ) : (
-                      <ArrowDown
-                        className="h-4 w-4 text-surface-300 dark:text-surface-600"
-                        aria-hidden
-                      />
-                    )}
-                  </div>
-                )}
-              </div>
-            )
-          })}
-        </div>
+        <p className="mt-1.5 font-sans text-[13px] font-medium leading-relaxed text-ink dark:text-ink-inverse">
+          {snapshot.query}
+        </p>
+        {snapshot.context && (
+          <p className="mt-1.5 line-clamp-3 border-t border-surface-100 pt-1.5 font-sans text-[11.5px] text-ink-secondary dark:border-surface-800 dark:text-ink-inverse-secondary">
+            <span className="font-medium text-ink-muted dark:text-ink-inverse-muted">
+              Attached context:{' '}
+            </span>
+            {snapshot.context}
+          </p>
+        )}
       </div>
+
+      {/* Outer Graph Stages & Conditional Refinement Edges */}
+      <div className="space-y-1.5">
+        {topology.nodes.map((stage, idx) => {
+          const isAfterVerification = stage.id === 'verification_swarm'
+          return (
+            <div key={stage.id}>
+              <OuterFormationStage stage={stage} index={idx} snapshot={snapshot} />
+
+              {idx < topology.nodes.length - 1 && (
+                <div className="my-2 flex flex-col items-center gap-1">
+                  {isAfterVerification ? (
+                    <div className="flex w-full flex-wrap items-center justify-center gap-2 py-0.5">
+                      <span
+                        className={cn(
+                          'inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 font-sans text-[11px] font-medium',
+                          snapshot.refinement_count > 0
+                            ? 'border-sky-500/40 bg-sky-500/10 text-sky-700 dark:text-sky-300'
+                            : 'border-surface-200 bg-surface-100 text-ink-muted dark:border-surface-800 dark:bg-surface-850 dark:text-ink-inverse-muted',
+                        )}
+                      >
+                        <Repeat className="h-2.5 w-2.5" aria-hidden />
+                        {snapshot.refinement_count > 0
+                          ? `Refinement pass ×${snapshot.refinement_count}`
+                          : 'Refinement loop'}
+                      </span>
+
+                      <span
+                        className={cn(
+                          'inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 font-sans text-[11px] font-medium',
+                          synthesisState.status !== 'idle'
+                            ? 'border-emerald-500/35 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
+                            : 'border-surface-200 bg-surface-100 text-ink-muted dark:border-surface-800 dark:bg-surface-850 dark:text-ink-inverse-muted',
+                        )}
+                      >
+                        <ArrowDown className="h-2.5 w-2.5" aria-hidden />
+                        Verified → Synthesis
+                      </span>
+                    </div>
+                  ) : (
+                    <ArrowDown
+                      className="h-4 w-4 text-surface-300 dark:text-surface-600"
+                      aria-hidden
+                    />
+                  )}
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+export interface DeepResearchFormationViewProps {
+  snapshot: DeepResearchSnapshot
+  topology: FormationTopology
+  onCancel: () => void
+}
+
+/** The formation as a list: status strip above the stage list. */
+export function DeepResearchFormationView({
+  snapshot,
+  topology,
+  onCancel,
+}: DeepResearchFormationViewProps) {
+  return (
+    <section
+      aria-label="Formation inspector"
+      className="flex h-full min-h-0 flex-col bg-surface-50/50 font-sans dark:bg-surface-900"
+    >
+      <FormationTelemetry snapshot={snapshot} onCancel={onCancel} />
+      <FormationStageList snapshot={snapshot} topology={topology} />
     </section>
   )
 }
