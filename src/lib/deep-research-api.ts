@@ -312,7 +312,23 @@ export interface DeepResearchSkillToolCall {
   status: 'running' | 'completed' | 'failed'
   output_preview: string
   timestamp: string
+  /** The call's arguments as the model sent them; `null` until the call is complete (or for a run saved before transcripts). */
+  input: unknown
+  /** The tool's result text, cut server-side at `RON_DEEP_RESEARCH_TOOL_OUTPUT_CHARS`. */
+  output: string
+  output_truncated: boolean
 }
+
+/** One entry of a `use_skill` sub-agent's work, in the order it happened. */
+export type DeepResearchSkillStep =
+  | { id: string; kind: 'text' | 'reasoning'; text: string }
+  | { id: string; kind: 'tool'; tool_id: string }
+
+/** One entry of a formation agent's own work, in the order it happened. */
+export type DeepResearchActivityPart =
+  | { id: string; kind: 'text' | 'reasoning'; text: string }
+  | { id: string; kind: 'skill'; skill_id: string }
+  | { id: string; kind: 'pass'; pass: number }
 
 export interface DeepResearchSkillExecution {
   id: string
@@ -327,6 +343,8 @@ export interface DeepResearchSkillExecution {
   tools: DeepResearchSkillToolCall[]
   output_text: string
   summary: string
+  /** The sub-agent's transcript: reasoning, tool calls (by `tools[].id`) and text, in order. */
+  steps: DeepResearchSkillStep[]
 }
 
 export interface DeepResearchNodeSnapshot {
@@ -342,6 +360,8 @@ export interface DeepResearchNodeSnapshot {
   skill_invocations: DeepResearchSkillExecution[]
   output_preview: string
   streaming_text: string
+  /** The agent's transcript: reasoning, `use_skill` calls (by skill id), text and repeat-pass marks, in order. */
+  activity: DeepResearchActivityPart[]
   error: string | null
 }
 
@@ -418,6 +438,7 @@ export type DeepResearchEventType =
   | 'skill_delta'
   | 'skill_stop'
   | 'text_delta'
+  | 'reasoning_delta'
   | 'citation'
   | 'artifact_ready'
   | 'error'
@@ -641,6 +662,80 @@ function formatInputPreview(input: unknown): string {
   }
 }
 
+/** Add streamed text to a transcript: it continues the last part when that part is the same kind. */
+function appendTranscriptText<T extends { id: string; kind: string }>(
+  parts: readonly T[],
+  kind: 'text' | 'reasoning',
+  delta: string,
+  sequence: number,
+): T[] {
+  const last = parts[parts.length - 1] as (T & { text?: string }) | undefined
+  if (last && last.kind === kind) {
+    return [...parts.slice(0, -1), { ...last, text: (last.text ?? '') + delta }]
+  }
+  return [...parts, { id: `p${sequence}`, kind, text: delta } as unknown as T]
+}
+
+function normalizeSkillSteps(raw: unknown): DeepResearchSkillStep[] {
+  if (!Array.isArray(raw)) return []
+  const steps: DeepResearchSkillStep[] = []
+  raw.forEach((item, index) => {
+    const obj = asRecord(item)
+    const id = asString(obj.id) || `step-${index}`
+    if (obj.kind === 'tool') {
+      const toolId = asString(obj.tool_id)
+      if (toolId) steps.push({ id, kind: 'tool', tool_id: toolId })
+    } else if (obj.kind === 'text' || obj.kind === 'reasoning') {
+      steps.push({ id, kind: obj.kind, text: asString(obj.text) })
+    }
+  })
+  return steps
+}
+
+function normalizeActivity(raw: unknown): DeepResearchActivityPart[] {
+  if (!Array.isArray(raw)) return []
+  const parts: DeepResearchActivityPart[] = []
+  raw.forEach((item, index) => {
+    const obj = asRecord(item)
+    const id = asString(obj.id) || `part-${index}`
+    if (obj.kind === 'skill') {
+      const skillId = asString(obj.skill_id)
+      if (skillId) parts.push({ id, kind: 'skill', skill_id: skillId })
+    } else if (obj.kind === 'pass') {
+      parts.push({ id, kind: 'pass', pass: asNumber(obj.pass, 2) })
+    } else if (obj.kind === 'text' || obj.kind === 'reasoning') {
+      parts.push({ id, kind: obj.kind, text: asString(obj.text) })
+    }
+  })
+  return parts
+}
+
+/**
+ * A skill from a snapshot, with what only a full snapshot or the live stream carries (transcript,
+ * tool input/output) kept from `previous` when this snapshot left it out (run lists do).
+ */
+function withKnownTranscript(
+  skill: DeepResearchSkillExecution,
+  previous: DeepResearchSkillExecution | undefined,
+): DeepResearchSkillExecution {
+  if (!previous) return skill
+  const known = new Map(previous.tools.map((tool) => [tool.id, tool]))
+  return {
+    ...skill,
+    steps: skill.steps.length > 0 ? skill.steps : previous.steps,
+    tools: skill.tools.map((tool) => {
+      const before = known.get(tool.id)
+      if (!before) return tool
+      return {
+        ...tool,
+        input: tool.input ?? before.input,
+        output: tool.output || before.output,
+        output_truncated: tool.output ? tool.output_truncated : before.output_truncated,
+      }
+    }),
+  }
+}
+
 function normalizeSkillToolCall(raw: unknown, index: number, fallbackTime: string): DeepResearchSkillToolCall {
   const obj = asRecord(raw)
   const statusRaw = asString(obj.status).toLowerCase()
@@ -657,6 +752,9 @@ function normalizeSkillToolCall(raw: unknown, index: number, fallbackTime: strin
     status,
     output_preview: asString(obj.output_preview ?? obj.summary ?? obj.result).slice(0, 300),
     timestamp: asString(obj.timestamp) || fallbackTime,
+    input: obj.input ?? null,
+    output: asString(obj.output),
+    output_truncated: obj.output_truncated === true,
   }
 }
 
@@ -683,6 +781,7 @@ function normalizeSkillExecution(
       tools: [],
       output_text: '',
       summary: '',
+      steps: [],
     }
   }
   const obj = asRecord(raw)
@@ -714,6 +813,7 @@ function normalizeSkillExecution(
     tools,
     output_text: asString(obj.output_text),
     summary: asString(obj.summary ?? obj.output_preview),
+    steps: normalizeSkillSteps(obj.steps),
   }
 }
 
@@ -971,6 +1071,7 @@ export function normalizeDeepResearchSnapshot(
               tools: [],
               output_text: '',
               summary: '',
+              steps: [],
             }))
 
     for (const inv of mergedNodeInvocations) {
@@ -978,6 +1079,7 @@ export function normalizeDeepResearchSnapshot(
         discoveredSkills.push(inv)
       }
     }
+    const incomingActivity = normalizeActivity(entry.activity)
 
     nodes[key] = {
       node_id: nodeId,
@@ -992,6 +1094,7 @@ export function normalizeDeepResearchSnapshot(
       skill_invocations: mergedNodeInvocations,
       output_preview: asString(entry.output_preview) || prevNode?.output_preview || '',
       streaming_text: prevNode?.streaming_text ?? '',
+      activity: incomingActivity.length > 0 ? incomingActivity : (prevNode?.activity ?? []),
       error: asNullableString(entry.error) ?? prevNode?.error ?? null,
     }
   }
@@ -1007,7 +1110,7 @@ export function normalizeDeepResearchSnapshot(
   for (const nodeSkill of discoveredSkills) {
     if (!skillById.has(nodeSkill.id)) skillById.set(nodeSkill.id, nodeSkill)
   }
-  for (const topSkill of topLevelSkills) skillById.set(topSkill.id, topSkill)
+  for (const topSkill of topLevelSkills) skillById.set(topSkill.id, withKnownTranscript(topSkill, skillById.get(topSkill.id)))
 
   const handoffs: DeepResearchHandoff[] = Array.isArray(obj.handoffs)
     ? obj.handoffs.map((hRaw, index) => {
@@ -1167,6 +1270,7 @@ function ensureNodeEntry(
         skill_invocations: [],
         output_preview: '',
         streaming_text: '',
+        activity: [],
         error: null,
       }
     } else if (depth === nodePath.length && nodeTypeHint) {
@@ -1291,6 +1395,11 @@ export function reduceDeepResearchEvent(
         completed_at: null,
         execution_count: nextExecCount,
         streaming_text: '',
+        // A repeat pass (refinement) is marked in the transcript; the earlier pass stays above it.
+        activity:
+          nextExecCount > 1 && prevNode.activity.length > 0
+            ? [...prevNode.activity, { id: `p${nextSeq}`, kind: 'pass', pass: nextExecCount }]
+            : prevNode.activity,
         error: null,
       }
 
@@ -1517,6 +1626,7 @@ export function reduceDeepResearchEvent(
         tools: [],
         output_text: '',
         summary: '',
+        steps: [],
       }
 
       const existingIdx = next.skill_invocations.findIndex((item) => item.id === skillId)
@@ -1528,7 +1638,21 @@ export function reduceDeepResearchEvent(
       let updatedNodes = next.nodes
       if (effectivePath.length > 0) {
         const seeded = ensureNodeEntry(next.nodes, effectivePath, timestamp)
-        updatedNodes = syncNodeSkillInvocations(seeded.nodes, seeded.key, skillInvocations)
+        const owner = seeded.nodes[seeded.key]
+        const listed = owner.activity.some((part) => part.kind === 'skill' && part.skill_id === skillId)
+        updatedNodes = syncNodeSkillInvocations(
+          listed
+            ? seeded.nodes
+            : {
+                ...seeded.nodes,
+                [seeded.key]: {
+                  ...owner,
+                  activity: [...owner.activity, { id: `p${nextSeq}`, kind: 'skill', skill_id: skillId }],
+                },
+              },
+          seeded.key,
+          skillInvocations,
+        )
       }
 
       return {
@@ -1553,7 +1677,8 @@ export function reduceDeepResearchEvent(
       const effectivePath = nodePath.length > 0 ? nodePath : next.active_node_path
       const key = nodePathKey(effectivePath)
       const targetSkillId = asString(event.skill_id ?? event.invocation_id ?? event.parent_tool_use_id)
-      const toolName = asString(event.tool_name ?? event.name) || 'research_tool'
+      const namedTool = asString(event.tool_name ?? event.name)
+      let toolName = namedTool || 'research_tool'
       const toolId = asString(event.tool_use_id ?? event.id) || `tool-${nextSeq}`
       const toolStatusRaw = asString(event.status).toLowerCase()
       const toolStatus: DeepResearchSkillToolCall['status'] =
@@ -1592,19 +1717,28 @@ export function reduceDeepResearchEvent(
         const target = next.skill_invocations[matchedIndex]
         resolvedSkillId = target.id
         const existingToolIdx = target.tools.findIndex((t) => t.id === toolId)
+        const before = existingToolIdx >= 0 ? target.tools[existingToolIdx] : undefined
+        // A result event names neither the tool nor its input: both stay as the call set them.
+        toolName = namedTool || before?.tool_name || 'research_tool'
+        const hasOutput = typeof event.output === 'string'
         const nextTool: DeepResearchSkillToolCall = {
           id: toolId,
           tool_name: toolName,
-          input_preview: inputPreview || (existingToolIdx >= 0 ? target.tools[existingToolIdx].input_preview : ''),
+          input_preview: inputPreview || (before?.input_preview ?? ''),
           status: toolStatus,
-          output_preview: outputPreview || (existingToolIdx >= 0 ? target.tools[existingToolIdx].output_preview : ''),
+          output_preview: outputPreview || (before?.output_preview ?? ''),
           timestamp,
+          input: event.input !== undefined ? event.input : (before?.input ?? null),
+          output: hasOutput ? (event.output as string) : (before?.output ?? ''),
+          output_truncated: hasOutput ? event.output_truncated === true : (before?.output_truncated ?? false),
         }
-        const tools =
-          existingToolIdx >= 0
-            ? target.tools.map((t, idx) => (idx === existingToolIdx ? nextTool : t))
-            : [...target.tools, nextTool]
-        skillInvocations = next.skill_invocations.map((s, idx) => (idx === matchedIndex ? { ...s, tools } : s))
+        const tools = before
+          ? target.tools.map((t, idx) => (idx === existingToolIdx ? nextTool : t))
+          : [...target.tools, nextTool]
+        const steps: DeepResearchSkillStep[] = before
+          ? target.steps
+          : [...target.steps, { id: `p${nextSeq}`, kind: 'tool', tool_id: toolId }]
+        skillInvocations = next.skill_invocations.map((s, idx) => (idx === matchedIndex ? { ...s, tools, steps } : s))
       }
 
       const updatedNodes = key ? syncNodeSkillInvocations(next.nodes, key, skillInvocations) : next.nodes
@@ -1651,6 +1785,7 @@ export function reduceDeepResearchEvent(
         ...target,
         output_text: outputText,
         summary: outputText.trim().slice(0, 320),
+        steps: appendTranscriptText(target.steps, 'text', delta, nextSeq),
       }
       const skillInvocations = next.skill_invocations.map((s, idx) => (idx === matchedIndex ? updatedSkill : s))
       const updatedNodes = key ? syncNodeSkillInvocations(next.nodes, key, skillInvocations) : next.nodes
@@ -1757,6 +1892,7 @@ export function reduceDeepResearchEvent(
             ...prevNode,
             streaming_text: streamingText,
             output_preview: streamingText.trim().slice(0, 400),
+            activity: appendTranscriptText(prevNode.activity, 'text', delta, nextSeq),
           },
         }
       }
@@ -1810,6 +1946,36 @@ export function reduceDeepResearchEvent(
         nodes: updatedNodes,
         report_markdown: reportMarkdown,
         report_source_node: reportSourceNode,
+      }
+    }
+
+    case 'reasoning_delta': {
+      const delta = asString(event.delta ?? event.text)
+      if (!delta) return next
+      const skillId = asString(event.skill_id)
+      if (skillId) {
+        // Reasoning of a `use_skill` sub-agent goes into that skill's transcript.
+        const index = next.skill_invocations.findIndex((s) => s.id === skillId)
+        if (index < 0) return next
+        const skillInvocations = next.skill_invocations.map((s, idx) =>
+          idx === index ? { ...s, steps: appendTranscriptText(s.steps, 'reasoning', delta, nextSeq) } : s,
+        )
+        const ownerKey = next.skill_invocations[index].node_key
+        return {
+          ...next,
+          nodes: ownerKey ? syncNodeSkillInvocations(next.nodes, ownerKey, skillInvocations) : next.nodes,
+          skill_invocations: skillInvocations,
+        }
+      }
+      if (nodePath.length === 0) return next
+      const seeded = ensureNodeEntry(next.nodes, nodePath, timestamp)
+      const owner = seeded.nodes[seeded.key]
+      return {
+        ...next,
+        nodes: {
+          ...seeded.nodes,
+          [seeded.key]: { ...owner, activity: appendTranscriptText(owner.activity, 'reasoning', delta, nextSeq) },
+        },
       }
     }
 

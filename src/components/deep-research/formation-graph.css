@@ -1,0 +1,40 @@
+/* Deep Research formation canvas: Ren's surface, ink and volt tokens on React Flow's own variables. */
+.ron-formation-canvas .react-flow {
+  --xy-edge-stroke-default: theme('colors.surface.300');
+  --xy-background-pattern-dots-color-default: theme('colors.surface.300');
+  --xy-handle-background-color-default: theme('colors.surface.300');
+  --xy-handle-border-color-default: theme('colors.surface.0');
+  --xy-controls-button-background-color-default: theme('colors.surface.0');
+  --xy-controls-button-background-color-hover-default: theme('colors.surface.100');
+  --xy-controls-button-color-default: theme('colors.ink.secondary');
+  --xy-controls-button-color-hover-default: theme('colors.ink.DEFAULT');
+  --xy-controls-button-border-color-default: theme('colors.surface.200');
+  --xy-attribution-background-color-default: transparent;
+}
+
+.dark .ron-formation-canvas .react-flow {
+  --xy-edge-stroke-default: theme('colors.surface.700');
+  --xy-background-pattern-dots-color-default: theme('colors.surface.700');
+  --xy-handle-background-color-default: theme('colors.surface.600');
+  --xy-handle-border-color-default: theme('colors.surface.850');
+  --xy-controls-button-background-color-default: theme('colors.surface.850');
+  --xy-controls-button-background-color-hover-default: theme('colors.surface.800');
+  --xy-controls-button-color-default: theme('colors.ink.inverse-secondary');
+  --xy-controls-button-color-hover-default: theme('colors.ink.inverse');
+  --xy-controls-button-border-color-default: theme('colors.surface.800');
+}
+
+/* The animated edge's travelling dot is the volt primary (the app's --primary is an HSL triplet). */
+.ron-formation-canvas .react-flow__edge circle {
+  fill: hsl(var(--primary));
+}
+
+.ron-formation-canvas .react-flow__attribution a {
+  color: theme('colors.ink.muted');
+}
+
+/* Connection points stay beside the card's face when its agent is open below (card face: 167px). */
+.ron-formation-canvas .react-flow__handle-left,
+.ron-formation-canvas .react-flow__handle-right {
+  top: 83px;
+}

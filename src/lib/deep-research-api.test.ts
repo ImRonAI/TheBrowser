@@ -548,3 +548,108 @@ test('artifact_ready, slidev_markdown text_delta, and resolveResearchArtifactUrl
   )
   assert.equal(resolveResearchArtifactUrl(null), null)
 })
+
+test('reduceDeepResearchEvent keeps each agent and sub-agent transcript in order, with tool names and payloads', () => {
+  const t = '2026-11-15T10:00:00Z'
+  const path = ['planning_formation', 'problem_framing']
+  const base = { session_id: 'dr-transcript', timestamp: t, node_path: path }
+  const events: DeepResearchEvent[] = [
+    { ...base, sequence: 1, type: 'node_start', node_type: 'agent' },
+    { ...base, sequence: 2, type: 'reasoning_delta', delta: 'I should scan ' },
+    { ...base, sequence: 3, type: 'reasoning_delta', delta: 'the landscape.' },
+    { ...base, sequence: 4, type: 'text_delta', delta: 'Starting with a scan. ' },
+    { ...base, sequence: 5, type: 'skill_start', skill_id: 'sk-1', skill_name: 'domain-landscape-scan', task: 'Scan the field' },
+    { ...base, sequence: 6, type: 'reasoning_delta', skill_id: 'sk-1', delta: 'Search first.' },
+    // Named as soon as the model starts the call, before its input is complete.
+    { ...base, sequence: 7, type: 'skill_tool', skill_id: 'sk-1', tool_use_id: 'tu-1', tool_name: 'brave_web_search', status: 'running' },
+    { ...base, sequence: 8, type: 'skill_tool', skill_id: 'sk-1', tool_use_id: 'tu-1', tool_name: 'brave_web_search', status: 'running', input: { query: 'qLDPC' }, input_preview: 'qLDPC' },
+    // The result event names neither the tool nor its input.
+    { ...base, sequence: 9, type: 'skill_tool', skill_id: 'sk-1', tool_use_id: 'tu-1', status: 'completed', output_preview: '8 results', output: '8 results\nfull text', output_truncated: false },
+    { ...base, sequence: 10, type: 'skill_delta', skill_id: 'sk-1', delta: 'Found ' },
+    { ...base, sequence: 11, type: 'skill_delta', skill_id: 'sk-1', delta: 'eight sources.' },
+    { ...base, sequence: 12, type: 'skill_stop', skill_id: 'sk-1', status: 'completed' },
+    { ...base, sequence: 13, type: 'text_delta', delta: 'Framing complete.' },
+    { ...base, sequence: 14, type: 'node_stop', status: 'completed' },
+  ]
+  let state = emptyDeepResearchSnapshot('dr-transcript')
+  for (const event of events) state = reduceDeepResearchEvent(state, event)
+
+  const node = state.nodes['planning_formation/problem_framing']
+  assert.deepEqual(node.activity, [
+    { id: 'p2', kind: 'reasoning', text: 'I should scan the landscape.' },
+    { id: 'p4', kind: 'text', text: 'Starting with a scan. ' },
+    { id: 'p5', kind: 'skill', skill_id: 'sk-1' },
+    { id: 'p13', kind: 'text', text: 'Framing complete.' },
+  ])
+  const skill = state.skill_invocations[0]
+  assert.deepEqual(skill.steps, [
+    { id: 'p6', kind: 'reasoning', text: 'Search first.' },
+    { id: 'p7', kind: 'tool', tool_id: 'tu-1' },
+    { id: 'p10', kind: 'text', text: 'Found eight sources.' },
+  ])
+  assert.equal(skill.tools.length, 1)
+  assert.equal(skill.tools[0].tool_name, 'brave_web_search')
+  assert.deepEqual(skill.tools[0].input, { query: 'qLDPC' })
+  assert.equal(skill.tools[0].input_preview, 'qLDPC')
+  assert.equal(skill.tools[0].output, '8 results\nfull text')
+  assert.equal(skill.tools[0].status, 'completed')
+  assert.equal(skill.output_text, 'Found eight sources.')
+
+  // A repeat pass is marked; the first pass stays above it.
+  state = reduceDeepResearchEvent(state, { ...base, sequence: 15, type: 'node_start', node_type: 'agent' })
+  state = reduceDeepResearchEvent(state, { ...base, sequence: 16, type: 'text_delta', delta: 'Second look.' })
+  const again = state.nodes['planning_formation/problem_framing'].activity
+  assert.deepEqual(again.slice(-2), [
+    { id: 'p15', kind: 'pass', pass: 2 },
+    { id: 'p16', kind: 'text', text: 'Second look.' },
+  ])
+  assert.equal(again.length, 6)
+})
+
+test('a run list entry without transcripts does not erase the transcript a full snapshot gave', () => {
+  const fullRun = {
+    session_id: 'dr-merge',
+    status: 'completed',
+    active: false,
+    sequence: 20,
+    nodes: {
+      'planning_formation/problem_framing': {
+        node_id: 'problem_framing',
+        node_path: ['planning_formation', 'problem_framing'],
+        node_type: 'agent',
+        status: 'completed',
+        activity: [{ id: 'p2', kind: 'reasoning', text: 'Think.' }, { id: 'p5', kind: 'skill', skill_id: 'sk-1' }],
+        skill_invocations: [{ id: 'sk-1', skill_name: 'domain-landscape-scan', node_path: ['planning_formation', 'problem_framing'], tools: [{ id: 'tu-1', tool_name: 'brave_web_search', status: 'completed' }] }],
+      },
+    },
+    skill_invocations: [
+      {
+        id: 'sk-1',
+        skill_name: 'domain-landscape-scan',
+        node_path: ['planning_formation', 'problem_framing'],
+        status: 'completed',
+        output_text: 'Found eight sources.',
+        steps: [{ id: 'p7', kind: 'tool', tool_id: 'tu-1' }, { id: 'p10', kind: 'text', text: 'Found eight sources.' }],
+        tools: [{ id: 'tu-1', tool_name: 'brave_web_search', status: 'completed', input: { query: 'qLDPC' }, output: 'full text', output_truncated: true }],
+      },
+    ],
+  }
+  const full = normalizeDeepResearchSnapshot(fullRun)
+  assert.equal(full.nodes['planning_formation/problem_framing'].activity.length, 2)
+  assert.equal(full.skill_invocations[0].steps.length, 2)
+  assert.equal(full.skill_invocations[0].tools[0].output_truncated, true)
+
+  // GET /deep-research/runs: same run, no `activity`, no `steps`, no tool input/output.
+  const listed = structuredClone(fullRun) as typeof fullRun
+  for (const node of Object.values(listed.nodes)) delete (node as { activity?: unknown }).activity
+  for (const skill of listed.skill_invocations) {
+    delete (skill as { steps?: unknown }).steps
+    skill.tools = skill.tools.map((tool) => ({ id: tool.id, tool_name: tool.tool_name, status: tool.status })) as typeof skill.tools
+  }
+  const merged = normalizeDeepResearchSnapshot(listed, full)
+  assert.deepEqual(merged.nodes['planning_formation/problem_framing'].activity, full.nodes['planning_formation/problem_framing'].activity)
+  assert.deepEqual(merged.skill_invocations[0].steps, full.skill_invocations[0].steps)
+  assert.deepEqual(merged.skill_invocations[0].tools[0].input, { query: 'qLDPC' })
+  assert.equal(merged.skill_invocations[0].tools[0].output, 'full text')
+  assert.equal(merged.skill_invocations[0].tools[0].output_truncated, true)
+})

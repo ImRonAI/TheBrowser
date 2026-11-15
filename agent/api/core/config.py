@@ -322,6 +322,8 @@ RON_DEEP_RESEARCH_NODE_TIMEOUT: float = float(os.getenv("RON_DEEP_RESEARCH_NODE_
 RON_DEEP_RESEARCH_MAX_NODE_EXECUTIONS: int = int(os.getenv("RON_DEEP_RESEARCH_MAX_NODE_EXECUTIONS", "16"))
 #: Maximum verification -> investigation refinement loops per Deep Research run.
 RON_DEEP_RESEARCH_MAX_REFINEMENTS: int = int(os.getenv("RON_DEEP_RESEARCH_MAX_REFINEMENTS", "1"))
+#: Characters of one leaf tool result kept in a run's transcript (the formation graph's tool rows).
+RON_DEEP_RESEARCH_TOOL_OUTPUT_CHARS: int = int(os.getenv("RON_DEEP_RESEARCH_TOOL_OUTPUT_CHARS", "8000"))
 #: Per-run Deep Research artifacts directory (`report.pdf`, `slides.md`, `slides/index.html`, `slides.pdf`).
 RON_DEEP_RESEARCH_ARTIFACTS_DIR: Path = Path(
     os.getenv("RON_DEEP_RESEARCH_ARTIFACTS_DIR", "").strip()
