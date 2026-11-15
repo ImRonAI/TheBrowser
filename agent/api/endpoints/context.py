@@ -2,7 +2,8 @@
 
 Items are Markdown files in the user's native ``context`` memory store (``core/context_agent.py``);
 binary captures (screenshots, screen recordings, uploaded images/videos/files) sit beside them on the
-same user storage. Like ``/chat`` and ``/sessions`` the caller names ``user_id`` and the routes are
+same user storage. ``/context/profile`` keeps a signed-in account's interview and interest graph on that
+storage too, so the account brings them to every device it signs in on (desktop and ren mobile). Like ``/chat`` and ``/sessions`` the caller names ``user_id`` and the routes are
 loopback-only: never add ``/context`` to the ngrok allowlist.
 """
 
@@ -281,6 +282,88 @@ async def mark_run_seen(run_id: UUID, body: RunSeen, request: Request) -> dict[s
     if not await _scheduler(request).mark_seen(_owner(body.user_id), str(run_id)):
         raise HTTPException(404, "Unknown run")
     return {"seen": str(run_id)}
+
+
+class ProfileAnswer(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    question: str = Field(max_length=1000)
+    answer: str = Field(max_length=4000)
+
+
+class ProfileOnboarding(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    answers: list[ProfileAnswer] = Field(default_factory=list, max_length=50)
+    isComplete: bool = False
+
+
+InterestCategory = Literal["technology", "design", "ai", "privacy", "productivity", "learning", "entertainment", "news", "other"]
+
+
+class ProfileInterest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    id: str = Field(max_length=200)
+    label: str = Field(max_length=200)
+    weight: float = Field(ge=0, le=1)
+    category: InterestCategory
+    source: Literal["onboarding", "browsing"]
+    reason: str | None = Field(default=None, max_length=1000)
+    lastUpdated: float
+
+
+class ProfileConnection(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    id: str = Field(max_length=500)
+    to: str = Field(max_length=200)
+    strength: float = Field(ge=0, le=1)
+    from_: str = Field(alias="from", max_length=200)
+
+
+class ProfileInterests(BaseModel):
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    nodes: list[ProfileInterest] = Field(default_factory=list, max_length=200)
+    connections: list[ProfileConnection] = Field(default_factory=list, max_length=2000)
+    isInitialized: bool = False
+
+
+class Profile(BaseModel):
+    """What the interview and the interest graph keep (``onboardingStore`` and ``interestsStore``), minus the
+    graph's on-screen layout, with when the device that wrote it last changed it (ms since the epoch)."""
+
+    model_config = ConfigDict(extra="forbid")
+    onboarding: ProfileOnboarding
+    interests: ProfileInterests
+    updated_at: float = Field(ge=0)
+
+
+class ProfileSave(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    user_id: Identifier
+    profile: Profile
+
+
+PROFILE_KEY = "profile.json"
+
+
+@router.get("/profile")
+async def read_profile(user_id: Identifier = "default") -> dict[str, Any]:
+    """The account's interview and interest graph, or null before any device saved them. Guests have none."""
+    _owner(user_id)
+    data = await context_agent.get_user_session_storage(user_id).read(PROFILE_KEY)
+    return {"profile": Profile.model_validate_json(data).model_dump(by_alias=True) if data else None}
+
+
+@router.put("/profile")
+async def save_profile(body: ProfileSave) -> dict[str, Any]:
+    """Keeps the newer profile: a save older than the stored one returns the stored one unchanged."""
+    _owner(body.user_id)
+    storage = context_agent.get_user_session_storage(body.user_id)
+    stored = await storage.read(PROFILE_KEY)
+    if stored:
+        current = Profile.model_validate_json(stored)
+        if current.updated_at > body.profile.updated_at:
+            return {"profile": current.model_dump(by_alias=True)}
+    await storage.write(PROFILE_KEY, body.profile.model_dump_json(by_alias=True).encode())
+    return {"profile": body.profile.model_dump(by_alias=True)}
 
 
 @router.get("/status")
