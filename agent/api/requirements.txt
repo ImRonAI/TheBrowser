@@ -54,6 +54,10 @@ playwright==1.57.0
 # Reader: the article text for core/articles.py and core/article_markdown.py
 trafilatura==2.3.1
 
+# Deep research: the report's template and its PDF pages (core/deep_research.py)
+jinja2==3.1.6
+pypdf==7.0.0
+
 # MCP (Model Context Protocol)
 mcp==1.26.0
 
