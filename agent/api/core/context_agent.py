@@ -8,6 +8,7 @@ drives it with prompt turns:
   :func:`update_interest_graph` and, when an interest is strong and recurring, proposes one specialist
   agent with :func:`recommend_agent`.
 * ``[context added]`` — an item the user collected (see below).
+* ``[phone]`` — from ren mobile: the apps the user used on the phone and what Ren did there.
 * ``[approve_agent <id>]`` — the user approved a recommendation: the agent writes the specialist's
   system prompt (``instructions``), assigns tools and Agent Skills, and saves it with the existing
   ``create_harness`` tool (strands_harness portable agent config, stored in Supabase ``harness_agents``).
@@ -82,6 +83,11 @@ Turns you receive:
   a one-line reason. Labels are short topics a news search understands ("Formula 1", "Home espresso",
   "Rust programming"), never site names or page titles. The Discover feed is built from these labels.
 - "[context added]" describes an item the user saved to their context. Fold it into the graph the same way.
+- "[phone]" comes from Ren on the user's phone: the apps they used there (with time on screen) and what Ren did on
+  the phone for them. Fold it into the graph the same way: an app used often or for long supports the interest it
+  clearly serves (a running app supports "Running"), while everyday utilities (launcher, settings, phone, messages,
+  camera, browser) say nothing about interests on their own. Pages visited in the phone's browser arrive as
+  "[browsing]".
 - When an interest is strong (weight >= 0.6) and recurring, and the user has no agent for it yet (check
   list_harness_agents and your earlier recommendations), call recommend_agent ONCE for a specialist that
   would do real recurring work for that interest. At most one recommendation per turn; never repeat one.

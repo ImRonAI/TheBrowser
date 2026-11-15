@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
-  agentServesInterest, agoLabel, approveAgentTurn, browsingDue, browsingTurn, cadenceLabel, contextAddedTurn, contextResults, createContextClient, dataUrlBlob, defaultCadence, discoverTopics,
+  agentServesInterest, agoLabel, approveAgentTurn, phoneTurn, browsingDue, browsingTurn, cadenceLabel, contextAddedTurn, contextResults, createContextClient, dataUrlBlob, defaultCadence, discoverTopics,
   formatBytes, interestsFromOutput, isObservable, latestReply, plainSummary, recommendationFromOutput, recordVisit, runErrorLine, runHeadline, runNotifications, runStatusLabel, searchMarkdown,
   type AgentRun, type ContextItem,
 } from './context-api.ts'
@@ -176,4 +176,16 @@ test('scheduled runs: cadence labels, notifications, plain summaries and headlin
   assert.equal(agoLabel('2026-11-13T11:55:00Z', now), '5 min ago')
   assert.equal(agoLabel('2026-11-13T09:00:00Z', now), '3 h ago')
   assert.equal(agoLabel('2026-11-10T12:00:00Z', now), '3 d ago')
+})
+
+test('phoneTurn names the apps, what Ren did and the current graph', () => {
+  const turn = phoneTurn({
+    since: Date.UTC(2026, 10, 15, 8, 0), until: Date.UTC(2026, 10, 15, 9, 30),
+    apps: [{ name: 'Strava', minutes: 42 }], actions: [{ text: 'Set a reminder: stretch', at: Date.UTC(2026, 10, 15, 9, 5) }],
+  }, [{ label: 'Running', weight: 0.5 }])
+  assert.match(turn, /^\[phone\]\nThe user's phone from 2026-11-15 08:00 to 2026-11-15 09:30 UTC\./)
+  assert.match(turn, /- Strava — 42 min/)
+  assert.match(turn, /- 2026-11-15 09:05 Set a reminder: stretch/)
+  assert.match(turn, /Current interest graph: Running \(0\.50\)/)
+  assert.match(phoneTurn({ since: 0, until: 0, apps: [], actions: [] }, []), /\(none\)[\s\S]*\(nothing\)/)
 })
