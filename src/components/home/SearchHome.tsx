@@ -163,7 +163,7 @@ export function SearchHome() {
         )}>
           <ComposerAttachmentTray attachments={attachments} className="px-5 pt-4" />
           <label className="flex items-center gap-3.5 px-5 pb-2 pt-4">
-            <Search className={cn('h-5 w-5 shrink-0 transition-colors duration-150', focused ? 'text-volt' : 'text-ink-muted dark:text-ink-inverse-muted')} strokeWidth={1.75} aria-hidden />
+            <Search className={cn('h-4 w-4 shrink-0 transition-colors duration-150', focused ? 'text-volt' : 'text-ink-muted dark:text-ink-inverse-muted')} strokeWidth={1.75} aria-hidden />
             <span className="sr-only">Search the web or ask Ren</span>
             <input
               ref={inputRef}
@@ -178,7 +178,7 @@ export function SearchHome() {
               placeholder="Search the web or ask Ren"
               autoComplete="off"
               spellCheck={false}
-              className="h-10 min-w-0 flex-1 bg-transparent text-[18px] text-ink outline-none placeholder:text-ink-muted focus-visible:ring-0 focus-visible:ring-offset-0 dark:text-ink-inverse dark:placeholder:text-ink-inverse-muted"
+              className="h-10 min-w-0 flex-1 bg-transparent text-[18px] text-ink outline-none placeholder:text-[15px] placeholder:text-ink-muted focus-visible:ring-0 focus-visible:ring-offset-0 dark:text-ink-inverse dark:placeholder:text-ink-inverse-muted"
             />
           </label>
           <div className="flex items-center gap-1.5 px-3 pb-3">
