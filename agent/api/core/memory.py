@@ -6,14 +6,14 @@ so Chat (``Agent``) and Live (``BidiAgent``) build the same stores and read the 
 
 Stores, in registration (and injection-priority) order:
 
-* ``facts`` — durable facts about the user. Written by native extraction
-  (``ExtractionConfig(extractor=ModelExtractor(system_prompt=FACTS_PROMPT))``, SDK default
-  trigger = every 5 turns, on ``agent.aux_model``) and by ``add_memory``.
+* ``facts`` — durable facts about the user the agent saves with ``add_memory``.
 * ``remember`` — what the user explicitly asked Ron to remember (``add_memory``).
 * ``feedback`` — the user's feedback on Ron's work (``add_memory``).
 * ``project-<id>`` / ``issue-<id>`` — attached only when the caller passes that scope.
 * ``tasks`` — to-dos the user asked Ron to track (``add_memory``). Found with
   ``search_memory``; **never injected** (owner decision 2026-10-27).
+* ``brain`` and the agent's journal (``core/dreaming.py``) — the second brain every agent reads and
+  the journal the dream files into it. Nothing is distilled during a conversation: that is the dream's work.
 
 The manager is the SDK's: ``search_memory`` and ``add_memory`` tools and default injection
 (``trigger="userTurn"``, adaptive query, 5 entries). The single deviation is
@@ -30,13 +30,12 @@ from typing import Final, Literal
 
 from strands.injection._xml import _escape_xml_attr, _escape_xml_text
 from strands.memory import MemoryAddToolConfig, MemoryInjectionConfig, MemoryManager, MemoryManagerConfig
-from strands.memory.extraction.model_extractor import ModelExtractor
-from strands.memory.extraction.types import ExtractionConfig
 from strands.memory.types import InjectionFormatContext, MemoryStore
 from strands.storage import Storage
 from strands.types.tools import AgentTool
 from strands.vended_memory_stores.file_memory_store import FileMemoryStore
 
+from agent.api.core.dreaming import JOURNAL_DIRECTIVE, agent_memory
 from agent.api.core.panel_storage import get_user_session_storage
 
 CategoryName = Literal["facts", "remember", "feedback", "tasks"]
@@ -55,19 +54,6 @@ DESCRIPTIONS: Final[dict[CategoryName, str]] = {
     "tasks": "To-dos the user asked you to track. Background only: never act on one unless the user asks now.",
 }
 
-#: Steers the native ModelExtractor for ``facts``: lasting facts about the user, nothing else.
-FACTS_PROMPT: Final[str] = (
-    "You extract durable facts about the USER that will still be true and useful in a future,"
-    " unrelated conversation: preferences, people and relationships, places, tools and accounts"
-    " they use, routines, constraints, and decisions they made.\n\n"
-    "Do NOT extract: what the assistant did, tool output, search results, web page content, task"
-    " progress, plans, to-dos, one-off requests, questions, greetings, or anything already obvious."
-    " Do not invent or infer facts the user did not state.\n\n"
-    'Return ONLY a JSON array of objects, each: {"content": string}. The first line of content is a'
-    ' markdown heading naming the subject (e.g. "# Travel preferences"); put each fact on its own'
-    " line below it. If there is nothing worth remembering, return []."
-)
-
 #: Appended to every agent prompt that carries this memory (Chat, Live).
 MEMORY_DIRECTIVE: Final[str] = """
 
@@ -81,7 +67,7 @@ Save with add_memory, choosing the store:
 - tasks: only when the user asks you to track a to-do. A stored task is never your current
   task: do not start or resume one unless the user asks in this conversation.
 - facts: a lasting fact the user tells you about themselves (preferences, people, tools).
-Never save tool output, page content, guesses, or your own progress."""
+Never save tool output, page content, guesses, or your own progress.""" + JOURNAL_DIRECTIVE
 
 _SCOPE_ID: Final = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,127}")
 
@@ -101,22 +87,15 @@ def scope_store_name(kind: Literal["project", "issue"], value: str) -> str:
     return f"{kind}-{value}"
 
 
-def _store(storage: Storage, name: str, description: str, extraction: ExtractionConfig | None = None) -> FileMemoryStore:
-    if extraction is None:
-        return FileMemoryStore(name=name, description=description, storage=storage)
-    return FileMemoryStore(name=name, description=description, storage=storage, extraction=extraction)
+def _store(storage: Storage, name: str, description: str) -> FileMemoryStore:
+    return FileMemoryStore(name=name, description=description, storage=storage)
 
 
-def user_stores(user_id: str, scope: MemoryScope | None = None, *, extraction: bool = True) -> list[FileMemoryStore]:
-    """The user's memory stores, ``tasks`` last.
-
-    ``extraction=False`` builds the same stores without the ``facts`` extractor, for a host that
-    never flushes (``BidiAgent`` takes no plugins, so its manager never runs extraction).
-    """
+def user_stores(user_id: str, scope: MemoryScope | None = None) -> list[FileMemoryStore]:
+    """The user's memory stores, ``tasks`` last."""
     storage = get_user_session_storage(user_id)
-    facts_extraction = ExtractionConfig(extractor=ModelExtractor(system_prompt=FACTS_PROMPT)) if extraction else None
     stores = [
-        _store(storage, "facts", DESCRIPTIONS["facts"], facts_extraction),
+        _store(storage, "facts", DESCRIPTIONS["facts"]),
         _store(storage, "remember", DESCRIPTIONS["remember"]),
         _store(storage, "feedback", DESCRIPTIONS["feedback"]),
     ]
@@ -147,30 +126,30 @@ def render_injection(context: InjectionFormatContext) -> str:
     return f"<memory>\n" + "\n".join(items) + "\n</memory>" if items else ""
 
 
-def memory_manager_config(user_id: str, scope: MemoryScope | None = None, *, extraction: bool = True,
+def memory_manager_config(user_id: str, scope: MemoryScope | None = None, *, agent: str = "panel",
                           extra_stores: Sequence[MemoryStore] = ()) -> MemoryManagerConfig:
     """Native ``MemoryManagerConfig`` for ``Agent(memory_manager=...)``.
 
-    ``extra_stores`` (e.g. the agent's learned-skills store) are searched and injected but never
-    targeted by ``add_memory``, which writes only the user's own stores.
+    ``extra_stores`` (e.g. the agent's learned-skills store) and ``agent``'s brain and journal
+    (``dreaming.agent_memory``) are never targeted by ``add_memory``, which writes only the user's own stores.
     """
-    own = user_stores(user_id, scope, extraction=extraction)
+    own = user_stores(user_id, scope)
     return MemoryManagerConfig(
-        stores=[*own, *extra_stores],
+        stores=[*own, *extra_stores, *agent_memory(user_id, agent)],
         search_tool_config=True,
         add_tool_config=MemoryAddToolConfig(stores=[store.name for store in own if store.name not in NOT_ADDED]),
         injection=MemoryInjectionConfig(format=render_injection),
     )
 
 
-def live_memory_tools(user_id: str, scope: MemoryScope | None = None,
+def live_memory_tools(user_id: str, scope: MemoryScope | None = None, *, agent: str = "panel",
                       extra_stores: Sequence[MemoryStore] = ()) -> list[AgentTool]:
-    """``search_memory`` + ``add_memory`` over the same stores, for ``BidiAgent``.
+    """``search_memory``, ``add_memory`` and ``journal`` over the same stores, for ``BidiAgent``.
 
-    A ``BidiAgent`` takes no plugins, so there is no injection or extraction on Live; the Chat
-    agent's extraction distills the shared thread the next time it runs.
+    A ``BidiAgent`` takes no plugins, so Live has no injection and its turns are not journaled:
+    what Live adds to the journal is what it jots with the ``journal`` tool.
     """
-    config = memory_manager_config(user_id, scope, extraction=False, extra_stores=extra_stores)
+    config = memory_manager_config(user_id, scope, agent=agent, extra_stores=extra_stores)
     manager = MemoryManager(stores=config["stores"], search_tool_config=True,
                             add_tool_config=config["add_tool_config"], injection=False)
     return manager.tools

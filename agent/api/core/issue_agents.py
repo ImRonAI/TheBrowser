@@ -29,6 +29,7 @@ from strands.vended_plugins.goal import GoalLoop, JudgeConfig
 from strands.hooks import HookProvider, HookRegistry
 from strands.hooks.events import BeforeToolCallEvent, AfterToolCallEvent
 
+from agent.api.core.dreaming import JOURNAL_DIRECTIVE, agent_memory
 from agent.api.core.issue_agent_storage import IssueA2ATaskStore, IssueAgentStorage
 from agent.api.core.media_understanding import CONTEXT_READING
 from agent.api.core.panel_agent import build_model, default_selection
@@ -324,7 +325,8 @@ def create_issue_chat_agent(*, user_id: str, session_id: str, issue_id: str, pro
       defaults.py:37). Taught skills come from ``create_learned_skill_tools`` (``list_learned_skills``/``use_skill``).
     - ``memory=MemoryManager(...)``: an instance is used verbatim and not forwarded to delegates (options.py:174,
       agent.py:436-444); the default resolves a file store under ``./.agent/memory`` (agent.py:509-518,
-      defaults.py:39). The store is the issue agent's read-only ``learned-skills`` store, as ``IssueAgentRuntime``.
+      defaults.py:39). The stores are the issue agent's read-only ``learned-skills`` store, as ``IssueAgentRuntime``,
+      and the caller's second brain and this agent's journal (``dreaming.agent_memory``, folder ``issue``).
     - ``session=False``: the runtime's ``session_manager`` (``ThreadSessionManager``) arrives in ``agent_kwargs`` and
       wins over the sugar (agent.py:474-487); off guarantees nothing is ever written to ``./.agent/sessions``
       (defaults.py:35).
@@ -379,7 +381,7 @@ def create_issue_chat_agent(*, user_id: str, session_id: str, issue_id: str, pro
     agent = create_harness(
         model=model,
         caching=False,
-        instructions=issue_agent_prompt(issue) + ISSUE_CHAT_ADDENDUM,
+        instructions=issue_agent_prompt(issue) + ISSUE_CHAT_ADDENDUM + JOURNAL_DIRECTIVE,
         tools=[
             *assigned,
             installed_http_request(),
@@ -398,7 +400,8 @@ def create_issue_chat_agent(*, user_id: str, session_id: str, issue_id: str, pro
         context_manager={"auto": "auto", "agentic": "agentic", "sliding": False}[context],
         session=False,
         skills=False,
-        memory=MemoryManager(stores=[get_teaching_service().get_memory_store(owner_id, agent_scope)],
+        memory=MemoryManager(stores=[get_teaching_service().get_memory_store(owner_id, agent_scope),
+                                     *agent_memory(user_id, agent_scope)],
                              search_tool_config=True, injection=True),
         interventions=None,
         name="Issue Ren",
@@ -551,11 +554,12 @@ class IssueAgentRuntime:
                 # natively by a multimodal lead (view_media), else described by RON_MEDIA_MODEL (understand_media).
                 intake = [installed_http_request(), *media_tools(lambda: service.identity,
                     provider=agent_record["provider"], model_id=agent_record["model_id"])]
-                agent = config_to_agent({"name": "Task Ren", "model": agent_record["model_id"], "prompt": prompt, "tools": []},
+                agent = config_to_agent({"name": "Task Ren", "model": agent_record["model_id"], "prompt": prompt + JOURNAL_DIRECTIVE, "tools": []},
                     model=model,
                     tools=[*assigned, *intake, *brave_tools(), *deep_research_tools(user_id=service.identity.user_id), *learned, *a2a_tools()],
                     description="Private canonical issue assistant",
-                    memory_manager={"stores": [get_teaching_service().get_memory_store(service.identity.user_id, agent_scope)],
+                    memory_manager={"stores": [get_teaching_service().get_memory_store(service.identity.user_id, agent_scope),
+                                               *agent_memory(service.identity.user_id, agent_scope)],
                                     "search_tool_config": True, "injection": True},
                     agent_id=agent_record["id"], session_manager=session, callback_handler=None,
                     checkpointing=False, load_tools_from_directory=False, plugins=plugins, hooks=[activity])

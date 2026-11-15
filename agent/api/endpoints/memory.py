@@ -2,12 +2,15 @@
 
 Identity is the Projects path (``project_identity``): the owner is the verified Supabase user, never
 a ``user_id`` from the request. Every store is a native ``FileMemoryStore``; this surface reads and
-writes the same storage namespace the store uses (``<user scope>/memory/<store>/``).
+writes the same storage namespace the store uses (``<user scope>/memory/<store>/``). A folder of the
+second brain is the store ``brain/<agent>`` (``core/dreaming.py``), and ``/memory/dreams`` lists and
+undoes the versions the dream wrote.
 Loopback only: never add ``/memory`` to the ngrok allowlist.
 """
 
 from __future__ import annotations
 
+import json
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -16,8 +19,10 @@ from strands.memory import MemoryManager
 from strands.memory.types import MemorySearchOptions
 from strands.storage import Storage
 from strands.types.exceptions import StorageError
+from strands.vended_memory_stores.file_memory_store import FileMemoryStore
 
-from agent.api.core.memory import CATEGORIES, DESCRIPTIONS, MemoryScope, scope_store_name, user_stores
+from agent.api.core.dreaming import agent_memory, dream, folder, undo_dream
+from agent.api.core.memory import CATEGORIES, DESCRIPTIONS, scope_store_name, user_stores
 from agent.api.core.panel_storage import get_user_session_storage
 from agent.api.core.projects import ProjectIdentity, project_identity
 
@@ -42,14 +47,16 @@ def _owner(request: Request, identity: ProjectIdentity) -> str:
 def _store_name(store: str) -> str:
     if store in CATEGORIES:
         return store
-    for kind in ("project", "issue"):
-        prefix = f"{kind}-"
-        if store.startswith(prefix):
-            try:
+    try:
+        if store.startswith("brain/"):
+            return f"brain/{folder(store[6:])}"
+        for kind in ("project", "issue"):
+            prefix = f"{kind}-"
+            if store.startswith(prefix):
                 return scope_store_name(kind, store[len(prefix):])
-            except ValueError as error:
-                raise HTTPException(422, str(error)) from error
-    raise HTTPException(422, f"store must be one of {CATEGORIES} or project-<id> / issue-<id>")
+    except ValueError as error:
+        raise HTTPException(422, str(error)) from error
+    raise HTTPException(422, f"store must be one of {CATEGORIES}, project-<id>, issue-<id> or brain/<agent>")
 
 
 def _view(user_id: str, store: str) -> Storage:
@@ -77,15 +84,16 @@ class EntryUpdate(BaseModel):
 
 @router.get("/memory/stores")
 async def memory_stores(request: Request, identity: Identity) -> dict[str, Any]:
-    """The user's stores, with entry counts (project/issue stores appear once they hold entries)."""
+    """The user's stores, with entry counts (project, issue and brain stores appear once they hold entries)."""
     user_id = _owner(request, identity)
     root = get_user_session_storage(user_id)
     keys = await root.list("memory/")
     counts: dict[str, int] = {}
     for key in keys:
         parts = key.split("/")
-        if len(parts) == 3 and parts[2].endswith(".md"):
-            counts[parts[1]] = counts.get(parts[1], 0) + 1
+        if parts[-1].endswith(".md") and (len(parts) == 3 or (len(parts) == 4 and parts[1] == "brain")):
+            name = "/".join(parts[1:-1])
+            counts[name] = counts.get(name, 0) + 1
     stores = [{"name": name, "description": DESCRIPTIONS[name], "count": counts.get(name, 0)} for name in CATEGORIES]
     stores += [{"name": name, "description": "", "count": count}
                for name, count in sorted(counts.items()) if name not in CATEGORIES and name != "learned-skills"]
@@ -112,10 +120,7 @@ async def memory_add(request: Request, identity: Identity, body: EntryCreate) ->
     """Add through the native ``FileMemoryStore.add`` (heading slug → file, facts merged under it)."""
     user_id = _owner(request, identity)
     name = _store_name(body.store)
-    scope = MemoryScope(project_id=name[8:] if name.startswith("project-") else None,
-                        issue_id=name[6:] if name.startswith("issue-") else None)
-    store = next(s for s in user_stores(user_id, scope, extraction=False) if s.name == name)
-    key = await store.add(body.content)
+    key = await FileMemoryStore(name=name, storage=get_user_session_storage(user_id)).add(body.content)
     return {"store": name, "key": key}
 
 
@@ -152,7 +157,34 @@ async def memory_search(request: Request, identity: Identity, q: str, max_result
     user_id = _owner(request, identity)
     if not q.strip():
         raise HTTPException(422, "q is required")
-    manager = MemoryManager(stores=list(user_stores(user_id, extraction=False)), injection=False)
+    manager = MemoryManager(stores=[*user_stores(user_id), agent_memory(user_id, "panel")[0]], injection=False)
     results = await manager.search(q, MemorySearchOptions(max_search_results=max(1, min(max_results, 50))))
     return {"results": [{"store": entry.store_name, "content": entry.content,
                          "key": (entry.metadata or {}).get("path")} for entry in results]}
+
+
+@router.get("/memory/dreams")
+async def memory_dreams(request: Request, identity: Identity) -> dict[str, Any]:
+    """The versions the dream wrote, newest first: each topic it changed and how it read before."""
+    storage = get_user_session_storage(_owner(request, identity))
+    dreams = []
+    for key in sorted(await storage.list("memory/dreams/"), reverse=True):
+        before: dict[str, str | None] = json.loads(await storage.read(key) or b"{}")
+        dreams.append({"version": key.rsplit("/", 1)[-1].removesuffix(".json"),
+                       "changed": [{"key": topic, "before": text} for topic, text in before.items()]})
+    return {"dreams": dreams}
+
+
+@router.post("/memory/dreams")
+async def memory_dream(request: Request, identity: Identity) -> dict[str, Any]:
+    """File the journals into the brain now, without waiting for the user to be idle."""
+    return {"version": await dream(_owner(request, identity))}
+
+
+@router.delete("/memory/dreams")
+async def memory_dream_undo(request: Request, identity: Identity) -> dict[str, Any]:
+    """Undo the newest dream: every topic it changed reads as it did before, and the version is dropped."""
+    version = await undo_dream(_owner(request, identity))
+    if version is None:
+        raise HTTPException(404, "there is no dream to undo")
+    return {"undone": version}

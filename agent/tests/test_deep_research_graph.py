@@ -677,11 +677,14 @@ def test_nested_formation_topology_and_strict_use_skill_only_invariant(tmp_path:
             assert "skills" in registered_tools
             assert "compile_scholarly_pdf" not in registered_tools
             assert "compile_slidev_deck" not in registered_tools
+            # Every agent's memory (core/dreaming.py): the second brain to read and its own journal to write.
+            memory_tools = {"search_memory", "journal"}
+            assert memory_tools <= registered_tools
             if orch_agent.name in swarm_agent_names:
-                allowed = {"use_skill", "handoff_to_agent"} | set(FRAMEWORK_PLUGIN_TOOL_NAMES)
+                allowed = {"use_skill", "handoff_to_agent"} | memory_tools | set(FRAMEWORK_PLUGIN_TOOL_NAMES)
                 assert "handoff_to_agent" in registered_tools
             else:
-                allowed = {"use_skill"} | set(FRAMEWORK_PLUGIN_TOOL_NAMES)
+                allowed = {"use_skill"} | memory_tools | set(FRAMEWORK_PLUGIN_TOOL_NAMES)
                 assert "handoff_to_agent" not in registered_tools
 
             unexpected = registered_tools - allowed

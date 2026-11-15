@@ -187,6 +187,6 @@ failures, user isolation (including read scope), cross-session recall, concurren
 append from multiple loops, write failure recovery, repeated cancellation during a
 blocked upload, server-stamped journal files, long-term subject merging (newest
 last), `search_memories` via `get_tools`, and journal-only `add_memory`.
-`agent/tests/test_dreaming.py` runs the dreaming extraction on a scripted
-`aux_model`; `agent/tests/test_memory_agent.py` covers the `recall` subagent. No
-live HF/model requests or credentials are used.
+`agent/tests/test_dreaming.py` runs the second brain, the journal and the dream
+(`core/dreaming.py`) on scripted models and counted-word embeddings. No live
+HF/model requests or credentials are used.

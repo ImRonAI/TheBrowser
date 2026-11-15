@@ -23,12 +23,12 @@ def test_live_tools_are_native_and_exclude_tools_bidi_cannot_run():
         "editor", "shell", "environment", "http_request", "perplexity_search",
         "brave_answer", "brave_web_search", "brave_news_search", "brave_image_search",
         "brave_video_search", "brave_local_search", "brave_rich_answer",
-        "list_learned_skills", "use_skill", "search_memory", "add_memory",
+        "list_learned_skills", "use_skill", "search_memory", "add_memory", "journal",
     ):
         assert name in names, name
     # think is text-only; ask_user interrupts (unsupported in bidi); tool_catalog and mcp_client
     # register tools after the connection has declared its tools.
-    for name in ("think", "ask_user", "tool_catalog", "mcp_client", "journal"):
+    for name in ("think", "ask_user", "tool_catalog", "mcp_client"):
         assert name not in names, name
     host = [value for value in tools if value.tool_name in
             ("editor", "shell", "environment", "http_request", "perplexity_search")]

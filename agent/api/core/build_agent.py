@@ -23,7 +23,8 @@ picked level when it offers it.
 **Agent.** ``create_harness`` with the choices ``create_issue_chat_agent`` documents for a multi-tenant host:
 ``builtin_tools=[]`` (the harness ``shell``/``read``/``write``/``edit`` run in ``agent.sandbox``, whose local
 default is the API process's cwd, i.e. this repository), ``builtin_plugins=["todos"]`` (``todo_write``, the Plan
-pane), ``skills=False``, ``memory=False``, ``session=False`` (the runtime's ``ThreadSessionManager`` arrives in
+pane), ``skills=False``, ``memory`` every agent's (``dreaming.agent_memory``: the second brain and this agent's
+journal, folder ``build``), ``session=False`` (the runtime's ``ThreadSessionManager`` arrives in
 ``agent_kwargs``), ``mcp_servers=None``, ``caching=False`` (pre-built models) and ``interventions=None``. The context
 modes are the panel composition's (``_context_kwargs``), so every Build thread saved before this module restores. The
 tools are the installed ``strands_tools`` ``shell`` and ``editor`` (the names the workbench reads,
@@ -37,7 +38,10 @@ import logging
 import time
 from typing import Any
 
+from strands.memory import MemoryManager
+
 from agent.api.core import config as app_config
+from agent.api.core.dreaming import JOURNAL_DIRECTIVE, agent_memory
 from agent.api.core.panel_agent import (
     NIM_REASONING_EFFORTS_BY_MODEL,
     build_model,
@@ -237,7 +241,7 @@ def create_build_agent(*, user_id: str, session_id: str, model: Any, side_model_
     agent = create_harness(
         model=model,
         caching=False,
-        instructions=build_agent_prompt(workspace).strip(),
+        instructions=build_agent_prompt(workspace).strip() + JOURNAL_DIRECTIVE,
         tools=[_installed_tool(shell, "shell"), _installed_tool(editor, "editor"), installed_http_request(),
                *brave_tools(), *deep_research_tools(user_id=user_id)],
         plugins=consumer_plugins,
@@ -247,7 +251,7 @@ def create_build_agent(*, user_id: str, session_id: str, model: Any, side_model_
         background_tasks=_background(options),
         session=False,
         skills=False,
-        memory=False,
+        memory=MemoryManager(stores=agent_memory(user_id, "build")),
         interventions=None,
         name="Ren Build Agent",
         description="Ren's Build Agent: builds software in the session's private workspace",

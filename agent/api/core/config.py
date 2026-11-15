@@ -229,9 +229,12 @@ AGENT_SANDBOX_ROOT = Path(os.getenv("RON_AGENT_SANDBOX_ROOT", str(Path.home() / 
 AGENT_SANDBOX_ROOT.mkdir(parents=True, exist_ok=True)
 
 # --- Memory (core/memory.py): native FileMemoryStores, search_memory/add_memory, userTurn injection ---
-#: Perplexity Agent API model for the panel Agent's native aux_model, which runs the `facts`
-#: store's ModelExtractor (verified in GET /v1/models 2026-10-26).
+#: Perplexity Agent API model for the panel Agent's native aux_model (verified in GET /v1/models 2026-10-26).
 DEFAULT_MEMORY_MODEL = "google/gemini-3.5-flash-lite"
+#: Seconds a user journals nothing before their dream files the journals into the brain (core/dreaming.py).
+RON_MEMORY_IDLE_SECONDS = float(os.getenv("RON_MEMORY_IDLE_SECONDS", "300"))
+#: Seconds one Mistral embedding request may take. A brain search that runs out is skipped, never waited on.
+RON_MEMORY_SEARCH_SECONDS = float(os.getenv("RON_MEMORY_SEARCH_SECONDS", "6"))
 
 # --- Media intake (core/media_understanding.py, core/media_capabilities.py) ---
 #: `<provider>/<model id>` that looks at media for a lead model that cannot see images (`understand_media`).
