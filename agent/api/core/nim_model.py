@@ -37,6 +37,7 @@ from collections.abc import AsyncGenerator
 import logging
 from typing import Any
 
+import httpx
 import openai
 from strands.agent.agent_metadata import AgentMetadata
 from strands.models._validation import _has_location_source
@@ -200,6 +201,11 @@ class RonNIMModel(OpenAIModel):
             request.pop("tool_choice", None)
         return request
 
+    def _read_bound(self) -> str:
+        timeout = self.client_args.get("timeout")
+        read_s = getattr(timeout, "read", None)
+        return f" after {read_s:g}s" if isinstance(read_s, (int, float)) else ""
+
     @override
     async def stream(
         self,
@@ -223,12 +229,17 @@ class RonNIMModel(OpenAIModel):
             ):
                 yield chunk
         except openai.APITimeoutError as error:
-            timeout = self.client_args.get("timeout")
-            read_s = getattr(timeout, "read", None)
-            bound = f" after {read_s:g}s" if isinstance(read_s, (int, float)) else ""
             raise RuntimeError(
-                f"NVIDIA NIM endpoint timed out{bound} waiting for {model_id!r} "
+                f"NVIDIA NIM endpoint timed out{self._read_bound()} waiting for {model_id!r} "
                 "(integrate.api.nvidia.com accepted the request and sent 0 bytes; "
+                "upstream model container is stalled or out of capacity)."
+            ) from error
+        except httpx.TimeoutException as error:
+            # A stall after the reply has started arrives as the transport's own timeout: the OpenAI
+            # client doesn't wrap errors raised while iterating the stream.
+            raise RuntimeError(
+                f"NVIDIA NIM stream from {model_id!r} went silent{self._read_bound()} partway through its reply "
+                "(integrate.api.nvidia.com started answering, then stopped sending; "
                 "upstream model container is stalled or out of capacity)."
             ) from error
         except openai.APIStatusError as error:

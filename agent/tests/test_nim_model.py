@@ -431,6 +431,17 @@ class _StalledOrErroredNIMHandler(BaseHTTPRequestHandler):
         if model == "deepseek-ai/deepseek-v4.1-flash":
             type(self).release.wait(timeout=5.0)
             return
+        if model == "minimaxai/minimax-m3.1-flash":
+            # Starts the reply, then goes silent mid-stream.
+            chunk = {"id": "c1", "object": "chat.completion.chunk", "model": model,
+                     "choices": [{"index": 0, "delta": {"role": "assistant", "content": "Framing"}, "finish_reason": None}]}
+            self.send_response(200)
+            self.send_header("Content-Type", "text/event-stream")
+            self.end_headers()
+            self.wfile.write(f"data: {json.dumps(chunk)}\n\n".encode())
+            self.wfile.flush()
+            type(self).release.wait(timeout=5.0)
+            return
         self.send_response(504)
         self.send_header("Content-Length", "0")
         self.send_header("nvcf-status", "errored")
@@ -531,6 +542,37 @@ def test_stalled_or_504_nim_endpoint_fails_once_without_retry_loops(monkeypatch,
 
     try:
         asyncio.run(scenario())
+    finally:
+        _StalledOrErroredNIMHandler.release.set()
+        server.shutdown()
+        server.server_close()
+
+
+def test_nim_stream_that_goes_silent_mid_reply_names_the_model_and_the_stall(monkeypatch):
+    server = ThreadingHTTPServer(("127.0.0.1", 0), _StalledOrErroredNIMHandler)
+    server.daemon_threads = True
+    _StalledOrErroredNIMHandler.calls = []
+    _StalledOrErroredNIMHandler.release.clear()
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+
+    monkeypatch.setattr(app_config, "NVIDIA_NIM_API_KEY", "nvapi-offline-test")
+    monkeypatch.setattr(panel_agent, "NVIDIA_NIM_BASE_URL", f"http://127.0.0.1:{server.server_port}/v1")
+    monkeypatch.setenv("NIM_READ_TIMEOUT", "0.3")
+    model = panel_agent.build_model("nim", "minimaxai/minimax-m3.1-flash")
+
+    async def scenario() -> list[Any]:
+        events: list[Any] = []
+        async for event in model.stream([{"role": "user", "content": [{"text": "Frame this question."}]}]):
+            events.append(event)
+        return events
+
+    try:
+        with pytest.raises(RuntimeError) as raised:
+            asyncio.run(scenario())
+        assert isinstance(raised.value.__cause__, httpx.TimeoutException)
+        message = str(raised.value)
+        assert "'minimaxai/minimax-m3.1-flash' went silent after 0.3s partway through its reply" in message
+        assert _StalledOrErroredNIMHandler.calls == ["minimaxai/minimax-m3.1-flash"]
     finally:
         _StalledOrErroredNIMHandler.release.set()
         server.shutdown()
