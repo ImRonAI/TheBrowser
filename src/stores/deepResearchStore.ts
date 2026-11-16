@@ -137,7 +137,7 @@ export const useDeepResearchStore = create<DeepResearchState>()(
         }))
 
         const pump = async () => {
-          let cursor = initialAfter ?? get().snapshotsBySession[sessionId]?.replay_after ?? 0
+          let cursor = initialAfter ?? get().snapshotsBySession[sessionId]?.sequence ?? 0
           let retries = 0
           try {
             while (!controller.signal.aborted && retries <= 2) {
@@ -158,12 +158,12 @@ export const useDeepResearchStore = create<DeepResearchState>()(
                   runs: upsertRunInList(state.runs, merged),
                 }))
                 if (!merged.active) break
-                cursor = merged.replay_after
+                cursor = merged.sequence
                 retries += 1
               } catch (err) {
                 if (controller.signal.aborted) break
                 if (err instanceof DeepResearchReplayOverflow) {
-                  // Re-hydrate full snapshot on 410 cursor overflow and resume from fresh replay_after.
+                  // Re-hydrate full snapshot on 410 cursor overflow and resume after the sequence it folds.
                   const snapshot = await getDeepResearchRun(sessionId, userId, { signal: controller.signal })
                   const merged = normalizeDeepResearchSnapshot(snapshot, get().snapshotsBySession[sessionId])
                   set((state) => ({
@@ -171,7 +171,7 @@ export const useDeepResearchStore = create<DeepResearchState>()(
                     runs: upsertRunInList(state.runs, merged),
                   }))
                   if (!merged.active) break
-                  cursor = merged.replay_after
+                  cursor = merged.sequence
                   retries += 1
                   continue
                 }
@@ -285,7 +285,7 @@ export const useDeepResearchStore = create<DeepResearchState>()(
             if (activeId) {
               const snap = get().snapshotsBySession[activeId]
               if (snap?.active && !activeControllers.has(activeId)) {
-                attachStream(activeId, userId, snap.replay_after)
+                attachStream(activeId, userId, snap.sequence)
               }
             }
           } catch {
@@ -322,7 +322,7 @@ export const useDeepResearchStore = create<DeepResearchState>()(
               syncResearchTabUrl(snapshot.session_id)
             }
             if (snapshot.active) {
-              attachStream(snapshot.session_id, userId, snapshot.replay_after)
+              attachStream(snapshot.session_id, userId, snapshot.sequence)
             }
             return snapshot
           } catch (err) {
@@ -351,7 +351,7 @@ export const useDeepResearchStore = create<DeepResearchState>()(
               runs: upsertRunInList(state.runs, merged),
             }))
             if (merged.active) {
-              attachStream(trimmed, userId, merged.replay_after)
+              attachStream(trimmed, userId, merged.sequence)
             }
           } catch (err) {
             const message = err instanceof Error ? err.message : String(err)

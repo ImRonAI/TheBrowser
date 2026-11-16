@@ -1,9 +1,9 @@
-"""Offline structural, execution, and runtime tests for Deep Research native Strands formations.
+"""Offline structural, execution, and runtime tests for the Deep Research set formation.
 
 Exercises the real pinned Strands SDK (``Graph``, ``Swarm``, ``SnapshotSessionManager``,
-``MultiAgentPlugin``, ``AgentSkills``) and ``strands_harness==0.1.2`` (``create_harness``,
-``make_subagent``) using deterministic Strands ``Model`` test doubles that emit genuine
-``use_skill``, leaf research & artifact compilation tool, and ``handoff_to_agent`` invocations.
+``MultiAgentPlugin``, ``AgentSkills``) and ``strands_harness==0.1.2`` (``create_harness`` with its
+built-in ``subagent`` and ``write`` tools) using deterministic Strands ``Model`` test doubles that
+emit genuine ``subagent``, ``handoff_to_agent``, file and artifact compilation tool calls.
 """
 
 from __future__ import annotations
@@ -13,6 +13,7 @@ import asyncio
 import json
 import os
 from pathlib import Path
+import re
 import threading
 from typing import Any, cast
 
@@ -29,7 +30,6 @@ from strands.types.streaming import StreamEvent
 from agent.api.core.context_agent import context_store
 from agent.api.core.deep_research import (
     DEEP_RESEARCH_SKILLS_DIR,
-    FRAMEWORK_PLUGIN_TOOL_NAMES,
     ORCHESTRATOR_IDS,
     VALID_DEPTHS,
     DeepResearchMultiAgentPlugin,
@@ -131,6 +131,49 @@ def _count_tool_results(messages: list[dict[str, Any]]) -> int:
     return total
 
 
+_ROLE_RE = re.compile(r"^## Your role: (.+)$", re.MULTILINE)
+_WORKSPACE_RE = re.compile(r"Every file of this run lives in (.+?)\. Read ")
+_ANCHOR = "([ArXiv QEC Benchmark](https://arxiv.org/abs/2401.00001))"
+
+_REPORT_MD = (
+    "# Quantum Error Correction Architecture Report\n\n"
+    "## Executive Summary\n"
+    "Bivariate bicycle qLDPC codes reduce physical-to-logical overhead compared with planar "
+    "surface codes ([IBM Quantum LDPC Paper](https://research.ibm.com/publications/qldpc-2026)), "
+    "while surface codes retain simpler nearest-neighbor 2D syndrome extraction "
+    "([ArXiv QEC Benchmark](https://arxiv.org/abs/2401.00001)).\n\n"
+    "| Architecture | Threshold | Connectivity |\n"
+    "| --- | --- | --- |\n"
+    "| Surface Code | ~1.0% | 2D Nearest-Neighbor |\n"
+    "| Bivariate Bicycle qLDPC | ~0.7% | Long-Range Couplers |\n\n"
+    "## References\n"
+    "1. [ArXiv QEC Benchmark](https://arxiv.org/abs/2401.00001)\n"
+    "2. [IBM Quantum LDPC Paper](https://research.ibm.com/publications/qldpc-2026)\n"
+)
+
+_SLIDES_MD = (
+    "---\n"
+    "title: Quantum Error Correction Architecture Deck\n"
+    "---\n\n"
+    "# Quantum Error Correction\n\n"
+    "Surface code vs. bivariate bicycle qLDPC fault-tolerance\n\n"
+    "---\n\n"
+    "## Key Empirical Findings\n\n"
+    "- **~1.0% threshold** on 2D nearest-neighbor planar surface codes\n"
+    "- **~0.7% threshold** with reduced overhead on bivariate bicycle qLDPC\n\n"
+    "<!--\nSpeaker note: contrast coupler hardware requirements.\n-->\n"
+)
+
+_RESEARCH_CALLS: tuple[tuple[str, dict[str, Any]], ...] = (
+    ("brave_web_search", {"query": "quantum error correction qLDPC surface code", "count": 3}),
+    ("extract_article_content", {"url": "https://arxiv.org/abs/2401.00001"}),
+)
+
+
+def _handoff(agent_name: str, message: str) -> tuple[str, dict[str, Any]]:
+    return ("handoff_to_agent", {"agent_name": agent_name, "message": message})
+
+
 class ScriptedFormationCoordinator:
     """Shared state across per-agent ``ScriptedFormationModel`` instances in a formation run."""
 
@@ -142,24 +185,77 @@ class ScriptedFormationCoordinator:
         invoke_artifact_tools: bool = True,
         reasoning: str | None = None,
     ) -> None:
+        # When set, each QA agent in a feedback loop rejects the work once before approving it.
         self.refine_once = refine_once
         self.slow_gate = slow_gate
         self.invoke_artifact_tools = invoke_artifact_tools
         # When set, every model turn opens with this text as a native reasoning content block.
         self.reasoning = reasoning
         self.lock = threading.Lock()
-        self.verification_critic_visits = 0
-        self.adversarial_handoffs = 0
-        self.verification_handoffs = 0
-        self.use_skill_calls: list[tuple[str, str]] = []
-        self.leaf_tool_calls: list[str] = []
+        self.turns: dict[str, int] = {}
+        self.tool_calls: list[str] = []
 
     def make_model(self, **_: Any) -> "ScriptedFormationModel":
         return ScriptedFormationModel(self)
 
+    def script(self, label: str, turn: int, workspace: str) -> tuple[list[tuple[str, dict[str, Any]]], str]:
+        """One formation agent's turn: the tool calls it makes in order, then its final message."""
+        revise = self.refine_once and turn == 1
+        if label == "Researcher":
+            return (
+                [
+                    ("subagent", {"task": "Research qLDPC and surface code thresholds from primary sources."}),
+                    _handoff("fact_checker", "research.md is ready for its reference fact check."),
+                ],
+                f"Research saved to research.md {_ANCHOR}.",
+            )
+        if label == "Fact Checker":
+            return [_handoff("citation_manager", "Claims checked; number the citations.")], "Claims match sources."
+        if label == "Citation Manager":
+            return [_handoff("research_qa", "Citations and references.md are ready.")], "References documented."
+        if label == "Research QA":
+            if revise:
+                return [_handoff("citation_manager", "Reference 2 has no URL; fix references.md.")], "Sent back."
+            return [], "Every reference and citation checks out.\nAPPROVED"
+        if label == "Visual QA":
+            if revise:
+                return [], "The y axis of figures/thresholds.png is mislabelled.\nREVISE: data_analyst"
+            return [], "Every chart is cited, relevant and accurate.\nAPPROVED"
+        if label == "Report Designer":
+            return [_handoff("deck_designer", "report-layout.md is ready.")], "Report layout saved."
+        if label == "Deck Designer":
+            return [_handoff("layout_qa", "deck-layout.md is ready.")], "Deck layout saved."
+        if label == "Layout QA":
+            return [_handoff("report_writer", "Both layouts approved.")], "Layouts approved."
+        if label == "Report Writer":
+            return (
+                [
+                    ("write", {"path": f"{workspace}/report.md", "content": _REPORT_MD}),
+                    _handoff("report_qa", "report.md is ready."),
+                ],
+                "Report written to report.md.",
+            )
+        if label == "Report QA":
+            return [_handoff("deck_writer", "Report approved.")], "Report approved."
+        if label == "Deck Writer":
+            return [_handoff("deck_qa", "deck-copy.md is ready.")], "Slide wording saved."
+        if label == "PDF Publisher" and self.invoke_artifact_tools:
+            return [("compile_scholarly_pdf", {"css": "h1 { color: #1e3a8a; }"})], "Compiled report.pdf."
+        if label == "Slidev Producer" and self.invoke_artifact_tools:
+            return (
+                [
+                    (
+                        "compile_slidev_deck",
+                        {"slides_markdown": _SLIDES_MD, "title": "Quantum Error Correction Architecture Deck"},
+                    )
+                ],
+                "Built the Slidev deck.",
+            )
+        return [], f"{label} finished {_ANCHOR}.\nAPPROVED"
+
 
 class ScriptedFormationModel(Model):
-    """Real Strands ``Model`` subclass driving orchestrators, Swarms, and ``use_skill`` subagents."""
+    """Real Strands ``Model`` subclass driving the formation's skill agents and their sub-agents."""
 
     def __init__(self, coordinator: ScriptedFormationCoordinator) -> None:
         self.coordinator = coordinator
@@ -212,234 +308,45 @@ class ScriptedFormationModel(Model):
         if self.coordinator.slow_gate is not None:
             await self.coordinator.slow_gate.wait()
 
-        msg_list = list(messages or [])
-        spec_map: dict[str, dict[str, Any]] = {
-            str(spec["name"]): spec for spec in (tool_specs or ()) if isinstance(spec, dict) and "name" in spec
-        }
+        spec_names = {str(spec["name"]) for spec in (tool_specs or ()) if isinstance(spec, dict) and "name" in spec}
         prompt_text = str(system_prompt or "")
+        prior_results = _count_tool_results(list(messages or []))
+        role = _ROLE_RE.search(prompt_text)
 
-        # ── Case A: Orchestrator Agent (Graph or Swarm member) ──────────────
-        if "use_skill" in spec_map:
-            use_skill_spec = spec_map["use_skill"]
-            agent_type_prop = (
-                use_skill_spec.get("inputSchema", {})
-                .get("json", {})
-                .get("properties", {})
-                .get("agent_type", {})
-            )
-            enum_presets: list[str] = list(agent_type_prop.get("enum") or [])
-            chosen_preset = enum_presets[0] if enum_presets else "domain-landscape-scan"
-
-            prior_results = _count_tool_results(msg_list)
-
-            # Step 1 on every orchestrator turn: invoke `use_skill`!
+        # ── Case A: a built-in `subagent` child: one research tool call, then its findings ──
+        if role is None:
             if prior_results == 0:
-                with self.coordinator.lock:
-                    seq = len(self.coordinator.use_skill_calls) + 1
-                    self.coordinator.use_skill_calls.append((chosen_preset, prompt_text.splitlines()[0]))
-                for ev in _assistant_tool_use_stream(
-                    f"use-skill-{seq}",
-                    "use_skill",
-                    {
-                        "agent_type": chosen_preset,
-                        "task": f"Execute {chosen_preset} analysis for quantum error correction thresholds",
-                    },
-                ):
-                    yield ev
-                return
-
-            # Step 2 for Swarm entry agents: handoff to peer via `handoff_to_agent`!
-            if "handoff_to_agent" in spec_map:
-                if "# Hypothesis Explorer" in prompt_text:
-                    with self.coordinator.lock:
-                        should_handoff = self.coordinator.adversarial_handoffs < 2
-                        if should_handoff:
-                            self.coordinator.adversarial_handoffs += 1
-                            h_idx = self.coordinator.adversarial_handoffs
-                        else:
-                            h_idx = 0
-                    if should_handoff and prior_results == 1:
-                        for ev in _assistant_tool_use_stream(
-                            f"handoff-adv-{h_idx}",
-                            "handoff_to_agent",
-                            {
-                                "agent_name": "contrarian_examiner",
-                                "message": "Falsify surface-code vs LDPC qubit overhead hypothesis.",
-                                "context": {"hypothesis": "qLDPC cuts physical overhead 5x"},
-                            },
-                        ):
-                            yield ev
-                        return
-
-                if "# Citation Verifier" in prompt_text:
-                    if prior_results == 1:
+                for tool_name, sample_args in _RESEARCH_CALLS:
+                    if tool_name in spec_names:
                         with self.coordinator.lock:
-                            self.coordinator.verification_handoffs += 1
-                            v_idx = self.coordinator.verification_handoffs
-                        for ev in _assistant_tool_use_stream(
-                            f"handoff-ver-{v_idx}",
-                            "handoff_to_agent",
-                            {
-                                "agent_name": "analytical_critic",
-                                "message": "Citations audited; evaluate sub-question completeness and gate.",
-                                "context": {"audited_urls": ["https://arxiv.org/abs/2401.00001"]},
-                            },
-                        ):
+                            self.coordinator.tool_calls.append(tool_name)
+                            t_seq = len(self.coordinator.tool_calls)
+                        for ev in _assistant_tool_use_stream(f"leaf-tool-{t_seq}", tool_name, sample_args):
                             yield ev
                         return
-
-                if "# Analytical Critic" in prompt_text:
-                    with self.coordinator.lock:
-                        self.coordinator.verification_critic_visits += 1
-                        visit_no = self.coordinator.verification_critic_visits
-                    if self.coordinator.refine_once and visit_no == 1:
-                        verdict = (
-                            "[NEEDS_REFINEMENT]\n"
-                            "Gap identified: gather primary decoder latency numbers from "
-                            "[IBM Quantum LDPC Paper](https://research.ibm.com/publications/qldpc-2026)."
-                        )
-                    else:
-                        verdict = (
-                            "[VERIFICATION_PASSED]\n"
-                            "All claims corroborated across [ArXiv QEC Benchmark](https://arxiv.org/abs/2401.00001) "
-                            "and [IBM Quantum LDPC Paper](https://research.ibm.com/publications/qldpc-2026)."
-                        )
-                    for ev in _assistant_text_stream(verdict):
-                        yield ev
-                    return
-
-            # Step 3: Terminal Synthesis / Stage output
-            if "# Executive Editor" in prompt_text:
-                report = (
-                    "# Quantum Error Correction Architecture Report\n\n"
-                    "## Executive Summary\n"
-                    "Bivariate bicycle qLDPC codes reduce physical-to-logical overhead compared with planar "
-                    "surface codes ([IBM Quantum LDPC Paper](https://research.ibm.com/publications/qldpc-2026)), "
-                    "while surface codes retain simpler nearest-neighbor 2D syndrome extraction "
-                    "([ArXiv QEC Benchmark](https://arxiv.org/abs/2401.00001)).\n\n"
-                    "| Architecture | Threshold | Connectivity |\n"
-                    "| --- | --- | --- |\n"
-                    "| Surface Code | ~1.0% | 2D Nearest-Neighbor |\n"
-                    "| Bivariate Bicycle qLDPC | ~0.7% | Long-Range Couplers |\n\n"
-                    "## Sources\n"
-                    "- [ArXiv QEC Benchmark](https://arxiv.org/abs/2401.00001)\n"
-                    "- [IBM Quantum LDPC Paper](https://research.ibm.com/publications/qldpc-2026)\n"
-                )
-                for ev in _assistant_text_stream(report):
-                    yield ev
-                return
-
-            if "# Scholarly PDF Publisher" in prompt_text:
-                pdf_manifest = "Compiled report.pdf and report.md via `pdf` preset."
-                for ev in _assistant_text_stream(pdf_manifest):
-                    yield ev
-                return
-
-            if "# Slidev Deck Producer" in prompt_text:
-                slidev_deck = (
-                    "---\n"
-                    "theme: default\n"
-                    "title: Quantum Error Correction Architecture Deck\n"
-                    "routerMode: hash\n"
-                    "aspectRatio: 16/9\n"
-                    "---\n\n"
-                    "# Quantum Error Correction\n\n"
-                    "Planar surface codes vs. bivariate bicycle qLDPC architectures\n\n"
-                    "---\n\n"
-                    "## Threshold & Connectivity Trade-offs\n\n"
-                    "- **Surface Code**: ~1.0% circuit-level threshold on 2D nearest-neighbor grids\n"
-                    "- **Bivariate Bicycle qLDPC**: ~0.7% threshold with 5x lower physical overhead\n"
-                )
-                for ev in _assistant_text_stream(slidev_deck):
-                    yield ev
-                return
-
-            if "# Report Drafter" in prompt_text:
-                draft = (
-                    "# Draft: Quantum Error Correction\n\n"
-                    "Initial synthesis citing [ArXiv QEC Benchmark](https://arxiv.org/abs/2401.00001)."
-                )
-                for ev in _assistant_text_stream(draft):
-                    yield ev
-                return
-
-            stage_summary = (
-                f"Completed stage dossier using `{chosen_preset}` with verified anchor "
-                "[ArXiv QEC Benchmark](https://arxiv.org/abs/2401.00001)."
-            )
-            for ev in _assistant_text_stream(stage_summary):
+            for ev in _assistant_text_stream(f"Sub-agent findings: surface code threshold ~1.0% {_ANCHOR}."):
                 yield ev
             return
 
-        # ── Case B: Leaf `use_skill` Subagent ───────────────────────────────
-        if not _has_tool_result(msg_list):
-            artifact_candidates: tuple[tuple[str, dict[str, Any]], ...] = (
-                (
-                    "compile_scholarly_pdf",
-                    {
-                        "markdown_content": (
-                            "# Quantum Error Correction Architecture Report\n\n"
-                            "## Executive Summary\n"
-                            "Bivariate bicycle qLDPC codes cut physical qubit overhead relative to planar "
-                            "surface codes ([IBM Quantum LDPC Paper](https://research.ibm.com/publications/qldpc-2026), "
-                            "[ArXiv QEC Benchmark](https://arxiv.org/abs/2401.00001)).\n\n"
-                            "| Architecture | Threshold | Connectivity |\n"
-                            "| --- | --- | --- |\n"
-                            "| Surface Code | ~1.0% | 2D Nearest-Neighbor |\n"
-                            "| Bivariate Bicycle qLDPC | ~0.7% | Long-Range Couplers |\n"
-                        ),
-                        "title": "Quantum Error Correction Architecture Report",
-                    },
-                ),
-                (
-                    "compile_slidev_deck",
-                    {
-                        "slides_markdown": (
-                            "---\n"
-                            "title: Quantum Error Correction Architecture Deck\n"
-                            "---\n\n"
-                            "# Quantum Error Correction\n\n"
-                            "Surface code vs. bivariate bicycle qLDPC fault-tolerance\n\n"
-                            "---\n\n"
-                            "## Key Empirical Findings\n\n"
-                            "- **~1.0% threshold** on 2D nearest-neighbor planar surface codes\n"
-                            "- **~0.7% threshold** with reduced overhead on bivariate bicycle qLDPC\n\n"
-                            "<!--\nSpeaker note: contrast coupler hardware requirements.\n-->\n"
-                        ),
-                        "title": "Quantum Error Correction Architecture Deck",
-                    },
-                ),
-            )
-            research_candidates: tuple[tuple[str, dict[str, Any]], ...] = (
-                ("brave_web_search", {"query": "quantum error correction qLDPC surface code", "count": 3}),
-                ("extract_article_content", {"url": "https://arxiv.org/abs/2401.00001"}),
-                ("search_saved_context", {"query": "surface code threshold", "max_results": 3}),
-                ("brave_news_search", {"query": "quantum error correction milestone", "count": 3}),
-                ("brave_answer", {"query": "qLDPC vs surface code threshold"}),
-            )
-            candidate_list = (
-                (*artifact_candidates, *research_candidates)
-                if self.coordinator.invoke_artifact_tools
-                else research_candidates
-            )
-            for candidate_tool, sample_args in candidate_list:
-                if candidate_tool in spec_map:
-                    with self.coordinator.lock:
-                        self.coordinator.leaf_tool_calls.append(candidate_tool)
-                        t_seq = len(self.coordinator.leaf_tool_calls)
-                    for ev in _assistant_tool_use_stream(
-                        f"leaf-tool-{t_seq}",
-                        candidate_tool,
-                        sample_args,
-                    ):
-                        yield ev
-                    return
-
-        leaf_note = (
-            "Leaf skill findings: surface code threshold ~1.0% vs qLDPC ~0.7% "
-            "([ArXiv QEC Benchmark](https://arxiv.org/abs/2401.00001))."
-        )
-        for ev in _assistant_text_stream(leaf_note):
+        # ── Case B: a formation skill agent following its scripted turn ──
+        label = role.group(1).strip()
+        workspace_match = _WORKSPACE_RE.search(prompt_text)
+        assert workspace_match is not None, "every formation agent is told its workspace"
+        with self.coordinator.lock:
+            if prior_results == 0:
+                self.coordinator.turns[label] = self.coordinator.turns.get(label, 0) + 1
+            turn = self.coordinator.turns[label]
+        steps, final_text = self.coordinator.script(label, turn, workspace_match.group(1))
+        if prior_results < len(steps):
+            tool_name, tool_input = steps[prior_results]
+            assert tool_name in spec_names, f"{label} has no {tool_name} tool"
+            with self.coordinator.lock:
+                self.coordinator.tool_calls.append(tool_name)
+            tool_use_id = f"{label.lower().replace(' ', '-')}-{turn}-{prior_results}"
+            for ev in _assistant_tool_use_stream(tool_use_id, tool_name, tool_input):
+                yield ev
+            return
+        for ev in _assistant_text_stream(final_text):
             yield ev
 
 
@@ -509,83 +416,34 @@ def _offline_leaf_tools() -> list[Any]:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 1. Native Skill & 3-Level Formation Structural Audit Tests
+# 1. Skill Library & Set Formation Structural Audit Tests
 # ─────────────────────────────────────────────────────────────────────────────
 
+_BUILTIN_AGENT_TOOLS = {"shell", "read", "write", "edit", "programmatic_tool_caller", "subagent"}
 
-def test_all_deep_research_skills_load_strictly_with_valid_metadata_and_references() -> None:
-    skills = load_deep_research_skills(DEEP_RESEARCH_SKILLS_DIR, strict=True)
-    assert len(skills) == 53
 
-    expected_skills_sh_packages = {
-        # Pillar 1: Deep Research
-        "research",
-        "scientific-critical-thinking",
-        # Pillar 2: Data Analytics & Visualization
-        "analytics",
-        "exploratory-data-analysis",
-        "statistical-analysis",
-        "scientific-visualization",
-        "data-visualization",
-        # Pillar 3: QA, Data Validation & Peer Verification
-        "verification-before-completion",
-        "peer-review",
-        "validate-data",
-        # Pillar 4: Humanized Voice & Anti-AI-Slop Writing
-        "humanizer",
-        "copy-editing",
-        "scientific-writing",
-        "stop-slop",
-        "no-ai-slop",
-        # Pillar 5: Stylized PDF & Slide Presentation
-        "pdf",
-        "canvas-design",
-        "theme-factory",
-        "slidev",
-    }
-    assert expected_skills_sh_packages.issubset(set(skills.keys()))
+def _topology_agents() -> list[dict[str, Any]]:
+    return [agent for formation in get_formation_topology()["nodes"] for agent in formation["children"]]
 
-    expected_studio_skills = {
-        "build-agent-slidev",
-        "scientific-slides",
-        "academic-paper",
-        "openai-pdf",
-        "scholarly-pdf-publisher",
-        "slidev-deck-producer",
-    }
-    assert expected_studio_skills.issubset(set(skills.keys()))
 
-    for pdf_leaf in ("pdf", "academic-paper", "openai-pdf"):
-        assert "compile_scholarly_pdf" in (skills[pdf_leaf].allowed_tools or [])
-    for slidev_leaf in ("build-agent-slidev", "slidev", "scientific-slides"):
-        assert "compile_slidev_deck" in (skills[slidev_leaf].allowed_tools or [])
+def test_skill_library_is_the_skills_cli_install_and_covers_every_agent() -> None:
+    skills = load_deep_research_skills()
 
-    for pkg in expected_skills_sh_packages:
-        meta = skills[pkg].metadata
-        assert meta.get("source") == "skills.sh"
-        assert int(meta.get("github_stars") or 0) >= 10_000
-        audits = meta.get("security_audits") or {}
-        assert audits == {
-            "gen_agent_trust_hub": "Pass",
-            "socket": "Pass",
-            "snyk": "Pass",
-        }
+    # Every skill is a Skills CLI install recorded in skills-lock.json with its GitHub source.
+    lock = json.loads((DEEP_RESEARCH_SKILLS_DIR.parents[1] / "skills-lock.json").read_text(encoding="utf-8"))
+    assert set(skills) == set(lock["skills"])
+    assert all(entry["sourceType"] == "github" and entry["source"] for entry in lock["skills"].values())
+    assert lock["skills"]["find-skills"]["source"] == "vercel-labs/skills"
 
+    assert {agent["skill"] for agent in _topology_agents()} <= set(skills)
     for name, skill in skills.items():
         assert skill.name == name
         assert skill.description.strip()
         assert skill.instructions.strip()
-        assert isinstance(skill.allowed_tools, list) and len(skill.allowed_tools) >= 1
-        assert isinstance(skill.metadata, dict)
-        assert skill.metadata.get("role") in ("orchestrator", "swarm_orchestrator", "leaf")
-        assert skill.metadata.get("stage") in ("planning", "investigation", "verification", "synthesis")
-        assert skill.path is not None and skill.path.is_dir()
-        refs_dir = skill.path / "references"
-        assert refs_dir.is_dir(), f"{name} missing references/ directory"
-        assert any(refs_dir.glob("*.md")), f"{name} missing markdown reference rubric"
+        assert skill.path is not None and (skill.path / "SKILL.md").is_file()
 
 
-def test_nested_formation_topology_and_strict_use_skill_only_invariant(tmp_path: Path) -> None:
+def test_set_formation_topology_and_skill_agent_invariants(tmp_path: Path) -> None:
     storage = InMemoryStorage()
     coordinator = ScriptedFormationCoordinator()
     owned_agents: list[Agent] = []
@@ -604,14 +462,15 @@ def test_nested_formation_topology_and_strict_use_skill_only_invariant(tmp_path:
     try:
         assert isinstance(graph, Graph)
         assert graph.id == "deep_research_graph"
-        assert graph.reset_on_revisit is True
+        # Strands applies a node timeout to a nested formation as a whole, so the outer graph sets none.
+        assert graph.node_timeout is None
+        assert [node.node_id for node in graph.entry_points] == ["research_swarm"]
 
-        # Every outer node MUST be a MultiAgentBase (Graph or Swarm).
         expected_outer_kinds = {
-            "planning_formation": Graph,
-            "investigation_formation": Graph,
-            "verification_swarm": Swarm,
-            "synthesis_formation": Graph,
+            "research_swarm": Swarm,
+            "data_analysis_graph": Graph,
+            "writing_swarm": Swarm,
+            "production_graph": Graph,
         }
         assert set(graph.nodes.keys()) == set(expected_outer_kinds.keys())
         for outer_id, expected_cls in expected_outer_kinds.items():
@@ -619,94 +478,79 @@ def test_nested_formation_topology_and_strict_use_skill_only_invariant(tmp_path:
             assert isinstance(executor, MultiAgentBase)
             assert isinstance(executor, expected_cls)
 
-        # Investigation formation MUST contain 3 parallel entry branches including nested Swarm
-        # `adversarial_swarm`, converging on `evidence_ledger`.
-        inv_graph = graph.nodes["investigation_formation"].executor
-        assert isinstance(inv_graph, Graph)
-        assert inv_graph.id == "deep_research_investigation"
-        assert inv_graph.reset_on_revisit is True
-        assert {n.node_id for n in inv_graph.entry_points} == {
-            "web_intelligence",
-            "news_data_intelligence",
-            "adversarial_swarm",
-        }
-        adv_swarm = inv_graph.nodes["adversarial_swarm"].executor
-        assert isinstance(adv_swarm, Swarm)
-        assert adv_swarm.id == "deep_research_adversarial_swarm"
-        assert adv_swarm.max_handoffs == 4
-        assert adv_swarm.max_iterations == 5
-        assert set(adv_swarm.nodes.keys()) == {"hypothesis_explorer", "contrarian_examiner"}
+        research = cast(Swarm, graph.nodes["research_swarm"].executor)
+        assert research.id == "deep_research_research_swarm"
+        assert list(research.nodes) == ["researcher", "fact_checker", "citation_manager", "research_qa"]
+        assert research.entry_point is research.nodes["researcher"].executor
+        assert research.node_timeout == 300.0 and research.execution_timeout == 1200.0
 
-        # Verification swarm checks.
-        ver_swarm = graph.nodes["verification_swarm"].executor
-        assert isinstance(ver_swarm, Swarm)
-        assert ver_swarm.id == "deep_research_verification_swarm"
-        assert ver_swarm.max_handoffs == 4
-        assert ver_swarm.max_iterations == 5
-        assert set(ver_swarm.nodes.keys()) == {"citation_verifier", "analytical_critic"}
-
-        # Synthesis formation checks: report_drafter -> executive_editor -> {pdf_publisher, slidev_producer}.
-        syn_graph = graph.nodes["synthesis_formation"].executor
-        assert isinstance(syn_graph, Graph)
-        assert syn_graph.id == "deep_research_synthesis"
-        assert syn_graph.reset_on_revisit is True
-        assert {n.node_id for n in syn_graph.entry_points} == {"report_drafter"}
-        assert set(syn_graph.nodes.keys()) == {
-            "report_drafter",
-            "executive_editor",
-            "pdf_publisher",
-            "slidev_producer",
+        analysis = cast(Graph, graph.nodes["data_analysis_graph"].executor)
+        assert analysis.id == "deep_research_data_analysis"
+        assert analysis.reset_on_revisit is True
+        assert analysis.node_timeout == 300.0
+        assert {node.node_id for node in analysis.entry_points} == {"visual_planner"}
+        # QA's feedback edges go back to each author; the forward chain returns to QA.
+        feedback = {(e.from_node.node_id, e.to_node.node_id) for e in analysis.edges if e.condition is not None}
+        assert feedback == {
+            ("visual_qa", "visual_planner"),
+            ("visual_qa", "data_analyst"),
+            ("visual_qa", "visual_citation"),
         }
 
-        # MultiAgentPlugin initialized all 6 unique orchestrator IDs.
+        writing = cast(Swarm, graph.nodes["writing_swarm"].executor)
+        assert writing.id == "deep_research_writing_swarm"
+        assert list(writing.nodes) == [
+            "report_designer",
+            "deck_designer",
+            "layout_qa",
+            "report_writer",
+            "report_qa",
+            "deck_writer",
+            "deck_qa",
+        ]
+
+        production = cast(Graph, graph.nodes["production_graph"].executor)
+        assert production.id == "deep_research_production"
+        # The PDF and the Slidev deck are built in parallel, each with its own QA loop.
+        assert {node.node_id for node in production.entry_points} == {"pdf_publisher", "deck_producer"}
+        assert {(e.from_node.node_id, e.to_node.node_id) for e in production.edges} == {
+            ("pdf_publisher", "pdf_qa"),
+            ("pdf_qa", "pdf_publisher"),
+            ("deck_producer", "deck_build_qa"),
+            ("deck_build_qa", "deck_producer"),
+        }
+
         plugin: DeepResearchMultiAgentPlugin = getattr(graph, "_deep_research_plugin")
         assert isinstance(plugin, DeepResearchMultiAgentPlugin)
         assert set(plugin.initialized_orchestrators) == set(ORCHESTRATOR_IDS)
 
-        # Strict `use_skill`-ONLY invariant on EVERY orchestrator Agent across all formations!
-        assert len(owned_agents) == 13
-        swarm_agent_names = {
-            "hypothesis_explorer",
-            "contrarian_examiner",
-            "citation_verifier",
-            "analytical_critic",
-        }
-        for orch_agent in owned_agents:
-            registered_tools = set(orch_agent.tool_registry.registry.keys())
-            assert "use_skill" in registered_tools
-            assert "skills" in registered_tools
-            assert "compile_scholarly_pdf" not in registered_tools
-            assert "compile_slidev_deck" not in registered_tools
-            # Every agent's memory (core/dreaming.py): the second brain to read and its own journal to write.
-            memory_tools = {"search_memory", "journal"}
-            assert memory_tools <= registered_tools
-            if orch_agent.name in swarm_agent_names:
-                allowed = {"use_skill", "handoff_to_agent"} | memory_tools | set(FRAMEWORK_PLUGIN_TOOL_NAMES)
-                assert "handoff_to_agent" in registered_tools
-            else:
-                allowed = {"use_skill"} | memory_tools | set(FRAMEWORK_PLUGIN_TOOL_NAMES)
-                assert "handoff_to_agent" not in registered_tools
+        # Every agent is a skill agent: SKILL.md in its system prompt, the harness's built-in file, shell,
+        # programmatic and `subagent` tools, the research pool, every skill loadable, no browser automation.
+        topology_agents = {agent["id"]: agent for agent in _topology_agents()}
+        skills = load_deep_research_skills()
+        assert len(owned_agents) == len(topology_agents) == 19
+        swarm_agent_names = set(research.nodes) | set(writing.nodes)
+        for agent in owned_agents:
+            spec = topology_agents[agent.name]
+            registered_tools = set(agent.tool_registry.registry.keys())
+            assert _BUILTIN_AGENT_TOOLS <= registered_tools
+            assert {"skills", "http_request", "compile_scholarly_pdf", "compile_slidev_deck"} <= registered_tools
+            assert not any(name.startswith(("browser_", "playwright_")) for name in registered_tools)
+            assert ("handoff_to_agent" in registered_tools) == (agent.name in swarm_agent_names)
+            system_prompt = str(agent.system_prompt)
+            assert f"## Your role: {spec['label']}\n{spec['description']}" in system_prompt
+            assert skills[spec["skill"]].instructions in system_prompt
+            assert f"Location: {skills[spec['skill']].path}/SKILL.md" in system_prompt
+            assert str(tmp_path / "artifacts" / "struct-audit-session") in system_prompt
+            assert agent.description == spec["description"]
 
-            unexpected = registered_tools - allowed
-            assert not unexpected, (
-                f"Orchestrator {orch_agent.name!r} leaked raw tools {sorted(unexpected)}"
-            )
-
-        # Topology helper aligns with graph structure & depths.
         topo = get_formation_topology()
         assert topo["id"] == "deep_research_graph"
-        assert [n["id"] for n in topo["nodes"]] == [
-            "planning_formation",
-            "investigation_formation",
-            "verification_swarm",
-            "synthesis_formation",
-        ]
-        syn_topo = next(n for n in topo["nodes"] if n["id"] == "synthesis_formation")
-        assert [c["id"] for c in syn_topo["children"]] == [
-            "report_drafter",
-            "executive_editor",
-            "pdf_publisher",
-            "slidev_producer",
+        assert [n["id"] for n in topo["nodes"]] == list(expected_outer_kinds)
+        assert [(e["from"], e["to"]) for e in topo["edges"]] == [
+            ("research_swarm", "data_analysis_graph"),
+            ("data_analysis_graph", "writing_swarm"),
+            ("writing_swarm", "production_graph"),
         ]
         assert VALID_DEPTHS == ("standard", "deep", "exhaustive")
     finally:
@@ -753,7 +597,7 @@ def test_leaf_tool_pool_rejects_forbidden_host_and_recursive_tools(tmp_path: Pat
 
 
 @pytest.mark.asyncio
-async def test_end_to_end_formation_stream_async_with_refinement_revisit_and_snapshots(
+async def test_end_to_end_formation_stream_async_with_qa_loops_and_snapshots(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -766,6 +610,7 @@ async def test_end_to_end_formation_stream_async_with_refinement_revisit_and_sna
     coordinator = ScriptedFormationCoordinator(refine_once=True)
     owned_agents: list[Agent] = []
     artifacts_root = tmp_path / "artifacts"
+    (artifacts_root / "e2e-formation-run").mkdir(parents=True)
 
     graph = build_deep_research_graph(
         session_id="e2e-formation-run",
@@ -778,54 +623,82 @@ async def test_end_to_end_formation_stream_async_with_refinement_revisit_and_sna
         artifacts_dir=artifacts_root,
     )
 
-    stream_events: list[dict[str, Any]] = []
     final_result: Any = None
     try:
         async for ev in graph.stream_async(
             "Compare bivariate bicycle qLDPC codes against planar surface codes.",
             invocation_state={"max_refinements": 1},
         ):
-            if isinstance(ev, dict):
-                stream_events.append(ev)
-                if ev.get("type") == "multiagent_result":
-                    final_result = ev.get("result")
+            if isinstance(ev, dict) and ev.get("type") == "multiagent_result":
+                final_result = ev.get("result")
 
         assert final_result is not None
         assert final_result.status == Status.COMPLETED
-
-        # Outer execution order MUST show conditional refinement loop:
-        # planning -> investigation -> verification ([NEEDS_REFINEMENT]) -> investigation -> verification ([VERIFICATION_PASSED]) -> synthesis!
-        outer_order = [node.node_id for node in final_result.execution_order]
-        assert outer_order == [
-            "planning_formation",
-            "investigation_formation",
-            "verification_swarm",
-            "investigation_formation",
-            "verification_swarm",
-            "synthesis_formation",
+        assert [node.node_id for node in final_result.execution_order] == [
+            "research_swarm",
+            "data_analysis_graph",
+            "writing_swarm",
+            "production_graph",
         ]
 
-        # Swarm handoffs executed in both nested adversarial_swarm and verification_swarm.
-        assert coordinator.adversarial_handoffs >= 1
-        assert coordinator.verification_handoffs == 2
+        # Research swarm: QA handed the references back to their author once, then approved.
+        research = final_result.results["research_swarm"].result
+        assert [node.node_id for node in research.node_history] == [
+            "researcher",
+            "fact_checker",
+            "citation_manager",
+            "research_qa",
+            "citation_manager",
+            "research_qa",
+        ]
 
-        # Real `use_skill` subagents spawned via `make_subagent` + `create_harness` and called leaf tools
-        # including scoped `compile_scholarly_pdf` and `compile_slidev_deck`!
-        assert len(coordinator.use_skill_calls) >= 16
-        assert len(coordinator.leaf_tool_calls) >= 12
-        assert "compile_scholarly_pdf" in coordinator.leaf_tool_calls
-        assert "compile_slidev_deck" in coordinator.leaf_tool_calls
-        # 13 stage orchestrators + >=16 dynamically spawned leaf subagents tracked in owned_agents!
-        assert len(owned_agents) >= 29
+        # Data analysis graph: QA's `REVISE: data_analyst` went back to that agent and returned to QA.
+        analysis = final_result.results["data_analysis_graph"].result
+        assert analysis.status == Status.COMPLETED
+        assert [node.node_id for node in analysis.execution_order] == [
+            "visual_planner",
+            "data_analyst",
+            "visual_citation",
+            "visual_qa",
+            "data_analyst",
+            "visual_citation",
+            "visual_qa",
+        ]
+
+        writing = final_result.results["writing_swarm"].result
+        assert [node.node_id for node in writing.node_history] == [
+            "report_designer",
+            "deck_designer",
+            "layout_qa",
+            "report_writer",
+            "report_qa",
+            "deck_writer",
+            "deck_qa",
+        ]
+
+        # Production graph: the PDF and the deck were built in the same batch, each followed by its QA.
+        production = final_result.results["production_graph"].result
+        production_order = [node.node_id for node in production.execution_order]
+        assert set(production_order[:2]) == {"pdf_publisher", "deck_producer"}
+        assert set(production_order[2:]) == {"pdf_qa", "deck_build_qa"}
+
+        # The researcher ran a built-in `subagent`, which called a research tool; the writer saved the
+        # report with the built-in `write`; the publishers compiled it and the deck.
+        assert {"subagent", "brave_web_search", "write", "compile_scholarly_pdf", "compile_slidev_deck"} <= set(
+            coordinator.tool_calls
+        )
+        assert len(owned_agents) == 19
 
         run_artifacts = artifacts_root / "e2e-formation-run"
+        assert (run_artifacts / "report.md").read_text(encoding="utf-8").startswith(
+            "# Quantum Error Correction Architecture Report"
+        )
         assert (run_artifacts / "report.pdf").is_file()
-        assert (run_artifacts / "report.md").is_file()
         assert (run_artifacts / "slides.md").is_file()
         assert (run_artifacts / "slides" / "index.html").is_file()
         assert (run_artifacts / "slides.pdf").is_file()
 
-        # Native `SnapshotSessionManager` persisted `snapshot_latest` for all 6 unique orchestrators!
+        # Native `SnapshotSessionManager` persisted `snapshot_latest` for the outer graph and each formation.
         stored_keys = await storage.list("")
         for orch_id in ORCHESTRATOR_IDS:
             assert any(orch_id in key and "snapshot_latest" in key for key in stored_keys), (
@@ -845,6 +718,31 @@ async def test_end_to_end_formation_stream_async_with_refinement_revisit_and_sna
     finally:
         for agent in owned_agents:
             agent.cleanup()
+
+
+def test_local_images_are_embedded_for_every_renderer(tmp_path: Path) -> None:
+    from agent.api.core.deep_research import _inline_local_images
+
+    (tmp_path / "figures").mkdir()
+    (tmp_path / "figures" / "a.png").write_bytes(b"\x89PNG\r\n\x1a\n")
+    (tmp_path.parent / "outside.png").write_bytes(b"\x89PNG\r\n\x1a\n")
+    markdown = (
+        "![A](figures/a.png)\n"
+        f"![Abs]({tmp_path}/figures/a.png)\n"
+        '<img src="figures/a.png" class="w-80" />\n'
+        "![Remote](https://example.org/b.png)\n"
+        "![Missing](figures/missing.png)\n"
+        "![Escape](../outside.png)\n"
+    )
+    embedded = "data:image/png;base64,iVBORw0KGgo="
+    assert _inline_local_images(markdown, tmp_path) == (
+        f"![A]({embedded})\n"
+        f"![Abs]({embedded})\n"
+        f'<img src="{embedded}" class="w-80" />\n'
+        "![Remote](https://example.org/b.png)\n"
+        "![Missing](figures/missing.png)\n"
+        "![Escape](../outside.png)\n"
+    )
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -909,41 +807,40 @@ async def test_deep_research_runtime_sse_streaming_persistence_and_delete(
     ):
         assert expected_type in event_types, f"Missing SSE event type {expected_type!r} in {event_types}"
 
-    # Verify nested 3-level paths + new synthesis studio branches appeared in SSE stream.
+    # Every formation agent of the set graph appeared in the SSE stream under its formation.
     all_paths = {"/".join(ev.get("node_path") or []) for ev in parsed_events}
-    assert "planning_formation/problem_framing" in all_paths
-    assert "investigation_formation/adversarial_swarm/hypothesis_explorer" in all_paths
-    assert "investigation_formation/adversarial_swarm/contrarian_examiner" in all_paths
-    assert "investigation_formation/evidence_ledger" in all_paths
-    assert "verification_swarm/citation_verifier" in all_paths
-    assert "verification_swarm/analytical_critic" in all_paths
-    assert "synthesis_formation/executive_editor" in all_paths
-    assert "synthesis_formation/pdf_publisher" in all_paths
-    assert "synthesis_formation/slidev_producer" in all_paths
+    for formation in get_formation_topology()["nodes"]:
+        for agent in formation["children"]:
+            assert f"{formation['id']}/{agent['id']}" in all_paths
 
-    # Verify text_delta stream scoping: pdf_publisher & slidev_producer never set is_report=True.
-    report_delta_nodes = {
-        ev["node_path"][-1]
+    # The researcher's built-in `subagent` is the sub-agent the formation view nests under it.
+    skill_starts = [ev for ev in parsed_events if ev["type"] == "skill_start"]
+    assert skill_starts and all(ev["node_path"] == ["research_swarm", "researcher"] for ev in skill_starts)
+    assert all(ev["task"].startswith("Research qLDPC") for ev in skill_starts)
+    # QA sent the data analyst's work back once, so it ran twice.
+    analyst_starts = [
+        ev
         for ev in parsed_events
-        if ev["type"] == "text_delta" and ev.get("is_report") is True and ev.get("node_path")
-    }
-    assert report_delta_nodes.issubset({"report_drafter", "executive_editor"})
-    slidev_delta_nodes = {
-        ev["node_path"][-1]
-        for ev in parsed_events
-        if ev["type"] == "text_delta" and ev.get("is_slidev") is True and ev.get("node_path")
-    }
-    assert slidev_delta_nodes == {"slidev_producer"}
+        if ev["type"] == "node_start" and ev["node_path"] == ["data_analysis_graph", "data_analyst"]
+    ]
+    assert len(analyst_starts) == 2
+
+    # The report and the deck are files in the run's workspace, never an agent's streamed text.
+    assert not any(
+        ev.get("is_report") or ev.get("is_slidev") for ev in parsed_events if ev["type"] == "text_delta"
+    )
 
     artifact_events = [ev for ev in parsed_events if ev["type"] == "artifact_ready"]
     assert {ev.get("kind") for ev in artifact_events} == {"report_pdf", "slidev_deck"}
     assert {ev.get("artifact_kind") for ev in artifact_events} == {"report_pdf", "slidev_deck"}
+    report_ready = next(ev for ev in artifact_events if ev["kind"] == "report_pdf")
+    assert report_ready["node_path"][0] == "production_graph"
+    assert report_ready["report_markdown"].startswith("# Quantum Error Correction Architecture Report")
 
-    completed = await runtime.wait_run(user_id="user-alpha", session_id="dr-alpha-001", timeout=5.0)
+    completed = await runtime.wait_run(user_id="user-alpha", session_id="dr-alpha-001", timeout=60.0)
     assert completed is not None
     assert completed["status"] == "completed"
     assert completed["active"] is False
-    assert completed["refinement_count"] == 1
     assert completed["report_markdown"].startswith("# Quantum Error Correction Architecture Report")
     assert "Compiled report.pdf" not in completed["report_markdown"]
     assert "routerMode: hash" in completed["slidev_markdown"]
@@ -1075,9 +972,9 @@ async def test_run_transcripts_keep_reasoning_and_tool_payloads_and_lists_leave_
     events: list[dict[str, Any]] = []
     async for frame in runtime.sse(user_id="user-alpha", session_id="dr-transcript-001", after=0):
         events.append(json.loads(frame.strip().splitlines()[1][6:]))
-    await runtime.wait_run(user_id="user-alpha", session_id="dr-transcript-001", timeout=5.0)
+    await runtime.wait_run(user_id="user-alpha", session_id="dr-transcript-001", timeout=60.0)
 
-    # Reasoning streams for the node's own agent and, with `skill_id`, for its use_skill sub-agent.
+    # Reasoning streams for the node's own agent and, with `skill_id`, for its `subagent` sub-agent.
     reasoning = [ev for ev in events if ev["type"] == "reasoning_delta"]
     assert any(not ev.get("skill_id") for ev in reasoning)
     assert any(ev.get("skill_id") for ev in reasoning)
@@ -1094,14 +991,14 @@ async def test_run_transcripts_keep_reasoning_and_tool_payloads_and_lists_leave_
 
     full = await runtime.get_run(user_id="user-alpha", session_id="dr-transcript-001")
     assert full is not None
-    node = full["nodes"]["planning_formation/problem_framing"]
+    node = full["nodes"]["research_swarm/researcher"]
     kinds = [part["kind"] for part in node["activity"]]
     assert kinds[0] == "reasoning"
     assert "skill" in kinds and kinds[-1] == "text"
     assert node["activity"][0]["text"] == "Weighing which source to read first."
     skill_part = next(part for part in node["activity"] if part["kind"] == "skill")
     skill = next(sk for sk in full["skill_invocations"] if sk["id"] == skill_part["skill_id"])
-    assert skill["node_key"] == "planning_formation/problem_framing"
+    assert skill["node_key"] == "research_swarm/researcher"
     step_kinds = [step["kind"] for step in skill["steps"]]
     assert step_kinds[0] == "reasoning" and "tool" in step_kinds and step_kinds[-1] == "text"
     tool_step = next(step for step in skill["steps"] if step["kind"] == "tool")
@@ -1133,7 +1030,7 @@ async def test_run_transcripts_keep_reasoning_and_tool_payloads_and_lists_leave_
     )
     # Reading the list did not strip the stored run.
     again = await runtime.get_run(user_id="user-alpha", session_id="dr-transcript-001")
-    assert again is not None and again["nodes"]["planning_formation/problem_framing"]["activity"]
+    assert again is not None and again["nodes"]["research_swarm/researcher"]["activity"]
 
 
 def test_tool_output_text_keeps_json_blocks_and_cuts_at_the_configured_length(
@@ -1178,13 +1075,13 @@ async def test_resolve_artifact_path_security_and_fallback_materialization(
         session_id="dr-sec-001",
         depth="standard",
     )
-    snap = await runtime.wait_run(user_id="owner-1", session_id="dr-sec-001", timeout=5.0)
+    snap = await runtime.wait_run(user_id="owner-1", session_id="dr-sec-001", timeout=60.0)
     assert snap is not None
     assert snap["status"] == "completed"
-    assert "compile_scholarly_pdf" not in coordinator.leaf_tool_calls
-    assert "compile_slidev_deck" not in coordinator.leaf_tool_calls
+    assert "compile_scholarly_pdf" not in coordinator.tool_calls
+    assert "compile_slidev_deck" not in coordinator.tool_calls
 
-    # Even without leaf build tool calls, runtime guaranteed all 5 studio artifacts on disk!
+    # Even without the publishers' build tool calls, runtime guaranteed all 5 studio artifacts on disk!
     assert set(snap["artifacts"].keys()) == {
         "report_pdf_url",
         "report_markdown_url",
@@ -1302,7 +1199,7 @@ async def test_deep_research_runtime_replay_overflow_and_cancellation(
     snap = await small_ring_runtime.wait_run(
         user_id="u-overflow",
         session_id="dr-overflow-1",
-        timeout=5.0,
+        timeout=60.0,
     )
     assert snap is not None and snap["sequence"] > 16
     assert snap["replay_after"] > 0

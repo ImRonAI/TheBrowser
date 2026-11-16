@@ -1,0 +1,6 @@
+#: The Deep Research skill library, installed by the Skills CLI (``npx skills add ... -a universal``
+#: run from ``agent/skills/deep-research``; ``skills-lock.json`` beside ``.agents`` records each source).
+DEEP_RESEARCH_SKILLS_DIR: Final[Path] = (
+    Path(__file__).resolve().parents[2] / "skills" / "deep-research" / ".agents" / "skills"
+)
+

@@ -1,0 +1,20 @@
+_LOCAL_IMAGE_RE: Final[re.Pattern[str]] = re.compile(r'(!\[[^\]\n]*\]\(|\bsrc=")([^)"\s]+)')
+
+
+def _inline_local_images(markdown: str, base_dir: Path) -> str:
+    """Embed images that are files under ``base_dir`` as data URIs, so every renderer shows them."""
+    root = base_dir.resolve()
+
+    def embed(match: re.Match[str]) -> str:
+        ref = match.group(2)
+        mime = mimetypes.guess_type(ref)[0] or ""
+        if ref.startswith(("data:", "http://", "https://")) or not mime.startswith("image/"):
+            return match.group(0)
+        target = (root / ref).resolve()
+        if not (target.is_relative_to(root) and target.is_file()):
+            return match.group(0)
+        return f"{match.group(1)}data:{mime};base64,{base64.b64encode(target.read_bytes()).decode('ascii')}"
+
+    return _LOCAL_IMAGE_RE.sub(embed, markdown)
+
+

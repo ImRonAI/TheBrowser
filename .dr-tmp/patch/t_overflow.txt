@@ -1,0 +1,67 @@
+@pytest.mark.asyncio
+async def test_deep_research_runtime_replay_overflow_and_cancellation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("RON_SLIDEV_DISABLE_CLI", "1")
+    storage = InMemoryStorage()
+    coordinator = ScriptedFormationCoordinator(refine_once=False)
+    artifacts_root = tmp_path / "artifacts"
+
+    # Small bounded ring (16 events) forces eviction during a multi-stage run -> ReplayOverflow on stale cursor.
+    small_ring_runtime = DeepResearchRuntime(
+        storage_factory=lambda _uid: storage,
+        model_builder=coordinator.make_model,
+        extra_leaf_tools=_offline_leaf_tools(),
+        max_events_per_run=16,
+        artifacts_dir=artifacts_root,
+    )
+    await small_ring_runtime.start_run(
+        user_id="u-overflow",
+        query="Test bounded replay ring overflow",
+        session_id="dr-overflow-1",
+        depth="standard",
+    )
+    snap = await small_ring_runtime.wait_run(
+        user_id="u-overflow",
+        session_id="dr-overflow-1",
+        timeout=60.0,
+    )
+    assert snap is not None and snap["sequence"] > 16
+    assert snap["replay_after"] > 0
+
+    with pytest.raises(ReplayOverflow) as exc_info:
+        async for _ in small_ring_runtime.events(
+            user_id="u-overflow",
+            session_id="dr-overflow-1",
+            after=1,
+        ):
+            pass
+    assert exc_info.value.requested == 1
+    assert exc_info.value.earliest > 2
+    assert exc_info.value.latest == snap["sequence"]
+    await small_ring_runtime.aclose()
+
+    # Active run cancellation test.
+    never_finish = asyncio.Event()
+    slow_coordinator = ScriptedFormationCoordinator(refine_once=False, slow_gate=never_finish)
+    cancel_runtime = DeepResearchRuntime(
+        storage_factory=lambda _uid: storage,
+        model_builder=slow_coordinator.make_model,
+        extra_leaf_tools=_offline_leaf_tools(),
+        artifacts_dir=artifacts_root,
+    )
+    started = await cancel_runtime.start_run(
+        user_id="u-cancel",
+        query="Long-running investigation to cancel",
+        session_id="dr-cancel-1",
+    )
+    assert started["active"] is True
+
+    cancelled = await cancel_runtime.cancel_run(user_id="u-cancel", session_id="dr-cancel-1")
+    assert cancelled is not None
+    settled = await cancel_runtime.wait_run(user_id="u-cancel", session_id="dr-cancel-1", timeout=3.0)
+    assert settled is not None
+    assert settled["status"] == "cancelled"
+    assert settled["active"] is False
+    await cancel_runtime.aclose()

@@ -1,0 +1,13 @@
+def test_tool_output_text_keeps_json_blocks_and_cuts_at_the_configured_length(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from agent.api.core import config as app_config
+    from agent.api.core.deep_research import _tool_output_text
+
+    result = {"content": [{"text": "alpha"}, {"json": {"hits": [1, 2]}}]}
+    text, truncated = _tool_output_text(result)
+    assert text.startswith("alpha\n{") and '"hits"' in text and truncated is False
+    monkeypatch.setattr(app_config, "RON_DEEP_RESEARCH_TOOL_OUTPUT_CHARS", 3)
+    assert _tool_output_text(result) == ("alp", True)
+
+

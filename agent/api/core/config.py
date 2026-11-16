@@ -317,13 +317,13 @@ RON_DEEP_RESEARCH_ENABLED: bool = _INIT_DEEP_RESEARCH_ENABLED
 RON_DEEP_RESEARCH_PROVIDER: str | None = os.getenv("RON_DEEP_RESEARCH_PROVIDER", "").strip() or None
 #: Optional model id override for Deep Research formations (unset uses the provider's default model).
 RON_DEEP_RESEARCH_MODEL: str | None = os.getenv("RON_DEEP_RESEARCH_MODEL", "").strip() or None
-#: Overall execution timeout (seconds) for the top-level Deep Research Graph.
-RON_DEEP_RESEARCH_EXECUTION_TIMEOUT: float = float(os.getenv("RON_DEEP_RESEARCH_EXECUTION_TIMEOUT", "1200.0"))
-#: Per-node execution timeout (seconds) inside Deep Research formations.
-RON_DEEP_RESEARCH_NODE_TIMEOUT: float = float(os.getenv("RON_DEEP_RESEARCH_NODE_TIMEOUT", "300.0"))
-#: Maximum node executions before the top-level Deep Research Graph halts.
+#: The whole Deep Research run's budget (seconds): the top-level Graph and every nested formation.
+RON_DEEP_RESEARCH_EXECUTION_TIMEOUT: float = float(os.getenv("RON_DEEP_RESEARCH_EXECUTION_TIMEOUT", "10800.0"))
+#: One agent's budget (seconds) for one turn inside a Deep Research formation, its sub-agents included.
+RON_DEEP_RESEARCH_NODE_TIMEOUT: float = float(os.getenv("RON_DEEP_RESEARCH_NODE_TIMEOUT", "3600.0"))
+#: Maximum node executions before a Deep Research Graph halts (the safety net behind the QA loops).
 RON_DEEP_RESEARCH_MAX_NODE_EXECUTIONS: int = int(os.getenv("RON_DEEP_RESEARCH_MAX_NODE_EXECUTIONS", "16"))
-#: Maximum verification -> investigation refinement loops per Deep Research run.
+#: Times a QA agent may send work back at depth "deep" ("standard" gets none, "exhaustive" one more).
 RON_DEEP_RESEARCH_MAX_REFINEMENTS: int = int(os.getenv("RON_DEEP_RESEARCH_MAX_REFINEMENTS", "1"))
 #: Characters of one leaf tool result kept in a run's transcript (the formation graph's tool rows).
 RON_DEEP_RESEARCH_TOOL_OUTPUT_CHARS: int = int(os.getenv("RON_DEEP_RESEARCH_TOOL_OUTPUT_CHARS", "8000"))

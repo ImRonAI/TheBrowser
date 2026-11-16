@@ -1,0 +1,33 @@
+def test_leaf_tool_pool_rejects_forbidden_host_and_recursive_tools(tmp_path: Path) -> None:
+    storage = InMemoryStorage()
+    pool = build_leaf_tool_pool(
+        user_id="u1",
+        storage=storage,
+        artifact_dir=tmp_path / "pool-artifacts",
+        session_id="pool-s1",
+    )
+    assert "extract_article_content" in pool
+    assert "search_saved_context" in pool
+    assert "http_request" in pool
+    assert "compile_scholarly_pdf" in pool
+    assert "compile_slidev_deck" in pool
+    for forbidden in ("shell", "editor", "read", "write", "deep_research_start"):
+        assert forbidden not in pool
+
+    @tool
+    def shell(command: str) -> str:
+        """Forbidden shell tool."""
+        return command
+
+    @tool
+    def deep_research_start(query: str) -> str:
+        """Forbidden recursive tool."""
+        return query
+
+    with pytest.raises(ValueError, match="Forbidden tool"):
+        build_leaf_tool_pool(user_id="u1", storage=storage, extra_leaf_tools=[shell])
+
+    with pytest.raises(ValueError, match="Forbidden tool"):
+        build_leaf_tool_pool(user_id="u1", storage=storage, extra_leaf_tools=[deep_research_start])
+
+

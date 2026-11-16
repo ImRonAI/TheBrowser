@@ -1,0 +1,18 @@
+def qa_requests_revision(qa_id: str, agent_id: str) -> Callable[..., bool]:
+    """The Strands feedback-loop edge condition: ``qa_id``'s verdict sends work back to ``agent_id``.
+
+    True while the QA agent's result says ``REVISE: <agent_id>`` and it has run no more than
+    ``invocation_state["max_refinements"]`` times, so rejected work is fixed and checked again, and a
+    loop that is never approved ends the graph normally rather than at its execution limit.
+    """
+
+    def condition(state: GraphState, *, invocation_state: dict[str, Any], **_: Any) -> bool:
+        verdict = state.results.get(qa_id)
+        if verdict is None or f"REVISE: {agent_id}" not in _extract_node_result_text(verdict):
+            return False
+        qa_runs = sum(1 for node in state.execution_order if node.node_id == qa_id)
+        return qa_runs <= int(invocation_state.get("max_refinements", 1))
+
+    return condition
+
+

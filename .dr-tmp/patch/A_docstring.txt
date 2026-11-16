@@ -1,0 +1,24 @@
+"""Deep Research Native Skill Formations & Asynchronous Runtime.
+
+Implements Ren's Deep Research engine on the pinned Strands SDK (``563f57d7``) and
+``strands-harness==0.1.2``:
+
+1. **Set formation** (``FORMATION_TOPOLOGY`` -> ``build_deep_research_graph``): the outer ``Graph``
+   runs ``research_swarm`` (``Swarm``: parallel researchers, reference fact check, citations and
+   reference list, QA) -> ``data_analysis_graph`` (``Graph``: visual planner -> data analyst ->
+   visual citation -> QA) -> ``writing_swarm`` (``Swarm``: report and deck layouts with QA, report
+   and slide wording each with its own QA) -> ``production_graph`` (``Graph``: PDF publisher and
+   Slidev producer in parallel, each with its own QA). In a Graph, a QA agent's ``REVISE: <agent>``
+   verdict follows the Strands feedback-loop edge back to that agent and returns to QA; in a Swarm
+   the agents hand off with the native ``handoff_to_agent``.
+2. **Skill agents**: every node is one ``strands_harness.create_harness(...)`` agent whose system
+   prompt is a proven Agent Skill's ``SKILL.md`` (the Agent-as-Tool skill agent of
+   ``aws-samples/sample-strands-agents-agentskills``), with the harness's built-in ``shell``,
+   ``read``, ``write``, ``edit``, ``programmatic_tool_caller`` and ``subagent`` tools, the research
+   tool pool (no browser automation), and every skill under ``DEEP_RESEARCH_SKILLS_DIR`` loadable
+   through the native ``AgentSkills`` plugin. The skills are installed there with the Skills CLI
+   (``npx skills add``; ``skills-lock.json`` records each source).
+3. **Native persistence & multi-agent hooks**: ``SnapshotSessionManager(session_id=..., storage=...,
+   multi_agent_save_latest_on="node")`` and ``DeepResearchMultiAgentPlugin`` on the outer ``Graph``
+   and every nested formation, plus durable run snapshots in user session storage.
+"""
