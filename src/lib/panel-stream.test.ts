@@ -812,3 +812,15 @@ test('reducePanelEvent updates xAI web_search, x_search, and image_search native
   assert.equal(nativeParts[1].itemType, 'x_search_results')
   assert.equal(nativeParts[2].itemType, 'image_search_results')
 })
+
+test('journal calls are never drawn in a conversation', () => {
+  let state = emptyPanelState('session')
+  for (const e of [
+    event(1, 'run_started', { model_id: 'm', provider: 'mistral' }),
+    event(2, 'tool_input', { id: 'j-1', name: 'journal', input: { entry: 'Prefers Thai food' } }),
+    event(3, 'tool_result', { id: 'j-1', status: 'success', content: [{ text: 'Noted.' }] }),
+    event(4, 'text_delta', { data: 'Thai it is.' }),
+  ]) state = reducePanelEvent(state, e)
+  const items = groupThinkParts(state.messages[0].parts, false)
+  assert.deepEqual(items.map((i) => (i.kind === 'part' ? i.part.kind : i.kind)), ['text'])
+})

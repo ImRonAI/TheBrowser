@@ -194,7 +194,7 @@ def test_native_a2a_durable_restart_task_and_user_isolation(monkeypatch):
         from agent.api.core.deep_research_tools import DEEP_RESEARCH_TOOL_NAMES
         # Every Ron agent also carries the native Brave research tools, async Deep Research tools, and A2A client tools.
         assert {t['name'] for t in models[0].calls[0]['tools']} == (
-            ISSUE_AGENT_TOOLS | set(BRAVE_TOOL_NAMES) | set(DEEP_RESEARCH_TOOL_NAMES) | set(A2A_TOOL_NAMES)
+            ISSUE_AGENT_TOOLS | set(BRAVE_TOOL_NAMES) | set(DEEP_RESEARCH_TOOL_NAMES) | set(A2A_TOOL_NAMES) | {"journal"}
         )
         await runtime.shutdown()
 

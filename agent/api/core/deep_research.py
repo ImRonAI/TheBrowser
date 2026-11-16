@@ -27,8 +27,10 @@ Implements Ren's multi-stage Deep Research engine strictly on the pinned Strands
    Every orchestrator ``Agent`` in every ``Graph`` and ``Swarm`` is constructed via
    ``strands_harness.create_harness(...)`` with ``tools=[use_skill]`` ONLY (plus native
    ``handoff_to_agent`` injected by ``Swarm``), ``builtin_tools=[]``,
-   ``builtin_plugins=["todos"]``, ``caching=False``, ``session=False``, ``memory=False``,
-   ``background_tasks=False``, and ``ContextOffloader``. Every ``use_skill`` subagent is
+   ``builtin_plugins=["todos"]``, ``caching=False``, ``session=False``,
+   ``background_tasks=False``, and ``ContextOffloader``. Its ``memory`` is every agent's
+   (``dreaming.agent_memory``, folder ``deep-research``): ``search_memory`` over the second brain
+   and the ``journal`` tool, neither of which researches. A ``use_skill`` subagent carries no memory. Every ``use_skill`` subagent is
    built via ``strands_harness.tools.make_subagent(name="use_skill", ...)`` +
    ``create_harness(...)`` over vetted read-only research tools.
 4. **Native Persistence & Multi-Agent Hooks**:
@@ -66,6 +68,7 @@ from markdown_it import MarkdownIt
 from pypdf import PdfReader, PdfWriter
 from strands import Agent, tool
 from strands.hooks import HookOrder
+from strands.memory import MemoryManager
 from strands.hooks.events import (
     AfterMultiAgentInvocationEvent,
     AfterNodeCallEvent,
@@ -89,6 +92,7 @@ from agent.api.core import config as app_config
 from agent.api.core.articles import ArticleUnavailableError, NonRetryableSourceError, extract_article
 from agent.api.core.brave_tools import brave_tools
 from agent.api.core.context_agent import context_store
+from agent.api.core.dreaming import JOURNAL_DIRECTIVE, agent_memory
 from agent.api.core.panel_storage import get_user_session_storage
 from agent.api.core.panel_tools import installed_http_request
 
@@ -2835,14 +2839,14 @@ def build_deep_research_graph(
             name=node_id,
             agent_id=node_id,
             model=_resolve_model(),
-            instructions=f"{stage_skill.instructions}{depth_note}",
+            instructions=f"{stage_skill.instructions}{depth_note}{JOURNAL_DIRECTIVE}",
             skills=AgentSkills(skills=[stage_skill]),
             tools=[use_skill_tool],
             builtin_tools=[],
             builtin_plugins=["todos"],
             caching=False,
             session=False,
-            memory=False,
+            memory=MemoryManager(stores=agent_memory(clean_user_id, "deep-research")),
             background_tasks=False,
             storage=resolved_storage,
             plugins=[ContextOffloader(storage=resolved_storage)],

@@ -77,14 +77,13 @@ def _first_user_text(messages: list[dict[str, Any]]) -> str:
 def test_stores_are_native_file_stores_per_category_tasks_last() -> None:
     config = mem.memory_manager_config("u1")
     names = [store.name for store in config["stores"]]
-    assert names == ["facts", "remember", "feedback", "context", "tasks"]
-    assert all(type(store) is FileMemoryStore for store in config["stores"])
-    stores = _by_name(config)
-    assert stores["facts"].extraction and not stores["remember"].extraction and not stores["tasks"].extraction
+    assert names == ["facts", "remember", "feedback", "context", "tasks", "brain", "journal/panel"]
+    assert all(type(store) is FileMemoryStore for store in config["stores"][:6])
+    # Nothing is distilled during a conversation: only the journal takes each turn, for the dream.
+    assert [store.name for store in config["stores"] if store.extraction] == ["journal/panel"]
     # The Context widget fills `context`; add_memory never writes it.
     assert config["add_tool_config"] == {"stores": ["facts", "remember", "feedback", "tasks"]}
     assert set(config["injection"]) == {"format"}  # SDK default trigger (userTurn), query and size
-    assert not _by_name(mem.memory_manager_config("u1", extraction=False))["facts"].extraction
 
 
 def test_project_and_issue_stores_attach_only_when_scoped() -> None:
@@ -96,25 +95,25 @@ def test_project_and_issue_stores_attach_only_when_scoped() -> None:
 
 def test_users_are_isolated_and_chat_and_live_share_the_same_files() -> None:
     async def run() -> None:
-        chat = MemoryManager(**mem.memory_manager_config("u1", extraction=False))
+        chat = MemoryManager(**mem.memory_manager_config("u1"))
         await chat.add("# Drinks\nLikes tea", MemoryAddOptions(stores=["facts"]))
         live = mem.live_memory_tools("u1")
         search = next(tool for tool in live if tool.tool_name == "search_memory")
         found = await search(query="tea")  # type: ignore[operator]  # DecoratedFunctionTool.__call__
         assert any("Likes tea" in item["content"] for item in found)
-        other = MemoryManager(**mem.memory_manager_config("u2", extraction=False))
+        other = MemoryManager(**mem.memory_manager_config("u2"))
         assert await other.search("tea") == []
 
     asyncio.run(run())
 
 
-def test_live_tools_are_the_native_search_and_add() -> None:
-    assert [tool.tool_name for tool in mem.live_memory_tools("u1")] == ["search_memory", "add_memory"]
+def test_live_tools_are_the_native_search_and_add_plus_the_journal() -> None:
+    assert [tool.tool_name for tool in mem.live_memory_tools("u1")] == ["search_memory", "add_memory", "journal"]
 
 
 def test_add_memory_writes_the_store_the_model_names() -> None:
     model = Scripted(add={"entries": ["# Coffee order\nOat flat white, no sugar"], "stores": ["remember"]})
-    config = mem.memory_manager_config("u1", extraction=False)
+    config = mem.memory_manager_config("u1")
     agent = Agent(model=model, memory_manager=config, callback_handler=None)
 
     async def run() -> None:
@@ -126,33 +125,15 @@ def test_add_memory_writes_the_store_the_model_names() -> None:
     asyncio.run(run())
 
 
-def test_facts_extraction_runs_on_aux_model_with_the_facts_prompt() -> None:
-    main = Scripted()
-    aux = Scripted(text=json.dumps([{"content": "# Answer style\nPrefers short answers"}]))
-    config = mem.memory_manager_config("u1")
-    agent = Agent(model=main, aux_model=aux, memory_manager=config, callback_handler=None)
-
-    async def run() -> None:
-        await agent.invoke_async("I prefer short answers.")
-        await agent.memory_manager.flush()
-        stores = _by_name(config)
-        assert "Prefers short answers" in (await stores["facts"].search("short answers"))[0].content
-        for name in ("remember", "feedback", "tasks"):
-            assert await stores[name].search("short answers") == []
-
-    asyncio.run(run())
-    assert aux.calls == 1 and aux.systems == [mem.FACTS_PROMPT]
-
-
 def test_injection_is_on_user_turns_and_never_includes_tasks() -> None:
     async def seed() -> None:
-        manager = MemoryManager(**mem.memory_manager_config("u1", extraction=False))
+        manager = MemoryManager(**mem.memory_manager_config("u1"))
         await manager.add("# Flights\nPrefers aisle seats on flights", MemoryAddOptions(stores=["facts"]))
         await manager.add("# Flights todo\nBook flights to Lisbon", MemoryAddOptions(stores=["tasks"]))
 
     asyncio.run(seed())
     model = Scripted()
-    agent = Agent(model=model, memory_manager=mem.memory_manager_config("u1", extraction=False), callback_handler=None)
+    agent = Agent(model=model, memory_manager=mem.memory_manager_config("u1"), callback_handler=None)
     asyncio.run(agent.invoke_async("Find me flights"))
     sent = _first_user_text(model.seen[0])
     assert '<entry source="facts">' in sent and "aisle seats" in sent
@@ -169,7 +150,7 @@ def test_render_injection_is_the_sdk_block_minus_tasks() -> None:
 
 
 def test_writes_across_threads_land_in_one_file() -> None:
-    stores = [mem.user_stores("u1", extraction=False)[1] for _ in range(8)]
+    stores = [mem.user_stores("u1")[1] for _ in range(8)]
     with ThreadPoolExecutor(max_workers=4) as pool:
         list(pool.map(lambda i: asyncio.run(stores[i].add(f"# Topic\nline-{i}")), range(8)))
     text = asyncio.run(stores[0].search("Topic"))[0].content
@@ -179,6 +160,7 @@ def test_writes_across_threads_land_in_one_file() -> None:
 def test_directive_names_every_store_and_forbids_acting_on_tasks() -> None:
     assert all(f"- {name}:" in mem.MEMORY_DIRECTIVE for name in mem.CATEGORIES)
     assert "never your current" in mem.MEMORY_DIRECTIVE and "search_memory" in mem.MEMORY_DIRECTIVE
+    assert "Never mention the journal" in mem.MEMORY_DIRECTIVE
 
 
 # --- /memory API: owner-bound view/add/edit/delete --------------------------------------------

@@ -3,8 +3,9 @@ import { PencilIcon, PlusIcon, TrashIcon } from 'lucide-react'
 import { getSession } from '@/api/supabase'
 import { API_BASE_URL } from '@/lib/api-base'
 import {
-  CATEGORY_LABELS, SIGN_IN_MESSAGE, composeEntry, createMemoryRequest, entryBody, entryTitle, memoryAdd, memoryDelete,
-  memoryEntries, memoryStores, memoryUpdate, type MemoryEntry, type MemoryStoreSummary,
+  CATEGORY_LABELS, SIGN_IN_MESSAGE, composeEntry, createMemoryRequest, dreamTopic, entryBody, entryTitle, memoryAdd,
+  memoryDelete, memoryDreamUndo, memoryDreams, memoryEntries, memoryStores, memoryUpdate,
+  type MemoryDream, type MemoryEntry, type MemoryStoreSummary,
 } from '@/lib/memory-api'
 import { isGuestUserId, openSignIn } from '@/lib/sign-in'
 import { Button } from '@/components/ui/button'
@@ -24,6 +25,7 @@ export function MemoryPanel({ userId, onClose }: { userId: string; onClose: () =
   const [stores, setStores] = useState<MemoryStoreSummary[]>([])
   const [active, setActive] = useState('facts')
   const [entries, setEntries] = useState<MemoryEntry[]>([])
+  const [dream, setDream] = useState<MemoryDream | undefined>()
   const [editing, setEditing] = useState<string | null>(null)
   const [draft, setDraft] = useState('')
   const [adding, setAdding] = useState(false)
@@ -35,9 +37,10 @@ export function MemoryPanel({ userId, onClose }: { userId: string; onClose: () =
   const report = (cause: unknown) => setError(cause instanceof Error ? cause.message : 'Memory request failed.')
 
   const load = useCallback(async (store: string) => {
-    const [summary, list] = await Promise.all([memoryStores(request), memoryEntries(request, store)])
+    const [summary, list, versions] = await Promise.all([memoryStores(request), memoryEntries(request, store), memoryDreams(request)])
     setStores(summary.stores)
     setEntries(list.entries)
+    setDream(versions.dreams[0])
   }, [request])
 
   useEffect(() => {
@@ -92,6 +95,10 @@ export function MemoryPanel({ userId, onClose }: { userId: string; onClose: () =
       </div>
       {stores.find((store) => store.name === active)?.description &&
         <p className="mb-2 px-1 text-ink-muted dark:text-ink-inverse-muted">{stores.find((store) => store.name === active)?.description}</p>}
+      {dream && <p className="mb-2 flex flex-wrap items-center gap-2 px-1 text-ink-muted dark:text-ink-inverse-muted">
+        <span>While you were away, Ren updated {dream.changed.map((topic) => dreamTopic(topic.key)).join(', ')}.</span>
+        <Button type="button" size="sm" variant="outline" disabled={busy} onClick={() => void run(() => memoryDreamUndo(request))}>Undo</Button>
+      </p>}
       {error && <p role="alert" className="mb-2 px-1 text-red-700 dark:text-red-300">{error}</p>}
       <ul className="max-h-72 space-y-1 overflow-y-auto scrollbar-thin">
         {!entries.length && <li className="px-1 text-ink-muted dark:text-ink-inverse-muted">Nothing remembered here yet.</li>}

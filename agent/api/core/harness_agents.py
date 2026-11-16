@@ -14,8 +14,9 @@
   passed as ``create_harness(model=<Model>)``, which the harness accepts natively; any other harness
   model string (``bedrock/``, ``google/``, ...) is resolved by the harness.
 - At build time Ron sets two harness options per run, never stored: ``session`` off (each A2A
-  context is its own conversation; Ron's A2A server rejects checkpointing) and, when memory is on, a
-  per-agent ``memory.dir`` (the harness default ``./.agent/memory`` is the process cwd, shared by
+  context is its own conversation; Ron's A2A server rejects checkpointing) and, when memory is on,
+  the owner's second brain and the agent's own journal, in the folder its name gives it
+  (``dreaming.agent_memory``; the harness default ``./.agent/memory`` is the process cwd, shared by
   every user).
 - Through ``create_harness(tools=...)``, the harness's documented seam for instances, Ron adds the
   native A2A client tools every Ron agent carries and, for ``mcpServers`` keys ``user_browser`` /
@@ -30,7 +31,6 @@
 from __future__ import annotations
 
 import asyncio
-import hashlib
 import logging
 import os
 from typing import Any
@@ -38,9 +38,12 @@ from uuid import UUID
 
 import httpx
 from strands import tool
+from strands.memory import MemoryManager
 from strands.types.tools import AgentTool
 from strands_harness import create_harness as harness_factory
 from strands_harness import define_harness_agent_config, harness_agent_kwargs_from_config
+
+from agent.api.core.dreaming import JOURNAL_DIRECTIVE, agent_memory
 
 logger = logging.getLogger(__name__)
 
@@ -84,7 +87,6 @@ def build_specialist(config: dict[str, Any], owner_id: str, *, connect_mcp: bool
     ``agent_kwargs`` go to ``Agent`` (the Agent Panel passes its session's ``agent_id``, ``session_manager`` and
     ``callback_handler`` here when the user talks to the specialist directly).
     """
-    from agent.api.core import config as app_config
     from agent.api.core.a2a_tools import a2a_tools
     from agent.api.core.brave_tools import brave_tools
     from agent.api.core.deep_research_tools import deep_research_tools
@@ -93,11 +95,12 @@ def build_specialist(config: dict[str, Any], owner_id: str, *, connect_mcp: bool
 
     browsers = {server_name(browser): browser for browser in BROWSERS}
     servers = config.get("mcpServers") or {}
-    memory_dir = app_config.SESSION_STORAGE_DIR / "harness-agents" / hashlib.sha256(f"{owner_id}:{config['name']}".encode()).hexdigest()
-    run = {**config, "session": False,
-           "memory": False if config.get("memory") is False else {"dir": str(memory_dir / "memory")},
+    run = {**config, "session": False, "memory": False,
            "mcpServers": {name: value for name, value in servers.items() if name not in browsers} if connect_mcp else {}}
     kwargs = harness_agent_kwargs_from_config(run, base_dir=PROJECT_TOOLS_DIR)
+    if config.get("memory") is not False:
+        kwargs["memory"] = MemoryManager(stores=agent_memory(owner_id, config["name"]))
+        kwargs["instructions"] = f"{kwargs.get('instructions') or ''}{JOURNAL_DIRECTIVE}"
     provider, _, model_id = str(config["model"]).partition("/")
     if model is not None:
         kwargs["model"] = model
@@ -121,8 +124,6 @@ def context_search_tools(owner_id: str) -> list[AgentTool]:
     Native ``MemoryManager`` tools over the same ``FileMemoryStore`` the panel's memory registers; named
     apart from the harness's own ``search_memory`` (its per-agent memory dir).
     """
-    from strands.memory import MemoryManager
-
     from agent.api.core.context_agent import context_store
 
     manager = MemoryManager(
