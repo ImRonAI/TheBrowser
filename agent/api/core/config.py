@@ -57,9 +57,10 @@ BRAVE_ANSWERS_TIMEOUT = float(os.getenv("BRAVE_ANSWERS_TIMEOUT", "120"))
 
 
 def brave_tools_enabled() -> bool:
-    """The Brave tools on Ren's agents (``brave_tools()``); off unless RON_BRAVE_TOOLS is set to '1'.
+    """Brave on Ren's agents (``brave_tools()``), the Search page's sections and answer and Discover's feed; off
+    unless RON_BRAVE_TOOLS is set to '1', when Tavily, Exa and Apify (``core/web_search.py``) serve the pages.
 
-    Discover, the search page, suggest and spellcheck call Brave themselves and stay on either way.
+    Suggest, spellcheck and Discover's instant answers call Brave either way.
     """
     return os.getenv("RON_BRAVE_TOOLS", "0") == "1"
 
@@ -72,6 +73,15 @@ EXA_API_KEY = os.getenv("EXA_API_KEY")
 BRIGHTDATA_API_KEY = os.getenv("BRIGHTDATA_API_KEY")
 OLOSTEP_API_KEY = os.getenv("OLOSTEP_API_KEY")
 OLOSTEP_MCP_URL = "https://mcp.olostep.com/mcp"
+# Apify: Google Maps places for the Search page, Discover and the agents' ``places_search``, from the Actor
+# RON_APIFY_PLACES_ACTOR (default Apify's Google Maps Scraper).
+APIFY_TOKEN = os.getenv("APIFY_TOKEN")
+APIFY_PLACES_ACTOR = os.getenv("RON_APIFY_PLACES_ACTOR", "compass~crawler-google-places")
+
+# Ren's workspace computer: Desktop Commander over MCP (the VM's emrys-computer, https://<vm>/computer/mcp, its token as
+# the bearer), where OpenCode runs. The Context Agent hands app and agent builds to OpenCode there (core/context_agent.py).
+COMPUTER_MCP_URL = os.getenv("RON_COMPUTER_MCP_URL", "").strip()
+COMPUTER_MCP_TOKEN = os.getenv("RON_COMPUTER_MCP_TOKEN", "").strip()
 
 # Perplexity Agent API. GET /v1/models is the model catalogue that backs the
 # picker; POST /v1/responses runs a turn (OpenAI Responses wire format).
@@ -339,12 +349,6 @@ RON_DEEP_RESEARCH_MODEL: str | None = os.getenv("RON_DEEP_RESEARCH_MODEL", "").s
 RON_DEEP_RESEARCH_EXECUTION_TIMEOUT: float = float(os.getenv("RON_DEEP_RESEARCH_EXECUTION_TIMEOUT", "10800.0"))
 #: One agent's budget (seconds) for one turn inside a Deep Research formation, its sub-agents included.
 RON_DEEP_RESEARCH_NODE_TIMEOUT: float = float(os.getenv("RON_DEEP_RESEARCH_NODE_TIMEOUT", "3600.0"))
-#: Maximum node executions before a Deep Research Graph halts (the safety net behind the QA loops).
-RON_DEEP_RESEARCH_MAX_NODE_EXECUTIONS: int = int(os.getenv("RON_DEEP_RESEARCH_MAX_NODE_EXECUTIONS", "16"))
-#: Times a QA agent may send work back at depth "deep" ("standard" gets none, "exhaustive" one more).
-RON_DEEP_RESEARCH_MAX_REFINEMENTS: int = int(os.getenv("RON_DEEP_RESEARCH_MAX_REFINEMENTS", "1"))
-#: Characters of one leaf tool result kept in a run's transcript (the formation graph's tool rows).
-RON_DEEP_RESEARCH_TOOL_OUTPUT_CHARS: int = int(os.getenv("RON_DEEP_RESEARCH_TOOL_OUTPUT_CHARS", "8000"))
 #: Per-run Deep Research artifacts directory (`report.pdf`, `slides.md`, `slides/index.html`, `slides.pdf`).
 RON_DEEP_RESEARCH_ARTIFACTS_DIR: Path = Path(
     os.getenv("RON_DEEP_RESEARCH_ARTIFACTS_DIR", "").strip()

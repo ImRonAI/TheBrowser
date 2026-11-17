@@ -1,9 +1,7 @@
 /**
- * DeepResearchFormationView — visualizes the 3-level nested Strands `Graph` + `Swarm`
- * formation (`planning_formation` → `investigation_formation` [with parallel `web_intelligence`,
- * `news_data_intelligence`, and nested `adversarial_swarm` → AND fan-in `evidence_ledger`] →
- * `verification_swarm` [with conditional refinement loop] → `synthesis_formation`), Swarm
- * `handoff_to_agent` messages, and every `use_skill` subagent + leaf research tool invocation.
+ * DeepResearchFormationView — draws the Strands `Graph` of `Swarm`s and `Graph`s
+ * (`research_swarm` → `data_analysis_graph` → `writing_swarm` → `production_graph`), the swarms'
+ * `handoff_to_agent` messages, and every built-in `subagent` run with its tool calls.
  *
  * Container-responsive and Ren palette-compliant using Inter (`font-sans`).
  */
@@ -67,9 +65,9 @@ export function StatusIcon({ status, className }: { status: DeepResearchNodeStat
 }
 
 function runStatusPill(status: DeepResearchRunStatus, active: boolean) {
-  if (active || status === 'executing' || status === 'pending') {
+  if (active || status === 'running') {
     return {
-      label: status === 'pending' ? 'Starting' : 'Executing',
+      label: 'Running',
       classes: 'border-blurple-500/40 bg-blurple-600/10 text-volt dark:border-blurple-400/40 dark:bg-blurple-400/15',
       dot: 'bg-volt animate-pulse',
     }
@@ -86,13 +84,6 @@ function runStatusPill(status: DeepResearchRunStatus, active: boolean) {
       label: 'Failed',
       classes: 'border-rose-500/30 bg-rose-500/10 text-rose-700 dark:text-rose-300',
       dot: 'bg-rose-500',
-    }
-  }
-  if (status === 'interrupted') {
-    return {
-      label: 'Interrupted',
-      classes: 'border-sky-500/30 bg-sky-500/10 text-sky-700 dark:text-sky-300',
-      dot: 'bg-sky-500',
     }
   }
   return {
@@ -151,11 +142,6 @@ function SkillInvocationCard({ invocation }: { invocation: DeepResearchSkillExec
         </button>
 
         <div className="flex shrink-0 items-center gap-1.5">
-          {invocation.duration_ms !== null && invocation.duration_ms > 0 && (
-            <span className="font-sans text-[11px] tabular-nums text-ink-muted dark:text-ink-inverse-muted">
-              {formatDurationMs(invocation.duration_ms)}
-            </span>
-          )}
           {hasDetail && (
             <button
               type="button"
@@ -224,7 +210,6 @@ function AgentLeafCard({
   const { status, nodeSnap } = deriveNodeState(snapshot, path)
   const key = nodePathKey(path)
   const directInvocations = snapshot.skill_invocations.filter((s) => s.node_key === key)
-  const presets = node.use_skill_presets ?? []
 
   return (
     <div
@@ -259,26 +244,16 @@ function AgentLeafCard({
         </div>
       </div>
 
-      {/* Stage AgentSkill + Preset chips when idle */}
-      {(node.skill || presets.length > 0) && directInvocations.length === 0 && (
+      {/* The agent's skill while it has no sub-agent runs */}
+      {node.skill && directInvocations.length === 0 && (
         <div className="mt-2 flex flex-wrap items-center gap-1 pl-5">
-          {node.skill && (
-            <span className="rounded-md border border-surface-200 bg-surface-50 px-1.5 py-px font-sans text-[11px] text-ink-muted dark:border-surface-800 dark:bg-surface-900 dark:text-ink-inverse-muted">
-              {node.skill}
-            </span>
-          )}
-          {presets.map((preset) => (
-            <span
-              key={preset}
-              className="rounded-md bg-surface-100 px-1.5 py-px font-sans text-[11px] text-ink-secondary dark:bg-surface-800 dark:text-ink-inverse-secondary"
-            >
-              {preset}
-            </span>
-          ))}
+          <span className="rounded-md border border-surface-200 bg-surface-50 px-1.5 py-px font-sans text-[11px] text-ink-muted dark:border-surface-800 dark:bg-surface-900 dark:text-ink-inverse-muted">
+            {node.skill}
+          </span>
         </div>
       )}
 
-      {/* Live & Completed use_skill subagent executions */}
+      {/* Live and completed sub-agent runs */}
       {directInvocations.length > 0 && (
         <div className="mt-2.5 space-y-1.5 pl-4">
           {directInvocations.map((inv) => (
@@ -597,13 +572,6 @@ export function FormationTelemetry({ snapshot, onCancel, actions }: FormationTel
           </strong>{' '}
           skills
         </span>
-        <span aria-hidden>·</span>
-        <span>
-          <strong className="font-semibold tabular-nums text-ink dark:text-ink-inverse">
-            {snapshot.citations.length}
-          </strong>{' '}
-          citations
-        </span>
         {snapshot.usage.totalTokens > 0 && (
           <>
             <span aria-hidden>·</span>
@@ -637,8 +605,6 @@ export function FormationStageList({
   topology: FormationTopology
   className?: string
 }) {
-  const synthesisState = deriveNodeState(snapshot, ['synthesis_formation'])
-
   return (
     <div className={cn('min-h-0 flex-1 overflow-y-auto px-4 py-4 scrollbar-thin', className)}>
       {/* Research Objective Card */}
@@ -666,55 +632,18 @@ export function FormationStageList({
         )}
       </div>
 
-      {/* Outer Graph Stages & Conditional Refinement Edges */}
+      {/* The outer graph's stages, in edge order */}
       <div className="space-y-1.5">
-        {topology.nodes.map((stage, idx) => {
-          const isAfterVerification = stage.id === 'verification_swarm'
-          return (
-            <div key={stage.id}>
-              <OuterFormationStage stage={stage} index={idx} snapshot={snapshot} />
-
-              {idx < topology.nodes.length - 1 && (
-                <div className="my-2 flex flex-col items-center gap-1">
-                  {isAfterVerification ? (
-                    <div className="flex w-full flex-wrap items-center justify-center gap-2 py-0.5">
-                      <span
-                        className={cn(
-                          'inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 font-sans text-[11px] font-medium',
-                          snapshot.refinement_count > 0
-                            ? 'border-sky-500/40 bg-sky-500/10 text-sky-700 dark:text-sky-300'
-                            : 'border-surface-200 bg-surface-100 text-ink-muted dark:border-surface-800 dark:bg-surface-850 dark:text-ink-inverse-muted',
-                        )}
-                      >
-                        <Repeat className="h-2.5 w-2.5" aria-hidden />
-                        {snapshot.refinement_count > 0
-                          ? `Refinement pass ×${snapshot.refinement_count}`
-                          : 'Refinement loop'}
-                      </span>
-
-                      <span
-                        className={cn(
-                          'inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 font-sans text-[11px] font-medium',
-                          synthesisState.status !== 'idle'
-                            ? 'border-emerald-500/35 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
-                            : 'border-surface-200 bg-surface-100 text-ink-muted dark:border-surface-800 dark:bg-surface-850 dark:text-ink-inverse-muted',
-                        )}
-                      >
-                        <ArrowDown className="h-2.5 w-2.5" aria-hidden />
-                        Verified → Synthesis
-                      </span>
-                    </div>
-                  ) : (
-                    <ArrowDown
-                      className="h-4 w-4 text-surface-300 dark:text-surface-600"
-                      aria-hidden
-                    />
-                  )}
-                </div>
-              )}
-            </div>
-          )
-        })}
+        {topology.nodes.map((stage, idx) => (
+          <div key={stage.id}>
+            <OuterFormationStage stage={stage} index={idx} snapshot={snapshot} />
+            {idx < topology.nodes.length - 1 && (
+              <div className="my-2 flex flex-col items-center gap-1">
+                <ArrowDown className="h-4 w-4 text-surface-300 dark:text-surface-600" aria-hidden />
+              </div>
+            )}
+          </div>
+        ))}
       </div>
     </div>
   )

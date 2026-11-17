@@ -1,7 +1,7 @@
 /**
  * Deep Research header bar and collapsible Runs drawer/rail.
  * Provides quick access to active & historical runs (including async runs launched by Ren
- * via `deep_research_start`), status indicators, depth badges, citation counts, and deletion.
+ * via `deep_research_start`), status indicators, depth badges and deletion.
  */
 import { History, Plus, Trash2, X } from 'lucide-react'
 import { RenMark } from '@/components/brand'
@@ -14,9 +14,9 @@ function capitalizeLabel(value: string): string {
 }
 
 function RunStatusDot({ status, active }: { status: DeepResearchRunStatus; active: boolean }) {
-  if (active || status === 'executing' || status === 'pending') {
+  if (active || status === 'running') {
     return (
-      <span className="relative flex h-2 w-2 shrink-0" aria-label="Executing">
+      <span className="relative flex h-2 w-2 shrink-0" aria-label="Running">
         <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-volt opacity-75" />
         <span className="relative inline-flex h-2 w-2 rounded-full bg-volt" />
       </span>
@@ -27,9 +27,6 @@ function RunStatusDot({ status, active }: { status: DeepResearchRunStatus; activ
   }
   if (status === 'failed') {
     return <span className="h-2 w-2 shrink-0 rounded-full bg-rose-500" aria-label="Failed" />
-  }
-  if (status === 'interrupted') {
-    return <span className="h-2 w-2 shrink-0 rounded-full bg-sky-500" aria-label="Interrupted" />
   }
   return <span className="h-2 w-2 shrink-0 rounded-full bg-surface-400 dark:bg-surface-600" aria-label="Cancelled" />
 }
@@ -51,7 +48,7 @@ export function DeepResearchHeaderBar({
   onToggleRail,
   onNewResearch,
 }: DeepResearchHeaderBarProps) {
-  const executingCount = runs.filter((r) => r.active || r.status === 'executing').length
+  const executingCount = runs.filter((r) => r.active || r.status === 'running').length
 
   return (
     <header
@@ -217,8 +214,6 @@ export function DeepResearchRunsRail({
                       <span className="rounded-md bg-surface-200/70 px-1.5 py-px font-medium text-ink-secondary dark:bg-surface-800 dark:text-ink-inverse-secondary">
                         {capitalizeLabel(run.depth)}
                       </span>
-                      <span>·</span>
-                      <span className="tabular-nums">{run.citations.length} sources</span>
                       <span>·</span>
                       <span>{relativeTime(run.updated_at || run.created_at)}</span>
                     </div>

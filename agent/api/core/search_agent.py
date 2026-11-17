@@ -6,10 +6,12 @@ Built exclusively on the native ``strands_harness`` configuration system:
 - Every config is normalized with ``define_harness_agent_config``, converted to factory arguments
   with ``harness_agent_kwargs_from_config(config, base_dir=REPO_ROOT)``, and instantiated via
   ``create_harness()``.
-- The first answer to a query is Brave Answers itself (``BraveAnswersClient.stream``), forwarded as
-  ``agent.*`` events with its citations; no model of Ron's is involved.
+- The first answer to a query is Exa's streamed answer (``web_search.exa_answer``), or Brave Answers
+  (``BraveAnswersClient.stream``) while ``RON_BRAVE_TOOLS=1``, forwarded as ``agent.*`` events with its
+  citations; no model of Ron's is involved.
 - The Search Agent (follow-up conversation) and the Shopping agent default to GLM-5.3-Flash on
-  NVIDIA NIM (``nim/z-ai/glm-5.3-flash``) with Brave tools only, and progressive reasoning effort
+  NVIDIA NIM (``nim/z-ai/glm-5.3-flash``) with the web tools (``web_tools()``: Tavily, Exa, Bright Data,
+  Apify's ``places_search``, Olostep) and ``http_request`` (Brave's while ``RON_BRAVE_TOOLS=1``), and progressive reasoning effort
   per research level mapped onto the efforts the model accepts (``resolve_search_effort``).
 - The Search Agent delegates shopping and store discovery to its native ``subagent`` tool
   (``strands_harness.tools.subagent.make_subagent`` with the ``"shopping"`` ``Preset``), whose
@@ -212,10 +214,14 @@ def build_harness_from_config(
         kwargs["model"] = f"{resolved_provider}/{raw_model}"
         kwargs["effort"] = configured_effort
 
-    if extra_tools:
-        existing = list(kwargs.get("tools", []))
-        seen = {getattr(t, "tool_name", None) for t in existing if getattr(t, "tool_name", None)}
-        kwargs["tools"] = [*existing, *(t for t in extra_tools if getattr(t, "tool_name", None) not in seen)]
+    from agent.api.core.brave_tools import brave_tools
+    from agent.api.core.panel_tools import installed_http_request
+    from agent.api.core.web_tools import web_tools
+
+    existing = list(kwargs.get("tools", []))
+    seen = {getattr(t, "tool_name", None) for t in existing if getattr(t, "tool_name", None)}
+    added = [*brave_tools(), *web_tools(), installed_http_request(), *extra_tools]
+    kwargs["tools"] = [*existing, *(t for t in added if getattr(t, "tool_name", None) not in seen)]
 
     hooks = [XAIStatePruner()] if resolved_provider == "xai" else []
     return create_harness(callback_handler=None, hooks=hooks, **kwargs)
@@ -239,7 +245,7 @@ def _location_context_note(location: Any | None, country: str = "US") -> str:
     return (
         "## User Geographic Context\n"
         + " | ".join(parts)
-        + "\nUse this location when calling `brave_local_search` or searching for nearby brick-and-mortar stores."
+        + "\nUse this location when calling `places_search` or searching for nearby brick-and-mortar stores."
     )
 
 
@@ -373,7 +379,7 @@ class _SearchSessionEntry:
 
 
 _SEARCH_SESSIONS: OrderedDict[str, _SearchSessionEntry] = OrderedDict()
-#: The Brave Answers turn of each session (question + answer), which the Search Agent starts from
+#: The answered turn of each session (question + answer), which the Search Agent starts from
 #: when the user asks a follow-up.
 _ANSWER_TURNS: OrderedDict[str, list[dict[str, Any]]] = OrderedDict()
 
@@ -736,7 +742,7 @@ async def stream_search_session(
     """Run the Strands Harness Search Agent (and its ``create_harness()`` shopping subagent) and yield
     ``(sse_event_name, payload)`` pairs for ``POST /search/stream``.
 
-    A new search without attachments is Brave Answers beside the Shopping agent. A follow-up, or any
+    A new search without attachments is the answer (Exa's, or Brave Answers) beside the Shopping agent. A follow-up, or any
     search carrying ``attachments`` (``PromptAttachment``s), runs the Search agent on the query plus one
     block per attachment, so the attached text is read by a model with the room for it."""
     resolved_provider = (provider or app_config.RON_SEARCH_PROVIDER).strip().lower()
@@ -844,6 +850,47 @@ async def stream_search_session(
         yield "shopping.done", {"model": None, "incomplete": False}
 
 
+def _remember_answer(session_id: str | None, q: str, text: list[str]) -> None:
+    """Keep the answered turn, which the Search Agent starts from on a follow-up."""
+    if session_id and text:
+        _ANSWER_TURNS[session_id] = [
+            {"role": "user", "content": [{"text": q}]},
+            {"role": "assistant", "content": [{"text": "".join(text)}]},
+        ]
+        while len(_ANSWER_TURNS) > MAX_SEARCH_SESSIONS:
+            _ANSWER_TURNS.popitem(last=False)
+
+
+async def _exa_answer_events(q: str, session_id: str | None, country: str) -> AsyncIterator[tuple[str, dict[str, Any]]]:
+    """Exa's answer for ``q`` as ``agent.*`` events: text deltas, its citations, then ``agent.done``."""
+    from agent.api.core.web_search import WebSearchError, exa_answer
+
+    if not app_config.EXA_API_KEY:
+        raise SearchAgentError("not_configured", "EXA_API_KEY is not set", status=503)
+    text: list[str] = []
+    usage: dict[str, Any] | None = None
+    try:
+        async for kind, payload in exa_answer(q, country):
+            if kind == "text":
+                text.append(payload)
+                yield "agent.delta", {"text": payload}
+            elif kind == "citations":
+                results = [{
+                    "title": c.get("title") or _hostname(str(c.get("url") or "")), "url": c.get("url"),
+                    "snippet": c.get("text") or "", "source": _hostname(str(c.get("url") or "")), "kind": "online",
+                } for c in payload if c.get("url")]
+                for result in results:
+                    yield "agent.citation", {"url": result["url"], "title": result["title"]}
+                if results:
+                    yield "agent.sources", {"results": results}
+            elif kind == "cost":
+                usage = payload
+    except WebSearchError as error:
+        raise SearchAgentError(error.code, str(error), status=error.status) from error
+    _remember_answer(session_id, q, text)
+    yield "agent.done", {"model": "exa/answer", "usage": usage, "incomplete": False}
+
+
 async def _answer_events(q: str, session_id: str | None, country: str) -> AsyncIterator[tuple[str, dict[str, Any]]]:
     """Brave Answers for ``q`` as ``agent.*`` events: text deltas, its citations, then ``agent.done``."""
     client = answers_client()
@@ -867,13 +914,7 @@ async def _answer_events(q: str, session_id: str | None, country: str) -> AsyncI
                 done = payload
     except BraveSearchError as error:
         raise SearchAgentError(error.code, str(error), status=error.status) from error
-    if session_id and text:
-        _ANSWER_TURNS[session_id] = [
-            {"role": "user", "content": [{"text": q}]},
-            {"role": "assistant", "content": [{"text": "".join(text)}]},
-        ]
-        while len(_ANSWER_TURNS) > MAX_SEARCH_SESSIONS:
-            _ANSWER_TURNS.popitem(last=False)
+    _remember_answer(session_id, q, text)
     yield "agent.done", {"model": f"brave/{done.get('model') or client.model}", "usage": usage,
                          "incomplete": done.get("finish_reason") == "length"}
 
@@ -905,8 +946,8 @@ async def _stream_answer_and_shopping(
     q: str, *, session_id: str | None, shopping: bool, country: str, location: Any | None,
     provider: str, shopping_model_id: str,
 ) -> AsyncIterator[tuple[str, dict[str, Any]]]:
-    """A new search: Brave Answers and the Shopping agent run side by side; one failing lane is
-    reported as its own ``source_error`` and never stops the other."""
+    """A new search: the answer (Exa's, or Brave Answers while ``RON_BRAVE_TOOLS=1``) and the Shopping agent
+    run side by side; one failing lane is reported as its own ``source_error`` and never stops the other."""
     import asyncio
 
     queue: asyncio.Queue[tuple[str, dict[str, Any]] | None] = asyncio.Queue()
@@ -925,7 +966,8 @@ async def _stream_answer_and_shopping(
         finally:
             await queue.put(None)
 
-    lanes = [pump("agent", _answer_events(q, session_id, country))]
+    answer = _answer_events if app_config.brave_tools_enabled() else _exa_answer_events
+    lanes = [pump("agent", answer(q, session_id, country))]
     if shopping:
         lanes.append(pump("shopping", _shopping_events(q, provider=provider, model_id=shopping_model_id,
                                                        location=location, country=country)))
