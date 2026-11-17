@@ -121,7 +121,7 @@ async def lifespan(app: FastAPI):
                 mounted_routes = [route for route in app.routes if route not in previous]
         # Opt-in (RON_NGROK=1); only allow-listed webhook paths are reachable.
         app.state.public_url = await public_tunnel.start()
-        async with skills_mcp_app.lifespan(app), ren_mcp_app.lifespan(app), opencode_memory_app.lifespan(app):
+        async with skills_mcp_app.lifespan(app), ren_mcp_app.lifespan(app), memory_mcp_app.lifespan(app):
             # Joined to Ren's hub (REN_HUB_URL), ren desktop serves its MCP server there too, so the phone and the
             # agents outside this machine can reach it.
             hub = ren_mcp.hub_url()
@@ -198,10 +198,10 @@ app.mount("/skills/mcp", skills_mcp_app)
 ren_mcp_server = ren_mcp.create_ren_mcp(app)
 ren_mcp_app = ren_mcp_server.http_app(path="/")
 app.mount("/mcp", ren_mcp_app)
-# OpenCode's second brain on Ren's workspace computer (core/opencode_memory.py).
-from agent.api.core import opencode_memory  # noqa: E402
-opencode_memory_app = opencode_memory.server.http_app(path="/")
-app.mount("/opencode/mcp", opencode_memory_app)
+# The second brain for agents outside this process: OpenCode and ren mobile's ElevenLabs agents (core/memory_mcp.py).
+from agent.api.core import memory_mcp  # noqa: E402
+memory_mcp_app = memory_mcp.server.http_app(path="/")
+app.mount("/memory/mcp", memory_mcp_app)
 # Stored harness specialists over native A2A (<PANEL_A2A_URL>/agents/<id>). Mounted before the
 # lifespan's /a2a mount so this prefix wins; loopback-only like /a2a (never on the ngrok allowlist).
 from agent.api.core.a2a_tools import a2a_enabled as _a2a_enabled  # noqa: E402
