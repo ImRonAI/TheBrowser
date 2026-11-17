@@ -1020,7 +1020,7 @@ class _AdaptedTool(AgentTool):
 def _memory_search_tools(user_id: str) -> list[AgentTool]:
     from agent.api.core.panel_agent import user_memory_config
 
-    stores = user_memory_config(user_id, "panel", extraction=False)["stores"]
+    stores = user_memory_config(user_id, "panel")["stores"]
     return list(resolve_memory(stores=list(stores), writable=False).tools)
 
 

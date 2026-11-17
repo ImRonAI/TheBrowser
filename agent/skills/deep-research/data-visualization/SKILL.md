@@ -4,7 +4,7 @@ description: Create effective data visualizations with Python (matplotlib, seabo
   plotly). Use when building charts, choosing the right chart type for a dataset,
   creating publication-quality figures, or applying design principles like accessibility
   and color theory.
-allowed-tools: search_saved_context brave_web_search
+allowed-tools: search_saved_context tavily_search exa_search olostep_search_web olostep_answers
 license: Apache-2.0
 compatibility: skills.sh / Ren Deep Research (Strands SDK 1.57.2 / strands-harness
   0.1.2)

@@ -102,7 +102,7 @@ stays on loopback even if the file is edited.
 
 | Port | Role |
 | --- | --- |
-| 8765 | Ron agent API (`ron-api.service`), reached from the Mac via `-L 8765`. Memory consolidation ("dreaming") is the SDK's native extraction inside this process (every 5 turns and at session close/shutdown via `memory_manager.flush()`); there is no timer or endpoint. A previously installed `ron-dreaming.timer` (VPS) or `com.ronbrowser.dreaming` launchd job (Mac) should be disabled: `systemctl disable --now ron-dreaming.timer` / `launchctl unload ~/Library/LaunchAgents/com.ronbrowser.dreaming.plist`. |
+| 8765 | Ron agent API (`ron-api.service`), reached from the Mac via `-L 8765`. Memory consolidation ("dreaming", `core/dreaming.py`) runs inside this process once a user has been idle for `RON_MEMORY_IDLE_SECONDS` (300); there is no timer to install, and `POST /memory/dreams` runs it at once. A previously installed `ron-dreaming.timer` (VPS) or `com.ronbrowser.dreaming` launchd job (Mac) should be disabled: `systemctl disable --now ron-dreaming.timer` / `launchctl unload ~/Library/LaunchAgents/com.ronbrowser.dreaming.plist`. |
 | 3000 / 8931 / 9222 | Cloud Ron: Electron surface / Playwright MCP surface / CDP (`ron-browser.service`, under `xvfb-run`) |
 | 13000 / 18931 / 19222 | The Mac's Ron (3000 / 8931 / 9222) via `-R` reverse forwards |
 | 22 | SSH — the only port open in `ufw` |

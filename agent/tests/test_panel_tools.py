@@ -570,7 +570,9 @@ def generated(value: str) -> str:
         agent = Agent(model=model, tools=[catalog], callback_handler=None,
                       background_tasks={"agentic": ["*"], "never": ["editor", "tool_catalog", "mcp_client"], "wait_for_completion": True})
         catalog.bind(agent)
-        assert set(CORE_TOOL_NAMES) <= set(agent.tool_registry.registry)
+        from agent.api.core.brave_tools import BRAVE_TOOL_NAMES
+
+        assert set(CORE_TOOL_NAMES) - set(BRAVE_TOOL_NAMES) <= set(agent.tool_registry.registry)
         result = await agent.invoke_async("Create and use a tool")
         assert str(result).strip() == "done"
         assert len(model.calls) == 5

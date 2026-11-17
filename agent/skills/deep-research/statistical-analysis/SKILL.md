@@ -7,7 +7,7 @@ description: Guided statistical analysis for research data - test selection, ass
   sizes, or write up results - even if they never name a specific test. Covers t-tests,
   ANOVA, chi-square, correlation, regression, non-parametric and Bayesian methods.
   For low-level model APIs, see the statsmodels and pymc skills.
-allowed-tools: brave_rich_answer brave_answer brave_web_search extract_article_content
+allowed-tools: tavily_search exa_search olostep_search_web olostep_answers tavily_extract exa_get_contents olostep_scrape_website bright_data extract_article_content
   search_saved_context
 license: MIT license
 compatibility: skills.sh / Ren Deep Research (Strands SDK 1.57.2 / strands-harness

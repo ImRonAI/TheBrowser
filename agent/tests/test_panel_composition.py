@@ -154,9 +154,11 @@ def test_real_constructor_defaults_stream_and_complete_cleanup(offline):
     assert kwargs["background_tasks"] is False
     assert kwargs["retry_strategy"]._max_attempts == 6
     names = set(agent.tool_registry.registry)
-    # User-mandated core set is always registered; think is Perplexity-only.
+    # User-mandated core set is always registered, Brave's while RON_BRAVE_TOOLS=1 (off here); think is Perplexity-only.
+    from agent.api.core.brave_tools import BRAVE_TOOL_NAMES
     from agent.api.core.panel_tools import CORE_TOOL_NAMES
-    assert set(CORE_TOOL_NAMES) <= names
+    assert set(CORE_TOOL_NAMES) - set(BRAVE_TOOL_NAMES) <= names
+    assert not set(BRAVE_TOOL_NAMES) & names
     assert {"ask_user", "think", "research_review", "reasoning_swarm", "nested_research_review",
             "retrieve_offloaded_content"} <= names
     assert "review" not in names and "load_tool" not in names and "discover_tools" not in names
@@ -164,14 +166,15 @@ def test_real_constructor_defaults_stream_and_complete_cleanup(offline):
     assert len(models) == 1
     result = asyncio.run(agent.invoke_async("hello"))
     assert result.stop_reason == "end_turn"
-    # Memory is the SDK's (core/memory.py): native search_memory/add_memory, the aux_model runs
-    # facts extraction, and userTurn injection found nothing so the model saw only the message.
-    assert {"search_memory", "add_memory", "list_learned_skills", "use_skill"} <= names
+    # Memory is the SDK's (core/memory.py, core/dreaming.py): native search_memory/add_memory, the journal
+    # tool, and userTurn injection that found nothing so the model saw only the message. Nothing is
+    # distilled during the conversation: only the journal takes the turn, for the dream.
+    assert {"search_memory", "add_memory", "journal", "list_learned_skills", "use_skill"} <= names
     assert "recall" not in names and "search_memories" not in names
-    assert "journal" not in names
     assert len(build.memory_models) == 1 and agent.aux_model is build.memory_models[0]
-    assert [s.name for s in agent.memory_manager._stores] == ["facts", "remember", "feedback", "context", "tasks", "learned-skills"]
-    assert agent.memory_manager._stores[0].extraction
+    assert [s.name for s in agent.memory_manager._stores] == [
+        "facts", "remember", "feedback", "context", "tasks", "learned-skills", "brain", "journal/panel"]
+    assert [s.name for s in agent.memory_manager._stores if s.extraction] == ["journal/panel"]
     texts = [b["text"] for m in models[0].calls[-1] for b in m["content"] if "text" in b]
     # PANEL_ENVIRONMENT_CONTEXT (default on) injects the harness environment block
     # (platform/date/cwd/AGENTS.md) before the user turn.

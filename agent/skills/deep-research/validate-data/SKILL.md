@@ -4,7 +4,7 @@ description: QA an analysis before sharing -- methodology, accuracy, and bias ch
   Use when reviewing an analysis before a stakeholder presentation, spot-checking
   calculations and aggregation logic, verifying a SQL query's results look right,
   or assessing whether conclusions are actually supported by the data.
-allowed-tools: brave_rich_answer brave_answer brave_web_search extract_article_content
+allowed-tools: tavily_search exa_search olostep_search_web olostep_answers tavily_extract exa_get_contents olostep_scrape_website bright_data extract_article_content
 license: Apache-2.0
 compatibility: skills.sh / Ren Deep Research (Strands SDK 1.57.2 / strands-harness
   0.1.2)

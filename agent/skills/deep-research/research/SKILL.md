@@ -3,7 +3,7 @@ name: research
 description: Investigate a question against high-trust primary sources and capture
   the findings as a Markdown file in the repo. Use when the user wants a topic researched,
   docs or API facts gathered, or reading legwork delegated to a background agent.
-allowed-tools: brave_web_search brave_answer extract_article_content search_saved_context
+allowed-tools: tavily_search exa_search olostep_search_web olostep_answers tavily_extract exa_get_contents olostep_scrape_website bright_data extract_article_content search_saved_context
 license: MIT
 compatibility: skills.sh / Ren Deep Research (Strands SDK 1.57.2 / strands-harness
   0.1.2)

@@ -1,0 +1,288 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# 3. `DeepResearchRuntime` Lifecycle, Artifacts, SSE Replay, Persistence & Cancel
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_deep_research_runtime_sse_streaming_persistence_and_delete(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("RON_SLIDEV_DISABLE_CLI", "1")
+    shared_storage = InMemoryStorage()
+    coordinator = ScriptedFormationCoordinator(refine_once=True)
+    artifacts_root = tmp_path / "artifacts"
+
+    runtime = DeepResearchRuntime(
+        storage_factory=lambda _uid: shared_storage,
+        model_builder=coordinator.make_model,
+        extra_leaf_tools=_offline_leaf_tools(),
+        artifacts_dir=artifacts_root,
+    )
+
+    initial = await runtime.start_run(
+        user_id="user-alpha",
+        query="Compare qLDPC vs surface code fault-tolerant architectures",
+        session_id="dr-alpha-001",
+        context="Focus on physical qubit overhead and syndrome extraction connectivity.",
+        depth="deep",
+    )
+    assert initial["version"] == 1
+    assert initial["session_id"] == "dr-alpha-001"
+    assert initial["user_id"] == "user-alpha"
+    assert initial["active"] is True
+    assert initial["artifacts"] == {}
+
+    # Consume live SSE stream from sequence 0 through run_finished.
+    sse_frames: list[str] = []
+    parsed_events: list[dict[str, Any]] = []
+    async for frame in runtime.sse(user_id="user-alpha", session_id="dr-alpha-001", after=0):
+        sse_frames.append(frame)
+        lines = [ln for ln in frame.strip().splitlines() if ln]
+        assert lines[0].startswith("id: ")
+        assert lines[1].startswith("data: ")
+        parsed_events.append(json.loads(lines[1][6:]))
+
+    event_types = {ev["type"] for ev in parsed_events}
+    for expected_type in (
+        "run_started",
+        "node_start",
+        "node_stop",
+        "node_handoff",
+        "skill_start",
+        "skill_tool",
+        "skill_delta",
+        "skill_stop",
+        "text_delta",
+        "citation",
+        "artifact_ready",
+        "run_finished",
+    ):
+        assert expected_type in event_types, f"Missing SSE event type {expected_type!r} in {event_types}"
+
+    # Every formation agent of the set graph appeared in the SSE stream under its formation.
+    all_paths = {"/".join(ev.get("node_path") or []) for ev in parsed_events}
+    for formation in get_formation_topology()["nodes"]:
+        for agent in formation["children"]:
+            assert f"{formation['id']}/{agent['id']}" in all_paths
+
+    # The researcher's built-in `subagent` is the sub-agent the formation view nests under it.
+    skill_starts = [ev for ev in parsed_events if ev["type"] == "skill_start"]
+    assert skill_starts and all(ev["node_path"] == ["research_swarm", "researcher"] for ev in skill_starts)
+    assert all(ev["task"].startswith("Research qLDPC") for ev in skill_starts)
+    # QA sent the data analyst's work back once, so it ran twice.
+    analyst_starts = [
+        ev
+        for ev in parsed_events
+        if ev["type"] == "node_start" and ev["node_path"] == ["data_analysis_graph", "data_analyst"]
+    ]
+    assert len(analyst_starts) == 2
+
+    # The report and the deck are files in the run's workspace, never an agent's streamed text.
+    assert not any(
+        ev.get("is_report") or ev.get("is_slidev") for ev in parsed_events if ev["type"] == "text_delta"
+    )
+
+    artifact_events = [ev for ev in parsed_events if ev["type"] == "artifact_ready"]
+    assert {ev.get("kind") for ev in artifact_events} == {"report_pdf", "slidev_deck"}
+    assert {ev.get("artifact_kind") for ev in artifact_events} == {"report_pdf", "slidev_deck"}
+    report_ready = next(ev for ev in artifact_events if ev["kind"] == "report_pdf")
+    assert report_ready["node_path"] == ["production_graph", "pdf_publisher"]
+    assert report_ready["report_markdown"].startswith("# Quantum Error Correction Architecture Report")
+
+    completed = await runtime.wait_run(user_id="user-alpha", session_id="dr-alpha-001", timeout=60.0)
+    assert completed is not None
+    assert completed["status"] == "completed"
+    assert completed["active"] is False
+    assert completed["report_markdown"].startswith("# Quantum Error Correction Architecture Report")
+    assert "Compiled report.pdf" not in completed["report_markdown"]
+    assert "routerMode: hash" in completed["slidev_markdown"]
+    assert completed["artifacts"] == {
+        "report_pdf_url": "/deep-research/runs/dr-alpha-001/artifacts/report.pdf",
+        "report_markdown_url": "/deep-research/runs/dr-alpha-001/artifacts/report.md",
+        "slidev_preview_url": "/deep-research/runs/dr-alpha-001/artifacts/slides/index.html",
+        "slidev_pdf_url": "/deep-research/runs/dr-alpha-001/artifacts/slides.pdf",
+        "slidev_markdown_url": "/deep-research/runs/dr-alpha-001/artifacts/slides.md",
+    }
+    assert len(completed["citations"]) >= 2
+    assert completed["usage"]["totalTokens"] > 0
+
+    # Verify compiled PDFs on disk with pypdf and check relative Slidev SPA sub-assets.
+    report_pdf_file = runtime.resolve_artifact_path(
+        session_id="dr-alpha-001",
+        relative_path="report.pdf",
+        user_id="user-alpha",
+    )
+    assert report_pdf_file is not None and report_pdf_file.is_file()
+    report_reader = PdfReader(str(report_pdf_file))
+    assert len(report_reader.pages) >= 1
+    assert report_reader.metadata is not None and report_reader.metadata.title
+
+    slides_pdf_file = runtime.resolve_artifact_path(
+        session_id="dr-alpha-001",
+        relative_path="slides.pdf",
+        user_id="user-alpha",
+    )
+    assert slides_pdf_file is not None and slides_pdf_file.is_file()
+    slides_reader = PdfReader(str(slides_pdf_file))
+    assert len(slides_reader.pages) >= 2
+
+    deck_js_file = runtime.resolve_artifact_path(
+        session_id="dr-alpha-001",
+        relative_path="slides/assets/deck.js",
+        user_id=None,
+    )
+    assert deck_js_file is not None and deck_js_file.is_file()
+
+    # `include_report=False` omits full Markdown & Slidev bodies while preserving artifact URLs.
+    lightweight = await runtime.get_run(
+        user_id="user-alpha",
+        session_id="dr-alpha-001",
+        include_report=False,
+    )
+    assert lightweight is not None
+    assert lightweight["report_markdown"] is None
+    assert lightweight["slidev_markdown"] is None
+    assert lightweight["artifacts"]["report_pdf_url"].endswith("/artifacts/report.pdf")
+    assert lightweight["status"] == "completed"
+
+    # Replay from cursor `after=5` yields strictly `sequence > 5`.
+    replayed = [
+        ev async for ev in runtime.events(user_id="user-alpha", session_id="dr-alpha-001", after=5)
+    ]
+    assert replayed and all(ev["sequence"] > 5 for ev in replayed)
+    assert replayed[0]["sequence"] == 6
+
+    await runtime.aclose()
+
+    # Fresh runtime instance over the same storage & artifacts_dir restores snapshot, artifacts, and ownership!
+    restarted_runtime = DeepResearchRuntime(
+        storage_factory=lambda _uid: shared_storage,
+        model_builder=coordinator.make_model,
+        extra_leaf_tools=_offline_leaf_tools(),
+        artifacts_dir=artifacts_root,
+    )
+    listed = await restarted_runtime.list_runs(user_id="user-alpha", limit=10)
+    assert len(listed) == 1
+    assert listed[0]["session_id"] == "dr-alpha-001"
+    assert listed[0]["status"] == "completed"
+    assert listed[0]["artifacts"]["slidev_preview_url"].endswith("/artifacts/slides/index.html")
+
+    restored = await restarted_runtime.get_run(
+        user_id="user-alpha",
+        session_id="dr-alpha-001",
+        include_report=True,
+    )
+    assert restored is not None
+    assert "# Quantum Error Correction Architecture Report" in restored["report_markdown"]
+    assert "routerMode: hash" in restored["slidev_markdown"]
+    assert (
+        restarted_runtime.resolve_artifact_path(
+            session_id="dr-alpha-001",
+            relative_path="report.pdf",
+            user_id="user-alpha",
+        )
+        is not None
+    )
+    assert (
+        restarted_runtime.resolve_artifact_path(
+            session_id="dr-alpha-001",
+            relative_path="report.pdf",
+            user_id="other-user",
+        )
+        is None
+    )
+
+    # `delete_run` removes snapshot, index entry, session state, AND disk artifacts!
+    deleted = await restarted_runtime.delete_run(user_id="user-alpha", session_id="dr-alpha-001")
+    assert deleted is True
+    assert not (artifacts_root / "dr-alpha-001").exists()
+    assert await restarted_runtime.get_run(user_id="user-alpha", session_id="dr-alpha-001") is None
+    assert await restarted_runtime.list_runs(user_id="user-alpha") == []
+    await restarted_runtime.aclose()
+
+
+@pytest.mark.asyncio
+async def test_run_transcripts_keep_reasoning_and_tool_payloads_and_lists_leave_them_out(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("RON_SLIDEV_DISABLE_CLI", "1")
+    shared_storage = InMemoryStorage()
+    coordinator = ScriptedFormationCoordinator(refine_once=False, reasoning="Weighing which source to read first.")
+    runtime = DeepResearchRuntime(
+        storage_factory=lambda _uid: shared_storage,
+        model_builder=coordinator.make_model,
+        extra_leaf_tools=_offline_leaf_tools(),
+        artifacts_dir=tmp_path / "artifacts",
+    )
+    await runtime.start_run(
+        user_id="user-alpha",
+        query="Compare qLDPC vs surface code fault-tolerant architectures",
+        session_id="dr-transcript-001",
+        depth="standard",
+    )
+    events: list[dict[str, Any]] = []
+    async for frame in runtime.sse(user_id="user-alpha", session_id="dr-transcript-001", after=0):
+        events.append(json.loads(frame.strip().splitlines()[1][6:]))
+    await runtime.wait_run(user_id="user-alpha", session_id="dr-transcript-001", timeout=60.0)
+
+    # Reasoning streams for the node's own agent and, with `skill_id`, for its `subagent` sub-agent.
+    reasoning = [ev for ev in events if ev["type"] == "reasoning_delta"]
+    assert any(not ev.get("skill_id") for ev in reasoning)
+    assert any(ev.get("skill_id") for ev in reasoning)
+    assert all(ev["delta"] == "Weighing which source to read first." for ev in reasoning)
+    assert all(ev["node_path"] for ev in reasoning)
+
+    # A finished tool call keeps its name and carries its whole result.
+    finished = [ev for ev in events if ev["type"] == "skill_tool" and ev.get("status") in ("completed", "failed")]
+    assert finished
+    assert all(ev.get("tool_name") and ev["tool_name"] != "research_tool" for ev in finished)
+    assert all(isinstance(ev.get("output"), str) and ev.get("output_truncated") is False for ev in finished)
+    started = [ev for ev in events if ev["type"] == "skill_tool" and ev.get("status") == "running"]
+    assert any(isinstance(ev.get("input"), dict) and ev["input"] for ev in started)
+
+    full = await runtime.get_run(user_id="user-alpha", session_id="dr-transcript-001")
+    assert full is not None
+    node = full["nodes"]["research_swarm/researcher"]
+    kinds = [part["kind"] for part in node["activity"]]
+    assert kinds[0] == "reasoning"
+    assert "skill" in kinds and kinds[-1] == "text"
+    assert node["activity"][0]["text"] == "Weighing which source to read first."
+    skill_part = next(part for part in node["activity"] if part["kind"] == "skill")
+    skill = next(sk for sk in full["skill_invocations"] if sk["id"] == skill_part["skill_id"])
+    assert skill["node_key"] == "research_swarm/researcher"
+    step_kinds = [step["kind"] for step in skill["steps"]]
+    assert step_kinds[0] == "reasoning" and "tool" in step_kinds and step_kinds[-1] == "text"
+    tool_step = next(step for step in skill["steps"] if step["kind"] == "tool")
+    tool_call = next(item for item in skill["tools"] if item["id"] == tool_step["tool_id"])
+    assert tool_call["tool_name"] != "research_tool"
+    assert isinstance(tool_call["input"], dict) and tool_call["input"]
+    assert tool_call["output"] and tool_call["status"] == "completed"
+    assert "".join(step["text"] for step in skill["steps"] if step["kind"] == "text") == skill["output_text"]
+    # No tool row is created for a framework plugin tool's result, and none loses its name on completion.
+    assert all(
+        item["tool_name"] != "research_tool" for sk in full["skill_invocations"] for item in sk["tools"]
+    )
+    # The node's own copy of its skills is a summary: the transcript is stored once.
+    node_skill = node["skill_invocations"][0]
+    assert "steps" not in node_skill
+    assert all("output" not in item and "input" not in item for item in node_skill["tools"])
+
+    # Lists carry status and previews only.
+    listed = next(
+        item for item in await runtime.list_runs(user_id="user-alpha") if item["session_id"] == "dr-transcript-001"
+    )
+    assert listed["status"] == "completed"
+    assert all("activity" not in listed_node for listed_node in listed["nodes"].values())
+    assert listed["skill_invocations"] and all("steps" not in sk for sk in listed["skill_invocations"])
+    assert all(
+        "output" not in item and "input" not in item and item["tool_name"]
+        for sk in listed["skill_invocations"]
+        for item in sk["tools"]
+    )
+    # Reading the list did not strip the stored run.
+    again = await runtime.get_run(user_id="user-alpha", session_id="dr-transcript-001")
+    assert again is not None and again["nodes"]["research_swarm/researcher"]["activity"]
+
+

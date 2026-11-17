@@ -1,7 +1,7 @@
 ---
 name: question-decomposition
 description: "Decompose a framed research objective into orthogonal, falsifiable sub-questions with explicit evidence requirements."
-allowed-tools: search_saved_context brave_answer
+allowed-tools: search_saved_context tavily_search exa_search olostep_search_web olostep_answers
 license: Proprietary
 compatibility: "Ren Deep Research (Strands SDK 1.57.2 / strands-harness 0.1.2)"
 metadata:

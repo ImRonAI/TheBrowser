@@ -1,0 +1,49 @@
+"""Offline structural, execution, and runtime tests for the Deep Research set formation.
+
+Exercises the real pinned Strands SDK (``Graph``, ``Swarm``, ``SnapshotSessionManager``,
+``MultiAgentPlugin``, ``AgentSkills``) and ``strands_harness==0.1.2`` (``create_harness`` with its
+built-in ``subagent`` and ``write`` tools) using deterministic Strands ``Model`` test doubles that
+emit genuine ``subagent``, ``handoff_to_agent``, file and artifact compilation tool calls.
+"""
+
+from __future__ import annotations
+
+from collections.abc import AsyncGenerator, AsyncIterator, Iterator
+import asyncio
+import json
+import os
+from pathlib import Path
+import re
+import threading
+from typing import Any, cast
+
+from pypdf import PdfReader
+import pytest
+from strands import Agent, tool
+from strands.models.model import Model
+from strands.multiagent import Status, Swarm
+from strands.multiagent.base import MultiAgentBase
+from strands.multiagent.graph import Graph
+from strands.storage import InMemoryStorage
+from strands.types.streaming import StreamEvent
+
+from agent.api.core.context_agent import context_store
+from agent.api.core.deep_research import (
+    DEEP_RESEARCH_SKILLS_DIR,
+    ORCHESTRATOR_IDS,
+    VALID_DEPTHS,
+    DeepResearchMultiAgentPlugin,
+    DeepResearchRuntime,
+    ReplayOverflow,
+    build_deep_research_graph,
+    build_leaf_tool_pool,
+    get_formation_topology,
+    load_deep_research_skills,
+)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Deterministic Strands Model & Leaf Research Tool Doubles
+# ─────────────────────────────────────────────────────────────────────────────
+
+

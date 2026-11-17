@@ -8,7 +8,7 @@
  *   adds a fixed height and moves only the cards under it.
  * - `scopeEdges`: `temporary` until an edge's source has started, `animated` after (as `graph-run.ts`).
  * - `nodeToolState`: node status as the tool state the vendored `getStatusBadge` renders.
- * - `agentTranscript`: one agent's work (reasoning, use_skill sub-agents with their tool calls,
+ * - `agentTranscript`: one agent's work (reasoning, subagent sub-agents with their tool calls,
  *   text) as ordered steps plus the final output.
  *
  * Pure module (relative `.ts` imports only) so `node --experimental-strip-types --test` runs it.
@@ -306,7 +306,7 @@ export function scopeEdges(
 ): LiveEdge[] {
   return edges.map((edge) => {
     const source = deriveNodeState(snapshot, [...scope.path, edge.source]).status
-    return { ...edge, type: source === 'idle' || source === 'pending' ? 'temporary' : 'animated' }
+    return { ...edge, type: source === 'idle' ? 'temporary' : 'animated' }
   })
 }
 
@@ -366,9 +366,9 @@ export interface PassView {
 export type AgentStepView = TextStepView | SkillView | PassView
 
 export interface AgentTranscript {
-  /** The work: reasoning, narration and use_skill sub-agents, in order. */
+  /** The work: reasoning, narration and subagent sub-agents, in order. */
   steps: AgentStepView[]
-  /** What the agent wrote after its last use_skill call: its result. */
+  /** What the agent wrote after its last subagent call: its result. */
   output: string
   outputActive: boolean
   /** The newest text the agent or one of its sub-agents wrote: what the collapsed card previews. */
@@ -378,19 +378,6 @@ export interface AgentTranscript {
 function skillSteps(skill: DeepResearchSkillExecution): SkillStepView[] {
   const running = skill.status === 'running'
   const tools = new Map(skill.tools.map((tool) => [tool.id, tool]))
-  if (skill.steps.length === 0) {
-    // A run saved before transcripts: tool calls, then whatever text the sub-agent returned.
-    const steps: SkillStepView[] = skill.tools.map((tool) => ({
-      kind: 'tool',
-      id: `tool:${tool.id}`,
-      tool,
-      active: tool.status === 'running',
-    }))
-    if (skill.output_text.trim()) {
-      steps.push({ kind: 'text', id: `${skill.id}:output`, text: skill.output_text, active: running })
-    }
-    return steps
-  }
   const steps: SkillStepView[] = []
   skill.steps.forEach((step, index) => {
     if (step.kind === 'tool') {
@@ -418,17 +405,9 @@ export function agentTranscript(snapshot: DeepResearchSnapshot, path: readonly s
     snapshot.skill_invocations.filter((skill) => skill.node_key === key).map((skill) => [skill.id, skill]),
   )
 
-  let parts = node?.activity ?? []
-  if (parts.length === 0 && (skillsById.size > 0 || node)) {
-    // A run saved before transcripts: its skills in order, then the text the node kept.
-    const text = node?.streaming_text || node?.output_preview || ''
-    parts = [
-      ...[...skillsById.values()].map((skill) => ({ id: `skill:${skill.id}`, kind: 'skill' as const, skill_id: skill.id })),
-      ...(text.trim() ? [{ id: `${key}:text`, kind: 'text' as const, text }] : []),
-    ]
-  }
+  const parts = node?.activity ?? []
 
-  // Text after the last use_skill call (or repeat pass) is the agent's result; the rest is its work.
+  // Text after the last subagent call (or repeat pass) is the agent's result; the rest is its work.
   let boundary = -1
   parts.forEach((part, index) => {
     if (part.kind === 'skill' || part.kind === 'pass') boundary = index

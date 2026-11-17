@@ -190,7 +190,8 @@ def test_document_agent_scope_excludes_host_shell_editor_and_repo_environment(mo
         assert "mcp_client" not in registered
         assert "tool_catalog" not in registered
         assert "render_ui" not in registered
-        assert {"http_request", "brave_web_search", "brave_image_search", "brave_video_search", "render_workflow"} <= registered
+        assert {"http_request", "render_workflow"} <= registered
+        assert not {name for name in registered if name.startswith("brave_")}
         assert built_candidates == [
             ("mistral", "zai-glm-5-3-flash", "low"),
             ("nim", "z-ai/glm-5.3-flash", "low"),

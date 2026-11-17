@@ -5,7 +5,7 @@ description: Evaluates scientific claims and evidence quality. Applies to experi
   frameworks (GRADE, Cochrane Risk of Bias), and teaching critical analysis. Supports
   evidence appraisal and identifying flaws; formal peer review writing belongs to
   peer-review.
-allowed-tools: brave_web_search brave_answer extract_article_content search_saved_context
+allowed-tools: tavily_search exa_search olostep_search_web olostep_answers tavily_extract exa_get_contents olostep_scrape_website bright_data extract_article_content search_saved_context
 license: MIT license
 compatibility: skills.sh / Ren Deep Research (Strands SDK 1.57.2 / strands-harness
   0.1.2)

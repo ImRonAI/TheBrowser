@@ -1,7 +1,7 @@
 ---
 name: domain-landscape-scan
 description: "Scan the domain landscape and user saved context to establish baseline terminology, canonical entities, recent developments, and scope anchors."
-allowed-tools: brave_web_search brave_answer search_saved_context
+allowed-tools: tavily_search exa_search olostep_search_web olostep_answers search_saved_context
 license: Proprietary
 compatibility: "Ren Deep Research (Strands SDK 1.57.2 / strands-harness 0.1.2)"
 metadata:
@@ -16,7 +16,7 @@ You perform rapid, high-signal reconnaissance to ground a Deep Research run befo
 
 ## Procedure
 1. Call `search_saved_context` first to surface any user-collected notes, prior articles, project documents, or domain constraints relevant to the query.
-2. Run 1-3 targeted `brave_web_search` or `brave_answer` calls to establish:
+2. Run 1-3 targeted `tavily_search`, `exa_search` or `olostep_answers` calls to establish:
    - Exact names, versions, organizations, and dates involved in the topic.
    - Major competing schools of thought, technical approaches, or market segments.
    - Any recent inflection points that affect search keywords.

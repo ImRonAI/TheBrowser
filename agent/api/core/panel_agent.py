@@ -93,6 +93,7 @@ from agent.api.core.panel_browser import (
     is_browser_tool,
     server_name,
 )
+from agent.api.core.dreaming import JOURNAL_DIRECTIVE, agent_memory
 from agent.api.core.memory import MEMORY_DIRECTIVE, MemoryScope, live_memory_tools, memory_manager_config
 from agent.api.core.panel_runtime import is_model_timeout
 from agent.api.core.panel_storage import ThreadSessionManager, get_user_session_storage, thread_agent_id
@@ -124,7 +125,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[3]
 PROJECT_TOOLS_DIR = PROJECT_ROOT / "agent" / "tools" / "strands_tools"
 
 def memory_aux_model_id() -> str:
-    """The panel Agent's native ``aux_model`` (runs memory extraction): ``RON_MEMORY_MODEL``, read at
+    """The panel Agent's native ``aux_model`` (the SDK's side calls): ``RON_MEMORY_MODEL``, read at
     construction so tests and operators can change it."""
     return os.getenv("RON_MEMORY_MODEL", "").strip() or DEFAULT_MEMORY_MODEL
 
@@ -1113,12 +1114,11 @@ def _default_formations() -> list[GraphSpec | SwarmSpec]:
     return [graph, swarm, nested]
 
 
-def user_memory_config(user_id: str, agent_scope: str = "panel", *, extraction: bool = True,
-                       scope: MemoryScope | None = None) -> Any:
+def user_memory_config(user_id: str, agent_scope: str = "panel", *, scope: MemoryScope | None = None) -> Any:
     """The user's memory (``core/memory.py``) plus the agent's read-only learned-skills store."""
     from agent.api.core.teaching import get_teaching_service
 
-    return memory_manager_config(user_id, scope, extraction=extraction,
+    return memory_manager_config(user_id, scope, agent=agent_scope,
                                  extra_stores=[get_teaching_service().get_memory_store(user_id, agent_scope)])
 
 
@@ -1126,7 +1126,7 @@ def user_memory_tools(user_id: str, agent_scope: str = "panel", scope: MemorySco
     """``search_memory`` / ``add_memory`` over the same stores, for ``BidiAgent`` (no plugins)."""
     from agent.api.core.teaching import get_teaching_service
 
-    return live_memory_tools(user_id, scope, extra_stores=[get_teaching_service().get_memory_store(user_id, agent_scope)])
+    return live_memory_tools(user_id, scope, agent=agent_scope, extra_stores=[get_teaching_service().get_memory_store(user_id, agent_scope)])
 
 
 class TimeoutRetryStrategy(ModelRetryStrategy):
@@ -1338,7 +1338,8 @@ def create_panel_agent(
             # with no host shell/editor, no MCP servers, no A2A/specialist/music tools, and no repo AGENTS.md injection.
             core = build_core_tools(tools_dir, names=DOCUMENT_TOOL_NAMES)
             catalog.add_tools([*core, *research_tools])
-            memory = None
+            memory = {"stores": agent_memory(user_id, agent_scope)}
+            system_prompt += JOURNAL_DIRECTIVE
             plugins: list[Any] = []
         else:
             core = build_core_tools(tools_dir)
@@ -1360,7 +1361,7 @@ def create_panel_agent(
             ))
             system_prompt += SKILLS_AND_SPECIALISTS_DIRECTIVE
             # Native MemoryManager (core/memory.py): search_memory, add_memory, userTurn injection,
-            # and facts extraction on aux_model (below).
+            # the second brain and this agent's journal (core/dreaming.py).
             memory = user_memory_config(user_id, agent_scope)
             system_prompt += MEMORY_DIRECTIVE
             # Native A2A client tools over Ron's agents (panel A2A server + RON_A2A_AGENTS).
@@ -1423,7 +1424,7 @@ def create_panel_agent(
             "tool_executor": ConcurrentToolExecutor() if execution == "concurrent" else SequentialToolExecutor(),
             "retry_strategy": retry, "checkpointing": options.get("checkpointing", False),
             "background_tasks": False,
-            # Native aux_model: memory extraction (and other side calls) on a fast model, not the
+            # Native aux_model: the SDK's side calls on a fast model, not the
             # panel model. Unset, the SDK falls back to the panel model.
             "aux_model": (build_model("perplexity", memory_aux_model_id(), None, hosted_tools=False)
                           if provider_api_key("perplexity") else None),

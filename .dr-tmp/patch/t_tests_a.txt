@@ -1,0 +1,143 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# 1. Skill Library & Set Formation Structural Audit Tests
+# ─────────────────────────────────────────────────────────────────────────────
+
+_BUILTIN_AGENT_TOOLS = {"shell", "read", "write", "edit", "programmatic_tool_caller", "subagent"}
+
+
+def _topology_agents() -> list[dict[str, Any]]:
+    return [agent for formation in get_formation_topology()["nodes"] for agent in formation["children"]]
+
+
+def test_skill_library_is_the_skills_cli_install_and_covers_every_agent() -> None:
+    skills = load_deep_research_skills()
+
+    # Every skill is a Skills CLI install recorded in skills-lock.json with its GitHub source.
+    lock = json.loads((DEEP_RESEARCH_SKILLS_DIR.parents[1] / "skills-lock.json").read_text(encoding="utf-8"))
+    assert set(skills) == set(lock["skills"])
+    assert all(entry["sourceType"] == "github" and entry["source"] for entry in lock["skills"].values())
+    assert lock["skills"]["find-skills"]["source"] == "vercel-labs/skills"
+
+    assert {agent["skill"] for agent in _topology_agents()} <= set(skills)
+    for name, skill in skills.items():
+        assert skill.name == name
+        assert skill.description.strip()
+        assert skill.instructions.strip()
+        assert skill.path is not None and (skill.path / "SKILL.md").is_file()
+
+
+def test_set_formation_topology_and_skill_agent_invariants(tmp_path: Path) -> None:
+    storage = InMemoryStorage()
+    coordinator = ScriptedFormationCoordinator()
+    owned_agents: list[Agent] = []
+
+    graph = build_deep_research_graph(
+        session_id="struct-audit-session",
+        user_id="auditor",
+        storage=storage,
+        model_factory=coordinator.make_model,
+        depth="deep",
+        owned_agents=owned_agents,
+        extra_leaf_tools=_offline_leaf_tools(),
+        artifacts_dir=tmp_path / "artifacts",
+    )
+
+    try:
+        assert isinstance(graph, Graph)
+        assert graph.id == "deep_research_graph"
+        # Strands applies a node timeout to a nested formation as a whole, so the outer graph sets none.
+        assert graph.node_timeout is None
+        assert [node.node_id for node in graph.entry_points] == ["research_swarm"]
+
+        expected_outer_kinds = {
+            "research_swarm": Swarm,
+            "data_analysis_graph": Graph,
+            "writing_swarm": Swarm,
+            "production_graph": Graph,
+        }
+        assert set(graph.nodes.keys()) == set(expected_outer_kinds.keys())
+        for outer_id, expected_cls in expected_outer_kinds.items():
+            executor = graph.nodes[outer_id].executor
+            assert isinstance(executor, MultiAgentBase)
+            assert isinstance(executor, expected_cls)
+
+        research = cast(Swarm, graph.nodes["research_swarm"].executor)
+        assert research.id == "deep_research_research_swarm"
+        assert list(research.nodes) == ["researcher", "fact_checker", "citation_manager", "research_qa"]
+        assert research.entry_point is research.nodes["researcher"].executor
+        assert research.node_timeout == 300.0 and research.execution_timeout == 1200.0
+
+        analysis = cast(Graph, graph.nodes["data_analysis_graph"].executor)
+        assert analysis.id == "deep_research_data_analysis"
+        assert analysis.reset_on_revisit is True
+        assert analysis.node_timeout == 300.0
+        assert {node.node_id for node in analysis.entry_points} == {"visual_planner"}
+        # QA's feedback edges go back to each author; the forward chain returns to QA.
+        feedback = {(e.from_node.node_id, e.to_node.node_id) for e in analysis.edges if e.condition is not None}
+        assert feedback == {
+            ("visual_qa", "visual_planner"),
+            ("visual_qa", "data_analyst"),
+            ("visual_qa", "visual_citation"),
+        }
+
+        writing = cast(Swarm, graph.nodes["writing_swarm"].executor)
+        assert writing.id == "deep_research_writing_swarm"
+        assert list(writing.nodes) == [
+            "report_designer",
+            "deck_designer",
+            "layout_qa",
+            "report_writer",
+            "report_qa",
+            "deck_writer",
+            "deck_qa",
+        ]
+
+        production = cast(Graph, graph.nodes["production_graph"].executor)
+        assert production.id == "deep_research_production"
+        # The PDF and the Slidev deck are built in parallel, each with its own QA loop.
+        assert {node.node_id for node in production.entry_points} == {"pdf_publisher", "deck_producer"}
+        assert {(e.from_node.node_id, e.to_node.node_id) for e in production.edges} == {
+            ("pdf_publisher", "pdf_qa"),
+            ("pdf_qa", "pdf_publisher"),
+            ("deck_producer", "deck_build_qa"),
+            ("deck_build_qa", "deck_producer"),
+        }
+
+        plugin: DeepResearchMultiAgentPlugin = getattr(graph, "_deep_research_plugin")
+        assert isinstance(plugin, DeepResearchMultiAgentPlugin)
+        assert set(plugin.initialized_orchestrators) == set(ORCHESTRATOR_IDS)
+
+        # Every agent is a skill agent: SKILL.md in its system prompt, the harness's built-in file, shell,
+        # programmatic and `subagent` tools, the research pool, every skill loadable, no browser automation.
+        topology_agents = {agent["id"]: agent for agent in _topology_agents()}
+        skills = load_deep_research_skills()
+        assert len(owned_agents) == len(topology_agents) == 19
+        swarm_agent_names = set(research.nodes) | set(writing.nodes)
+        for agent in owned_agents:
+            spec = topology_agents[agent.name]
+            registered_tools = set(agent.tool_registry.registry.keys())
+            assert _BUILTIN_AGENT_TOOLS <= registered_tools
+            assert {"skills", "http_request", "compile_scholarly_pdf", "compile_slidev_deck"} <= registered_tools
+            assert not any(name.startswith(("browser_", "playwright_")) for name in registered_tools)
+            assert ("handoff_to_agent" in registered_tools) == (agent.name in swarm_agent_names)
+            system_prompt = str(agent.system_prompt)
+            assert f"## Your role: {spec['label']}\n{spec['description']}" in system_prompt
+            assert skills[spec["skill"]].instructions in system_prompt
+            assert f"Location: {skills[spec['skill']].path}/SKILL.md" in system_prompt
+            assert str(tmp_path / "artifacts" / "struct-audit-session") in system_prompt
+            assert agent.description == spec["description"]
+
+        topo = get_formation_topology()
+        assert topo["id"] == "deep_research_graph"
+        assert [n["id"] for n in topo["nodes"]] == list(expected_outer_kinds)
+        assert [(e["from"], e["to"]) for e in topo["edges"]] == [
+            ("research_swarm", "data_analysis_graph"),
+            ("data_analysis_graph", "writing_swarm"),
+            ("writing_swarm", "production_graph"),
+        ]
+        assert VALID_DEPTHS == ("standard", "deep", "exhaustive")
+    finally:
+        for agent in owned_agents:
+            agent.cleanup()
+
+

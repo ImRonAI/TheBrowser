@@ -1,10 +1,6 @@
 /**
- * Deep Research store: session-scoped Zustand state for multi-agent Strands `Graph` + `Swarm`
- * formation runs, live SSE event streaming, replay recovery, and run history synchronization.
- *
- * Keeps active `AbortController` streams per `sessionId` so background runs started from this
- * workbench — or asynchronously by any Ren agent via `deep_research_start` — stream live
- * nested formation progress without mutating any global single-graph singleton.
+ * Deep Research store: the runs, the open run's snapshot folded from its Strands events, and one
+ * SSE stream per running run (started here or by an agent's `deep_research_start`).
  */
 import { create } from 'zustand'
 import { createJSONStorage, persist } from 'zustand/middleware'
@@ -13,7 +9,6 @@ import { openInternalUrl } from '@/components/board/task-detail/editor/extension
 import {
   DEFAULT_FORMATION_TOPOLOGY,
   DEFAULT_RESEARCH_DEPTH,
-  DeepResearchReplayOverflow,
   RESEARCH_DEPTHS,
   cancelDeepResearchRun,
   deleteDeepResearchRun,
@@ -136,74 +131,42 @@ export const useDeepResearchStore = create<DeepResearchState>()(
           streamingSessions: { ...state.streamingSessions, [sessionId]: true },
         }))
 
-        const pump = async () => {
-          let cursor = initialAfter ?? get().snapshotsBySession[sessionId]?.replay_after ?? 0
-          let retries = 0
-          try {
-            while (!controller.signal.aborted && retries <= 2) {
-              try {
-                const { finished, lastSequence } = await streamDeepResearchEvents(sessionId, userId, {
-                  after: cursor,
-                  signal: controller.signal,
-                  onEvent: (event) => applyEvent(sessionId, event),
-                })
-                cursor = Math.max(cursor, lastSequence)
-                if (finished || controller.signal.aborted) break
+        const refresh = async (signal?: AbortSignal) => {
+          const fresh = await getDeepResearchRun(sessionId, userId, { signal })
+          set((state) => ({
+            snapshotsBySession: { ...state.snapshotsBySession, [sessionId]: fresh },
+            runs: upsertRunInList(state.runs, fresh),
+          }))
+          return fresh
+        }
 
-                // Stream closed before `run_finished`: check authoritative snapshot once.
-                const snapshot = await getDeepResearchRun(sessionId, userId, { signal: controller.signal })
-                const merged = normalizeDeepResearchSnapshot(snapshot, get().snapshotsBySession[sessionId])
-                set((state) => ({
-                  snapshotsBySession: { ...state.snapshotsBySession, [sessionId]: merged },
-                  runs: upsertRunInList(state.runs, merged),
-                }))
-                if (!merged.active) break
-                cursor = merged.replay_after
-                retries += 1
-              } catch (err) {
-                if (controller.signal.aborted) break
-                if (err instanceof DeepResearchReplayOverflow) {
-                  // Re-hydrate full snapshot on 410 cursor overflow and resume from fresh replay_after.
-                  const snapshot = await getDeepResearchRun(sessionId, userId, { signal: controller.signal })
-                  const merged = normalizeDeepResearchSnapshot(snapshot, get().snapshotsBySession[sessionId])
-                  set((state) => ({
-                    snapshotsBySession: { ...state.snapshotsBySession, [sessionId]: merged },
-                    runs: upsertRunInList(state.runs, merged),
-                  }))
-                  if (!merged.active) break
-                  cursor = merged.replay_after
-                  retries += 1
-                  continue
-                }
-                throw err
-              }
+        const pump = async () => {
+          let cursor = initialAfter ?? get().snapshotsBySession[sessionId]?.sequence ?? 0
+          try {
+            for (let attempt = 0; attempt < 3 && !controller.signal.aborted; attempt++) {
+              const { finished, lastSequence } = await streamDeepResearchEvents(sessionId, userId, {
+                after: cursor,
+                signal: controller.signal,
+                onEvent: (event) => applyEvent(sessionId, event),
+              })
+              cursor = Math.max(cursor, lastSequence)
+              if (finished || controller.signal.aborted) break
+              // The stream closed before the run ended: reload the run and stream on from it.
+              const fresh = await refresh(controller.signal)
+              if (!fresh.active) break
+              cursor = fresh.sequence
             }
           } catch (err) {
-            if (!controller.signal.aborted) {
-              const msg = err instanceof Error ? err.message : String(err)
-              set({ error: msg })
-            }
+            if (!controller.signal.aborted) set({ error: err instanceof Error ? err.message : String(err) })
           } finally {
-            if (activeControllers.get(sessionId) === controller) {
-              activeControllers.delete(sessionId)
-            }
+            if (activeControllers.get(sessionId) === controller) activeControllers.delete(sessionId)
             set((state) => {
               const nextStreaming = { ...state.streamingSessions }
               delete nextStreaming[sessionId]
               return { streamingSessions: nextStreaming }
             })
-            // Final refresh to ensure completed report & citations match persisted storage.
-            if (!controller.signal.aborted) {
-              void getDeepResearchRun(sessionId, userId)
-                .then((fresh) => {
-                  const merged = normalizeDeepResearchSnapshot(fresh, get().snapshotsBySession[sessionId])
-                  set((state) => ({
-                    snapshotsBySession: { ...state.snapshotsBySession, [sessionId]: merged },
-                    runs: upsertRunInList(state.runs, merged),
-                  }))
-                })
-                .catch(() => undefined)
-            }
+            // The finished run's status, workspace files, report and deck.
+            if (!controller.signal.aborted) void refresh().catch(() => undefined)
           }
         }
 
@@ -285,7 +248,7 @@ export const useDeepResearchStore = create<DeepResearchState>()(
             if (activeId) {
               const snap = get().snapshotsBySession[activeId]
               if (snap?.active && !activeControllers.has(activeId)) {
-                attachStream(activeId, userId, snap.replay_after)
+                attachStream(activeId, userId, snap.sequence)
               }
             }
           } catch {
@@ -322,7 +285,7 @@ export const useDeepResearchStore = create<DeepResearchState>()(
               syncResearchTabUrl(snapshot.session_id)
             }
             if (snapshot.active) {
-              attachStream(snapshot.session_id, userId, snapshot.replay_after)
+              attachStream(snapshot.session_id, userId, snapshot.sequence)
             }
             return snapshot
           } catch (err) {
@@ -341,8 +304,7 @@ export const useDeepResearchStore = create<DeepResearchState>()(
             syncResearchTabUrl(trimmed)
           }
           try {
-            const fetched = await getDeepResearchRun(trimmed, userId)
-            const merged = normalizeDeepResearchSnapshot(fetched, get().snapshotsBySession[trimmed])
+            const merged = await getDeepResearchRun(trimmed, userId)
             set((state) => ({
               snapshotsBySession: {
                 ...state.snapshotsBySession,
@@ -351,7 +313,7 @@ export const useDeepResearchStore = create<DeepResearchState>()(
               runs: upsertRunInList(state.runs, merged),
             }))
             if (merged.active) {
-              attachStream(trimmed, userId, merged.replay_after)
+              attachStream(trimmed, userId, merged.sequence)
             }
           } catch (err) {
             const message = err instanceof Error ? err.message : String(err)
@@ -362,13 +324,12 @@ export const useDeepResearchStore = create<DeepResearchState>()(
         cancelRun: async (sessionId, explicitUserId) => {
           const userId = resolveResearchUserId(explicitUserId)
           try {
-            const snapshot = await cancelDeepResearchRun(sessionId, userId)
+            const merged = await cancelDeepResearchRun(sessionId, userId, {}, get().snapshotsBySession[sessionId])
             const controller = activeControllers.get(sessionId)
             if (controller) {
               controller.abort()
               activeControllers.delete(sessionId)
             }
-            const merged = normalizeDeepResearchSnapshot(snapshot, get().snapshotsBySession[sessionId])
             set((state) => {
               const nextStreaming = { ...state.streamingSessions }
               delete nextStreaming[sessionId]

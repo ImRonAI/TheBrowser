@@ -831,6 +831,9 @@ export type ThinkStep =
  */
 export const CHAIN_TOOLS: ReadonlySet<string> = new Set(['think', 'repair'])
 
+/** The agents' private notebook (`core/dreaming.py`): its calls are never drawn in a conversation. */
+export const JOURNAL_TOOL = 'journal'
+
 export function isChainTool(part: PanelPart): part is ToolPart {
   return part.kind === 'tool' && part.path.length === 0 && CHAIN_TOOLS.has(part.name)
 }
@@ -847,6 +850,7 @@ export function groupThinkParts(parts: PanelPart[], running: boolean): RenderIte
   for (const part of parts) {
     const parentId = part.path.length ? String(part.path[0]) : undefined
     if (parentId !== undefined && thinkIds.has(parentId)) continue // consumed by its chain block
+    if (part.kind === 'tool' && part.name === JOURNAL_TOOL) continue
     if (isChainTool(part)) {
       const nested = parts.filter((p) => p.path.length >= 1 && String(p.path[0]) === part.id)
       const steps: ThinkStep[] = []

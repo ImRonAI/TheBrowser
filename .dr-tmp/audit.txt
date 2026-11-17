@@ -1,0 +1,662 @@
+
+███████╗██╗  ██╗██╗██╗     ██╗     ███████╗
+██╔════╝██║ ██╔╝██║██║     ██║     ██╔════╝
+███████╗█████╔╝ ██║██║     ██║     ███████╗
+╚════██║██╔═██╗ ██║██║     ██║     ╚════██║
+███████║██║  ██╗██║███████╗███████╗███████║
+╚══════╝╚═╝  ╚═╝╚═╝╚══════╝╚══════╝╚══════╝
+
+┌   skills 
+[?25l│
+◇  Source: https://github.com/mattpocock/skills.git
+[?25h[?25l│
+◒  Cloning repository…[1G[J◐  Cloning repository…[1G[J◓  Cloning repository…[1G[J◑  Cloning repository…[1G[J◒  Cloning repository…[1G[J◐  Cloning repository…[1G[J◓  Cloning repository…[1G[J◑  Cloning repository…[1G[J◒  Cloning repository….[1G[J◐  Cloning repository….[1G[J◓  Cloning repository….[1G[J◇  Repository cloned
+[?25h[?25l│
+[SKILLS_SKILL_SKIPPED] ⚠ Skipped /var/folders/c8/y41r0sp91172dqm_0jk3wcww0000gn/T/skills-wrMOi4/skills/in-progress/software-factory/SKILL.md — YAML parse error: Nested mappings are not allowed in compact mappings at line 2, column 14:
+
+description: Shared language for designing a software factory: the tasks it run…
+             ^
+
+[1G[J◇  Found 38 skills
+[?25h│
+●  Selected 1 skill: research
+
+│
+◇  Installation Summary ──────────────────────────────────────╮
+│                                                             │
+│                                                             │
+│  Mattpocock Skills                                          │
+│                                                             │
+│  ~/RonBrowserRebuild/.dr-tmp/audit/.agents/skills/research  │
+│    universal: Universal                                     │
+│                                                             │
+├─────────────────────────────────────────────────────────────╯
+│
+◇  Security Risk Assessments ──────────────────────────────╮
+│                                                          │
+│            Gen               Socket            Snyk      │
+│  research  Safe              0 alerts          Low Risk  │
+│                                                          │
+│  Details: https://skills.sh/mattpocock/skills            │
+│                                                          │
+├──────────────────────────────────────────────────────────╯
+[?25l│
+[1G[J◇  Installation complete
+[?25h
+│
+◇  Installed 1 skill ─────────────────────────────────────────────╮
+│                                                                 │
+│                                                                 │
+│  Mattpocock Skills                                              │
+│  ✓ research (copied)                                            │
+│    → ~/RonBrowserRebuild/.dr-tmp/audit/.agents/skills/research  │
+│                                                                 │
+├─────────────────────────────────────────────────────────────────╯
+
+│
+└  Done!  Review skills before use; they run with full agent permissions.
+
+
+███████╗██╗  ██╗██╗██╗     ██╗     ███████╗
+██╔════╝██║ ██╔╝██║██║     ██║     ██╔════╝
+███████╗█████╔╝ ██║██║     ██║     ███████╗
+╚════██║██╔═██╗ ██║██║     ██║     ╚════██║
+███████║██║  ██╗██║███████╗███████╗███████║
+╚══════╝╚═╝  ╚═╝╚═╝╚══════╝╚══════╝╚══════╝
+
+┌   skills 
+[?25l│
+◇  Source: https://github.com/k-dense-ai/scientific-agent-skills.git
+[?25h[?25l│
+◒  Cloning repository…[1G[J◐  Cloning repository…[1G[J◓  Cloning repository…[1G[J◑  Cloning repository…[1G[J◒  Cloning repository…[1G[J◐  Cloning repository…[1G[J◓  Cloning repository…[1G[J◑  Cloning repository…[1G[J◒  Cloning repository….[1G[J◐  Cloning repository….[1G[J◓  Cloning repository….[1G[J◑  Cloning repository….[1G[J◒  Cloning repository….[1G[J◐  Cloning repository….[1G[J◓  Cloning repository….[1G[J◑  Cloning repository….[1G[J◒  Cloning repository…..[1G[J◐  Cloning repository…..[1G[J◓  Cloning repository…..[1G[J◑  Cloning repository…..[1G[J◒  Cloning repository…..[1G[J◐  Cloning repository…..[1G[J◓  Cloning repository…..[1G[J◑  Cloning repository…..[1G[J◒  Cloning repository…...[1G[J◐  Cloning repository…...[1G[J◓  Cloning repository…...[1G[J◑  Cloning repository…...[1G[J◒  Cloning repository…...[1G[J◐  Cloning repository…...[1G[J◓  Cloning repository…...[1G[J◑  Cloning repository…...[1G[J◒  Cloning repository…...[1G[J◐  Cloning repository…[1G[J◓  Cloning repository…[1G[J◑  Cloning repository…[1G[J◒  Cloning repository…[1G[J◐  Cloning repository…[1G[J◓  Cloning repository…[1G[J◑  Cloning repository…[1G[J◒  Cloning repository…[1G[J◐  Cloning repository….[1G[J◓  Cloning repository….[1G[J◑  Cloning repository….[1G[J◒  Cloning repository….[1G[J◐  Cloning repository….[1G[J◓  Cloning repository….[1G[J◑  Cloning repository….[1G[J◒  Cloning repository….[1G[J◐  Cloning repository…..[1G[J◓  Cloning repository…..[1G[J◑  Cloning repository…..[1G[J◒  Cloning repository…..[1G[J◐  Cloning repository…..[1G[J◓  Cloning repository…..[1G[J◑  Cloning repository…..[1G[J◒  Cloning repository…..[1G[J◐  Cloning repository…...[1G[J◓  Cloning repository…...[1G[J◑  Cloning repository…...[1G[J◒  Cloning repository…...[1G[J◐  Cloning repository…...[1G[J◓  Cloning repository…...[1G[J◑  Cloning repository…...[1G[J◒  Cloning repository…...[1G[J◐  Cloning repository…...[1G[J◓  Cloning repository…[1G[J◑  Cloning repository…[1G[J◒  Cloning repository…[1G[J◐  Cloning repository…[1G[J◓  Cloning repository…[1G[J◑  Cloning repository…[1G[J◒  Cloning repository…[1G[J◐  Cloning repository…[1G[J◓  Cloning repository….[1G[J◑  Cloning repository….[1G[J◒  Cloning repository….[1G[J◐  Cloning repository….[1G[J◓  Cloning repository….[1G[J◑  Cloning repository….[1G[J◒  Cloning repository….[1G[J◐  Cloning repository….[1G[J◓  Cloning repository…..[1G[J◑  Cloning repository…..[1G[J◒  Cloning repository…..[1G[J◐  Cloning repository…..[1G[J◓  Cloning repository…..[1G[J◑  Cloning repository…..[1G[J◒  Cloning repository…..[1G[J◐  Cloning repository…..[1G[J◓  Cloning repository…...[1G[J◑  Cloning repository…...[1G[J◒  Cloning repository…...[1G[J◐  Cloning repository…...[1G[J◓  Cloning repository…...[1G[J◑  Cloning repository…...[1G[J◒  Cloning repository…...[1G[J◐  Cloning repository…...[1G[J◓  Cloning repository…...[1G[J◑  Cloning repository…[1G[J◒  Cloning repository…[1G[J◐  Cloning repository…[1G[J◓  Cloning repository…[1G[J◑  Cloning repository…[1G[J◒  Cloning repository…[1G[J◐  Cloning repository…[1G[J◓  Cloning repository…[1G[J◑  Cloning repository….[1G[J◒  Cloning repository….[1G[J◐  Cloning repository….[1G[J◓  Cloning repository….[1G[J◑  Cloning repository….[1G[J◒  Cloning repository….[1G[J◐  Cloning repository….[1G[J◓  Cloning repository….[1G[J◑  Cloning repository…..[1G[J◒  Cloning repository…..[1G[J◐  Cloning repository…..[1G[J◓  Cloning repository…..[1G[J◑  Cloning repository…..[1G[J◒  Cloning repository…..[1G[J◐  Cloning repository…..[1G[J◓  Cloning repository…..[1G[J◑  Cloning repository…...[1G[J◒  Cloning repository…...[1G[J◐  Cloning repository…...[1G[J◓  Cloning repository…...[1G[J◑  Cloning repository…...[1G[J◒  Cloning repository…...[1G[J◐  Cloning repository…...[1G[J◓  Cloning repository…...[1G[J◑  Cloning repository…...[1G[J◒  Cloning repository…[1G[J◐  Cloning repository…[1G[J◓  Cloning repository…[1G[J◑  Cloning repository…[1G[J◒  Cloning repository…[1G[J◐  Cloning repository…[1G[J◓  Cloning repository…[1G[J◑  Cloning repository…[1G[J◒  Cloning repository….[1G[J◐  Cloning repository….[1G[J◓  Cloning repository….[1G[J◑  Cloning repository….[1G[J◒  Cloning repository….[1G[J◐  Cloning repository….[1G[J◓  Cloning repository….[1G[J◑  Cloning repository….[1G[J◒  Cloning repository…..[1G[J◐  Cloning repository…..[1G[J◓  Cloning repository…..[1G[J◑  Cloning repository…..[1G[J◒  Cloning repository…..[1G[J◐  Cloning repository…..[1G[J◓  Cloning repository…..[1G[J◑  Cloning repository…..[1G[J◒  Cloning repository…...[1G[J◐  Cloning repository…...[1G[J◓  Cloning repository…...[1G[J◑  Cloning repository…...[1G[J◒  Cloning repository…...[1G[J◐  Cloning repository…...[1G[J◓  Cloning repository…...[1G[J◑  Cloning repository…...[1G[J◒  Cloning repository…...[1G[J◐  Cloning repository…[1G[J◓  Cloning repository…[1G[J◑  Cloning repository…[1G[J◒  Cloning repository…[1G[J◐  Cloning repository…[1G[J◓  Cloning repository…[1G[J◑  Cloning repository…[1G[J◒  Cloning repository…[1G[J◐  Cloning repository….[1G[J◓  Cloning repository….[1G[J◑  Cloning repository….[1G[J◒  Cloning repository….[1G[J◐  Cloning repository….[1G[J◓  Cloning repository….[1G[J◑  Cloning repository….[1G[J◒  Cloning repository….[1G[J◐  Cloning repository…..[1G[J◓  Cloning repository…..[1G[J◑  Cloning repository…..[1G[J◒  Cloning repository…..[1G[J◐  Cloning repository…..[1G[J◓  Cloning repository…..[1G[J◑  Cloning repository…..[1G[J◒  Cloning repository…..[1G[J◐  Cloning repository…...[1G[J◓  Cloning repository…...[1G[J◑  Cloning repository…...[1G[J◒  Cloning repository…...[1G[J◐  Cloning repository…...[1G[J◓  Cloning repository…...[1G[J◑  Cloning repository…...[1G[J◒  Cloning repository…...[1G[J◐  Cloning repository…...[1G[J◓  Cloning repository…[1G[J◑  Cloning repository…[1G[J◒  Cloning repository…[1G[J◐  Cloning repository…[1G[J◓  Cloning repository…[1G[J◑  Cloning repository…[1G[J◒  Cloning repository…[1G[J◐  Cloning repository…[1G[J◓  Cloning repository….[1G[J◑  Cloning repository….[1G[J◒  Cloning repository….[1G[J◐  Cloning repository….[1G[J◓  Cloning repository….[1G[J◑  Cloning repository….[1G[J◒  Cloning repository….[1G[J◐  Cloning repository….[1G[J◓  Cloning repository…..[1G[J◑  Cloning repository…..[1G[J◒  Cloning repository…..[1G[J◐  Cloning repository…..[1G[J◓  Cloning repository…..[1G[J◑  Cloning repository…..[1G[J◒  Cloning repository…..[1G[J◐  Cloning repository…..[1G[J◓  Cloning repository…...[1G[J◑  Cloning repository…...[1G[J◒  Cloning repository…...[1G[J◐  Cloning repository…...[1G[J◓  Cloning repository…...[1G[J◑  Cloning repository…...[1G[J◒  Cloning repository…...[1G[J◐  Cloning repository…...[1G[J◓  Cloning repository…...[1G[J◑  Cloning repository…[1G[J◒  Cloning repository…[1G[J◐  Cloning repository…[1G[J◓  Cloning repository…[1G[J◑  Cloning repository…[1G[J◒  Cloning repository…[1G[J◐  Cloning repository…[1G[J◓  Cloning repository…[1G[J◑  Cloning repository….[1G[J◒  Cloning repository….[1G[J◐  Cloning repository….[1G[J◓  Cloning repository….[1G[J◑  Cloning repository….[1G[J◒  Cloning repository….[1G[J◐  Cloning repository….[1G[J◓  Cloning repository….[1G[J◑  Cloning repository…..[1G[J◒  Cloning repository…..[1G[J◐  Cloning repository…..[1G[J◓  Cloning repository…..[1G[J◑  Cloning repository…..[1G[J◒  Cloning repository…..[1G[J◐  Cloning repository…..[1G[J◓  Cloning repository…..[1G[J◑  Cloning repository…...[1G[J◒  Cloning repository…...[1G[J◐  Cloning repository…...[1G[J◓  Cloning repository…...[1G[J◑  Cloning repository…...[1G[J◒  Cloning repository…...[1G[J◐  Cloning repository…...[1G[J◓  Cloning repository…...[1G[J◑  Cloning repository…...[1G[J◒  Cloning repository…[1G[J◐  Cloning repository…[1G[J◓  Cloning repository…[1G[J◑  Cloning repository…[1G[J◒  Cloning repository…[1G[J◐  Cloning repository…[1G[J◓  Cloning repository…[1G[J◑  Cloning repository…[1G[J◒  Cloning repository….[1G[J◇  Repository cloned
+[?25h[?25l│
+[1G[J◇  Found 177 skills
+[?25h│
+●  Selected 6 skills: citation-management, peer-review, scientific-critical-thinking, scientific-slides, scientific-visualization, scientific-writing
+
+│
+◇  Installation Summary ───────────────────────────────────────────────────────╮
+│                                                                              │
+│  ~/RonBrowserRebuild/.dr-tmp/audit/.agents/skills/citation-management        │
+│    universal: Universal                                                      │
+│                                                                              │
+│  ~/RonBrowserRebuild/.dr-tmp/audit/.agents/skills/peer-review                │
+│    universal: Universal                                                      │
+│                                                                              │
+│  ~/RonBrowserRebuild/.dr-tmp/audit/.agents/skills/scientific-critical-think  │
+│  ing                                                                         │
+│    universal: Universal                                                      │
+│                                                                              │
+│  ~/RonBrowserRebuild/.dr-tmp/audit/.agents/skills/scientific-slides          │
+│    universal: Universal                                                      │
+│                                                                              │
+│  ~/RonBrowserRebuild/.dr-tmp/audit/.agents/skills/scientific-visualization   │
+│    universal: Universal                                                      │
+│                                                                              │
+│  ~/RonBrowserRebuild/.dr-tmp/audit/.agents/skills/scientific-writing         │
+│    universal: Universal                                                      │
+│                                                                              │
+├──────────────────────────────────────────────────────────────────────────────╯
+│
+◇  Security Risk Assessments ──────────────────────────────────────────────────╮
+│                                                                              │
+│                                Gen               Socket            Snyk      │
+│  citation-management           Safe              0 alerts          Med Risk  │
+│  peer-review                   Safe              0 alerts          Low Risk  │
+│  scientific-critical-thinking  Safe              0 alerts          Low Risk  │
+│  scientific-slides             Safe              0 alerts          Low Risk  │
+│  scientific-visualization      Safe              0 alerts          Low Risk  │
+│  scientific-writing            Safe              0 alerts          Low Risk  │
+│                                                                              │
+│  Details: https://skills.sh/K-Dense-AI/scientific-agent-skills               │
+│                                                                              │
+├──────────────────────────────────────────────────────────────────────────────╯
+[?25l│
+[1G[J◇  Installation complete
+[?25h
+│
+◇  Installed 6 skills ─────────────────────────────────────────────────────────╮
+│                                                                              │
+│  ✓ citation-management (copied)                                              │
+│    → ~/RonBrowserRebuild/.dr-tmp/audit/.agents/skills/citation-management    │
+│  ✓ peer-review (copied)                                                      │
+│    → ~/RonBrowserRebuild/.dr-tmp/audit/.agents/skills/peer-review            │
+│  ✓ scientific-critical-thinking (copied)                                     │
+│    → ~/RonBrowserRebuild/.dr-tmp/audit/.agents/skills/scientific-critical-t  │
+│  hinking                                                                     │
+│  ✓ scientific-slides (copied)                                                │
+│    → ~/RonBrowserRebuild/.dr-tmp/audit/.agents/skills/scientific-slides      │
+│  ✓ scientific-visualization (copied)                                         │
+│    →                                                                         │
+│  ~/RonBrowserRebuild/.dr-tmp/audit/.agents/skills/scientific-visualization   │
+│  ✓ scientific-writing (copied)                                               │
+│    → ~/RonBrowserRebuild/.dr-tmp/audit/.agents/skills/scientific-writing     │
+│                                                                              │
+├──────────────────────────────────────────────────────────────────────────────╯
+
+│
+└  Done!  Review skills before use; they run with full agent permissions.
+
+
+███████╗██╗  ██╗██╗██╗     ██╗     ███████╗
+██╔════╝██║ ██╔╝██║██║     ██║     ██╔════╝
+███████╗█████╔╝ ██║██║     ██║     ███████╗
+╚════██║██╔═██╗ ██║██║     ██║     ╚════██║
+███████║██║  ██╗██║███████╗███████╗███████║
+╚══════╝╚═╝  ╚═╝╚═╝╚══════╝╚══════╝╚══════╝
+
+┌   skills 
+[?25l│
+◇  Source: https://github.com/wshobson/agents.git
+[?25h[?25l│
+◒  Cloning repository…[1G[J◐  Cloning repository…[1G[J◓  Cloning repository…[1G[J◑  Cloning repository…[1G[J◒  Cloning repository…[1G[J◐  Cloning repository…[1G[J◓  Cloning repository…[1G[J◑  Cloning repository…[1G[J◒  Cloning repository….[1G[J◐  Cloning repository….[1G[J◓  Cloning repository….[1G[J◑  Cloning repository….[1G[J◒  Cloning repository….[1G[J◐  Cloning repository….[1G[J◓  Cloning repository….[1G[J◑  Cloning repository….[1G[J◒  Cloning repository…..[1G[J◐  Cloning repository…..[1G[J◓  Cloning repository…..[1G[J◑  Cloning repository…..[1G[J◒  Cloning repository…..[1G[J◐  Cloning repository…..[1G[J◓  Cloning repository…..[1G[J◑  Cloning repository…..[1G[J◒  Cloning repository…...[1G[J◇  Repository cloned
+[?25h[?25l│
+[1G[J◇  Found 185 skills
+[?25h│
+●  Selected 1 skill: data-storytelling
+
+│
+◇  Installation Summary ───────────────────────────────────────────────╮
+│                                                                      │
+│  ~/RonBrowserRebuild/.dr-tmp/audit/.agents/skills/data-storytelling  │
+│    universal: Universal                                              │
+│                                                                      │
+├──────────────────────────────────────────────────────────────────────╯
+│
+◇  Security Risk Assessments ───────────────────────────────────────╮
+│                                                                   │
+│                     Gen               Socket            Snyk      │
+│  data-storytelling  Safe              0 alerts          Low Risk  │
+│                                                                   │
+│  Details: https://skills.sh/wshobson/agents                       │
+│                                                                   │
+├───────────────────────────────────────────────────────────────────╯
+[?25l│
+[1G[J◇  Installation complete
+[?25h
+│
+◇  Installed 1 skill ──────────────────────────────────────────────────────╮
+│                                                                          │
+│  ✓ data-storytelling (copied)                                            │
+│    → ~/RonBrowserRebuild/.dr-tmp/audit/.agents/skills/data-storytelling  │
+│                                                                          │
+├──────────────────────────────────────────────────────────────────────────╯
+
+│
+└  Done!  Review skills before use; they run with full agent permissions.
+
+
+███████╗██╗  ██╗██╗██╗     ██╗     ███████╗
+██╔════╝██║ ██╔╝██║██║     ██║     ██╔════╝
+███████╗█████╔╝ ██║██║     ██║     ███████╗
+╚════██║██╔═██╗ ██║██║     ██║     ╚════██║
+███████║██║  ██╗██║███████╗███████╗███████║
+╚══════╝╚═╝  ╚═╝╚═╝╚══════╝╚══════╝╚══════╝
+
+┌   skills 
+[?25l│
+◇  Source: https://github.com/anthropics/knowledge-work-plugins.git
+[?25h[?25l│
+◒  Cloning repository…[1G[J◐  Cloning repository…[1G[J◓  Cloning repository…[1G[J◑  Cloning repository…[1G[J◒  Cloning repository…[1G[J◐  Cloning repository…[1G[J◓  Cloning repository…[1G[J◑  Cloning repository…[1G[J◒  Cloning repository….[1G[J◐  Cloning repository….[1G[J◓  Cloning repository….[1G[J◑  Cloning repository….[1G[J◒  Cloning repository….[1G[J◐  Cloning repository….[1G[J◓  Cloning repository….[1G[J◑  Cloning repository….[1G[J◒  Cloning repository…..[1G[J◐  Cloning repository…..[1G[J◓  Cloning repository…..[1G[J◇  Repository cloned
+[?25h[?25l│
+[1G[J◇  Found 218 skills
+[?25h│
+●  Selected 1 skill: data-visualization
+
+│
+◇  Installation Summary ────────────────────────────────────────────────╮
+│                                                                       │
+│  ~/RonBrowserRebuild/.dr-tmp/audit/.agents/skills/data-visualization  │
+│    universal: Universal                                               │
+│                                                                       │
+├───────────────────────────────────────────────────────────────────────╯
+│
+◇  Security Risk Assessments ────────────────────────────────────────╮
+│                                                                    │
+│                      Gen               Socket            Snyk      │
+│  data-visualization  Safe              0 alerts          Low Risk  │
+│                                                                    │
+│  Details: https://skills.sh/anthropics/knowledge-work-plugins      │
+│                                                                    │
+├────────────────────────────────────────────────────────────────────╯
+[?25l│
+[1G[J◇  Installation complete
+[?25h
+│
+◇  Installed 1 skill ───────────────────────────────────────────────────────╮
+│                                                                           │
+│  ✓ data-visualization (copied)                                            │
+│    → ~/RonBrowserRebuild/.dr-tmp/audit/.agents/skills/data-visualization  │
+│                                                                           │
+├───────────────────────────────────────────────────────────────────────────╯
+
+│
+└  Done!  Review skills before use; they run with full agent permissions.
+
+
+███████╗██╗  ██╗██╗██╗     ██╗     ███████╗
+██╔════╝██║ ██╔╝██║██║     ██║     ██╔════╝
+███████╗█████╔╝ ██║██║     ██║     ███████╗
+╚════██║██╔═██╗ ██║██║     ██║     ╚════██║
+███████║██║  ██╗██║███████╗███████╗███████║
+╚══════╝╚═╝  ╚═╝╚═╝╚══════╝╚══════╝╚══════╝
+
+┌   skills 
+[?25l│
+◇  Source: https://github.com/anthropics/skills.git
+[?25h[?25l│
+◒  Cloning repository…[1G[J◐  Cloning repository…[1G[J◓  Cloning repository…[1G[J◑  Cloning repository…[1G[J◒  Cloning repository…[1G[J◐  Cloning repository…[1G[J◓  Cloning repository…[1G[J◑  Cloning repository…[1G[J◒  Cloning repository….[1G[J◐  Cloning repository….[1G[J◓  Cloning repository….[1G[J◑  Cloning repository….[1G[J◒  Cloning repository….[1G[J◐  Cloning repository….[1G[J◓  Cloning repository….[1G[J◑  Cloning repository….[1G[J◒  Cloning repository…..[1G[J◐  Cloning repository…..[1G[J◓  Cloning repository…..[1G[J◇  Repository cloned
+[?25h[?25l│
+[1G[J◇  Found 20 skills
+[?25h│
+●  Selected 2 skills: pdf, theme-factory
+
+│
+◇  Installation Summary ───────────────────────────────────────────╮
+│                                                                  │
+│                                                                  │
+│  Document Skills                                                 │
+│                                                                  │
+│  ~/RonBrowserRebuild/.dr-tmp/audit/.agents/skills/pdf            │
+│    universal: Universal                                          │
+│                                                                  │
+│  Example Skills                                                  │
+│                                                                  │
+│  ~/RonBrowserRebuild/.dr-tmp/audit/.agents/skills/theme-factory  │
+│    universal: Universal                                          │
+│                                                                  │
+├──────────────────────────────────────────────────────────────────╯
+│
+◇  Security Risk Assessments ───────────────────────────────────╮
+│                                                               │
+│                 Gen               Socket            Snyk      │
+│  pdf            Safe              0 alerts          Low Risk  │
+│  theme-factory  Safe              0 alerts          Low Risk  │
+│                                                               │
+│  Details: https://skills.sh/anthropics/skills                 │
+│                                                               │
+├───────────────────────────────────────────────────────────────╯
+[?25l│
+[1G[J◇  Installation complete
+[?25h
+│
+◇  Installed 2 skills ─────────────────────────────────────────────────╮
+│                                                                      │
+│                                                                      │
+│  Document Skills                                                     │
+│  ✓ pdf (copied)                                                      │
+│    → ~/RonBrowserRebuild/.dr-tmp/audit/.agents/skills/pdf            │
+│                                                                      │
+│  Example Skills                                                      │
+│  ✓ theme-factory (copied)                                            │
+│    → ~/RonBrowserRebuild/.dr-tmp/audit/.agents/skills/theme-factory  │
+│                                                                      │
+├──────────────────────────────────────────────────────────────────────╯
+
+│
+└  Done!  Review skills before use; they run with full agent permissions.
+
+
+███████╗██╗  ██╗██╗██╗     ██╗     ███████╗
+██╔════╝██║ ██╔╝██║██║     ██║     ██╔════╝
+███████╗█████╔╝ ██║██║     ██║     ███████╗
+╚════██║██╔═██╗ ██║██║     ██║     ╚════██║
+███████║██║  ██╗██║███████╗███████╗███████║
+╚══════╝╚═╝  ╚═╝╚═╝╚══════╝╚══════╝╚══════╝
+
+┌   skills 
+[?25l│
+◇  Source: https://github.com/slidevjs/slidev.git
+[?25h[?25l│
+◒  Cloning repository…[1G[J◐  Cloning repository…[1G[J◓  Cloning repository…[1G[J◑  Cloning repository…[1G[J◒  Cloning repository…[1G[J◐  Cloning repository…[1G[J◓  Cloning repository…[1G[J◑  Cloning repository…[1G[J◒  Cloning repository….[1G[J◐  Cloning repository….[1G[J◓  Cloning repository….[1G[J◑  Cloning repository….[1G[J◒  Cloning repository….[1G[J◐  Cloning repository….[1G[J◓  Cloning repository….[1G[J◑  Cloning repository….[1G[J◒  Cloning repository…..[1G[J◐  Cloning repository…..[1G[J◓  Cloning repository…..[1G[J◑  Cloning repository…..[1G[J◒  Cloning repository…..[1G[J◐  Cloning repository…..[1G[J◓  Cloning repository…..[1G[J◑  Cloning repository…..[1G[J◒  Cloning repository…...[1G[J◐  Cloning repository…...[1G[J◓  Cloning repository…...[1G[J◑  Cloning repository…...[1G[J◒  Cloning repository…...[1G[J◐  Cloning repository…...[1G[J◓  Cloning repository…...[1G[J◑  Cloning repository…...[1G[J◒  Cloning repository…...[1G[J◐  Cloning repository…[1G[J◓  Cloning repository…[1G[J◑  Cloning repository…[1G[J◒  Cloning repository…[1G[J◇  Repository cloned
+[?25h[?25l│
+[1G[J◇  Found 1 skill
+[?25h│
+●  Selected 1 skill: slidev
+
+│
+◇  Installation Summary ────────────────────────────────────╮
+│                                                           │
+│  ~/RonBrowserRebuild/.dr-tmp/audit/.agents/skills/slidev  │
+│    universal: Universal                                   │
+│                                                           │
+├───────────────────────────────────────────────────────────╯
+│
+◇  Security Risk Assessments ────────────────────────────╮
+│                                                        │
+│          Gen               Socket            Snyk      │
+│  slidev  Safe              0 alerts          Low Risk  │
+│                                                        │
+│  Details: https://skills.sh/slidevjs/slidev            │
+│                                                        │
+├────────────────────────────────────────────────────────╯
+[?25l│
+[1G[J◇  Installation complete
+[?25h
+│
+◇  Installed 1 skill ───────────────────────────────────────────╮
+│                                                               │
+│  ✓ slidev (copied)                                            │
+│    → ~/RonBrowserRebuild/.dr-tmp/audit/.agents/skills/slidev  │
+│                                                               │
+├───────────────────────────────────────────────────────────────╯
+
+│
+└  Done!  Review skills before use; they run with full agent permissions.
+
+
+███████╗██╗  ██╗██╗██╗     ██╗     ███████╗
+██╔════╝██║ ██╔╝██║██║     ██║     ██╔════╝
+███████╗█████╔╝ ██║██║     ██║     ███████╗
+╚════██║██╔═██╗ ██║██║     ██║     ╚════██║
+███████║██║  ██╗██║███████╗███████╗███████║
+╚══════╝╚═╝  ╚═╝╚═╝╚══════╝╚══════╝╚══════╝
+
+┌   skills 
+[?25l│
+◇  Source: https://github.com/coreyhaines31/marketingskills.git
+[?25h[?25l│
+◒  Cloning repository…[1G[J◐  Cloning repository…[1G[J◓  Cloning repository…[1G[J◑  Cloning repository…[1G[J◒  Cloning repository…[1G[J◐  Cloning repository…[1G[J◓  Cloning repository…[1G[J◑  Cloning repository…[1G[J◒  Cloning repository….[1G[J◐  Cloning repository….[1G[J◓  Cloning repository….[1G[J◑  Cloning repository….[1G[J◒  Cloning repository….[1G[J◐  Cloning repository….[1G[J◓  Cloning repository….[1G[J◑  Cloning repository….[1G[J◒  Cloning repository…..[1G[J◐  Cloning repository…..[1G[J◓  Cloning repository…..[1G[J◇  Repository cloned
+[?25h[?25l│
+[1G[J◇  Found 53 skills
+[?25h│
+●  Selected 1 skill: copy-editing
+
+│
+◇  Installation Summary ──────────────────────────────────────────╮
+│                                                                 │
+│  ~/RonBrowserRebuild/.dr-tmp/audit/.agents/skills/copy-editing  │
+│    universal: Universal                                         │
+│                                                                 │
+├─────────────────────────────────────────────────────────────────╯
+│
+◇  Security Risk Assessments ──────────────────────────────────╮
+│                                                              │
+│                Gen               Socket            Snyk      │
+│  copy-editing  Safe              0 alerts          Low Risk  │
+│                                                              │
+│  Details: https://skills.sh/coreyhaines31/marketingskills    │
+│                                                              │
+├──────────────────────────────────────────────────────────────╯
+[?25l│
+[1G[J◇  Installation complete
+[?25h
+│
+◇  Installed 1 skill ─────────────────────────────────────────────────╮
+│                                                                     │
+│  ✓ copy-editing (copied)                                            │
+│    → ~/RonBrowserRebuild/.dr-tmp/audit/.agents/skills/copy-editing  │
+│                                                                     │
+├─────────────────────────────────────────────────────────────────────╯
+
+│
+└  Done!  Review skills before use; they run with full agent permissions.
+
+
+███████╗██╗  ██╗██╗██╗     ██╗     ███████╗
+██╔════╝██║ ██╔╝██║██║     ██║     ██╔════╝
+███████╗█████╔╝ ██║██║     ██║     ███████╗
+╚════██║██╔═██╗ ██║██║     ██║     ╚════██║
+███████║██║  ██╗██║███████╗███████╗███████║
+╚══════╝╚═╝  ╚═╝╚═╝╚══════╝╚══════╝╚══════╝
+
+┌   skills 
+[?25l│
+◇  Source: https://github.com/obra/superpowers.git
+[?25h[?25l│
+◒  Cloning repository…[1G[J◐  Cloning repository…[1G[J◓  Cloning repository…[1G[J◑  Cloning repository…[1G[J◒  Cloning repository…[1G[J◐  Cloning repository…[1G[J◓  Cloning repository…[1G[J◑  Cloning repository…[1G[J◒  Cloning repository….[1G[J◐  Cloning repository….[1G[J◓  Cloning repository….[1G[J◑  Cloning repository….[1G[J◒  Cloning repository….[1G[J◇  Repository cloned
+[?25h[?25l│
+[1G[J◇  Found 15 skills
+[?25h│
+●  Selected 1 skill: verification-before-completion
+
+│
+◇  Installation Summary ───────────────────────────────────────────────────────╮
+│                                                                              │
+│  ~/RonBrowserRebuild/.dr-tmp/audit/.agents/skills/verification-before-compl  │
+│  etion                                                                       │
+│    universal: Universal                                                      │
+│                                                                              │
+├──────────────────────────────────────────────────────────────────────────────╯
+│
+◇  Security Risk Assessments ────────────────────────────────────────────────╮
+│                                                                            │
+│                                  Gen               Socket            Snyk  │
+│  verification-before-completion  Safe              0 alerts          Low   │
+│  Risk                                                                      │
+│                                                                            │
+│  Details: https://skills.sh/obra/superpowers                               │
+│                                                                            │
+├────────────────────────────────────────────────────────────────────────────╯
+[?25l│
+[1G[J◇  Installation complete
+[?25h
+│
+◇  Installed 1 skill ──────────────────────────────────────────────────────────╮
+│                                                                              │
+│  ✓ verification-before-completion (copied)                                   │
+│    → ~/RonBrowserRebuild/.dr-tmp/audit/.agents/skills/verification-before-c  │
+│  ompletion                                                                   │
+│                                                                              │
+├──────────────────────────────────────────────────────────────────────────────╯
+
+│
+└  Done!  Review skills before use; they run with full agent permissions.
+
+
+███████╗██╗  ██╗██╗██╗     ██╗     ███████╗
+██╔════╝██║ ██╔╝██║██║     ██║     ██╔════╝
+███████╗█████╔╝ ██║██║     ██║     ███████╗
+╚════██║██╔═██╗ ██║██║     ██║     ╚════██║
+███████║██║  ██╗██║███████╗███████╗███████║
+╚══════╝╚═╝  ╚═╝╚═╝╚══════╝╚══════╝╚══════╝
+
+┌   skills 
+[?25l│
+◇  Source: https://github.com/vercel-labs/skills.git
+[?25h[?25l│
+◒  Fetching skills…[1G[J◐  Fetching skills…[1G[J◓  Fetching skills…[1G[J◑  Fetching skills…[1G[J◒  Fetching skills…[1G[J◐  Fetching skills…[1G[J◓  Fetching skills…[1G[J◑  Fetching skills…[1G[J◇  Found 1 skill
+[?25h│
+●  Selected 1 skill: find-skills
+
+│
+◇  Installation Summary ─────────────────────────────────────────╮
+│                                                                │
+│  ~/RonBrowserRebuild/.dr-tmp/audit/.agents/skills/find-skills  │
+│    universal: Universal                                        │
+│                                                                │
+├────────────────────────────────────────────────────────────────╯
+│
+◇  Security Risk Assessments ─────────────────────────────────╮
+│                                                             │
+│               Gen               Socket            Snyk      │
+│  find-skills  Safe              0 alerts          Med Risk  │
+│                                                             │
+│  Details: https://skills.sh/vercel-labs/skills              │
+│                                                             │
+├─────────────────────────────────────────────────────────────╯
+[?25l│
+[1G[J◇  Installation complete
+[?25h
+│
+◇  Installed 1 skill ────────────────────────────────────────────────╮
+│                                                                    │
+│  ✓ find-skills (copied)                                            │
+│    → ~/RonBrowserRebuild/.dr-tmp/audit/.agents/skills/find-skills  │
+│                                                                    │
+├────────────────────────────────────────────────────────────────────╯
+
+│
+└  Done!  Review skills before use; they run with full agent permissions.
+
+AUDIT_DONE
+[?25l│
+◇  Found 15 unique installed skill(s)
+[?25h[?25l│
+◇  Removal process complete
+[?25h│
+◆  Successfully removed 1 skill(s)
+
+│
+└  Done!
+
+
+███████╗██╗  ██╗██╗██╗     ██╗     ███████╗
+██╔════╝██║ ██╔╝██║██║     ██║     ██╔════╝
+███████╗█████╔╝ ██║██║     ██║     ███████╗
+╚════██║██╔═██╗ ██║██║     ██║     ╚════██║
+███████║██║  ██╗██║███████╗███████╗███████║
+╚══════╝╚═╝  ╚═╝╚═╝╚══════╝╚══════╝╚══════╝
+
+┌   skills 
+[?25l│
+◇  Source: https://github.com/k-dense-ai/scientific-agent-skills.git
+[?25h[?25l│
+◒  Cloning repository…[1G[J◐  Cloning repository…[1G[J◓  Cloning repository…[1G[J◑  Cloning repository…[1G[J◒  Cloning repository…[1G[J◐  Cloning repository…[1G[J◓  Cloning repository…[1G[J◑  Cloning repository…[1G[J◒  Cloning repository….[1G[J◐  Cloning repository….[1G[J◓  Cloning repository….[1G[J◑  Cloning repository….[1G[J◒  Cloning repository….[1G[J◐  Cloning repository….[1G[J◓  Cloning repository….[1G[J◑  Cloning repository….[1G[J◒  Cloning repository…..[1G[J◐  Cloning repository…..[1G[J◓  Cloning repository…..[1G[J◑  Cloning repository…..[1G[J◒  Cloning repository…..[1G[J◐  Cloning repository…..[1G[J◓  Cloning repository…..[1G[J◑  Cloning repository…..[1G[J◒  Cloning repository…...[1G[J◐  Cloning repository…...[1G[J◓  Cloning repository…...[1G[J◑  Cloning repository…...[1G[J◒  Cloning repository…...[1G[J◐  Cloning repository…...[1G[J◓  Cloning repository…...[1G[J◑  Cloning repository…...[1G[J◒  Cloning repository…...[1G[J◐  Cloning repository…[1G[J◓  Cloning repository…[1G[J◑  Cloning repository…[1G[J◒  Cloning repository…[1G[J◐  Cloning repository…[1G[J◓  Cloning repository…[1G[J◑  Cloning repository…[1G[J◒  Cloning repository…[1G[J◐  Cloning repository….[1G[J◓  Cloning repository….[1G[J◑  Cloning repository….[1G[J◒  Cloning repository….[1G[J◐  Cloning repository….[1G[J◓  Cloning repository….[1G[J◑  Cloning repository….[1G[J◒  Cloning repository….[1G[J◐  Cloning repository…..[1G[J◓  Cloning repository…..[1G[J◑  Cloning repository…..[1G[J◒  Cloning repository…..[1G[J◐  Cloning repository…..[1G[J◓  Cloning repository…..[1G[J◑  Cloning repository…..[1G[J◒  Cloning repository…..[1G[J◐  Cloning repository…...[1G[J◓  Cloning repository…...[1G[J◑  Cloning repository…...[1G[J◒  Cloning repository…...[1G[J◐  Cloning repository…...[1G[J◓  Cloning repository…...[1G[J◑  Cloning repository…...[1G[J◒  Cloning repository…...[1G[J◐  Cloning repository…...[1G[J◓  Cloning repository…[1G[J◑  Cloning repository…[1G[J◒  Cloning repository…[1G[J◐  Cloning repository…[1G[J◓  Cloning repository…[1G[J◑  Cloning repository…[1G[J◒  Cloning repository…[1G[J◐  Cloning repository…[1G[J◓  Cloning repository….[1G[J◑  Cloning repository….[1G[J◒  Cloning repository….[1G[J◐  Cloning repository….[1G[J◓  Cloning repository….[1G[J◑  Cloning repository….[1G[J◒  Cloning repository….[1G[J◐  Cloning repository….[1G[J◓  Cloning repository…..[1G[J◑  Cloning repository…..[1G[J◒  Cloning repository…..[1G[J◐  Cloning repository…..[1G[J◓  Cloning repository…..[1G[J◑  Cloning repository…..[1G[J◒  Cloning repository…..[1G[J◐  Cloning repository…..[1G[J◓  Cloning repository…...[1G[J◑  Cloning repository…...[1G[J◒  Cloning repository…...[1G[J◐  Cloning repository…...[1G[J◓  Cloning repository…...[1G[J◑  Cloning repository…...[1G[J◒  Cloning repository…...[1G[J◐  Cloning repository…...[1G[J◓  Cloning repository…...[1G[J◑  Cloning repository…[1G[J◒  Cloning repository…[1G[J◐  Cloning repository…[1G[J◓  Cloning repository…[1G[J◑  Cloning repository…[1G[J◒  Cloning repository…[1G[J◐  Cloning repository…[1G[J◓  Cloning repository…[1G[J◑  Cloning repository….[1G[J◒  Cloning repository….[1G[J◐  Cloning repository….[1G[J◓  Cloning repository….[1G[J◑  Cloning repository….[1G[J◒  Cloning repository….[1G[J◐  Cloning repository….[1G[J◓  Cloning repository….[1G[J◑  Cloning repository…..[1G[J◒  Cloning repository…..[1G[J◐  Cloning repository…..[1G[J◓  Cloning repository…..[1G[J◑  Cloning repository…..[1G[J◒  Cloning repository…..[1G[J◐  Cloning repository…..[1G[J◓  Cloning repository…..[1G[J◑  Cloning repository…...[1G[J◒  Cloning repository…...[1G[J◐  Cloning repository…...[1G[J◓  Cloning repository…...[1G[J◑  Cloning repository…...[1G[J◒  Cloning repository…...[1G[J◐  Cloning repository…...[1G[J◓  Cloning repository…...[1G[J◑  Cloning repository…...[1G[J◒  Cloning repository…[1G[J◐  Cloning repository…[1G[J◓  Cloning repository…[1G[J◑  Cloning repository…[1G[J◒  Cloning repository…[1G[J◐  Cloning repository…[1G[J◓  Cloning repository…[1G[J◑  Cloning repository…[1G[J◒  Cloning repository….[1G[J◐  Cloning repository….[1G[J◓  Cloning repository….[1G[J◑  Cloning repository….[1G[J◒  Cloning repository….[1G[J◐  Cloning repository….[1G[J◓  Cloning repository….[1G[J◑  Cloning repository….[1G[J◒  Cloning repository…..[1G[J◐  Cloning repository…..[1G[J◓  Cloning repository…..[1G[J◑  Cloning repository…..[1G[J◒  Cloning repository…..[1G[J◐  Cloning repository…..[1G[J◓  Cloning repository…..[1G[J◑  Cloning repository…..[1G[J◒  Cloning repository…...[1G[J◐  Cloning repository…...[1G[J◓  Cloning repository…...[1G[J◑  Cloning repository…...[1G[J◒  Cloning repository…...[1G[J◐  Cloning repository…...[1G[J◓  Cloning repository…...[1G[J◑  Cloning repository…...[1G[J◒  Cloning repository…...[1G[J◐  Cloning repository…[1G[J◓  Cloning repository…[1G[J◑  Cloning repository…[1G[J◒  Cloning repository…[1G[J◐  Cloning repository…[1G[J◓  Cloning repository…[1G[J◑  Cloning repository…[1G[J◒  Cloning repository…[1G[J◐  Cloning repository….[1G[J◓  Cloning repository….[1G[J◑  Cloning repository….[1G[J◒  Cloning repository….[1G[J◐  Cloning repository….[1G[J◓  Cloning repository….[1G[J◑  Cloning repository….[1G[J◒  Cloning repository….[1G[J◐  Cloning repository…..[1G[J◓  Cloning repository…..[1G[J◑  Cloning repository…..[1G[J◒  Cloning repository…..[1G[J◐  Cloning repository…..[1G[J◓  Cloning repository…..[1G[J◑  Cloning repository…..[1G[J◒  Cloning repository…..[1G[J◐  Cloning repository…...[1G[J◓  Cloning repository…...[1G[J◑  Cloning repository…...[1G[J◒  Cloning repository…...[1G[J◐  Cloning repository…...[1G[J◓  Cloning repository…...[1G[J◑  Cloning repository…...[1G[J◒  Cloning repository…...[1G[J◐  Cloning repository…...[1G[J◓  Cloning repository…[1G[J◑  Cloning repository…[1G[J◒  Cloning repository…[1G[J◐  Cloning repository…[1G[J◓  Cloning repository…[1G[J◑  Cloning repository…[1G[J◒  Cloning repository…[1G[J◐  Cloning repository…[1G[J◓  Cloning repository….[1G[J◑  Cloning repository….[1G[J◒  Cloning repository….[1G[J◐  Cloning repository….[1G[J◓  Cloning repository….[1G[J◑  Cloning repository….[1G[J◒  Cloning repository….[1G[J◐  Cloning repository….[1G[J◓  Cloning repository…..[1G[J◑  Cloning repository…..[1G[J◒  Cloning repository…..[1G[J◐  Cloning repository…..[1G[J◓  Cloning repository…..[1G[J◑  Cloning repository…..[1G[J◒  Cloning repository…..[1G[J◐  Cloning repository…..[1G[J◓  Cloning repository…...[1G[J◑  Cloning repository…...[1G[J◒  Cloning repository…...[1G[J◐  Cloning repository…...[1G[J◓  Cloning repository…...[1G[J◑  Cloning repository…...[1G[J◒  Cloning repository…...[1G[J◐  Cloning repository…...[1G[J◓  Cloning repository…...[1G[J◑  Cloning repository…[1G[J◒  Cloning repository…[1G[J◐  Cloning repository…[1G[J◓  Cloning repository…[1G[J◑  Cloning repository…[1G[J◒  Cloning repository…[1G[J◐  Cloning repository…[1G[J◓  Cloning repository…[1G[J◑  Cloning repository….[1G[J◒  Cloning repository….[1G[J◐  Cloning repository….[1G[J◓  Cloning repository….[1G[J◑  Cloning repository….[1G[J◒  Cloning repository….[1G[J◐  Cloning repository….[1G[J◓  Cloning repository….[1G[J◑  Cloning repository…..[1G[J◒  Cloning repository…..[1G[J◐  Cloning repository…..[1G[J◓  Cloning repository…..[1G[J◑  Cloning repository…..[1G[J◒  Cloning repository…..[1G[J◐  Cloning repository…..[1G[J◓  Cloning repository…..[1G[J◑  Cloning repository…...[1G[J◒  Cloning repository…...[1G[J◐  Cloning repository…...[1G[J◓  Cloning repository…...[1G[J◑  Cloning repository…...[1G[J◒  Cloning repository…...[1G[J◐  Cloning repository…...[1G[J◓  Cloning repository…...[1G[J◑  Cloning repository…...[1G[J◒  Cloning repository…[1G[J◐  Cloning repository…[1G[J◓  Cloning repository…[1G[J◑  Cloning repository…[1G[J◒  Cloning repository…[1G[J◐  Cloning repository…[1G[J◓  Cloning repository…[1G[J◑  Cloning repository…[1G[J◒  Cloning repository….[1G[J◐  Cloning repository….[1G[J◓  Cloning repository….[1G[J◑  Cloning repository….[1G[J◒  Cloning repository….[1G[J◐  Cloning repository….[1G[J◓  Cloning repository….[1G[J◑  Cloning repository….[1G[J◒  Cloning repository…..[1G[J◐  Cloning repository…..[1G[J◓  Cloning repository…..[1G[J◑  Cloning repository…..[1G[J◒  Cloning repository…..[1G[J◐  Cloning repository…..[1G[J◓  Cloning repository…..[1G[J◑  Cloning repository…..[1G[J◒  Cloning repository…...[1G[J◐  Cloning repository…...[1G[J◓  Cloning repository…...[1G[J◑  Cloning repository…...[1G[J◒  Cloning repository…...[1G[J◐  Cloning repository…...[1G[J◓  Cloning repository…...[1G[J◑  Cloning repository…...[1G[J◒  Cloning repository…...[1G[J◐  Cloning repository…[1G[J◓  Cloning repository…[1G[J◑  Cloning repository…[1G[J◒  Cloning repository…[1G[J◐  Cloning repository…[1G[J◓  Cloning repository…[1G[J◑  Cloning repository…[1G[J◒  Cloning repository…[1G[J◐  Cloning repository….[1G[J◓  Cloning repository….[1G[J◑  Cloning repository….[1G[J◒  Cloning repository….[1G[J◐  Cloning repository….[1G[J◓  Cloning repository….[1G[J◑  Cloning repository….[1G[J◒  Cloning repository….[1G[J◐  Cloning repository…..[1G[J◓  Cloning repository…..[1G[J◑  Cloning repository…..[1G[J◒  Cloning repository…..[1G[J◐  Cloning repository…..[1G[J◓  Cloning repository…..[1G[J◑  Cloning repository…..[1G[J◒  Cloning repository…..[1G[J◐  Cloning repository…...[1G[J◓  Cloning repository…...[1G[J◑  Cloning repository…...[1G[J◒  Cloning repository…...[1G[J◐  Cloning repository…...[1G[J◓  Cloning repository…...[1G[J◑  Cloning repository…...[1G[J◒  Cloning repository…...[1G[J◐  Cloning repository…...[1G[J◓  Cloning repository…[1G[J◑  Cloning repository…[1G[J◒  Cloning repository…[1G[J◐  Cloning repository…[1G[J◓  Cloning repository…[1G[J◑  Cloning repository…[1G[J◒  Cloning repository…[1G[J◐  Cloning repository…[1G[J◓  Cloning repository….[1G[J◑  Cloning repository….[1G[J◒  Cloning repository….[1G[J◐  Cloning repository….[1G[J◓  Cloning repository….[1G[J◑  Cloning repository….[1G[J◒  Cloning repository….[1G[J◐  Cloning repository….[1G[J◓  Cloning repository…..[1G[J◑  Cloning repository…..[1G[J◒  Cloning repository…..[1G[J◐  Cloning repository…..[1G[J◓  Cloning repository…..[1G[J◑  Cloning repository…..[1G[J◒  Cloning repository…..[1G[J◐  Cloning repository…..[1G[J◓  Cloning repository…...[1G[J◑  Cloning repository…...[1G[J◒  Cloning repository…...[1G[J◐  Cloning repository…...[1G[J◓  Cloning repository…...[1G[J◑  Cloning repository…...[1G[J◒  Cloning repository…...[1G[J◐  Cloning repository…...[1G[J◓  Cloning repository…...[1G[J◑  Cloning repository…[1G[J◒  Cloning repository…[1G[J◐  Cloning repository…[1G[J◓  Cloning repository…[1G[J◑  Cloning repository…[1G[J◒  Cloning repository…[1G[J◐  Cloning repository…[1G[J◓  Cloning repository…[1G[J◑  Cloning repository….[1G[J◒  Cloning repository….[1G[J◐  Cloning repository….[1G[J◓  Cloning repository….[1G[J◑  Cloning repository….[1G[J◒  Cloning repository….[1G[J◐  Cloning repository….[1G[J◓  Cloning repository….[1G[J◑  Cloning repository…..[1G[J◒  Cloning repository…..[1G[J◐  Cloning repository…..[1G[J◓  Cloning repository…..[1G[J◑  Cloning repository…..[1G[J◒  Cloning repository…..[1G[J◐  Cloning repository…..[1G[J◓  Cloning repository…..[1G[J◑  Cloning repository…...[1G[J◒  Cloning repository…...[1G[J◐  Cloning repository…...[1G[J◓  Cloning repository…...[1G[J◑  Cloning repository…...[1G[J◒  Cloning repository…...[1G[J◐  Cloning repository…...[1G[J◓  Cloning repository…...[1G[J◑  Cloning repository…...[1G[J◒  Cloning repository…[1G[J◐  Cloning repository…[1G[J◓  Cloning repository…[1G[J◑  Cloning repository…[1G[J◒  Cloning repository…[1G[J◐  Cloning repository…[1G[J◓  Cloning repository…[1G[J◑  Cloning repository…[1G[J◒  Cloning repository….[1G[J◐  Cloning repository….[1G[J◓  Cloning repository….[1G[J◑  Cloning repository….[1G[J◒  Cloning repository….[1G[J◐  Cloning repository….[1G[J◓  Cloning repository….[1G[J◑  Cloning repository….[1G[J◒  Cloning repository…..[1G[J◐  Cloning repository…..[1G[J◓  Cloning repository…..[1G[J◑  Cloning repository…..[1G[J◒  Cloning repository…..[1G[J◐  Cloning repository…..[1G[J◓  Cloning repository…..[1G[J◑  Cloning repository…..[1G[J◒  Cloning repository…...[1G[J◐  Cloning repository…...[1G[J◓  Cloning repository…...[1G[J◑  Cloning repository…...[1G[J◒  Cloning repository…...[1G[J◐  Cloning repository…...[1G[J◓  Cloning repository…...[1G[J◑  Cloning repository…...[1G[J◒  Cloning repository…...[1G[J◐  Cloning repository…[1G[J◓  Cloning repository…[1G[J◑  Cloning repository…[1G[J◒  Cloning repository…[1G[J◐  Cloning repository…[1G[J◓  Cloning repository…[1G[J◑  Cloning repository…[1G[J◒  Cloning repository…[1G[J◐  Cloning repository….[1G[J◓  Cloning repository….[1G[J◑  Cloning repository….[1G[J◒  Cloning repository….[1G[J◐  Cloning repository….[1G[J◇  Repository cloned
+[?25h[?25l│
+[1G[J◇  Found 177 skills
+[?25h│
+●  Selected 1 skill: scientific-critical-thinking
+
+│
+◇  Installation Summary ───────────────────────────────────────────────────────╮
+│                                                                              │
+│  ~/RonBrowserRebuild/agent/skills/deep-research/.agents/skills/scientific-c  │
+│  ritical-thinking                                                            │
+│    universal: Universal                                                      │
+│                                                                              │
+├──────────────────────────────────────────────────────────────────────────────╯
+[?25l│
+[1G[J◇  Installation complete
+[?25h
+│
+◇  Installed 1 skill ──────────────────────────────────────────────────────────╮
+│                                                                              │
+│  ✓ scientific-critical-thinking (copied)                                     │
+│    → ~/RonBrowserRebuild/agent/skills/deep-research/.agents/skills/scientif  │
+│  ic-critical-thinking                                                        │
+│                                                                              │
+├──────────────────────────────────────────────────────────────────────────────╯
+
+│
+└  Done!  Review skills before use; they run with full agent permissions.
+
+--- library ---
+citation-management
+copy-editing
+data-storytelling
+data-visualization
+fact-checker
+find-skills
+pdf
+peer-review
+research
+scientific-critical-thinking
+scientific-slides
+scientific-visualization
+scientific-writing
+slidev
+theme-factory
+verification-before-completion
+{
+  "version": 2,
+  "skills": {
+    "citation-management": {
+      "source": "K-Dense-AI/scientific-agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/citation-management/SKILL.md",
+      "computedHash": "3b3bb7b57f41f5e6fdab85f7f3081df0cceedf37b377e3125cd87c14552e8650"
+    },
+    "copy-editing": {
+      "source": "coreyhaines31/marketingskills",
+      "sourceType": "github",
+      "skillPath": "skills/copy-editing/SKILL.md",
+      "computedHash": "faf2d2cb156cdebe9b7ad16df2d25e42494e6069b33f237f5cdd24b04853636b"
+    },
+    "data-storytelling": {
+      "source": "wshobson/agents",
+      "sourceType": "github",
+      "skillPath": "plugins/business-analytics/skills/data-storytelling/SKILL.md",
+      "computedHash": "ddf010accb6f29bb6c751f216b6423af74d20c025b4188762d25c1e71081af01"
+    },
+    "data-visualization": {
+      "source": "anthropics/knowledge-work-plugins",
+      "sourceType": "github",
+      "skillPath": "data/skills/data-visualization/SKILL.md",
+      "computedHash": "2d313aa0dc3624db43c11139b10cb2e3e7a264fae1a687ad097d3d0a2fad016b"
+    },
+    "fact-checker": {
+      "source": "daymade/claude-code-skills",
+      "sourceType": "github",
+      "skillPath": "fact-checker/SKILL.md",
+      "computedHash": "0ab0c8699b9d234a91e654be4c97b1a68f05fea66497cc381cc24df615646dca"
+    },
+    "find-skills": {
+      "source": "vercel-labs/skills",
+      "sourceType": "github",
+      "skillPath": "skills/find-skills/SKILL.md",
+      "computedHash": "7bc223e2aafbdbf6e50ea243ba6ef67fe432bb069ab439fea0390795dac0bf7f"
+    },
+    "pdf": {
+      "source": "anthropics/skills",
+      "sourceType": "github",
+      "skillPath": "skills/pdf/SKILL.md",
+      "computedHash": "c9c58ce1e1c334d4beb50dfe97aee27aee1d074aed17b3aa1df03b8982028200"
+    },
+    "peer-review": {
+      "source": "K-Dense-AI/scientific-agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/peer-review/SKILL.md",
+      "computedHash": "b626fbbbb2de1eabc016c9426481a7abfb87d76753fd41fd5b143a26d8059ca1"
+    },
+    "research": {
+      "source": "mattpocock/skills",
+      "sourceType": "github",
+      "skillPath": "skills/engineering/research/SKILL.md",
+      "computedHash": "7662666af51f8b1672ed7d88360d4b82656da21bb7b11c49e956eeb3036b85d5"
+    },
+    "scientific-critical-thinking": {
+      "source": "K-Dense-AI/scientific-agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/scientific-critical-thinking/SKILL.md",
+      "computedHash": "a79ae9c13bfd7fc39770c4500ee4b2ecf2808c1d77e4561071bee6f166efd1ec"
+    },
+    "scientific-slides": {
+      "source": "K-Dense-AI/scientific-agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/scientific-slides/SKILL.md",
+      "computedHash": "6acaa92260aab991ed7d0b59547aa32470e552cc8c911c365240c800d9688268"
+    },
+    "scientific-visualization": {
+      "source": "K-Dense-AI/scientific-agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/scientific-visualization/SKILL.md",
+      "computedHash": "a9ea119baafe77128193200a93acf35f56ce8c52038253a4bcef4f0da41e7e70"
+    },
+    "scientific-writing": {
+      "source": "K-Dense-AI/scientific-agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/scientific-writing/SKILL.md",
+      "computedHash": "2b98539c10a4a176bf98659a8437c0b6d195e8c18be79f19bbe4cd8395efd064"
+    },
+    "slidev": {
+      "source": "slidevjs/slidev",
+      "sourceType": "github",
+      "skillPath": "skills/slidev/SKILL.md",
+      "computedHash": "5009e1e90efa148395212686d36e72c5318914a21851031f027865ac31eea519"
+    },
+    "theme-factory": {
+      "source": "anthropics/skills",
+      "sourceType": "github",
+      "skillPath": "skills/theme-factory/SKILL.md",
+      "computedHash": "f426a07c06316201360be19324f2689c5bd3ab2d1669848c9383c321efa4386f"
+    },
+    "verification-before-completion": {
+      "source": "obra/superpowers",
+      "sourceType": "github",
+      "skillPath": "skills/verification-before-completion/SKILL.md",
+      "computedHash": "09b0e3a4689c1c38a3b8fc6ef57a1d4165aa33c0013d546dbde9dd348941a319"
+    }
+  }
+}
+DONE

@@ -60,6 +60,13 @@ export const memoryUpdate = (request: MemoryRequest, store: string, key: string,
 export const memoryDelete = (request: MemoryRequest, store: string, key: string) =>
   request<{ deleted: boolean }>(`/entries${query({ store, key })}`, 'DELETE')
 
+/** One version the dream wrote: each brain topic it changed and how the topic read before (null: it was new). */
+export interface MemoryDream { version: string; changed: { key: string; before: string | null }[] }
+export const memoryDreams = (request: MemoryRequest) => request<{ dreams: MemoryDream[] }>('/dreams')
+export const memoryDreamUndo = (request: MemoryRequest) => request<{ undone: string }>('/dreams', 'DELETE')
+/** `memory/brain/shared/mom.md` as `shared/mom`. */
+export const dreamTopic = (key: string) => key.replace(/^memory\/brain\//, '').replace(/\.md$/, '')
+
 /** The store's native first-line heading (`# Subject`), or the file name without `.md`. */
 export function entryTitle(entry: MemoryEntry): string {
   const first = entry.content.split('\n', 1)[0]?.trim() ?? ''
