@@ -451,7 +451,6 @@ def build_deep_research_graph(*, session_id: str, user_id: str, model: Model, de
     for edge in FORMATION_TOPOLOGY["edges"]:
         builder.add_edge(edge["from"], edge["to"])
     builder.set_graph_id(FORMATION_TOPOLOGY["id"])
-    builder.set_execution_timeout(app_config.RON_DEEP_RESEARCH_EXECUTION_TIMEOUT)
     builder.set_session_manager(
         SnapshotSessionManager(session_id=session_id, storage=get_user_session_storage(user_id))
     )
