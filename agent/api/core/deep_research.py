@@ -17,8 +17,8 @@ writing_swarm -> production_graph, built as the Strands docs build it:
 - Streaming: the outer Graph's ``stream_async`` events, kept with the docs' own filter pattern
   (Event Serialization, https://strandsagents.com/latest/documentation/docs/user-guide/concepts/streaming/).
 
-Every agent is ``strands_harness.create_harness(...)`` with its skill's ``SKILL.md`` as its
-instructions and every agent has the same tools.
+Every agent is ``strands_harness.create_harness(...)`` with its role, the sections of its skill's ``SKILL.md`` that
+fit the role (``SKILL_SECTIONS``) and the same tools as every other agent.
 """
 
 from __future__ import annotations
@@ -132,28 +132,30 @@ FORMATION_TOPOLOGY: Final[Topology] = {
                     "researcher",
                     "Researcher",
                     "research",
-                    "Researches the inquiry from primary sources and writes research.md, every claim with its "
-                    "source URL.",
+                    "Researches the inquiry from primary sources, follows every claim back to the source that owns "
+                    "it, and writes research.md, every claim with its source URL.",
                 ),
                 _agent(
                     "fact_checker",
                     "Fact Checker",
                     "scientific-critical-thinking",
-                    "Opens the source of every claim in research.md, records a verdict per claim in "
-                    "fact-check.md and fixes or removes what fails.",
+                    "The only agent that opens sources: opens the source of every claim in research.md, records a "
+                    "verdict per claim in fact-check.md and fixes or removes what fails.",
                 ),
                 _agent(
                     "citation_manager",
                     "Citation Manager",
                     "citation-management",
-                    "Numbers the citations in research.md and lists each source once in references.md.",
+                    "Numbers the citations in research.md and lists each source once in references.md, from the "
+                    "URLs in research.md and fact-check.md, without opening them.",
                 ),
                 _agent(
                     "research_qa",
                     "Research QA",
                     "peer-review",
-                    "Checks research.md, fact-check.md and references.md: every claim cited, every citation "
-                    "in the reference list, every reference real and supporting its claim.",
+                    "Checks research.md, fact-check.md and references.md against each other, without opening "
+                    "sources: every claim cited, every citation in the reference list, every claim passed in "
+                    "fact-check.md.",
                 ),
             ],
             "edges": [],
@@ -188,8 +190,8 @@ FORMATION_TOPOLOGY: Final[Topology] = {
                     "visual_qa",
                     "Visual QA",
                     "scientific-visualization",
-                    "Checks every chart in figures/ is cited, relevant and accurate against its data, and fixes "
-                    "what is not.",
+                    "Checks every chart in figures/ against its data and citations in visuals.md and its script, "
+                    "without opening sources, and fixes what is not.",
                 ),
             ],
             "edges": [
@@ -235,7 +237,8 @@ FORMATION_TOPOLOGY: Final[Topology] = {
                     "report_qa",
                     "Report QA",
                     "peer-review",
-                    "Checks report.md against research.md, references.md, figures/ and report-layout.md.",
+                    "Checks report.md against research.md, references.md, figures/ and report-layout.md, without "
+                    "opening sources.",
                 ),
                 _agent(
                     "deck_writer",
@@ -318,6 +321,51 @@ SWARM_HANDOFFS: Final[dict[str, str]] = {
     "deck_qa": "If deck-copy.md fails your check, hand off to deck_writer. When it passes, reply with your verdict "
     "without handing off: that ends the writing.",
 }
+
+#: The headings of each agent's ``SKILL.md`` whose sections it gets, each with its subsections. The skill files are
+#: general packs (manuscript peer review, BibTeX from paper databases, marketing copy, PowerPoint), so an agent gets
+#: only what fits its role; an agent missing here gets none of its skill.
+SKILL_SECTIONS: Final[dict[str, tuple[str, ...]]] = {
+    "fact_checker": ("When Uncertain", "Remember"),
+    "visual_planner": ("Core Concepts", "Best Practices"),
+    "data_analyst": ("Chart Selection Guide", "Python Visualization Code Patterns", "Design Principles",
+                     "Color Blindness"),
+    "visual_qa": ("2. Choose an honest encoding",),
+    "report_designer": ("Themes Available", "Theme Details", "Application Process"),
+    "deck_designer": ("Basic Syntax", "Layout & Styling", "Common Layouts"),
+    "report_writer": ("No fabrication", "Scientific fidelity", "5. Draft without adding facts"),
+    "deck_qa": ("Word-Level Checks", "Sentence-Level Checks", "AI-Tell Check"),
+    "pdf_publisher": ("reportlab - Create PDFs",),
+    "pdf_qa": ("pdfplumber - Text and Table Extraction", "Extract Images"),
+    "deck_producer": ("Basic Syntax", "Layout & Styling", "Export & Build", "Common Layouts"),
+    "deck_build_qa": ("Layout & Styling", "Export & Build"),
+}
+
+
+def skill_sections(instructions: str, headings: tuple[str, ...]) -> str:
+    """The sections of a ``SKILL.md`` body under ``headings``, in the file's order: each heading through the line before
+    the next heading of its level or higher, headings inside code fences ignored."""
+    lines = instructions.splitlines()
+    found: list[tuple[int, int]] = []
+    fenced = False
+    for number, line in enumerate(lines):
+        if line.startswith("```"):
+            fenced = not fenced
+        elif not fenced and line.startswith("#"):
+            level = len(line) - len(line.lstrip("#"))
+            found.append((number, level))
+    sections: list[str] = []
+    missing = set(headings)
+    for index, (start, level) in enumerate(found):
+        title = lines[start][level:].strip()
+        if title not in headings:
+            continue
+        missing.discard(title)
+        end = next((line for line, other in found[index + 1:] if other <= level), len(lines))
+        sections.append("\n".join(lines[start:end]).strip())
+    if missing:
+        raise ValueError(f"SKILL.md has no section {sorted(missing)}")
+    return "\n\n".join(sections)
 
 
 class Selection(TypedDict):
@@ -404,6 +452,7 @@ def build_deep_research_graph(*, session_id: str, user_id: str, model: Model, de
     def make_agent(spec: AgentSpec) -> Agent:
         skill = skills[spec["skill"]]
         handoff = SWARM_HANDOFFS.get(spec["id"])
+        sections = SKILL_SECTIONS.get(spec["id"])
         return create_harness(
             name=spec["id"],
             description=spec["description"],
@@ -411,10 +460,15 @@ def build_deep_research_graph(*, session_id: str, user_id: str, model: Model, de
             instructions=(
                 f"## Your role: {spec['label']}\n{spec['description']}\n\n"
                 + (f"## Handing off\n{handoff}\n\n" if handoff else "")
-                + f"{workspace_note}\n\n"
-                f"## Skill: {skill.name}\n{skill.instructions}{JOURNAL_DIRECTIVE}"
+                + workspace_note
+                + (
+                    f"\n\n## From the skill {skill.name} (its files are in {skill.path})\n"
+                    f"{skill_sections(skill.instructions, sections)}"
+                    if sections else ""
+                )
+                + JOURNAL_DIRECTIVE
             ),
-            skills=DEEP_RESEARCH_SKILLS_DIR,
+            skills=False,
             tools=research_tools(),
             builtin_tools=["shell", "read", "write", "edit", "programmatic_tool_caller", "subagent"],
             builtin_plugins=["todos"],
