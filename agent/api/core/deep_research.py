@@ -3,9 +3,12 @@
 The formation is ``FORMATION_TOPOLOGY``: an outer Graph, research_swarm -> data_analysis_graph ->
 writing_swarm -> production_graph, built as the Strands docs build it:
 
-- Swarm: ``Swarm(agents, id=...)``; its agents hand off with the built-in ``handoff_to_agent``
-  and the Swarm ends when an agent finishes without one
-  (https://strandsagents.com/latest/documentation/docs/user-guide/concepts/multi-agent/swarm/).
+- Swarm: ``Swarm(agents, id=...)`` with repetitive handoff detection on; its agents hand off with the built-in
+  ``handoff_to_agent`` and the Swarm ends when an agent finishes without one
+  (https://strandsagents.com/latest/documentation/docs/user-guide/concepts/multi-agent/swarm/). Each agent's
+  instructions say when it hands off (``SWARM_HANDOFFS``): "each agent's system prompt tells it when to hand off, and
+  the model decides" (Agent Swarms, strands-agents/harness-sdk ``site/src/content/docs/learning/
+  multi-agent-patterns-agent-swarms.mdx``).
 - Graph: ``GraphBuilder`` with ``add_node``, ``add_edge`` and ``build``; a Swarm or a Graph is a
   node of the outer Graph as it is (nested multi-agent systems,
   https://strandsagents.com/latest/documentation/docs/user-guide/concepts/multi-agent/graph/).
@@ -297,6 +300,26 @@ FORMATION_TOPOLOGY: Final[Topology] = {
 }
 
 
+#: When each Swarm agent hands off. An agent that replies without handing off ends its Swarm, so only each Swarm's
+#: last check ends it.
+SWARM_HANDOFFS: Final[dict[str, str]] = {
+    "researcher": "When research.md is written, hand off to fact_checker.",
+    "fact_checker": "When fact-check.md is written and research.md is fixed, hand off to citation_manager. If a claim "
+    "needs new research, hand off to researcher.",
+    "citation_manager": "When references.md is written, hand off to research_qa.",
+    "research_qa": "If a file fails your check, hand off to the agent that wrote it. When everything passes, reply with "
+    "your verdict without handing off: that ends the research.",
+    "report_designer": "When report-layout.md is written, hand off to deck_designer.",
+    "deck_designer": "When deck-layout.md is written, hand off to layout_qa.",
+    "layout_qa": "If a layout fails your check, hand off to its designer. When both pass, hand off to report_writer.",
+    "report_writer": "When report.md is written, hand off to report_qa.",
+    "report_qa": "If report.md fails your check, hand off to report_writer. When it passes, hand off to deck_writer.",
+    "deck_writer": "When deck-copy.md is written, hand off to deck_qa.",
+    "deck_qa": "If deck-copy.md fails your check, hand off to deck_writer. When it passes, reply with your verdict "
+    "without handing off: that ends the writing.",
+}
+
+
 class Selection(TypedDict):
     provider: str | None
     model_id: str | None
@@ -380,12 +403,15 @@ def build_deep_research_graph(*, session_id: str, user_id: str, model: Model, de
 
     def make_agent(spec: AgentSpec) -> Agent:
         skill = skills[spec["skill"]]
+        handoff = SWARM_HANDOFFS.get(spec["id"])
         return create_harness(
             name=spec["id"],
             description=spec["description"],
             model=model,
             instructions=(
-                f"## Your role: {spec['label']}\n{spec['description']}\n\n{workspace_note}\n\n"
+                f"## Your role: {spec['label']}\n{spec['description']}\n\n"
+                + (f"## Handing off\n{handoff}\n\n" if handoff else "")
+                + f"{workspace_note}\n\n"
                 f"## Skill: {skill.name}\n{skill.instructions}{JOURNAL_DIRECTIVE}"
             ),
             skills=DEEP_RESEARCH_SKILLS_DIR,
@@ -407,6 +433,8 @@ def build_deep_research_graph(*, session_id: str, user_id: str, model: Model, de
                 id=spec["id"],
                 execution_timeout=app_config.RON_DEEP_RESEARCH_EXECUTION_TIMEOUT,
                 node_timeout=app_config.RON_DEEP_RESEARCH_NODE_TIMEOUT,
+                repetitive_handoff_detection_window=8,
+                repetitive_handoff_min_unique_agents=3,
             )
         builder = GraphBuilder()
         for agent, child in zip(agents, spec["children"]):
