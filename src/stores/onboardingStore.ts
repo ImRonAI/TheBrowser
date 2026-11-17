@@ -48,6 +48,8 @@ interface OnboardingState {
   addReasoningStep: (type: string, content: string) => void
   setSystemPrompt: (prompt: string) => void
   completeOnboarding: () => void
+  /** The account's interview from another device (`accountProfileStore`). */
+  applyAccount: (answers: OnboardingAnswer[], isComplete: boolean) => void
   resetOnboarding: () => void
   startRedo: () => void
   cancelRedo: () => void
@@ -180,6 +182,16 @@ export const useOnboardingStore = create<OnboardingState>()(
 
       completeOnboarding: () => {
         set({ isComplete: true, currentStep: 'complete', redoBackup: null })
+      },
+
+      applyAccount: (answers, isComplete) => {
+        set({
+          answers,
+          isComplete,
+          currentStep: isComplete ? 'complete' : 'interview',
+          currentQuestionIndex: isComplete ? 0 : Math.min(answers.length, INTERVIEW_QUESTIONS.length - 1),
+          redoBackup: null,
+        })
       },
 
       resetOnboarding: () => {

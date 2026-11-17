@@ -181,3 +181,24 @@ def test_context_api_rejects_empty_items_and_guest_agent_listing(client: TestCli
     assert client.post("/context/files", data={"user_id": "u1"}, files={"file": ("a.bin", b"", "x/y")}).status_code == 422
     assert client.get("/context/items/not-an-id", params={"user_id": "u1"}).status_code == 404
     assert client.get("/context/agents", params={"user_id": "default"}).json() == {"agents": [], "sign_in_required": True}
+
+
+def test_profile_follows_the_account_and_keeps_the_newer_save(client: TestClient) -> None:
+    user = "6f1c2d3e-4a5b-4c6d-8e7f-0123456789ab"
+    assert client.get("/context/profile", params={"user_id": user}).json() == {"profile": None}
+    profile = {
+        "onboarding": {"answers": [{"question": "What topics are you most interested in?", "answer": "AI, F1"}], "isComplete": True},
+        "interests": {"nodes": [{"id": "n1", "label": "AI", "weight": 0.9, "category": "ai", "source": "onboarding", "lastUpdated": 1}],
+                      "connections": [{"id": "n1-n2", "from": "n1", "to": "n2", "strength": 0.5}], "isInitialized": True},
+        "updated_at": 2000,
+    }
+    saved = client.put("/context/profile", json={"user_id": user, "profile": profile})
+    assert saved.status_code == 200, saved.text
+    read = client.get("/context/profile", params={"user_id": user}).json()["profile"]
+    assert read["onboarding"]["isComplete"] is True and read["interests"]["connections"][0]["from"] == "n1"
+    older = {**profile, "onboarding": {"answers": [], "isComplete": False}, "updated_at": 1000}
+    assert client.put("/context/profile", json={"user_id": user, "profile": older}).json()["profile"]["updated_at"] == 2000
+    assert client.get("/context/profile", params={"user_id": user}).json()["profile"]["onboarding"]["isComplete"] is True
+    assert client.get("/context/profile", params={"user_id": "default"}).status_code == 401
+    assert client.put("/context/profile", json={"user_id": "default", "profile": profile}).status_code == 401
+    assert client.put("/context/profile", json={"user_id": user, "profile": {**profile, "extra": 1}}).status_code == 422

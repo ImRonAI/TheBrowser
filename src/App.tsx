@@ -4,6 +4,7 @@ import { useTheme } from '@/hooks/useTheme'
 import { handleDeepLinkCallback, useAuthStore } from '@/stores/authStore'
 import { useTabStore } from '@/stores/tabStore'
 import { useOnboardingStore } from '@/stores/onboardingStore'
+import { useAccountProfileReady, useAccountProfileSync } from '@/stores/accountProfileStore'
 import { useInterestsStore } from '@/stores/interestsStore'
 import { useSearchStore, selectShowFullResults, selectShowChat } from '@/stores/searchStore'
 import { useNavigationStore } from '@/stores/navigationStore'
@@ -48,6 +49,8 @@ export function App() {
   const { tabs, activeTabId, createTab } = useTabStore()
   const activeTabUrl = useTabStore((state) => state.tabs.find((tab) => tab.id === state.activeTabId)?.url)
   const { isComplete } = useOnboardingStore()
+  useAccountProfileSync()
+  const profileReady = useAccountProfileReady()
   const [hasHydrated, setHasHydrated] = useState(false)
   // A fresh install (nothing in localStorage yet) launches on the sign-in page.
   const [showSignIn, setShowSignIn] = useState(() => {
@@ -253,7 +256,7 @@ export function App() {
   // SearchAgentDisplay handles its own fetching - no need to fetch here
 
 
-  if (!hasHydrated || isLoading || !isInitialized) return <AppLoadingScreen />
+  if (!hasHydrated || isLoading || !isInitialized || !profileReady) return <AppLoadingScreen />
 
   // DEV: Show AI Elements Showcase (accessible from any state via Cmd/Ctrl + Shift + S)
   if (showShowcase) {
