@@ -488,3 +488,27 @@ async def test_endpoints_are_loopback_only_and_serve_the_workspace(isolated: Non
         assert (await client.post("/deep-research/runs", json={"query": "x", "depth": "deep"})).status_code == 422
         assert (await client.get("/deep-research/runs/dr-missing/document")).status_code == 404
         assert (await client.post("/deep-research/runs/dr-missing/document", json={"document_id": "d"})).status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_a_run_saved_before_the_levels_is_listed_and_opened(isolated: None) -> None:
+    """A run.json as the earlier version saved it: an old depth, and no document_id."""
+    legacy = {
+        "session_id": "dr-legacy", "user_id": "u1", "query": "Grid bottlenecks", "context": "", "title": "Grid",
+        "depth": "deep", "status": "failed", "active": False, "created_at": "2026-11-17T11:49:13+00:00",
+        "updated_at": "2026-11-17T12:05:01+00:00", "completed_at": None,
+        "selection": {"provider": "mistral", "model_id": "mistral-large-latest", "reasoning_effort": None},
+        "error": "The server stopped during this run.",
+    }
+    storage = panel_storage.get_user_session_storage("u1")
+    await storage.write("deep_research/runs/dr-legacy/run.json", json.dumps(legacy).encode())
+    await storage.write("deep_research/runs/dr-legacy/events.json", b"[]")
+    app = FastAPI()
+    app.include_router(deep_research_endpoints.router)
+    local = httpx.ASGITransport(app=app, client=("127.0.0.1", 52100))
+    async with httpx.AsyncClient(transport=local, base_url="http://test") as client:
+        listed = await client.get("/deep-research/runs", params={"user_id": "u1"})
+        assert listed.status_code == 200
+        assert [(run["depth"], run["document_id"]) for run in listed.json()["runs"]] == [("medium", None)]
+        opened = await client.get("/deep-research/runs/dr-legacy", params={"user_id": "u1"})
+        assert opened.status_code == 200 and opened.json()["depth"] == "medium"
