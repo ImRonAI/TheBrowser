@@ -71,3 +71,18 @@ def test_build_model_sets_the_real_window(monkeypatch):
     model = panel_agent.build_model("xai", "grok-4.7")
     assert model.context_window_limit == 500000
     assert model.estimate_utilization(250000) == 0.5
+
+
+def test_build_model_sends_each_mistral_models_largest_output(monkeypatch):
+    _install(monkeypatch, [])
+    # The output limit Mistral states wins; any other model takes its whole window.
+    assert panel_agent.build_model("mistral", "mistral-large-latest").get_config()["max_tokens"] == 262144
+    assert panel_agent.build_model("mistral", "mistral-large-4-0", "high").get_config()["max_tokens"] == 262144
+    assert panel_agent.build_model("mistral", "zai-glm-5-3", "max").get_config()["max_tokens"] == 131072
+    assert panel_agent.build_model("mistral", "zai-glm-5-3-flash").get_config()["max_tokens"] == 131072
+    assert panel_agent.build_model("mistral", "deepseek-v4-1-flash-1017").get_config()["max_tokens"] == 131072
+    codestral = panel_agent.build_model("mistral", "codestral-latest")
+    assert codestral.get_config()["max_tokens"] == 256000
+    assert codestral.format_request([{"role": "user", "content": [{"text": "hi"}]}])["max_tokens"] == 256000
+    # No stated limit and no published window: the request carries none.
+    assert "max_tokens" not in panel_agent.build_model("mistral", "mistral-unlisted").get_config()
