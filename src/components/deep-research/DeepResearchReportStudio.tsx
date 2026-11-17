@@ -1,7 +1,7 @@
 /**
  * DeepResearchReportStudio — the right-hand studio pane of the Deep Research workbench.
  *
- * Four first-class studio views:
+ * Three studio views:
  * - **PDF Report**: Embedded scholarly PDF viewer (`/deep-research/runs/{id}/artifacts/report.pdf`)
  *   when ready, with live streaming Markdown fallback (and PDF / Markdown toggle), **Download PDF**,
  *   **Copy Markdown**, and **Save to Context** (`POST /context/items`).
@@ -9,8 +9,8 @@
  *   or deck PDF fallback, streaming Slidev outline preview, **Open Fullscreen Tab**,
  *   **Download Slidev `.md`**, and **Download Deck PDF**.
  * - **Formation Trace**: Chronological expandable trace of every nested formation node, Swarm
- *   `handoff_to_agent`, `use_skill` subagent output, leaf tool call, and published artifact.
- * - **Sources**: Deduplicated citation cards with domain, title, snippet, and provenance.
+ *   `handoff_to_agent` and built-in `subagent` run, with its tool calls. The report's sources are
+ *   its own reference list.
  *
  * Uses Inter (`font-sans`) and `useElementWidth` for container-driven responsiveness across Light, Dark, and Glass themes.
  */
@@ -20,7 +20,6 @@ import {
   ArrowLeftRight,
   BookmarkCheck,
   BookmarkPlus,
-  BookOpen,
   Check,
   ChevronDown,
   ChevronRight,
@@ -29,7 +28,6 @@ import {
   ExternalLink,
   FileCode2,
   FileText,
-  Globe,
   Layers,
   Loader2,
   Maximize2,
@@ -45,18 +43,16 @@ import {
   humanizeIdentifier,
   researchUrl,
   resolveResearchArtifactUrl,
-  type DeepResearchCitation,
   type DeepResearchSkillExecution,
   type DeepResearchSnapshot,
   type DeepResearchTraceEntry,
 } from '@/lib/deep-research-api'
 import { useContextAgentStore } from '@/stores/contextAgentStore'
 import { cn } from '@/utils/cn'
-import { formatDurationMs } from './DeepResearchFormationView'
-import { extractDomain, openSourceInNewTab } from './openSource'
+import { openSourceInNewTab } from './openSource'
 
-export type ResearchStudioTab = 'report' | 'deck' | 'trace' | 'sources'
-type TraceFilter = 'all' | 'skill' | 'handoff' | 'tool' | 'artifact' | 'node'
+export type ResearchStudioTab = 'report' | 'deck' | 'trace'
+type TraceFilter = 'all' | DeepResearchTraceEntry['kind']
 
 const REPORT_PROSE = [
   'prose prose-sm dark:prose-invert max-w-none font-sans',
@@ -163,21 +159,7 @@ function parseSlidevDeckOutline(markdown: string): ParsedSlide[] {
 }
 
 function buildContextExportMarkdown(snapshot: DeepResearchSnapshot): string {
-  const sections: string[] = []
-  if (snapshot.report_markdown.trim()) {
-    sections.push(snapshot.report_markdown.trim())
-  } else if (snapshot.summary.trim()) {
-    sections.push(`# ${snapshot.title || snapshot.query}\n\n${snapshot.summary.trim()}`)
-  }
-  if (snapshot.citations.length > 0) {
-    sections.push(
-      '## Verified Sources',
-      ...snapshot.citations.map(
-        (c, idx) => `${idx + 1}. [${c.title || c.url}](${c.url})${c.snippet ? ` — ${c.snippet}` : ''}`,
-      ),
-    )
-  }
-  return sections.join('\n\n')
+  return snapshot.report_markdown.trim()
 }
 
 function TraceRow({
@@ -197,22 +179,14 @@ function TraceRow({
       ? 'bg-blurple-600/10 text-volt dark:bg-blurple-400/15'
       : entry.kind === 'handoff'
         ? 'bg-sky-500/10 text-sky-700 dark:text-sky-300'
-        : entry.kind === 'tool' || entry.kind === 'artifact'
-          ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
-          : entry.kind === 'error'
-            ? 'bg-rose-500/10 text-rose-700 dark:text-rose-300'
-            : 'bg-surface-100 text-ink-secondary dark:bg-surface-800 dark:text-ink-inverse-secondary'
+        : 'bg-surface-100 text-ink-secondary dark:bg-surface-800 dark:text-ink-inverse-secondary'
 
   const Icon =
     entry.kind === 'skill'
       ? Layers
       : entry.kind === 'handoff'
         ? ArrowLeftRight
-        : entry.kind === 'tool'
-          ? Wrench
-          : entry.kind === 'artifact'
-            ? Download
-            : Activity
+        : Activity
 
   return (
     <div className="rounded-xl border border-surface-200 bg-surface-0 p-3 font-sans dark:border-surface-800 dark:bg-surface-850">
@@ -257,11 +231,6 @@ function TraceRow({
         </button>
 
         <div className="flex shrink-0 items-center gap-1.5">
-          {linkedSkill?.duration_ms ? (
-            <span className="font-sans text-[11px] tabular-nums text-ink-muted dark:text-ink-inverse-muted">
-              {formatDurationMs(linkedSkill.duration_ms)}
-            </span>
-          ) : null}
           {expandable && (
             <button
               type="button"
@@ -321,53 +290,6 @@ function TraceRow({
         </div>
       )}
     </div>
-  )
-}
-
-function CitationCard({ citation, index }: { citation: DeepResearchCitation; index: number }) {
-  const domain = extractDomain(citation.url)
-  return (
-    <button
-      type="button"
-      onClick={() => openSourceInNewTab(citation.url)}
-      className="group flex w-full flex-col justify-between rounded-xl border border-surface-200 bg-surface-0 p-3.5 text-left font-sans transition-all duration-150 hover:border-blurple-400 hover:bg-blurple-50/30 dark:border-surface-800 dark:bg-surface-850 dark:hover:border-blurple-500/60 dark:hover:bg-blurple-950/20"
-    >
-      <div>
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex min-w-0 items-center gap-2">
-            <span className="flex h-5 min-w-[20px] shrink-0 items-center justify-center rounded-full bg-surface-100 px-1.5 font-sans text-[11px] font-semibold tabular-nums text-ink-secondary transition-colors group-hover:bg-blurple-600 group-hover:text-white dark:bg-surface-800 dark:text-ink-inverse-secondary dark:group-hover:bg-blurple-400 dark:group-hover:text-ink">
-              {index + 1}
-            </span>
-            <Globe className="h-3.5 w-3.5 shrink-0 text-ink-muted dark:text-ink-inverse-muted" aria-hidden />
-            <span className="truncate font-sans text-[12px] font-medium text-ink-muted dark:text-ink-inverse-muted">
-              {domain}
-            </span>
-          </div>
-          <ExternalLink
-            className="h-3.5 w-3.5 shrink-0 text-ink-muted opacity-0 transition-opacity group-hover:text-volt group-hover:opacity-100 dark:text-ink-inverse-muted"
-            aria-hidden
-          />
-        </div>
-
-        <h3 className="mt-2 line-clamp-2 font-sans text-[13.5px] font-semibold leading-snug text-ink group-hover:text-volt dark:text-ink-inverse">
-          {citation.title && citation.title !== citation.url ? citation.title : domain}
-        </h3>
-
-        {citation.snippet && (
-          <p className="mt-1.5 line-clamp-3 font-sans text-[12px] leading-relaxed text-ink-secondary dark:text-ink-inverse-secondary">
-            {citation.snippet}
-          </p>
-        )}
-      </div>
-
-      {citation.source && (
-        <div className="mt-2.5 border-t border-surface-100 pt-2 dark:border-surface-800">
-          <span className="font-sans text-[11px] text-ink-muted dark:text-ink-inverse-muted">
-            Verified via {citation.source}
-          </span>
-        </div>
-      )}
-    </button>
   )
 }
 
@@ -517,13 +439,6 @@ export function DeepResearchReportStudio({ snapshot, userId }: DeepResearchRepor
                 label: compact ? 'Trace' : 'Formation Trace',
                 icon: Activity,
                 count: snapshot.trace.length,
-                readyDot: false,
-              },
-              {
-                id: 'sources',
-                label: 'Sources',
-                icon: BookOpen,
-                count: snapshot.citations.length,
                 readyDot: false,
               },
             ] as const
@@ -758,7 +673,7 @@ export function DeepResearchReportStudio({ snapshot, userId }: DeepResearchRepor
                   <div className="flex min-w-0 items-center gap-2">
                     <RenMark className="h-4 w-4 shrink-0" />
                     <span className="truncate font-sans text-[12px] font-medium text-ink-secondary dark:text-ink-inverse-secondary">
-                      Scholarly Publication PDF · {snapshot.citations.length} verified citations
+                      Scholarly Publication PDF
                     </span>
                   </div>
                   <button
@@ -795,11 +710,7 @@ export function DeepResearchReportStudio({ snapshot, userId }: DeepResearchRepor
                       <Loader2 className="h-3 w-3 animate-spin" aria-hidden />
                       Synthesizing &amp; typesetting PDF…
                     </span>
-                  ) : (
-                    <span className="font-sans text-[12px] tabular-nums text-ink-muted dark:text-ink-inverse-muted">
-                      {snapshot.citations.length} verified sources
-                    </span>
-                  )}
+                  ) : null}
                 </div>
 
                 <MessageResponse
@@ -812,43 +723,6 @@ export function DeepResearchReportStudio({ snapshot, userId }: DeepResearchRepor
                   {snapshot.report_markdown}
                 </MessageResponse>
 
-                {snapshot.citations.length > 0 && (
-                  <footer className="mt-8 border-t border-surface-200 pt-5 dark:border-surface-800">
-                    <div className="mb-3 flex items-center justify-between">
-                      <span className="font-sans text-[12px] font-medium text-ink-muted dark:text-ink-inverse-muted">
-                        Verified citations ({snapshot.citations.length})
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => setActiveTab('sources')}
-                        className="font-sans text-[12px] font-medium text-volt hover:underline"
-                      >
-                        View all source cards →
-                      </button>
-                    </div>
-                    <ol className="flex flex-wrap gap-1.5">
-                      {snapshot.citations.map((citation, i) => (
-                        <li key={citation.url}>
-                          <button
-                            type="button"
-                            onClick={() => openSourceInNewTab(citation.url)}
-                            title={citation.url}
-                            className="group inline-flex h-7 max-w-[240px] items-center gap-1.5 rounded-full border border-surface-200 bg-surface-50 pl-1 pr-2.5 font-sans text-[11.5px] text-ink-secondary transition-colors hover:border-blurple-400 hover:text-ink dark:border-surface-700 dark:bg-surface-900 dark:text-ink-inverse-secondary dark:hover:border-blurple-500 dark:hover:text-ink-inverse"
-                          >
-                            <span className="flex h-5 min-w-[20px] items-center justify-center rounded-full bg-surface-200/80 px-1 font-sans text-[10.5px] font-semibold tabular-nums text-ink transition-colors group-hover:bg-blurple-600 group-hover:text-white dark:bg-surface-800 dark:text-ink-inverse dark:group-hover:bg-blurple-400 dark:group-hover:text-ink">
-                              {i + 1}
-                            </span>
-                            <span className="truncate">
-                              {citation.title && citation.title !== citation.url
-                                ? citation.title
-                                : extractDomain(citation.url)}
-                            </span>
-                          </button>
-                        </li>
-                      ))}
-                    </ol>
-                  </footer>
-                )}
               </article>
             ) : snapshot.active ? (
               <div className="rounded-2xl border border-surface-200 bg-surface-50/70 p-6 dark:border-surface-800 dark:bg-surface-850/70">
@@ -865,8 +739,9 @@ export function DeepResearchReportStudio({ snapshot, userId }: DeepResearchRepor
                 </div>
 
                 <p className="mt-3 font-sans text-[13.5px] leading-relaxed text-ink-secondary dark:text-ink-inverse-secondary">
-                  Once Planning, Parallel Investigation, Adversarial Swarm probing, and Verification Swarm
-                  audits pass, Synthesis produces a scholarly PDF report and interactive Slidev deck.
+                  The research swarm researches and checks the sources, the data analysis graph builds the
+                  charts, the writing swarm writes the report and the deck, and the production graph
+                  publishes the PDF and the Slidev deck.
                 </p>
 
                 {snapshot.active_node_path.length > 0 && (
@@ -1047,16 +922,16 @@ export function DeepResearchReportStudio({ snapshot, userId }: DeepResearchRepor
                   <Presentation className="h-5 w-5 shrink-0 text-volt" aria-hidden />
                   <div>
                     <p className="font-sans text-[12px] font-medium text-volt">
-                      Slidev synthesis queued
+                      Slidev deck queued
                     </p>
                     <h2 className="mt-0.5 font-display text-[17px] font-semibold tracking-[-0.015em] text-ink dark:text-ink-inverse">
-                      Executive presentation deck compiles during Synthesis
+                      The production graph builds the deck
                     </h2>
                   </div>
                 </div>
                 <p className="mt-3 font-sans text-[13.5px] leading-relaxed text-ink-secondary dark:text-ink-inverse-secondary">
-                  As soon as verified claims lock in, the Synthesis Formation composes a structured Slidev
-                  briefing deck alongside the scholarly PDF report.
+                  The writing swarm writes slides.md and the production graph builds it into an interactive
+                  Slidev deck and a PDF, alongside the report.
                 </p>
               </div>
             ) : (
@@ -1065,7 +940,7 @@ export function DeepResearchReportStudio({ snapshot, userId }: DeepResearchRepor
                   No Slidev presentation deck is attached to this run yet.
                 </h3>
                 <p className="mt-1.5 font-sans text-[13px] text-ink-muted dark:text-ink-inverse-muted">
-                  Completed Synthesis runs publish interactive Slidev decks, .md sources, and PDF slides here.
+                  Completed runs publish the interactive Slidev deck, its .md source and its PDF here.
                 </p>
               </div>
             )}
@@ -1081,8 +956,6 @@ export function DeepResearchReportStudio({ snapshot, userId }: DeepResearchRepor
                   ['all', 'All'],
                   ['skill', 'Skills'],
                   ['handoff', 'Handoffs'],
-                  ['tool', 'Leaf Tools'],
-                  ['artifact', 'Artifacts'],
                   ['node', 'Nodes'],
                 ] as const
               ).map(([id, label]) => (
@@ -1121,27 +994,6 @@ export function DeepResearchReportStudio({ snapshot, userId }: DeepResearchRepor
           </div>
         )}
 
-        {/* 4. Sources Tab */}
-        {activeTab === 'sources' && (
-          <div className="mx-auto max-w-[820px]">
-            {snapshot.citations.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-surface-200 px-6 py-12 text-center dark:border-surface-800">
-                <h3 className="font-display text-[16px] font-semibold tracking-[-0.015em] text-ink dark:text-ink-inverse">
-                  No verified sources collected yet.
-                </h3>
-                <p className="mt-1.5 font-sans text-[13px] text-ink-muted dark:text-ink-inverse-muted">
-                  Citations stream here automatically as skill subagents verify primary sources.
-                </p>
-              </div>
-            ) : (
-              <div className={cn('grid gap-3', twoColSources ? 'grid-cols-2' : 'grid-cols-1')}>
-                {snapshot.citations.map((citation, idx) => (
-                  <CitationCard key={citation.url} citation={citation} index={idx} />
-                ))}
-              </div>
-            )}
-          </div>
-        )}
       </div>
     </section>
   )

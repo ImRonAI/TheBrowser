@@ -45,13 +45,10 @@ async def lifespan(app: FastAPI):
     # RON_TOOL_OBSERVATION=1: retain spans in memory (strands_evals) for tool diagnosis.
     setup_evals_exporter()
     manager = chat.create_runtime_manager()
-    from agent.api.core.deep_research import DeepResearchRuntime, set_deep_research_runtime
+    from agent.api.core import deep_research
     from agent.api.core.deep_research_tools import deep_research_tools
     from agent.api.core.issue_agents import IssueAgentRuntime
 
-    deep_research_runtime = DeepResearchRuntime()
-    app.state.deep_research = deep_research_runtime
-    set_deep_research_runtime(deep_research_runtime)
     app.state.issue_agents = IssueAgentRuntime()
     app.state.panel_runtime = manager
     app.state.panel_a2a = None
@@ -138,7 +135,7 @@ async def lifespan(app: FastAPI):
             await close_article_browser()
             await get_teaching_service().shutdown()
             await public_tunnel.stop()
-            await deep_research_runtime.aclose()
+            await deep_research.shutdown()
             await app.state.issue_agents.shutdown()
             await repairs.shutdown()
             # Before the runtime: a run still active is kept in its journal and continues on the next start.
@@ -155,8 +152,6 @@ async def lifespan(app: FastAPI):
             finally:
                 for route in mounted_routes:
                     app.routes.remove(route)
-                set_deep_research_runtime(None)
-                app.state.deep_research = None
                 app.state.panel_runtime = None
                 app.state.panel_a2a = None
                 app.state.fixer_a2a = None

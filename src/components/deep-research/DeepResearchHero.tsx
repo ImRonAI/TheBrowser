@@ -415,8 +415,8 @@ export function DeepResearchHero({
             </span>
           </h1>
           <p className="relative mt-4 max-w-[40rem] font-sans text-[15.5px] leading-relaxed text-ink-secondary dark:text-ink-inverse-secondary">
-            Multi-agent investigation, adversarial hypothesis probing, and cited synthesis — compiled into a
-            scholarly PDF report and interactive Slidev presentation.
+            A research swarm, a data analysis graph and a writing swarm, published as a cited PDF report and
+            an interactive Slidev deck.
           </p>
         </motion.section>
 

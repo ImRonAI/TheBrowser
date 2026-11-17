@@ -171,7 +171,7 @@ function toolInput(input: unknown, preview: string): string {
   }
 }
 
-/** One `use_skill` sub-agent: a Task whose content is that sub-agent's Chain of Thought. */
+/** One `subagent` run: a Task whose content is that sub-agent's Chain of Thought. */
 function SkillTask({ view }: { view: SkillView }) {
   const { skill } = view
   const status: TaskStatus = skill.status === 'running' ? 'running' : skill.status === 'failed' ? 'error' : 'success'
@@ -206,7 +206,6 @@ function SkillTask({ view }: { view: SkillView }) {
                       {!step.active && (
                         <pre className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap break-words opacity-80">
                           {step.tool.output || step.tool.output_preview}
-                          {step.tool.output_truncated ? '\n…' : ''}
                         </pre>
                       )}
                     </details>
@@ -223,7 +222,7 @@ function SkillTask({ view }: { view: SkillView }) {
   )
 }
 
-/** The agent's own reasoning and narration between its use_skill calls. */
+/** The agent's own reasoning and narration between its subagent calls. */
 function OwnChain({ steps }: { steps: Array<Exclude<AgentStepView, SkillView>> }) {
   const streaming = steps.some((step) => step.kind !== 'pass' && step.active)
   return (
@@ -242,7 +241,7 @@ function OwnChain({ steps }: { steps: Array<Exclude<AgentStepView, SkillView>> }
   )
 }
 
-/** An agent's work in order: its Chain of Thought, a Task per use_skill sub-agent, then its output. */
+/** An agent's work in order: its Chain of Thought, a Task per subagent run, then its output. */
 function AgentWork({ transcript, executing }: { transcript: AgentTranscript; executing: boolean }) {
   const blocks = useMemo(() => {
     const grouped: Array<{ key: string; skill?: SkillView; own?: Array<Exclude<AgentStepView, SkillView>> }> = []
