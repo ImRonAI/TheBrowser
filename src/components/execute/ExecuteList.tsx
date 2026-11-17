@@ -53,7 +53,7 @@ export function ExecuteList({ issues, projects, people, now, onOpen }: ExecuteLi
             {sort.direction === 'asc' ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />}
           </button>
         </div>
-        <ul className="grid grid-cols-1 gap-x-10 border-t border-ink/[0.08] sm:grid-cols-2 dark:border-ink-inverse/[0.08]">
+        <ul className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
           {sorted.map((issue) => (
             <li key={issue.id} className="min-w-0">
               <IssueCard issue={issue} issueKey={issueKey(issue, byId)} projectName={byId.get(issue.projectId)?.name} people={people}

@@ -64,6 +64,7 @@ const IMMEDIATE: Record<string, Build> = {
   toc: (chain) => chain.insertTableOfContents(),
   code: (chain) => chain.toggleCodeBlock(),
   workflow: (chain) => chain.insertWorkflow(),
+  'embed-tabs': (chain) => chain.insertEmbedTabs(),
 }
 
 const PANEL = 'flex max-h-[min(26rem,45vh)] w-[22rem] max-w-[calc(100vw-1rem)] flex-col overflow-hidden rounded-xl border border-surface-200 bg-surface-0 text-ink shadow-dramatic dark:border-surface-700 dark:bg-surface-850 dark:text-ink-inverse dark:shadow-dark-bold'
@@ -354,7 +355,7 @@ async function imageDataUrl(file: File): Promise<string> {
 }
 
 /** An uploaded PDF as `data:application/pdf;base64,…`, after checking its size and `%PDF-` signature. */
-async function pdfDataUrl(file: File): Promise<string> {
+export async function pdfDataUrl(file: File): Promise<string> {
   if (file.size > MAX_INLINE_FILE_BYTES) throw new Error(tooLargeMessage(file.name, file.size))
   if (!isPdfBytes(new Uint8Array(await file.slice(0, 5).arrayBuffer()))) throw new Error(`${file.name} is not a PDF.`)
   const dataUrl = await fileToDataUrl(file)

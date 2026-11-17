@@ -80,8 +80,72 @@ def reference_markdown(kind: str, ref_id: str, label: str) -> str:
     return f"@[{text}](ron://{kind}/{ref_id})"
 
 
+EMBED_LABELS = {"web": "Embed", "maps": "Google Maps", "figma": "Figma", "loom": "Loom", "vimeo": "Vimeo", "drive": "Google Drive"}
+YOUTUBE_ID = re.compile(r"/embed/([A-Za-z0-9_-]{11})")
+
+
+def _link_line(kind: str, title: str, href: str) -> str:
+    name = re.sub(r"([\[\]\\])", r"\\\1", re.sub(r"\s+", " ", title).strip())
+    label = f"{kind}: {name}" if name else kind
+    target = f"<{href}>" if re.search(r"[\s()<>]", href) else href
+    return f"[{label}]({target})"
+
+
+def _https(value: Any) -> str:
+    text = str(value or "").strip()
+    return text if text.startswith("https://") and not re.search(r"\s", text) else ""
+
+
+def _tab_markdown(tab: Tag) -> str:
+    """One tab of an Embed tabs block, as the editor writes it (``tabMarkdown`` in src/lib/document-ron.ts)."""
+    kind = tab.get("data-type")
+    if kind == "embed":
+        href = _https(tab.get("data-url")) or _https(tab.get("data-src"))
+        label = EMBED_LABELS.get(str(tab.get("data-provider") or ""), "Embed")
+        return _link_line(label, str(tab.get("data-title") or ""), href) if href else ""
+    if tab.has_attr("data-youtube-video"):
+        frame = tab.find("iframe")
+        found = YOUTUBE_ID.search(str(frame.get("src") or "")) if isinstance(frame, Tag) else None
+        return _link_line("YouTube", "", f"https://www.youtube.com/watch?v={found.group(1)}") if found else ""
+    if kind == "media":
+        src = _https(tab.get("data-src"))
+        return _link_line("Audio" if tab.get("data-kind") == "audio" else "Video", str(tab.get("data-title") or ""), src) if src else ""
+    if kind == "pdf":
+        src, name = str(tab.get("data-src") or ""), str(tab.get("data-name") or "Document.pdf")
+        if src.startswith("data:application/pdf;base64,"):
+            return f"PDF: {name} (uploaded into this page)"
+        return _link_line("PDF", name, _https(src)) if _https(src) else ""
+    if tab.name == "workflow-block":
+        try:
+            graph = json.loads(str(tab.get("data-graph") or "{}"))
+        except json.JSONDecodeError:
+            return ""
+        steps = [{key: value for key, value in step.items() if key != "position"} for step in graph.get("steps") or [] if isinstance(step, dict)]
+        connections = [{key: edge[key] for key in ("source", "target", "type", "label") if edge.get(key)}
+                       for edge in graph.get("connections") or [] if isinstance(edge, dict)]
+        body = json.dumps({"title": str(tab.get("data-title") or "Workflow"), "steps": steps, "connections": connections}, indent=2, ensure_ascii=False)
+        return f"```workflow\n{body}\n```" if steps else ""
+    return ""
+
+
+def embed_tabs_markdown(block: Tag) -> str:
+    """An Embed tabs block (``<div data-type="embed-tabs">``) as the ```embeds fence agents read and write."""
+    parts = [line for line in (_tab_markdown(tab) for tab in block.find_all(recursive=False)) if line]
+    if not parts:
+        return ""
+    fence = "````" if any("```" in part for part in parts) else "```"
+    return f"{fence}embeds\n" + "\n".join(parts) + f"\n{fence}"
+
+
 class _PageMarkdown(MarkdownConverter):
-    """markdownify, with ReferenceMention chips written as ``@[label](ron://kind/id)`` (unescaped)."""
+    """markdownify, with ReferenceMention chips written as ``@[label](ron://kind/id)`` (unescaped) and Embed tabs
+    blocks as their ```embeds fence."""
+
+    def convert_div(self, el: Tag, text: str, parent_tags: set[str]) -> str:
+        if el.get("data-type") == "embed-tabs":
+            fence = embed_tabs_markdown(el)
+            return f"\n\n{fence}\n\n" if fence else ""
+        return str(super().convert_div(el, text, parent_tags))
 
     def convert_span(self, el: Tag, text: str, parent_tags: set[str]) -> str:
         if el.get("data-type") == "reference":

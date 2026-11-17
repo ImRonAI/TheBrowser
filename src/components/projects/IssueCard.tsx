@@ -3,7 +3,6 @@ import { ISSUE_PRIORITY_CONFIG, ISSUE_STATUS_CONFIG, ISSUE_TYPE_CONFIG, RON_ASSI
 import { BRAND } from '@/lib/brand'
 import { cn } from '@/utils/cn'
 import { useIssueBlocking } from '@/hooks/useIssueBlocking'
-import { STATUS_MARK } from './issueTone'
 
 interface IssueCardProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   issue: Issue
@@ -51,23 +50,25 @@ function dueOf(dueDate: string | undefined, done: boolean): Due | null {
 }
 
 const DUE_TONE: Record<Due['tone'], string> = {
-  overdue: 'text-rose-600 dark:text-rose-400',
-  soon: 'text-ink dark:text-ink-inverse',
+  overdue: 'font-semibold ren-tone-ink',
+  soon: 'font-medium text-ink dark:text-ink-inverse',
   plain: 'text-ink-muted dark:text-ink-inverse-muted',
 }
 
 /** Only high and critical earn a word; low and medium stay silent. */
 const PRIORITY_WORD: Partial<Record<IssuePriority, { label: string; className: string }>> = {
   high: { label: 'High priority', className: 'text-ink dark:text-ink-inverse' },
-  critical: { label: 'Critical', className: 'text-rose-600 dark:text-rose-400' },
+  critical: { label: 'Critical', className: 'font-semibold ren-tone-ink' },
 }
 
 /** People read the agent assignee by the product's name; everyone else by their own. */
 const displayName = (person: Person) => person.id === RON_ASSIGNEE.id ? `${BRAND.name} (agent)` : person.name
 
 /**
- * The issue entry, set like an index line rather than a boxed card: a mono dateline, the title in the display
- * face, one quiet standfirst and a footnote of facts. Entries are separated by hairlines; the title answers hover.
+ * The issue card: frosted glass lit by one blurple tone, and the tone is the status (`.ren-issue-card` in
+ * index.css): a whisper for backlog, bright volt in progress, a deeper step in review, the deepest when blocked,
+ * faded into the paper when done, with a spine of the same tone. A mono dateline, the title in the display face,
+ * one quiet standfirst and a footnote of facts.
  */
 export function IssueCard({ issue, issueKey, people = [], issues = [], showStatus = false, projectName, dragging = false, className, ...props }: IssueCardProps) {
   const done = issue.status === 'done'
@@ -87,35 +88,31 @@ export function IssueCard({ issue, issueKey, people = [], issues = [], showStatu
   return (
     <button
       type="button"
+      data-status={blocking.blocked && !done ? 'blocked' : issue.status}
       className={cn(
-        'group relative block w-full text-left',
-        'border-b border-ink/[0.08] px-3 pb-4 pt-3.5 dark:border-ink-inverse/[0.08]',
-        'transition-colors duration-200 ease-out hover:bg-ink/[0.018] dark:hover:bg-ink-inverse/[0.025]',
-        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[rgb(var(--ren-volt)/0.6)]',
+        'ren-glass ren-issue-card group block w-full rounded-2xl px-4 pb-4 pt-3.5 text-left',
+        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--ren-volt)/0.6)] focus-visible:ring-offset-2 focus-visible:ring-offset-surface-0 dark:focus-visible:ring-offset-surface-900',
         dragging && 'opacity-35',
         className
       )}
       {...props}
     >
-      {blocking.blocked && <span aria-hidden className="absolute bottom-4 left-0 top-4 w-[2px] rounded-full bg-rose-500 dark:bg-rose-400" />}
-
       {/* Dateline */}
-      <div className="flex items-baseline gap-2.5 text-[11px] leading-none">
+      <div className="flex items-center gap-2.5 text-[11px] leading-none">
         {issueKey && (
-          <span className="font-mono text-[10.5px] font-medium tabular-nums tracking-[0.04em] text-ink-secondary transition-colors group-hover:text-volt dark:text-ink-inverse-secondary">
+          <span className="ren-tone-ink font-mono text-[10.5px] font-semibold tabular-nums tracking-[0.04em]">
             {issueKey}
           </span>
         )}
         <span className="text-ink-muted dark:text-ink-inverse-muted">{typeLabel}</span>
         {showStatus && (
-          <span className="flex items-center gap-1.5 text-ink-muted dark:text-ink-inverse-muted">
-            <span aria-hidden className={cn('h-[5px] w-[5px] translate-y-[-1px] rounded-full', STATUS_MARK[issue.status])} />
+          <span className="ren-status-chip flex items-center gap-1.5 rounded-full px-2 py-[3px] text-[10.5px] font-semibold">
+            <span aria-hidden className="ren-tone-fill h-[5px] w-[5px] rounded-full" />
             {ISSUE_STATUS_CONFIG[issue.status]?.label ?? issue.status}
           </span>
         )}
         {due && (
-          <time dateTime={issue.dueDate} title={due.title}
-            className={cn('ml-auto shrink-0 tabular-nums', due.tone !== 'plain' && 'font-medium', DUE_TONE[due.tone])}>
+          <time dateTime={issue.dueDate} title={due.title} className={cn('ml-auto shrink-0 tabular-nums', DUE_TONE[due.tone])}>
             {due.tone === 'overdue' ? `Overdue, ${due.label}` : due.label}
           </time>
         )}
@@ -131,9 +128,9 @@ export function IssueCard({ issue, issueKey, people = [], issues = [], showStatu
 
       {/* Standfirst, or what it is waiting on */}
       {blocking.blocked ? (
-        <p title={blocking.label} className="mt-1.5 truncate text-[12.5px] text-rose-700 dark:text-rose-300">
+        <p title={blocking.label} className="ren-tone-ink mt-1.5 truncate text-[12.5px] font-medium">
           {blocking.keys.length
-            ? <>Waiting on <span className="font-mono text-[11.5px] font-medium tracking-[0.02em]">{blocking.keys.join(', ')}</span></>
+            ? <>Waiting on <span className="font-mono text-[11.5px] font-semibold tracking-[0.02em]">{blocking.keys.join(', ')}</span></>
             : blocking.label || 'Blocked'}
         </p>
       ) : summary ? (
@@ -142,13 +139,13 @@ export function IssueCard({ issue, issueKey, people = [], issues = [], showStatu
 
       {/* Footnote */}
       {hasFootnote && (
-        <div className="mt-3.5 flex items-center gap-4 text-[11.5px] text-ink-muted dark:text-ink-inverse-muted">
+        <div className="mt-3.5 flex items-center gap-4 border-t border-[rgb(var(--tone)/0.12)] pt-3 text-[11.5px] text-ink-muted dark:text-ink-inverse-muted">
           <div className="flex min-w-0 flex-1 items-center gap-4">
-            {priority && <span className={cn('shrink-0 font-medium', priority.className)} title={ISSUE_PRIORITY_CONFIG[issue.priority]?.label}>{priority.label}</span>}
+            {priority && <span className={cn('shrink-0', priority.className)} title={ISSUE_PRIORITY_CONFIG[issue.priority]?.label}>{priority.label}</span>}
             {children.length > 0 && (
               <span className="flex shrink-0 items-center gap-2 tabular-nums" title={`${childrenDone} of ${children.length} child issues done`}>
-                <span className="relative h-[2px] w-8 overflow-hidden rounded-full bg-ink/10 dark:bg-ink-inverse/15">
-                  <span className={cn('absolute inset-y-0 left-0 rounded-full', childrenDone === children.length ? 'bg-ink/60 dark:bg-ink-inverse/60' : 'bg-volt')}
+                <span className="relative h-[3px] w-9 overflow-hidden rounded-full bg-[rgb(var(--tone)/0.18)]">
+                  <span className="ren-tone-fill absolute inset-y-0 left-0 rounded-full"
                     style={{ width: `${Math.round((childrenDone / children.length) * 100)}%` }} />
                 </span>
                 {childrenDone} of {children.length}
@@ -165,14 +162,14 @@ export function IssueCard({ issue, issueKey, people = [], issues = [], showStatu
             <div className="flex shrink-0 -space-x-1" aria-label={`Assigned to ${assignees.map(displayName).join(', ')}`}>
               {assignees.slice(0, 3).map((person) => person.avatar
                 ? <img key={person.id} src={person.avatar} alt="" title={displayName(person)}
-                    className="h-5 w-5 rounded-full object-cover ring-2 ring-surface-0 dark:ring-surface-900" />
+                    className="h-5 w-5 rounded-full object-cover ring-2 ring-white/90 dark:ring-surface-900" />
                 : <span key={person.id} title={displayName(person)}
-                    className={cn('flex h-5 w-5 items-center justify-center rounded-full font-display text-[9px] font-bold ring-2 ring-surface-0 dark:ring-surface-900',
-                      person.id === RON_ASSIGNEE.id ? 'bg-volt text-white dark:text-ink' : 'bg-ink/[0.07] text-ink-secondary dark:bg-ink-inverse/[0.12] dark:text-ink-inverse-secondary')}>
+                    className={cn('flex h-5 w-5 items-center justify-center rounded-full font-display text-[9px] font-bold ring-2 ring-white/90 dark:ring-surface-900',
+                      person.id === RON_ASSIGNEE.id ? 'bg-volt text-white dark:text-ink' : 'bg-[rgb(var(--tone)/0.16)] ren-tone-ink')}>
                     {person.initials || person.name.slice(0, 1).toUpperCase()}
                   </span>)}
               {assignees.length > 3 && (
-                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-ink/[0.05] text-[8.5px] font-semibold tabular-nums text-ink-muted ring-2 ring-surface-0 dark:bg-ink-inverse/[0.08] dark:text-ink-inverse-muted dark:ring-surface-900">
+                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[rgb(var(--tone)/0.1)] text-[8.5px] font-semibold tabular-nums text-ink-muted ring-2 ring-white/90 dark:text-ink-inverse-muted dark:ring-surface-900">
                   +{assignees.length - 3}
                 </span>
               )}

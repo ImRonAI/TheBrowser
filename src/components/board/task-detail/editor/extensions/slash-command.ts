@@ -2,7 +2,7 @@ import { Extension, type Editor, type Range } from '@tiptap/core'
 import { RenIcon } from '@/components/brand'
 import Suggestion, { type SuggestionKeyDownProps, type SuggestionOptions, type SuggestionProps } from '@tiptap/suggestion'
 import { ReactRenderer } from '@tiptap/react'
-import { AlertTriangle, AppWindow, Baseline, CalendarDays, CheckSquare, Clapperboard, Code, Columns2, Columns3, Columns4, CreditCard, Figma, FileSymlink, FileText, Film, HardDrive, Heading1, Heading2, Heading3, Highlighter, Image, List, ListCollapse, ListOrdered, ListTree, MapPin, MessageSquareText, Minus, MousePointerClick, Music, Quote, Radical, Sigma, Smile, SquareKanban, Table, Target, Type, Upload, Video, Workflow, Youtube } from 'lucide-react'
+import { AlertTriangle, AppWindow, Baseline, CalendarDays, CheckSquare, Clapperboard, Code, Columns2, Columns3, Columns4, CreditCard, Figma, FileSymlink, FileText, Film, HardDrive, Heading1, Heading2, Heading3, Highlighter, Image, List, ListCollapse, ListOrdered, ListTree, MapPin, MessageSquareText, Minus, MousePointerClick, Music, PanelsTopLeft, Quote, Radical, Sigma, Smile, SquareKanban, Table, Target, Type, Upload, Video, Workflow, Youtube } from 'lucide-react'
 import { flattenSections, slashSections } from '@/lib/editor-blocks'
 import { SLASH_PLUGIN_KEY, askRonCallback, type SlashItem } from './slash-shared'
 import { SlashCommandMenu, type SlashMenuHandle } from '../SlashCommandMenu'
@@ -38,6 +38,7 @@ export const SLASH_COMMANDS: readonly SlashItem[] = [
   { id: 'pdf', label: 'PDF', description: 'Upload a PDF or view one by link', group: 'media', icon: FileText, keywords: ['document', 'file', 'viewer'], requires: ['pdf'] },
   { id: 'upload', label: 'Upload File', description: 'Attach any file', group: 'media', icon: Upload, keywords: ['file', 'attachment', 'attach'], requires: ['fileAttachment'] },
   // Embeds
+  { id: 'embed-tabs', label: 'Embed tabs', description: 'Pages, maps, Figma, Loom, videos, PDFs and workflows, a tab each', group: 'embeds', icon: PanelsTopLeft, keywords: ['tabs', 'tabbed', 'embeds', 'iframe', 'figma', 'loom', 'youtube', 'video', 'pdf', 'maps', 'drive', 'workflow'], requires: ['embedTabs'] },
   { id: 'embed', label: 'Embed', description: 'Show any https page inside the page', group: 'embeds', icon: AppWindow, keywords: ['iframe', 'website', 'url', 'link', 'web'], requires: ['embed'] },
   { id: 'maps', label: 'Google Maps', description: 'An interactive map of a place or address', group: 'embeds', icon: MapPin, keywords: ['map', 'location', 'address', 'directions'], requires: ['embed'] },
   { id: 'figma', label: 'Figma', description: 'A live Figma file or prototype', group: 'embeds', icon: Figma, keywords: ['design', 'prototype'], requires: ['embed'] },

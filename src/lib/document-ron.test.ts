@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { emptyPanelState, reducePanelEvent, type PanelEvent } from './panel-stream.ts'
-import { documentContent, documentRetryMessage, documentRonMessage, hasDraft, unwrapMarkdown, withWorkflowBlocks, workflowFromFence, workflowMarkdown, type DocNode } from './document-ron.ts'
+import { documentContent, documentRetryMessage, documentRonMessage, embedTabsMarkdown, hasDraft, tabNode, tabsFromFence, unwrapMarkdown, withWorkflowBlocks, workflowFromFence, workflowMarkdown, type DocNode } from './document-ron.ts'
 import { ronSegments, ronSessionId, workflowRonMessage } from './ron-run.ts'
 import { starterWorkflow } from './workflow.ts'
 import { MarkdownManager } from '@tiptap/markdown'
@@ -111,4 +111,43 @@ test('workflow fences round-trip; bad fences stay code', () => {
     { type: 'codeBlock', attrs: { language: 'ts' }, content: [{ type: 'text', text: 'let a = 1' }] },
   ] }, () => 'w1')
   assert.deepEqual(doc.content!.map((node) => node.type), ['codeBlock', 'codeBlock'])
+})
+
+test('an ```embeds fence becomes Embed tabs and reads back as the same fence', () => {
+  const workflow = workflowMarkdown('Release', starterWorkflow())
+  const markdown = [
+    '````embeds',
+    '[Figma: Home \\[v2\\]](https://www.figma.com/file/abc/Home)',
+    '- [Loom](https://www.loom.com/share/0123456789abcdef0123456789abcdef)',
+    '[YouTube](https://youtu.be/dQw4w9WgXcQ)',
+    '[PDF: Spec](https://example.com/spec.pdf)',
+    'https://example.com/clip.mp4',
+    '[Audio: Episode 1](<https://example.com/a(1).mp3>)',
+    'not a tab',
+    workflow,
+    '````',
+  ].join('\n')
+  const doc = withWorkflowBlocks(parse(markdown), () => 'w1')
+  const tabs = doc.content![0]
+  assert.equal(tabs.type, 'embedTabs')
+  assert.deepEqual(tabs.content!.map((tab) => tab.type), ['embed', 'embed', 'youtube', 'pdf', 'media', 'media', 'workflow'])
+  assert.deepEqual([tabs.content![0].attrs!.provider, tabs.content![0].attrs!.title], ['figma', 'Home [v2]'])
+  assert.equal(tabs.content![1].attrs!.provider, 'loom')
+  assert.equal(tabs.content![2].attrs!.src, 'https://www.youtube.com/watch?v=dQw4w9WgXcQ')
+  assert.deepEqual([tabs.content![4].attrs!.kind, tabs.content![5].attrs!.kind, tabs.content![5].attrs!.title], ['video', 'audio', 'Episode 1'])
+  assert.deepEqual([tabs.content![6].attrs!.id, tabs.content![6].attrs!.title], ['w1', 'Release'])
+  const again = embedTabsMarkdown(tabs.content!)
+  assert.match(again, /^````embeds\n\[Figma: Home \\\[v2\\\]\]\(https:\/\/www\.figma\.com\/file\/abc\/Home\)\n\[Loom: /)
+  assert.match(again, /\n\[Audio: Episode 1\]\(<https:\/\/example\.com\/a\(1\)\.mp3>\)\n```workflow\n/)
+  assert.deepEqual(tabsFromFence(again.split('\n').slice(1, -1).join('\n')).map((tab) => tab.type), tabs.content!.map((tab) => tab.type))
+  assert.equal(embedTabsMarkdown([]), '')
+  assert.equal(embedTabsMarkdown([{ type: 'media', attrs: { kind: 'audio', src: 'https://e.com/a.mp3', title: 'Ep' } }]), '```embeds\n[Audio: Ep](https://e.com/a.mp3)\n```')
+})
+
+test('a tab is built only from a link that fits its kind', () => {
+  assert.deepEqual(tabNode('youtube', 'https://example.com'), { ok: false, error: 'That is not a YouTube video link.' })
+  assert.deepEqual(tabNode('pdf', 'http://example.com/a.pdf'), { ok: false, error: 'Use a full https:// link to the PDF.' })
+  assert.equal(tabNode('web', 'javascript:alert(1)').ok, false)
+  const routed = tabNode('web', 'https://vimeo.com/76979871')
+  assert.ok(routed.ok && routed.value.attrs!.provider === 'vimeo')
 })

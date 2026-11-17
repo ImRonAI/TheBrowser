@@ -632,6 +632,79 @@
   border: 1px solid rgba(255, 255, 255, 0.05);
 }
 
+/* Ren glass: frosted paper lit by one blurple tone (issue cards, Embed tabs). `--tone` is the blurple step,
+   `--wash` how much of it shows; an issue's status only ever shifts these two, never the hue. */
+.ren-glass {
+  --tone: var(--ren-volt);
+  --wash: 0.07;
+  --edge: 0;
+  position: relative;
+  isolation: isolate;
+  background:
+    radial-gradient(140% 110% at 0% 0%, rgb(var(--tone) / var(--wash)), transparent 58%),
+    radial-gradient(90% 120% at 100% 100%, rgb(var(--tone) / calc(var(--wash) * 0.5)), transparent 62%),
+    linear-gradient(118deg, rgb(255 255 255 / 0.7) 0%, rgb(255 255 255 / 0) 34%),
+    linear-gradient(180deg, rgb(255 255 255 / 0.8), rgb(255 255 255 / 0.58));
+  border: 1px solid rgb(var(--tone) / calc(0.1 + var(--wash)));
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.95),
+    inset 0 -1px 0 rgb(var(--tone) / 0.05),
+    0 1px 2px rgb(19 15 75 / 0.05),
+    0 14px 34px -18px rgb(var(--tone) / calc(0.2 + var(--wash)));
+  -webkit-backdrop-filter: blur(22px) saturate(170%);
+  backdrop-filter: blur(22px) saturate(170%);
+}
+.dark .ren-glass {
+  background:
+    radial-gradient(140% 110% at 0% 0%, rgb(var(--tone) / var(--wash)), transparent 58%),
+    radial-gradient(90% 120% at 100% 100%, rgb(var(--tone) / calc(var(--wash) * 0.5)), transparent 62%),
+    linear-gradient(118deg, rgb(255 255 255 / 0.06) 0%, rgb(255 255 255 / 0) 34%),
+    linear-gradient(180deg, rgb(255 255 255 / 0.065), rgb(255 255 255 / 0.025));
+  border-color: rgb(var(--tone) / calc(0.08 + var(--wash)));
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.09),
+    0 1px 2px rgb(0 0 0 / 0.45),
+    0 18px 40px -20px rgb(var(--tone) / calc(0.14 + var(--wash)));
+}
+.ren-glass-selected { outline: 2px solid rgb(var(--ren-volt) / 0.6); outline-offset: 2px; }
+
+/* Issue cards: the status is the tone. Backlog is a whisper, in progress the bright volt, review a deeper step,
+   blocked the deepest, done fades back into the paper. The spine on the left carries the same tone. */
+.ren-issue-card { --chip-ink: 52 41 167; transition: transform 220ms cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 220ms ease-out; }
+.ren-issue-card::before {
+  content: '';
+  position: absolute;
+  left: -1px;
+  top: 16px;
+  bottom: 16px;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: rgb(var(--tone) / var(--edge));
+  box-shadow: 0 0 14px rgb(var(--tone) / calc(var(--edge) * 0.55));
+}
+.ren-issue-card:hover { transform: translateY(-1.5px); }
+.ren-issue-card:active { transform: translateY(0); }
+.ren-issue-card[data-status='backlog'] { --tone: 179 189 255; --wash: 0.1; --edge: 0.55; --chip-ink: 69 51 216; }
+.ren-issue-card[data-status='in-progress'] { --tone: 85 67 255; --wash: 0.15; --edge: 1; --chip-ink: 69 51 216; }
+.ren-issue-card[data-status='review'] { --tone: 69 51 216; --wash: 0.12; --edge: 1; --chip-ink: 52 41 167; }
+.ren-issue-card[data-status='blocked'] { --tone: 52 41 167; --wash: 0.17; --edge: 1; --chip-ink: 37 31 120; }
+.ren-issue-card[data-status='done'] { --tone: 211 218 254; --wash: 0.08; --edge: 0; --chip-ink: 103 106 254; }
+.dark .ren-issue-card[data-status='backlog'] { --tone: 141 152 254; --wash: 0.05; --edge: 0.45; --chip-ink: 179 189 255; }
+.dark .ren-issue-card[data-status='in-progress'] { --tone: 141 152 254; --wash: 0.16; --edge: 1; --chip-ink: 211 218 254; }
+.dark .ren-issue-card[data-status='review'] { --tone: 103 106 254; --wash: 0.13; --edge: 1; --chip-ink: 179 189 255; }
+.dark .ren-issue-card[data-status='blocked'] { --tone: 69 51 216; --wash: 0.3; --edge: 1; --chip-ink: 211 218 254; }
+.dark .ren-issue-card[data-status='done'] { --tone: 141 152 254; --wash: 0.025; --edge: 0; --chip-ink: 141 152 254; }
+.ren-status-chip {
+  background: rgb(var(--tone) / calc(var(--wash) + 0.08));
+  color: rgb(var(--chip-ink));
+  box-shadow: inset 0 0 0 1px rgb(var(--tone) / calc(var(--wash) + 0.1));
+}
+.ren-tone-ink { color: rgb(var(--chip-ink)); }
+.ren-tone-fill { background: rgb(var(--tone)); }
+@media (prefers-reduced-motion: reduce) {
+  .ren-issue-card, .ren-issue-card:hover { transition: none; transform: none; }
+}
+
 /* Chrome glass for header */
 .chrome-glass {
   background: rgba(241, 242, 246, 0.88);

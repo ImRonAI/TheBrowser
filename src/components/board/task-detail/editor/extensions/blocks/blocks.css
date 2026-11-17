@@ -104,3 +104,36 @@
 /* ---- Highlights (official multicolor Highlight): a volt highlighter when no color is set ---- */
 .ProseMirror mark { @apply rounded-[3px] bg-blurple-200/70 px-[1px] text-inherit dark:bg-blurple-400/30; }
 .ProseMirror mark[data-color] { color: inherit; }
+
+/* ---- Embed tabs (EmbedTabs.tsx): a glass frame, a rail of tabs, one open panel ---- */
+.ren-embed-tabs { --tone: var(--ren-volt); --wash: 0.06; }
+.ren-embed-tabs .ren-tab-rail { background: rgb(var(--tone) / 0.06); box-shadow: inset 0 0 0 1px rgb(var(--tone) / 0.08); }
+.ren-embed-tabs .ren-tab,
+.ren-embed-tabs .ren-chip {
+  @apply text-ink-secondary transition-[background-color,color,box-shadow] duration-150 dark:text-ink-inverse-secondary;
+}
+.ren-embed-tabs .ren-tab:hover,
+.ren-embed-tabs .ren-chip:hover { background: rgb(var(--tone) / 0.09); @apply text-ink dark:text-ink-inverse; }
+.ren-embed-tabs .ren-tab.is-active {
+  background: rgb(255 255 255 / 0.92);
+  color: rgb(var(--ren-volt-deep));
+  box-shadow: 0 1px 2px rgb(var(--tone) / 0.16), 0 4px 12px -6px rgb(var(--tone) / 0.35), inset 0 0 0 1px rgb(var(--tone) / 0.16);
+}
+.dark .ren-embed-tabs .ren-tab.is-active { background: rgb(255 255 255 / 0.09); color: rgb(var(--ren-volt-soft)); }
+.ren-embed-tabs .ren-chip { box-shadow: inset 0 0 0 1px rgb(var(--tone) / 0.16); }
+.ren-embed-tabs .ren-chip.is-active { background: rgb(var(--ren-volt)); box-shadow: 0 4px 14px -6px rgb(var(--ren-volt) / 0.7); @apply text-white dark:text-ink; }
+.ren-embed-tabs .ren-add-button { background: rgb(var(--ren-volt)); box-shadow: 0 6px 16px -8px rgb(var(--ren-volt) / 0.8); @apply text-white transition-opacity hover:opacity-90 dark:text-ink; }
+.ren-embed-tabs .ren-tab-input {
+  background: rgb(255 255 255 / 0.75);
+  box-shadow: inset 0 0 0 1px rgb(var(--tone) / 0.18);
+  @apply text-ink placeholder:text-ink-muted dark:text-ink-inverse dark:placeholder:text-ink-inverse-muted;
+}
+.dark .ren-embed-tabs .ren-tab-input { background: rgb(255 255 255 / 0.05); }
+.ren-embed-tabs .ren-tab-input:focus { box-shadow: inset 0 0 0 1.5px rgb(var(--ren-volt) / 0.8), 0 0 0 4px rgb(var(--ren-volt) / 0.12); }
+.ren-embed-tabs .ren-tab-panel { box-shadow: inset 0 0 0 1px rgb(var(--tone) / 0.12); @apply bg-surface-0 dark:bg-surface-900; }
+/* A tab is the block it would be on its own, without its own frame: the tabs are its frame. */
+.ren-embed-tabs .ron-block { @apply m-0 rounded-none border-0 ring-0; }
+.ren-embed-tabs .ron-block-header { display: none; }
+.ren-embed-tabs [data-workflow-block] { @apply m-0 rounded-none border-0 bg-transparent; }
+.ren-embed-tabs div[data-youtube-video] { @apply m-0; }
+.ren-embed-tabs div[data-youtube-video] iframe { @apply rounded-none; }

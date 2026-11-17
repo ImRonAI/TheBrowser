@@ -36,7 +36,7 @@ function parseGraph(value: string | null): WorkflowGraph {
  */
 export const WorkflowBlockExtension = Node.create<Record<string, never>, { openId: string | null }>({
   name: 'workflow',
-  group: 'block',
+  group: 'block embedTab',
   atom: true,
   draggable: false,
 

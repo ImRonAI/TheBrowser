@@ -41,7 +41,7 @@ export function IssueColumn({ status, count, over = false, dragging = false, onC
       </header>
       <div aria-hidden className={cn('mx-3 h-[2px] rounded-full', STATUS_RULE[status])} />
       <div className={cn(
-        'flex min-h-[7rem] flex-1 flex-col rounded-b-xl transition-colors duration-200',
+        'flex min-h-[7rem] flex-1 flex-col gap-2.5 rounded-b-xl pt-3 transition-colors duration-200',
         over && 'bg-[rgb(var(--ren-volt)/0.05)] ring-1 ring-inset ring-[rgb(var(--ren-volt)/0.25)]',
       )}>
         {children}
