@@ -57,6 +57,8 @@ trafilatura==2.3.1
 # Deep research: the report's template and its PDF pages (core/deep_research.py)
 jinja2==3.1.6
 pypdf==7.0.0
+# Documents: a page as a Word file (core/document_export.py); the wheel bundles pandoc
+pypandoc_binary==1.17
 
 # MCP (Model Context Protocol)
 mcp==1.26.0
