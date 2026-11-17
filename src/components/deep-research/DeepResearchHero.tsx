@@ -260,7 +260,7 @@ export function DeepResearchHero({
   const compactControls = containerWidth > 0 && containerWidth < 560
   const effectivePrompt = attachments.messageFor(query).trim()
   const canLaunch = Boolean(effectivePrompt) && !busy && available
-  const activeDepthMeta = DEPTH_METADATA.find((d) => d.id === depth) ?? DEPTH_METADATA[1]
+  const activeDepthMeta = DEPTH_METADATA.find((d) => d.id === depth) ?? DEPTH_METADATA[2]
 
   const chooseMention = (item: ContextItem) => {
     if (!mention) return
@@ -539,7 +539,7 @@ export function DeepResearchHero({
                         onClick={() => onDepthChange(item.id)}
                         title={item.description}
                         className={cn(
-                          'inline-flex h-7 items-center gap-1.5 rounded-full px-3 font-sans text-[12.5px] font-medium transition-colors duration-150',
+                          'inline-flex h-7 items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 font-sans text-[12.5px] font-medium transition-colors duration-150',
                           selected
                             ? 'bg-blurple-600 text-white dark:bg-blurple-400 dark:text-ink'
                             : 'text-ink-secondary hover:text-ink dark:text-ink-inverse-secondary dark:hover:text-ink-inverse',

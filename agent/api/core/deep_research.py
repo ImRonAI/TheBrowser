@@ -17,40 +17,53 @@ writing_swarm -> production_graph, built as the Strands docs build it:
 - Streaming: the outer Graph's ``stream_async`` events, kept with the docs' own filter pattern
   (Event Serialization, https://strandsagents.com/latest/documentation/docs/user-guide/concepts/streaming/).
 
-Every agent is ``strands_harness.create_harness(...)`` with its role, the sections of its skill's ``SKILL.md`` that
-fit the role (``SKILL_SECTIONS``) and the same tools as every other agent.
+Every agent is ``strands_harness.create_harness(...)`` with the level's prompt (``LEVELS``, modeled on the Perplexity
+Agent API's effort levels, https://docs.perplexity.ai/docs/agent-api/effort.md), its role, the sections of its skill's
+``SKILL.md`` that fit the role (``SKILL_SECTIONS``) and the same tools as every other agent. The Slidev agents load
+their Slidev skills with the harness's ``skills`` tool instead (``SLIDEV_SKILLS``). Each agent and each subagent it
+starts has the level's turn budget (``TurnBudget``).
 """
 
 from __future__ import annotations
 
 import asyncio
+import base64
 from collections.abc import AsyncIterator, Mapping
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+import html
+import io
 import json
 import logging
 from pathlib import Path
+import re
 import shutil
 import sys
 import time
 from typing import Final, Literal, TypedDict
 import uuid
 
+from PIL import Image
 from strands import Agent
 from strands.memory import MemoryManager
 from strands.models import Model
 from strands.multiagent import GraphBuilder, Swarm
 from strands.multiagent.base import MultiAgentResult, NodeResult, Status
 from strands.multiagent.graph import Graph
+from strands.hooks import BeforeModelCallEvent
+from strands.injection.types import InjectionContext
+from strands.plugins import Plugin
 from strands.session import SnapshotSessionManager
 from strands.types.session import encode_bytes_values
 from strands.types.tools import AgentTool
+from strands.vended_plugins.context_injector import ContextInjector
 from strands.vended_plugins.skills import Skill
 from strands_harness import create_harness
 
 from agent.api.core import config as app_config
 from agent.api.core.brave_tools import brave_tools
 from agent.api.core.dreaming import JOURNAL_DIRECTIVE, agent_memory
+from agent.api.core.media_understanding import EMBED_TABS_MARKDOWN, markdown_to_html
 from agent.api.core.panel_agent import (
     PROVIDERS,
     ProviderName,
@@ -61,12 +74,14 @@ from agent.api.core.panel_agent import (
 )
 from agent.api.core.panel_storage import get_user_session_storage
 from agent.api.core.panel_tools import installed_http_request
+from agent.api.core.render_ui_tool import render_workflow, workflow_block_html, workflow_graph
 from agent.api.core.web_tools import web_tools
 
 logger = logging.getLogger(__name__)
 
-ResearchDepth = Literal["standard", "deep", "exhaustive"]
-VALID_DEPTHS: Final[tuple[ResearchDepth, ...]] = ("standard", "deep", "exhaustive")
+ResearchDepth = Literal["fast", "low", "medium", "high", "xhigh", "ultra"]
+VALID_DEPTHS: Final[tuple[ResearchDepth, ...]] = ("fast", "low", "medium", "high", "xhigh", "ultra")
+DEFAULT_DEPTH: Final[ResearchDepth] = "medium"
 RunStatus = Literal["running", "completed", "failed", "cancelled"]
 JsonDict = dict[str, object]
 
@@ -74,6 +89,12 @@ JsonDict = dict[str, object]
 DEEP_RESEARCH_SKILLS_DIR: Final[Path] = (
     Path(__file__).resolve().parents[2] / "skills" / "deep-research" / ".agents" / "skills"
 )
+
+#: The Slidev skills, which the deck agents load with the harness's ``skills`` tool: Slidev's own and Deckcraft.
+SLIDEV_SKILLS: Final[list[str]] = [
+    str(DEEP_RESEARCH_SKILLS_DIR / "slidev"),
+    str(DEEP_RESEARCH_SKILLS_DIR.parents[1] / "build-agent-slidev"),
+]
 
 _RUNS_PREFIX: Final[str] = "deep_research/runs"
 _SAVE_INTERVAL_SECONDS: Final[float] = 5.0
@@ -217,8 +238,9 @@ FORMATION_TOPOLOGY: Final[Topology] = {
                     "deck_designer",
                     "Deck Designer",
                     "slidev",
-                    "Designs the Slidev deck in deck-layout.md: the slide sequence, each slide's layout and "
-                    "chart, theme and styling.",
+                    "Designs the Slidev deck in deck-layout.md: an art direction that follows the subject, the theme, "
+                    "palette, type and motion, and each slide's layout, chart, Vue component and transition, with "
+                    "three.js scenes where the subject has a shape worth seeing in 3D.",
                 ),
                 _agent(
                     "layout_qa",
@@ -230,8 +252,9 @@ FORMATION_TOPOLOGY: Final[Topology] = {
                     "report_writer",
                     "Report Writer",
                     "scientific-writing",
-                    "Writes report.md as report-layout.md lays it out: every claim with its citation number, "
-                    "charts as ![caption](figures/<name>.png), and the reference list at the end.",
+                    "Writes report.md, the run's Document, as report-layout.md lays it out: every claim with its "
+                    "citation number, charts as ![caption](figures/<name>.png), processes and timelines as workflows, "
+                    "real videos, pages, maps and PDFs as embeds, and the reference list at the end.",
                 ),
                 _agent(
                     "report_qa",
@@ -280,16 +303,18 @@ FORMATION_TOPOLOGY: Final[Topology] = {
                     "deck_producer",
                     "Slidev Producer",
                     "slidev",
-                    "Writes slides.md in Slidev Markdown from deck-copy.md and deck-layout.md with the charts "
-                    "from figures/, builds it into slides/ (slidev build --out slides --base ./) and exports "
-                    "slides.pdf.",
+                    "Builds the deck as a Slidev project in the workspace from deck-copy.md and deck-layout.md: "
+                    "slides.md (routerMode: hash), the charts from figures/, Vue components in components/ with "
+                    "three.js scenes, layouts and styles; builds it into slides/ (slidev build --out slides --base ./) "
+                    "and exports slides.pdf.",
                 ),
                 _agent(
                     "deck_build_qa",
                     "Slidev QA",
                     "slidev",
-                    "Checks slides.md, slides/ and slides.pdf against deck-layout.md: every slide's chart, "
-                    "styling and citations; fixes what is not.",
+                    "Checks slides.md, slides/ and slides.pdf against deck-layout.md by looking at every slide: art "
+                    "direction, nothing clipped or overflowing, charts, 3D scenes and citations in place; fixes what "
+                    "is not.",
                 ),
             ],
             "edges": [_edge("pdf_publisher", "pdf_qa"), _edge("deck_producer", "deck_build_qa")],
@@ -324,7 +349,7 @@ SWARM_HANDOFFS: Final[dict[str, str]] = {
 
 #: The headings of each agent's ``SKILL.md`` whose sections it gets, each with its subsections. The skill files are
 #: general packs (manuscript peer review, BibTeX from paper databases, marketing copy, PowerPoint), so an agent gets
-#: only what fits its role; an agent missing here gets none of its skill.
+#: only what fits its role; an agent missing here gets none of its skill, except the Slidev agents (``SLIDEV_AGENTS``).
 SKILL_SECTIONS: Final[dict[str, tuple[str, ...]]] = {
     "fact_checker": ("When Uncertain", "Remember"),
     "visual_planner": ("Core Concepts", "Best Practices"),
@@ -332,13 +357,47 @@ SKILL_SECTIONS: Final[dict[str, tuple[str, ...]]] = {
                      "Color Blindness"),
     "visual_qa": ("2. Choose an honest encoding",),
     "report_designer": ("Themes Available", "Theme Details", "Application Process"),
-    "deck_designer": ("Basic Syntax", "Layout & Styling", "Common Layouts"),
     "report_writer": ("No fabrication", "Scientific fidelity", "5. Draft without adding facts"),
     "deck_qa": ("Word-Level Checks", "Sentence-Level Checks", "AI-Tell Check"),
     "pdf_publisher": ("reportlab - Create PDFs",),
     "pdf_qa": ("pdfplumber - Text and Table Extraction", "Extract Images"),
-    "deck_producer": ("Basic Syntax", "Layout & Styling", "Export & Build", "Common Layouts"),
-    "deck_build_qa": ("Layout & Styling", "Export & Build"),
+}
+
+
+#: The deck agents, which load ``SLIDEV_SKILLS`` with the harness's ``skills`` tool.
+SLIDEV_AGENTS: Final[frozenset[str]] = frozenset({"deck_designer", "deck_producer", "deck_build_qa"})
+
+#: What the agents' roles need beyond their description.
+ROLE_NOTES: Final[dict[str, str]] = {
+    "report_writer": (
+        "report.md becomes a Document in the user's Deep Research folder, so write it the way Ren's Document Agent "
+        "writes a page:\n"
+        "- Charts as ![Caption](figures/<name>.png); other images only from real https:// URLs a tool returned.\n"
+        "- A process, plan, pipeline, timeline or decision flow as a workflow: draw it with `render_workflow`, then "
+        "write the same title, steps and connections into report.md as a ```workflow fence holding "
+        "{\"title\": ..., \"steps\": [...], \"connections\": [...]}.\n"
+        f"- {EMBED_TABS_MARKDOWN} A YouTube video is a YouTube tab in such a fence, from a real URL a tool returned.\n"
+    ),
+    "deck_designer": (
+        "Load your Slidev skills with the `skills` tool before you design (Deckcraft's references/art-direction.md, "
+        "layouts.md, vue-components.md and animations.md, and Slidev's own references). Make the deck beautiful with "
+        "everything Slidev allows: a theme, fonts, a deliberate palette, layouts, v-click and v-motion choreography, "
+        "Magic Move, Mermaid, LaTeX, transitions, and custom Vue components, three.js among them. Every slide gets a "
+        "visual: a chart from figures/, a diagram, a 3D scene or a styled component, never a wall of bullets.\n"
+    ),
+    "deck_producer": (
+        "Load your Slidev skills with the `skills` tool before you build. The workspace is the Slidev project: "
+        "`pnpm add @slidev/cli @slidev/theme-default three playwright-chromium` there, slides.md at its root with "
+        "`routerMode: hash` in the headmatter, Vue components in components/ (three.js scenes run in onMounted on a "
+        "canvas and stop in onUnmounted), layouts in layouts/, styles in styles/, charts copied to public/. Build with "
+        "`pnpm exec slidev build --out slides --base ./` and export with `pnpm exec slidev export --output slides.pdf "
+        "--timeout 120000`. A build that fails is fixed and run again until it passes.\n"
+    ),
+    "deck_build_qa": (
+        "Load your Slidev skills with the `skills` tool. Export every slide as an image "
+        "(`pnpm exec slidev export --format png --output qa`) and look at each with `read`; fix slides.md, components/ "
+        "or styles/ until every slide looks finished, then build and export slides/ and slides.pdf again.\n"
+    ),
 }
 
 
@@ -368,6 +427,182 @@ def skill_sections(instructions: str, headings: tuple[str, ...]) -> str:
     return "\n\n".join(sections)
 
 
+class Level(TypedDict):
+    label: str
+    prompt: str
+    pages: tuple[int, int]
+    sources: int
+    figures: int
+    slides: int
+    turns: int
+
+
+#: The last turns of an agent's budget, kept for bringing its work together and handing off.
+WRAP_UP_TURNS: Final[int] = 5
+
+_FAST_PROMPT: Final[str] = """# Deep Research: {label}
+Today is {today}. You are one agent of Ren's Deep Research at its fastest level. The goal is an accurate, \
+well-cited report, with speed and precision before breadth.
+
+## Tools workflow
+- Search before you write anything factual. Don't rely on what you remember where current, verifiable sources exist.
+- Split the inquiry into its parts and search them in parallel, in one turn. Queries are short keywords: 2 to 5 \
+words, 8 at most, none repeating or overlapping another.
+- Write in the inquiry's language.
+- When searches come back empty or unhelpful, say what stays unknown instead of filling the gap.
+
+## Citations
+- Every sentence that rests on a source carries its citation right after the statement, with no space before the \
+bracket: "grew 4%[3]." Several sources take separate brackets, "[2][5]", at most three per sentence: the most relevant.
+- Only the reference number goes inside the brackets: no commas, spaces or dashes.
+- Cite only what a source says. Nothing from memory is cited.
+- The reference list at the end of report.md, built from references.md, is the only list of sources.
+
+## Writing
+- Open with the direct answer in one or two sentences, never with a header or with how the research went.
+- Use ## headings for substantial sections only, and bold sparingly.
+- Lists are flat: numbered for sequences, bullets otherwise. Markdown tables for comparisons, citations in the cells. \
+Code in fenced blocks with their language. Math in LaTeX, \\( \\) inline and \\[ \\] for blocks. Supporting quotes \
+as blockquotes.
+- Plain, precise, active voice, varied sentences. No hedging, no first person, nothing about yourself or the search \
+("based on my search").
+- Fit the inquiry: a scientific write-up for academic questions; news grouped by topic, newest first; a person's \
+profile kept apart from others who share the name; code first, then its explanation; exact amounts for anything \
+step by step; formulas in LaTeX with their citations after them.
+- Never reproduce copyrighted text: quotes stay under 30 words and everything else is in your own words. Plain facts \
+are always fine.
+"""
+
+_RESEARCH_PROMPT: Final[str] = """# Deep Research: {label}
+Today is {today}. You are an expert research assistant, one agent of Ren's Deep Research at the {label} level. \
+Gather evidence with search and your other tools before you write: break the inquiry into its parts, make the calls \
+each part needs, and read what comes back carefully.
+
+## Searching
+- Queries are plain keywords. No quotation marks and no AND, OR or NOT: the engines read them as text. For \
+alternatives or an exact phrase, send several short queries.
+- Use every research tool you have, not only search: extract, crawl and map pages with Tavily, Exa, Bright Data and \
+Olostep, fetch with http_request, compute and parse data with Python. Run independent calls together in one turn.
+- Prefer primary sources (the paper, the filing, the dataset, the official page) and use a write-up only to find them.
+
+## Citations
+- Cite only when a source in research.md or references.md informs what you write. Never invent a source or a number.
+- Cite every source-backed fact, current claim, named entity, figure and recommendation where it appears. One \
+citation may cover a bullet or a paragraph that all comes from one source.
+- A citation is the source's reference number in brackets, right after what it supports: [n]. Adjacent citations \
+sit together with nothing between them: [2][7].
+- No raw URLs in the text and no footnotes: the reference list at the end of report.md is the only list of sources.
+
+## Finish complete (this overrides everything else)
+- Every file you are responsible for ends complete. Never stop after tool calls alone and never leave a placeholder.
+- Never refuse, say you can't finish, or ask for more information.
+- When the evidence is incomplete, conflicting or uncertain, commit to the most likely answer, state it first and add \
+at most one short caveat.
+
+## Format
+- Answer the inquiry's exact question directly, with the name, number, date or entity it asks for up front.
+- Ground the answer in tool evidence and cite every factual claim.
+- For a list or an "all/every" question, give a complete markdown table: one header row with the columns asked for, \
+one row per item, every item covered and every cell filled, empty only where the value truly doesn't exist.
+"""
+
+_EXTENDED_PROMPT: Final[str] = _RESEARCH_PROMPT + """
+## Sandbox
+- The shell and Python in the workspace are your sandbox: download data files, parse them, compute and check every \
+number there, never in your head.
+- Long tool results are offloaded and your context is managed for you, so keep going until each part of the inquiry \
+is answered from primary sources.
+"""
+
+_ULTRA_PROMPT: Final[str] = _EXTENDED_PROMPT + """- This is the most complete level and a long run is expected: \
+cover every angle the inquiry has, including the counterevidence, before anything is written.
+"""
+
+#: The research levels, Perplexity's six effort levels from fastest to most complete: each its own prompt
+#: (fast's, the shared low/medium/high research prompt, and xhigh/ultra's with the sandbox), the report's length, the
+#: least number of sources, the figures, the deck's slides and each agent's turn budget.
+LEVELS: Final[dict[ResearchDepth, Level]] = {
+    "fast": {"label": "Fast", "prompt": _FAST_PROMPT, "pages": (5, 8), "sources": 15, "figures": 3, "slides": 8,
+             "turns": 12},
+    "low": {"label": "Low", "prompt": _RESEARCH_PROMPT, "pages": (8, 12), "sources": 25, "figures": 4, "slides": 10,
+            "turns": 20},
+    "medium": {"label": "Medium", "prompt": _RESEARCH_PROMPT, "pages": (12, 17), "sources": 40, "figures": 6,
+               "slides": 14, "turns": 30},
+    "high": {"label": "High", "prompt": _RESEARCH_PROMPT, "pages": (17, 23), "sources": 60, "figures": 8, "slides": 18,
+             "turns": 45},
+    "xhigh": {"label": "Extra High", "prompt": _EXTENDED_PROMPT, "pages": (23, 30), "sources": 90, "figures": 11,
+              "slides": 24, "turns": 70},
+    "ultra": {"label": "Ultra", "prompt": _ULTRA_PROMPT, "pages": (30, 40), "sources": 130, "figures": 15,
+              "slides": 30, "turns": 100},
+}
+
+#: Words on a report page, figures and headings included, for the length the report writer aims at.
+WORDS_PER_PAGE: Final[int] = 450
+
+
+def level_prompt(depth: ResearchDepth, today: str) -> str:
+    """The level's prompt with its size and the way every agent works through its turns."""
+    level = LEVELS[depth]
+    low, high = level["pages"]
+    return level["prompt"].format(label=level["label"], today=today) + (
+        "\n## Size\n"
+        f"- report.md: {low} to {high} pages (about {low * WORDS_PER_PAGE:,} to {high * WORDS_PER_PAGE:,} words), with "
+        f"{level['figures']} figures or more and at least {level['sources']} distinct, good sources cited in it.\n"
+        f"- The deck: {level['slides']} slides.\n\n"
+        "## How you work\n"
+        f"- You have {level['turns']} turns; a turn is one reply of yours and the tools it calls. Each subagent you "
+        "start has the same.\n"
+        f"- In every turn but your last {WRAP_UP_TURNS}, work through `subagent`: several calls in one turn for the "
+        "independent parts (a question, a source, a chart, a section each), each told the exact files to read and the "
+        "result to bring back.\n"
+        f"- Your last {WRAP_UP_TURNS} turns are for bringing it together: gather what your subagents returned, write "
+        "it into your file, check it against your role, then hand off or finish. A reminder says when they start.\n"
+    )
+
+
+class TurnBudget(Plugin):
+    """Ends an agent's invocation when its turns are spent, before the model is called again.
+
+    A Swarm or Graph node is called without ``limits`` (``Swarm`` streams ``node.executor.stream_async(node_input,
+    invocation_state=...)``), so the budget is the hooks guide's model-call cancel: ``BeforeModelCallEvent.cancel``
+    ends the loop with that text as the reply. The harness rebuilds every subagent with its parent's plugins, so a
+    subagent has the same budget.
+    """
+
+    name = "deep-research:turn-budget"
+
+    def __init__(self, turns: int, node_ids: frozenset[str]) -> None:
+        super().__init__()
+        self.turns = turns
+        self.node_ids = node_ids
+
+    @staticmethod
+    def turn(agent: Agent) -> int:
+        """The turn the agent is on in its current invocation (``Limits`` counts turns the same way)."""
+        invocation = agent.event_loop_metrics.latest_agent_invocation
+        return len(invocation.cycles) if invocation is not None else 0
+
+    def init_agent(self, agent: Agent) -> None:
+        agent.add_hook(self.spend, BeforeModelCallEvent)
+
+    def spend(self, event: BeforeModelCallEvent) -> None:
+        if self.turn(event.agent) > self.turns:
+            event.cancel = f"My {self.turns} turns are spent."
+
+    def reminder(self, context: InjectionContext) -> str | None:
+        """The ``<system-reminder>`` for each of the last turns (the harness's convention for injected text)."""
+        turn = self.turn(context.agent)
+        left = self.turns - turn
+        if left >= WRAP_UP_TURNS or turn > self.turns:
+            return None
+        if context.agent.name in self.node_ids:
+            work = ("Stop delegating. Gather what your subagents returned, finish your file, check it against your "
+                    "role and hand off or finish as your role says.")
+        else:
+            work = "Stop starting new work. Put together what you found and reply with your result."
+        return f"<system-reminder>Turn {turn} of {self.turns}: {left} left after this one. {work}</system-reminder>"
+
+
 class Selection(TypedDict):
     provider: str | None
     model_id: str | None
@@ -388,6 +623,7 @@ class RunMeta(TypedDict):
     completed_at: str | None
     selection: Selection
     error: str | None
+    document_id: str | None
 
 
 @dataclass
@@ -440,25 +676,29 @@ def build_deep_research_graph(*, session_id: str, user_id: str, model: Model, de
     workspace = artifacts_dir(session_id)
     workspace.mkdir(parents=True, exist_ok=True)
     skills = _skills()
+    level = level_prompt(depth, datetime.now().astimezone().strftime("%A, %B %d, %Y"))
     workspace_note = (
         "## Workspace\n"
         f"Every file of this run is in {workspace}. Read what the other agents saved there and save your work "
         "there under absolute paths.\n"
-        f"- Python: {sys.executable}\n"
-        "- Run independent sub-tasks in parallel by calling `subagent` several times in one turn.\n"
-        f"- Research depth: {depth}. Today is {datetime.now().astimezone().strftime('%A, %B %d, %Y')}."
+        f"- Python: {sys.executable}"
     )
+    node_ids = frozenset(child["id"] for formation in FORMATION_TOPOLOGY["nodes"] for child in formation["children"])
 
     def make_agent(spec: AgentSpec) -> Agent:
         skill = skills[spec["skill"]]
         handoff = SWARM_HANDOFFS.get(spec["id"])
         sections = SKILL_SECTIONS.get(spec["id"])
+        note = ROLE_NOTES.get(spec["id"])
+        budget = TurnBudget(LEVELS[depth]["turns"], node_ids)
         return create_harness(
             name=spec["id"],
             description=spec["description"],
             model=model,
             instructions=(
-                f"## Your role: {spec['label']}\n{spec['description']}\n\n"
+                level
+                + f"\n## Your role: {spec['label']}\n{spec['description']}\n\n"
+                + (f"{note}\n" if note else "")
                 + (f"## Handing off\n{handoff}\n\n" if handoff else "")
                 + workspace_note
                 + (
@@ -468,8 +708,9 @@ def build_deep_research_graph(*, session_id: str, user_id: str, model: Model, de
                 )
                 + JOURNAL_DIRECTIVE
             ),
-            skills=False,
-            tools=research_tools(),
+            skills=[*SLIDEV_SKILLS] if spec["id"] in SLIDEV_AGENTS else False,
+            tools=[*research_tools(), render_workflow] if spec["id"] == "report_writer" else research_tools(),
+            plugins=[budget, ContextInjector(budget.reminder, name="deep-research:wrap-up", trigger="everyTurn")],
             builtin_tools=["shell", "read", "write", "edit", "programmatic_tool_caller", "subagent"],
             builtin_plugins=["todos"],
             caching=False,
@@ -637,7 +878,7 @@ async def start_run(
     user_id: str,
     query: str,
     context: str = "",
-    depth: ResearchDepth = "deep",
+    depth: ResearchDepth = DEFAULT_DEPTH,
     provider: str | None = None,
     model_id: str | None = None,
     reasoning_effort: str | None = None,
@@ -670,6 +911,7 @@ async def start_run(
             "completed_at": None,
             "selection": {"provider": chosen_provider, "model_id": chosen_model, "reasoning_effort": reasoning_effort},
             "error": None,
+            "document_id": None,
         }
     )
     _RUNS[(user_id, session_id)] = run
@@ -708,7 +950,8 @@ def workspace_files(session_id: str) -> list[str]:
     return sorted(
         str(path.relative_to(root))
         for path in root.rglob("*")
-        if path.is_file() and not any(part.startswith(".") for part in path.relative_to(root).parts)
+        if path.is_file()
+        and not any(part.startswith(".") or part == "node_modules" for part in path.relative_to(root).parts)
     )
 
 
@@ -723,6 +966,74 @@ async def get_run(*, user_id: str, session_id: str) -> JsonDict | None:
         for key, name in (("report_markdown", "report.md"), ("slidev_markdown", "slides.md"))
     }
     return {**run.meta, "events": list(run.events), "files": workspace_files(session_id), **texts}
+
+
+_FIGURE_TYPES: Final[dict[str, str]] = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+                                         ".webp": "image/webp", ".gif": "image/gif", ".svg": "image/svg+xml"}
+#: A figure's longer side in a Document: twice the page's width, for sharp charts on a high-density screen.
+_INLINE_IMAGE_EDGE: Final[int] = 1600
+_WORKFLOW_BLOCK = re.compile(r'<pre><code class="language-workflow">(.*?)</code></pre>', re.DOTALL)
+_WORKSPACE_IMAGE = re.compile(r'<img src="(?!https?:|data:)([^"]+)"')
+#: The report's own title, which becomes the Document's title rather than its first line.
+_LEADING_HEADING = re.compile(r"\s*<h1>(.*?)</h1>\s*", re.DOTALL)
+
+
+def _workflow_block(match: re.Match[str]) -> str:
+    """A ```workflow fence as the editor's workflow block, or the fence as it was when it isn't a workflow."""
+    try:
+        value = json.loads(html.unescape(match.group(1)))
+        graph = workflow_graph(value["steps"], value.get("connections"))
+    except (ValueError, KeyError, TypeError):
+        return match.group(0)
+    title = str(value.get("title") or "Workflow").strip()[:120] or "Workflow"
+    return workflow_block_html(title, graph)
+
+
+def _inline_image(workspace: Path, match: re.Match[str]) -> str:
+    """A workspace image as a data URL, as the editor keeps an uploaded image; anything else as it was. A PNG, JPEG
+    or WebP figure is WebP at quality 85, as the editor shrinks an upload (``imageDataUrl``), at most
+    ``_INLINE_IMAGE_EDGE`` pixels on its longer side, so a page of figures fits a Document."""
+    path = (workspace / html.unescape(match.group(1))).resolve()
+    media_type = _FIGURE_TYPES.get(path.suffix.lower())
+    if media_type is None or not path.is_relative_to(workspace) or not path.is_file():
+        return match.group(0)
+    data = path.read_bytes()
+    if media_type in {"image/png", "image/jpeg", "image/webp"}:
+        with Image.open(io.BytesIO(data)) as image:
+            image.thumbnail((_INLINE_IMAGE_EDGE, _INLINE_IMAGE_EDGE))
+            encoded = io.BytesIO()
+            image.save(encoded, "WEBP", quality=85)
+        data, media_type = encoded.getvalue(), "image/webp"
+    return f'<img src="data:{media_type};base64,{base64.b64encode(data).decode()}"'
+
+
+async def report_document(*, user_id: str, session_id: str) -> JsonDict | None:
+    """report.md as the page editor stores it (``markdown_to_html``, as Ren's workspace tools save a page): its
+    first heading as the title, its workflows as workflow blocks, its ```embeds fences left for the editor's Embed
+    tabs, its figures inline."""
+    run = await _load(user_id, session_id)
+    workspace = artifacts_dir(session_id).resolve()
+    report = workspace / "report.md"
+    if run is None or not report.is_file():
+        return None
+    content = markdown_to_html(report.read_text(encoding="utf-8"))
+    content = _WORKFLOW_BLOCK.sub(_workflow_block, content)
+    content = _WORKSPACE_IMAGE.sub(lambda match: _inline_image(workspace, match), content)
+    heading = _LEADING_HEADING.match(content)
+    title = re.sub(r"<[^>]+>", "", html.unescape(heading.group(1))).strip() if heading else ""
+    if title:
+        content = content[heading.end():] if heading else content
+    return {"title": title or run.meta["title"], "content": content, "document_id": run.meta.get("document_id")}
+
+
+async def set_report_document(*, user_id: str, session_id: str, document_id: str) -> RunMeta | None:
+    """Record the Document the report was saved as."""
+    run = await _load(user_id, session_id)
+    if run is None:
+        return None
+    run.meta["document_id"] = document_id
+    await _save(run)
+    return run.meta
 
 
 async def list_runs(*, user_id: str, limit: int = 50) -> list[RunMeta]:
