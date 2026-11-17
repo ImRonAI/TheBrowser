@@ -374,3 +374,32 @@ def test_a_subagent_inherits_its_parents_search_and_journal() -> None:
     tools = {tool.tool_name: tool for tool in dreaming.agent_memory_tools("u1", "panel")}
     assert set(tools) == {"search_memory", "journal"}
     assert dreaming.inherited_memory({**tools, "shell": tools["journal"]}) == [tools["search_memory"], tools["journal"]]
+
+
+def test_an_outside_agent_journals_in_its_own_folder_over_mcp() -> None:
+    import httpx
+    from fastmcp import Client
+    from fastmcp.client.transports import StreamableHttpTransport
+
+    from agent.api.core import memory_mcp
+
+    app = memory_mcp.server.http_app(path="/mcp")
+
+    def client(headers: dict[str, str]) -> Client[StreamableHttpTransport]:
+        def factory(headers: dict[str, str] | None = None, timeout: httpx.Timeout | None = None,
+                    auth: httpx.Auth | None = None, **_: Any) -> httpx.AsyncClient:
+            return httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://ren", headers=headers,
+                                     timeout=timeout, auth=auth)
+        return Client(StreamableHttpTransport("http://ren/mcp", headers=headers, httpx_client_factory=factory))
+
+    async def run() -> None:
+        async with app.router.lifespan_context(app):
+            async with client({"X-Ren-User": "u1", "X-Ren-Agent": "ElevenLabs Voice"}) as voice:
+                assert (await voice.call_tool("journal", {"entry": "prefers texts to calls"})).data == "Noted."
+                await asyncio.gather(*dreaming._tasks)
+                assert "prefers texts to calls" in (await voice.call_tool("journal", {})).data
+            async with client({"X-Ren-User": "u1"}) as nameless:
+                assert (await nameless.call_tool("journal", {"entry": "x"}, raise_on_error=False)).is_error
+
+    asyncio.run(run())
+    assert [key.split("/")[2] for key in asyncio.run(_keys("memory/journal/"))] == ["elevenlabs-voice"]
