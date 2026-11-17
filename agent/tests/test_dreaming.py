@@ -241,8 +241,7 @@ def test_dream_models_fall_back_in_the_owners_order(monkeypatch: pytest.MonkeyPa
 
     built: list[tuple[str, str]] = []
     models = [Scripted(RuntimeError("down")), Scripted(RuntimeError("down")),
-              Scripted([("add_memory", {"entries": ["# Seat\nPrefers an aisle seat."], "stores": ["brain/shared"]})]),
-              Scripted()]
+              Scripted([("add_memory", {"entries": ["# Seat\nPrefers an aisle seat."], "stores": ["brain/shared"]})])]
 
     def build_model(provider: str, model_id: str) -> Scripted:
         built.append((provider, model_id))
@@ -257,8 +256,8 @@ def test_dream_models_fall_back_in_the_owners_order(monkeypatch: pytest.MonkeyPa
 
     asyncio.run(run())
     assert built == [("nim", "minimaxai/minimax-m3.1-flash"), ("mistral", "zai-glm-5-3-flash"),
-                     ("nim", "deepseek-ai/deepseek-v4.1-flash"), ("mistral", "mistral-medium-latest")]
-    assert [model.calls for model in models] == [1, 1, 2, 0]
+                     ("mistral", "mistral-medium-latest")]
+    assert [model.calls for model in models] == [1, 1, 2]
 
 
 def test_a_failed_dream_keeps_that_agents_journal_and_still_files_the_others(monkeypatch: pytest.MonkeyPatch) -> None:

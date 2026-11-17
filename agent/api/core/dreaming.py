@@ -49,11 +49,11 @@ from agent.api.core.panel_storage import _ScopedStorage, get_user_session_storag
 
 logger = logging.getLogger(__name__)
 
-#: The dream's models, tried in this order (owner, 2026-11-15).
+#: The dream's models, tried in this order (owner, 2026-11-15; NIM's DeepSeek v4.1 Flash reached its end of life on
+#: 2026-11-16 and answers 410).
 DREAM_MODELS: Final[tuple[tuple[Literal["nim", "mistral"], str], ...]] = (
     ("nim", "minimaxai/minimax-m3.1-flash"),
     ("mistral", "zai-glm-5-3-flash"),
-    ("nim", "deepseek-ai/deepseek-v4.1-flash"),
     ("mistral", "mistral-medium-latest"),
 )
 EMBEDDING_MODEL: Final = "mistral-embed"

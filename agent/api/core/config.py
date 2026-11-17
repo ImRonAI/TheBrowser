@@ -21,7 +21,9 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY") or GOOGLE_API_KEY
 NVIDIA_NIM_API_KEY = os.getenv("NVIDIA_NIM_API_KEY")
 # NVIDIA NIM hosted endpoint (OpenAI-compatible chat completions): https://docs.api.nvidia.com/nim/reference/
 NVIDIA_NIM_BASE_URL = os.getenv("NVIDIA_NIM_BASE_URL") or "https://integrate.api.nvidia.com/v1"
-NIM_DEFAULT_MODEL = os.getenv("NIM_MODEL") or "z-ai/glm-5.3-flash"
+#: MiniMax M3.1 Flash (owner, 2026-11-17): on 2026-11-17 NIM answered it in under a second, GLM 5.3 Flash sent
+#: nothing for 60 s, and DeepSeek v4.1 Flash answered 410 (end of life 2026-11-16).
+NIM_DEFAULT_MODEL = os.getenv("NIM_MODEL") or "minimaxai/minimax-m3.1-flash"
 #: Seconds any NIM chat-completions call may go without sending a byte (first byte included) before raising
 #: APITimeoutError (`max_retries=0` on AsyncOpenAI). 0 = unbounded.
 NIM_READ_TIMEOUT = float(os.getenv("NIM_READ_TIMEOUT", "20"))
