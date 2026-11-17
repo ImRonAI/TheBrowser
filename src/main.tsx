@@ -9,11 +9,13 @@ import '@fontsource/jetbrains-mono/500.css'
 import '@fontsource/jetbrains-mono/600.css'
 import { App } from './App'
 import { OpeningSequenceGate } from './components/brand/OpeningSequence'
+import { ScreenSharePicker } from './components/shared/ScreenSharePicker'
 import './index.css'
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <App />
     <OpeningSequenceGate />
+    <ScreenSharePicker />
   </React.StrictMode>,
 )

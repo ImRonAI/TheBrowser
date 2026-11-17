@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from 'react'
 import { RenIcon } from '@/components/brand'
 import { useEditorState, type Editor } from '@tiptap/react'
-import { Bold, ChevronDown, Code, CodeSquare, Heading1, Heading2, Heading3, Italic, Link2, List, ListChecks, ListOrdered, Minus, Pilcrow, Plus, Quote, Redo2, Strikethrough, Table, Underline, Undo2, Workflow } from 'lucide-react'
+import { Bold, ChevronDown, Code, CodeSquare, Heading1, Heading2, Heading3, Italic, Link2, List, ListChecks, ListOrdered, Minus, PanelsTopLeft, Pilcrow, Plus, Quote, Redo2, Strikethrough, Table, Underline, Undo2, Workflow } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger,
@@ -104,6 +104,10 @@ function EditorToolbar({ editor, onAskRon }: { editor: Editor; onAskRon?: () => 
           <DropdownMenuItem className={menuItem} onSelect={() => chain().insertWorkflow().run()}>
             <Workflow className="text-accent dark:text-accent-light" />
             <span className="flex flex-col"><span>Show a workflow</span><span className="text-xs text-ink-muted dark:text-ink-inverse-muted">Connect steps into a visual flow</span></span>
+          </DropdownMenuItem>
+          <DropdownMenuItem className={menuItem} onSelect={() => chain().insertEmbedTabs().run()}>
+            <PanelsTopLeft className="text-accent dark:text-accent-light" />
+            <span className="flex flex-col"><span>Embed tabs</span><span className="text-xs text-ink-muted dark:text-ink-inverse-muted">Pages, maps, Figma, videos, PDFs and workflows, a tab each</span></span>
           </DropdownMenuItem>
           <DropdownMenuSeparator className="bg-surface-200 dark:bg-surface-700" />
           <DropdownMenuItem className={menuItem} onSelect={() => chain().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()}><Table />Table</DropdownMenuItem>

@@ -1,4 +1,5 @@
-import { app, BrowserWindow, clipboard, desktopCapturer, dialog, ipcMain, Menu, NativeImage, nativeImage, nativeTheme, session, shell, systemPreferences, WebContentsView } from 'electron'
+import { app, BrowserWindow, clipboard, desktopCapturer, ipcMain, Menu, NativeImage, nativeImage, nativeTheme, session, shell, systemPreferences, WebContentsView } from 'electron'
+import { randomUUID } from 'node:crypto'
 import { existsSync } from 'node:fs'
 import { createServer, type Server } from 'node:http'
 import { join } from 'node:path'
@@ -961,16 +962,7 @@ async function createWindow() {
     }
     void (async () => {
       try {
-        const sources = await desktopCapturer.getSources({ types: ['screen', 'window'], thumbnailSize: { width: 0, height: 0 } })
-        if (!sources.length || win.isDestroyed()) { callback({}); return }
-        const choice = await dialog.showMessageBox(win, {
-          type: 'question', title: 'Share your screen with Ren',
-          message: 'Choose what to share with Ren',
-          detail: 'Ren sees the selected screen or window only while you share it (a live session, a lesson or a screen recording).',
-          buttons: ['Cancel', ...sources.map((source) => source.name)],
-          cancelId: 0, defaultId: 0, noLink: true,
-        })
-        const source = sources[choice.response - 1]
+        const source = await pickScreenShareSource(win)
         callback(source ? { video: source } : {})
       } catch (error) {
         console.error('Screen sharing could not start:', error)
@@ -1001,6 +993,78 @@ async function createWindow() {
     mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])
   } else {
     mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
+  }
+}
+
+/**
+ * Screen share picker: the shell renderer draws it (`ScreenSharePicker.tsx`, Ink & Volt) from the screens and
+ * windows `desktopCapturer` lists, with their thumbnails. The active page view sits above the shell, so it is
+ * hidden while the picker is open and the shell shows a still of the page behind its scrim instead.
+ */
+interface ScreenShareSource { id: string; name: string; kind: 'screen' | 'window'; thumbnail: string; icon: string }
+interface ScreenShareRequest {
+  requestId: string
+  sources: ScreenShareSource[]
+  /** A still of the page view, in the shell's CSS pixels, drawn where the hidden view was. */
+  backdrop: { image: string; x: number; y: number; width: number; height: number } | null
+}
+
+const screenShareChoices = new Map<string, (sourceId: string | null) => void>()
+
+ipcMain.on('screen-share:chosen', (event, requestId: unknown, sourceId: unknown) => {
+  if (!validateIpcSender(event.senderFrame) || !mainWindow || event.senderFrame !== mainWindow.webContents.mainFrame) return
+  if (typeof requestId !== 'string') return
+  const resolve = screenShareChoices.get(requestId)
+  if (!resolve) return
+  screenShareChoices.delete(requestId)
+  resolve(typeof sourceId === 'string' ? sourceId : null)
+})
+
+async function pickScreenShareSource(win: BrowserWindow): Promise<Electron.DesktopCapturerSource | null> {
+  const listed = await desktopCapturer.getSources({ types: ['screen', 'window'], thumbnailSize: { width: 480, height: 300 }, fetchWindowIcons: true })
+  if (!listed.length || win.isDestroyed()) return null
+  const sources: ScreenShareSource[] = listed.map((source) => ({
+    id: source.id,
+    name: source.name,
+    kind: source.id.startsWith('screen:') ? 'screen' : 'window',
+    thumbnail: source.thumbnail.isEmpty() ? '' : source.thumbnail.toDataURL(),
+    icon: source.appIcon && !source.appIcon.isEmpty() ? source.appIcon.toDataURL() : '',
+  }))
+  const page = tabsManager.activeTab?.view
+  const shown = page && !page.webContents.isDestroyed() && win.contentView.children.includes(page) ? page : null
+  let backdrop: ScreenShareRequest['backdrop'] = null
+  if (shown) {
+    try {
+      const image = jpegDataUrl(await shown.webContents.capturePage())
+      const zoom = win.webContents.getZoomFactor() || 1
+      const bounds = shown.getBounds()
+      if (image) backdrop = { image, x: bounds.x / zoom, y: bounds.y / zoom, width: bounds.width / zoom, height: bounds.height / zoom }
+    } catch {}
+    shown.setVisible(false)
+  }
+  const requestId = randomUUID()
+  let settle: (sourceId: string | null) => void = () => {}
+  // A closed window or a reloaded shell never answers.
+  const onClosed = () => settle(null)
+  win.once('closed', onClosed)
+  win.webContents.once('did-start-loading', onClosed)
+  win.webContents.once('render-process-gone', onClosed)
+  try {
+    const chosen = await new Promise<string | null>((resolve) => {
+      settle = resolve
+      screenShareChoices.set(requestId, resolve)
+      win.webContents.send('screen-share:choose', { requestId, sources, backdrop } satisfies ScreenShareRequest)
+      win.focus()
+    })
+    return listed.find((source) => source.id === chosen) ?? null
+  } finally {
+    screenShareChoices.delete(requestId)
+    if (!win.isDestroyed()) {
+      win.removeListener('closed', onClosed)
+      win.webContents.removeListener('did-start-loading', onClosed)
+      win.webContents.removeListener('render-process-gone', onClosed)
+    }
+    if (shown && !shown.webContents.isDestroyed()) shown.setVisible(true)
   }
 }
 
