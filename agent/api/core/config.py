@@ -55,6 +55,24 @@ BRAVE_ANSWERS_RPS = float(os.getenv("BRAVE_ANSWERS_RPS", "2"))
 BRAVE_ANSWERS_MODEL = os.getenv("BRAVE_ANSWERS_MODEL", "brave")
 BRAVE_ANSWERS_TIMEOUT = float(os.getenv("BRAVE_ANSWERS_TIMEOUT", "120"))
 
+
+def brave_tools_enabled() -> bool:
+    """The Brave tools on Ren's agents (``brave_tools()``); off unless RON_BRAVE_TOOLS is set to '1'.
+
+    Discover, the search page, suggest and spellcheck call Brave themselves and stay on either way.
+    """
+    return os.getenv("RON_BRAVE_TOOLS", "0") == "1"
+
+
+# Web search and reading tools for every agent (``core/web_tools.py``), each on when its key is set. strands_tools'
+# Tavily, Exa and Bright Data tools read their keys themselves (Bright Data also ``BRIGHTDATA_ZONE``, default
+# ``web_unlocker1``); Olostep is its hosted MCP server (github.com/olostep/olostep-mcp-server), the key as its bearer.
+TAVILY_API_KEY = os.getenv("TAVILY_API_KEY")
+EXA_API_KEY = os.getenv("EXA_API_KEY")
+BRIGHTDATA_API_KEY = os.getenv("BRIGHTDATA_API_KEY")
+OLOSTEP_API_KEY = os.getenv("OLOSTEP_API_KEY")
+OLOSTEP_MCP_URL = "https://mcp.olostep.com/mcp"
+
 # Perplexity Agent API. GET /v1/models is the model catalogue that backs the
 # picker; POST /v1/responses runs a turn (OpenAI Responses wire format).
 # Verified live 2026-08-09: /v1/models returns 39 ids. This is PINNED, not
@@ -229,9 +247,12 @@ AGENT_SANDBOX_ROOT = Path(os.getenv("RON_AGENT_SANDBOX_ROOT", str(Path.home() / 
 AGENT_SANDBOX_ROOT.mkdir(parents=True, exist_ok=True)
 
 # --- Memory (core/memory.py): native FileMemoryStores, search_memory/add_memory, userTurn injection ---
-#: Perplexity Agent API model for the panel Agent's native aux_model, which runs the `facts`
-#: store's ModelExtractor (verified in GET /v1/models 2026-10-26).
+#: Perplexity Agent API model for the panel Agent's native aux_model (verified in GET /v1/models 2026-10-26).
 DEFAULT_MEMORY_MODEL = "google/gemini-3.5-flash-lite"
+#: Seconds a user journals nothing before their dream files the journals into the brain (core/dreaming.py).
+RON_MEMORY_IDLE_SECONDS = float(os.getenv("RON_MEMORY_IDLE_SECONDS", "300"))
+#: Seconds one Mistral embedding request may take. A brain search that runs out is skipped, never waited on.
+RON_MEMORY_SEARCH_SECONDS = float(os.getenv("RON_MEMORY_SEARCH_SECONDS", "6"))
 
 # --- Media intake (core/media_understanding.py, core/media_capabilities.py) ---
 #: `<provider>/<model id>` that looks at media for a lead model that cannot see images (`understand_media`).
@@ -314,13 +335,13 @@ RON_DEEP_RESEARCH_ENABLED: bool = _INIT_DEEP_RESEARCH_ENABLED
 RON_DEEP_RESEARCH_PROVIDER: str | None = os.getenv("RON_DEEP_RESEARCH_PROVIDER", "").strip() or None
 #: Optional model id override for Deep Research formations (unset uses the provider's default model).
 RON_DEEP_RESEARCH_MODEL: str | None = os.getenv("RON_DEEP_RESEARCH_MODEL", "").strip() or None
-#: Overall execution timeout (seconds) for the top-level Deep Research Graph.
-RON_DEEP_RESEARCH_EXECUTION_TIMEOUT: float = float(os.getenv("RON_DEEP_RESEARCH_EXECUTION_TIMEOUT", "1200.0"))
-#: Per-node execution timeout (seconds) inside Deep Research formations.
-RON_DEEP_RESEARCH_NODE_TIMEOUT: float = float(os.getenv("RON_DEEP_RESEARCH_NODE_TIMEOUT", "300.0"))
-#: Maximum node executions before the top-level Deep Research Graph halts.
+#: The whole Deep Research run's budget (seconds): the top-level Graph and every nested formation.
+RON_DEEP_RESEARCH_EXECUTION_TIMEOUT: float = float(os.getenv("RON_DEEP_RESEARCH_EXECUTION_TIMEOUT", "10800.0"))
+#: One agent's budget (seconds) for one turn inside a Deep Research formation, its sub-agents included.
+RON_DEEP_RESEARCH_NODE_TIMEOUT: float = float(os.getenv("RON_DEEP_RESEARCH_NODE_TIMEOUT", "3600.0"))
+#: Maximum node executions before a Deep Research Graph halts (the safety net behind the QA loops).
 RON_DEEP_RESEARCH_MAX_NODE_EXECUTIONS: int = int(os.getenv("RON_DEEP_RESEARCH_MAX_NODE_EXECUTIONS", "16"))
-#: Maximum verification -> investigation refinement loops per Deep Research run.
+#: Times a QA agent may send work back at depth "deep" ("standard" gets none, "exhaustive" one more).
 RON_DEEP_RESEARCH_MAX_REFINEMENTS: int = int(os.getenv("RON_DEEP_RESEARCH_MAX_REFINEMENTS", "1"))
 #: Characters of one leaf tool result kept in a run's transcript (the formation graph's tool rows).
 RON_DEEP_RESEARCH_TOOL_OUTPUT_CHARS: int = int(os.getenv("RON_DEEP_RESEARCH_TOOL_OUTPUT_CHARS", "8000"))

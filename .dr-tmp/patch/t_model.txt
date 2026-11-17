@@ -1,0 +1,219 @@
+_ROLE_RE = re.compile(r"^## Your role: (.+)$", re.MULTILINE)
+_WORKSPACE_RE = re.compile(r"Every file of this run lives in (.+?)\. Read ")
+_ANCHOR = "([ArXiv QEC Benchmark](https://arxiv.org/abs/2401.00001))"
+
+_REPORT_MD = (
+    "# Quantum Error Correction Architecture Report\n\n"
+    "## Executive Summary\n"
+    "Bivariate bicycle qLDPC codes reduce physical-to-logical overhead compared with planar "
+    "surface codes ([IBM Quantum LDPC Paper](https://research.ibm.com/publications/qldpc-2026)), "
+    "while surface codes retain simpler nearest-neighbor 2D syndrome extraction "
+    "([ArXiv QEC Benchmark](https://arxiv.org/abs/2401.00001)).\n\n"
+    "| Architecture | Threshold | Connectivity |\n"
+    "| --- | --- | --- |\n"
+    "| Surface Code | ~1.0% | 2D Nearest-Neighbor |\n"
+    "| Bivariate Bicycle qLDPC | ~0.7% | Long-Range Couplers |\n\n"
+    "## References\n"
+    "1. [ArXiv QEC Benchmark](https://arxiv.org/abs/2401.00001)\n"
+    "2. [IBM Quantum LDPC Paper](https://research.ibm.com/publications/qldpc-2026)\n"
+)
+
+_SLIDES_MD = (
+    "---\n"
+    "title: Quantum Error Correction Architecture Deck\n"
+    "---\n\n"
+    "# Quantum Error Correction\n\n"
+    "Surface code vs. bivariate bicycle qLDPC fault-tolerance\n\n"
+    "---\n\n"
+    "## Key Empirical Findings\n\n"
+    "- **~1.0% threshold** on 2D nearest-neighbor planar surface codes\n"
+    "- **~0.7% threshold** with reduced overhead on bivariate bicycle qLDPC\n\n"
+    "<!--\nSpeaker note: contrast coupler hardware requirements.\n-->\n"
+)
+
+_RESEARCH_CALLS: tuple[tuple[str, dict[str, Any]], ...] = (
+    ("brave_web_search", {"query": "quantum error correction qLDPC surface code", "count": 3}),
+    ("extract_article_content", {"url": "https://arxiv.org/abs/2401.00001"}),
+)
+
+
+def _handoff(agent_name: str, message: str) -> tuple[str, dict[str, Any]]:
+    return ("handoff_to_agent", {"agent_name": agent_name, "message": message})
+
+
+class ScriptedFormationCoordinator:
+    """Shared state across per-agent ``ScriptedFormationModel`` instances in a formation run."""
+
+    def __init__(
+        self,
+        *,
+        refine_once: bool = True,
+        slow_gate: asyncio.Event | None = None,
+        invoke_artifact_tools: bool = True,
+        reasoning: str | None = None,
+    ) -> None:
+        # When set, each QA agent in a feedback loop rejects the work once before approving it.
+        self.refine_once = refine_once
+        self.slow_gate = slow_gate
+        self.invoke_artifact_tools = invoke_artifact_tools
+        # When set, every model turn opens with this text as a native reasoning content block.
+        self.reasoning = reasoning
+        self.lock = threading.Lock()
+        self.turns: dict[str, int] = {}
+        self.tool_calls: list[str] = []
+
+    def make_model(self, **_: Any) -> "ScriptedFormationModel":
+        return ScriptedFormationModel(self)
+
+    def script(self, label: str, turn: int, workspace: str) -> tuple[list[tuple[str, dict[str, Any]]], str]:
+        """One formation agent's turn: the tool calls it makes in order, then its final message."""
+        revise = self.refine_once and turn == 1
+        if label == "Researcher":
+            return (
+                [
+                    ("subagent", {"task": "Research qLDPC and surface code thresholds from primary sources."}),
+                    _handoff("fact_checker", "research.md is ready for its reference fact check."),
+                ],
+                f"Research saved to research.md {_ANCHOR}.",
+            )
+        if label == "Fact Checker":
+            return [_handoff("citation_manager", "Claims checked; number the citations.")], "Claims match sources."
+        if label == "Citation Manager":
+            return [_handoff("research_qa", "Citations and references.md are ready.")], "References documented."
+        if label == "Research QA":
+            if revise:
+                return [_handoff("citation_manager", "Reference 2 has no URL; fix references.md.")], "Sent back."
+            return [], "Every reference and citation checks out.\nAPPROVED"
+        if label == "Visual QA":
+            if revise:
+                return [], "The y axis of figures/thresholds.png is mislabelled.\nREVISE: data_analyst"
+            return [], "Every chart is cited, relevant and accurate.\nAPPROVED"
+        if label == "Report Designer":
+            return [_handoff("deck_designer", "report-layout.md is ready.")], "Report layout saved."
+        if label == "Deck Designer":
+            return [_handoff("layout_qa", "deck-layout.md is ready.")], "Deck layout saved."
+        if label == "Layout QA":
+            return [_handoff("report_writer", "Both layouts approved.")], "Layouts approved."
+        if label == "Report Writer":
+            return (
+                [
+                    ("write", {"path": f"{workspace}/report.md", "content": _REPORT_MD}),
+                    _handoff("report_qa", "report.md is ready."),
+                ],
+                "Report written to report.md.",
+            )
+        if label == "Report QA":
+            return [_handoff("deck_writer", "Report approved.")], "Report approved."
+        if label == "Deck Writer":
+            return [_handoff("deck_qa", "deck-copy.md is ready.")], "Slide wording saved."
+        if label == "PDF Publisher" and self.invoke_artifact_tools:
+            return [("compile_scholarly_pdf", {"css": "h1 { color: #1e3a8a; }"})], "Compiled report.pdf."
+        if label == "Slidev Producer" and self.invoke_artifact_tools:
+            return (
+                [
+                    (
+                        "compile_slidev_deck",
+                        {"slides_markdown": _SLIDES_MD, "title": "Quantum Error Correction Architecture Deck"},
+                    )
+                ],
+                "Built the Slidev deck.",
+            )
+        return [], f"{label} finished {_ANCHOR}.\nAPPROVED"
+
+
+class ScriptedFormationModel(Model):
+    """Real Strands ``Model`` subclass driving the formation's skill agents and their sub-agents."""
+
+    def __init__(self, coordinator: ScriptedFormationCoordinator) -> None:
+        self.coordinator = coordinator
+
+    def update_config(self, **model_config: Any) -> None:
+        del model_config
+
+    def get_config(self) -> dict[str, Any]:
+        return {"model_id": "scripted-deep-research-model"}
+
+    async def structured_output(
+        self,
+        output_model: Any,
+        prompt: Any,
+        system_prompt: Any = None,
+        **kwargs: Any,
+    ) -> AsyncGenerator[dict[str, Any], None]:
+        raise NotImplementedError
+        yield {}  # pragma: no cover
+
+    async def stream(
+        self,
+        messages: Any,
+        tool_specs: list[Any] | None = None,
+        system_prompt: str | None = None,
+        **kwargs: Any,
+    ) -> AsyncIterator[StreamEvent]:
+        async for ev in self._scripted_stream(messages, tool_specs, system_prompt, **kwargs):
+            yield ev
+            if self.coordinator.reasoning and "messageStart" in ev:
+                yield cast(
+                    StreamEvent,
+                    {
+                        "contentBlockDelta": {
+                            "contentBlockIndex": 0,
+                            "delta": {"reasoningContent": {"text": self.coordinator.reasoning}},
+                        }
+                    },
+                )
+                yield cast(StreamEvent, {"contentBlockStop": {"contentBlockIndex": 0}})
+
+    async def _scripted_stream(
+        self,
+        messages: Any,
+        tool_specs: list[Any] | None = None,
+        system_prompt: str | None = None,
+        **kwargs: Any,
+    ) -> AsyncIterator[StreamEvent]:
+        del kwargs
+        if self.coordinator.slow_gate is not None:
+            await self.coordinator.slow_gate.wait()
+
+        spec_names = {str(spec["name"]) for spec in (tool_specs or ()) if isinstance(spec, dict) and "name" in spec}
+        prompt_text = str(system_prompt or "")
+        prior_results = _count_tool_results(list(messages or []))
+        role = _ROLE_RE.search(prompt_text)
+
+        # ── Case A: a built-in `subagent` child: one research tool call, then its findings ──
+        if role is None:
+            if prior_results == 0:
+                for tool_name, sample_args in _RESEARCH_CALLS:
+                    if tool_name in spec_names:
+                        with self.coordinator.lock:
+                            self.coordinator.tool_calls.append(tool_name)
+                            t_seq = len(self.coordinator.tool_calls)
+                        for ev in _assistant_tool_use_stream(f"leaf-tool-{t_seq}", tool_name, sample_args):
+                            yield ev
+                        return
+            for ev in _assistant_text_stream(f"Sub-agent findings: surface code threshold ~1.0% {_ANCHOR}."):
+                yield ev
+            return
+
+        # ── Case B: a formation skill agent following its scripted turn ──
+        label = role.group(1).strip()
+        workspace_match = _WORKSPACE_RE.search(prompt_text)
+        assert workspace_match is not None, "every formation agent is told its workspace"
+        with self.coordinator.lock:
+            if prior_results == 0:
+                self.coordinator.turns[label] = self.coordinator.turns.get(label, 0) + 1
+            turn = self.coordinator.turns[label]
+        steps, final_text = self.coordinator.script(label, turn, workspace_match.group(1))
+        if prior_results < len(steps):
+            tool_name, tool_input = steps[prior_results]
+            assert tool_name in spec_names, f"{label} has no {tool_name} tool"
+            with self.coordinator.lock:
+                self.coordinator.tool_calls.append(tool_name)
+            tool_use_id = f"{label.lower().replace(' ', '-')}-{turn}-{prior_results}"
+            for ev in _assistant_tool_use_stream(tool_use_id, tool_name, tool_input):
+                yield ev
+            return
+        for ev in _assistant_text_stream(final_text):
+            yield ev
+
+

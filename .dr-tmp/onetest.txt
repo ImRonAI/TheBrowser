@@ -1,0 +1,42 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+____________ test_browser_kwarg_configures_only_the_selected_server ____________
+
+offline = (<function offline.<locals>.build at 0x118909a60>, [<test_panel_composition.OfflineModel object at 0x11bcc57f0>], [<ag...l-04f8996da763b7a969b1028ee3007569', ...})], <strands.storage.in_memory_storage.InMemoryStorage object at 0x11736c590>)
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x11735de00>
+
+    def test_browser_kwarg_configures_only_the_selected_server(offline, monkeypatch):
+        from agent.api.core import panel_browser
+        from agent.api.core.panel_browser import BrowserAvailabilityHook, browser_server_config, server_name
+    
+        for name in ("RON_BROWSER_DEFAULT",):
+            monkeypatch.delenv(name, raising=False)
+        build, _models, catalogs, constructed, _storage = offline
+    
+        agent = build(browser="cloud")
+        catalog = catalogs[-1]
+>       assert set(catalog._server_config) == {"cloud_browser"}
+E       AssertionError: assert {'cloud_browser', 'phone'} == {'cloud_browser'}
+E         
+E         Extra items in the left set:
+E         'phone'
+E         Use -v to get more diff
+
+agent/tests/test_panel_composition.py:736: AssertionError
+=============================== warnings summary ===============================
+agent/tests/test_panel_composition.py::test_browser_kwarg_configures_only_the_selected_server
+  /Users/tims-stuff/RonBrowserRebuild/venv/lib/python3.14/site-packages/a2a/server/apps/jsonrpc/fastapi_app.py:21: StarletteDeprecationWarning: 'HTTP_413_REQUEST_ENTITY_TOO_LARGE' is deprecated. Use 'HTTP_413_CONTENT_TOO_LARGE' instead.
+    from a2a.server.apps.jsonrpc.jsonrpc_app import (
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED agent/tests/test_panel_composition.py::test_browser_kwarg_configures_only_the_selected_server
+1 failed, 1 warning in 2.48s
+--- same test with the dev stack's env cleared ---
+    from a2a.server.apps.jsonrpc.jsonrpc_app import (
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED agent/tests/test_panel_composition.py::test_browser_kwarg_configures_only_the_selected_server
+1 failed, 1 warning in 1.82s
+DONE

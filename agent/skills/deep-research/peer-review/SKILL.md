@@ -5,7 +5,7 @@ description: Prepares evidence-bounded, constructive peer-review drafts and stru
   preprints, or research proposals; reporting-guideline selection; claim–evidence
   checks; methods, statistics, reproducibility, ethics, figure/table, and citation
   critique; or revision-response planning.
-allowed-tools: extract_article_content brave_web_search brave_answer search_saved_context
+allowed-tools: extract_article_content tavily_search exa_search olostep_search_web olostep_answers tavily_extract exa_get_contents olostep_scrape_website bright_data search_saved_context
 license: MIT
 compatibility: skills.sh / Ren Deep Research (Strands SDK 1.57.2 / strands-harness
   0.1.2)

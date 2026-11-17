@@ -320,7 +320,8 @@ def test_rich_in_feed_and_answer_endpoint():
     asyncio.run(scenario())
 
 
-def test_brave_tools_verticals_and_error_handling():
+def test_brave_tools_verticals_and_error_handling(monkeypatch):
+    monkeypatch.setenv("RON_BRAVE_TOOLS", "1")
     from agent.api.core import brave_tools as bt
     from agent.api.endpoints import discover as discover_ep
 

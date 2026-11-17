@@ -1,6 +1,6 @@
 """The project agent: one per project, chosen in the Agent Panel's agent picker (``ChatRequest.agent`` =
 ``{"kind": "project", "id": <project_id>}``). It is the panel composition (``create_panel_agent``: core tools,
-Brave, http_request, memory, skills, A2A) plus the tools below, bound to that one project.
+web search, http_request, memory, skills, A2A) plus the tools below, bound to that one project.
 
 Access is the caller's own: every ``/chat`` for a project session carries the user's Supabase bearer token (or a
 guest workspace capability), ``chat.py`` verifies it with ``projects.project_identity`` and binds it here per
@@ -47,7 +47,7 @@ def project_agent_prompt(project_id: str) -> str:
         "new or changed issues, list them and ask the user before writing. Always pass an issue's latest `version`; on a "
         "conflict reread it and retry once.\n"
         "Improve context: put research findings, sources and notes into an issue's Context with add_issue_context so the "
-        "issue's own agent has them; research with brave_web_search / brave_news_search / brave_answer, fetch pages "
+        "issue's own agent has them; research with your web search tools (tavily_search, exa_search, olostep_answers and the others you have), fetch pages "
         "with http_request, or launch multi-stage asynchronous investigations with deep_research_start and check "
         "progress/reports with deep_research_status before saving findings via add_issue_context. "
         "Project pages: list_project_documents and read_project_document (Markdown).\n"

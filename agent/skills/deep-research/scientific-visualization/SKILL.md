@@ -4,7 +4,7 @@ description: Creates and audits truthful, accessible, publication-ready scientif
   figures with Matplotlib, Seaborn, or Plotly. Use it for figure design, multi-panel
   layouts, uncertainty and missing-data displays, color/contrast review, image metadata
   validation, and journal export planning.
-allowed-tools: search_saved_context brave_web_search
+allowed-tools: search_saved_context tavily_search exa_search olostep_search_web olostep_answers
 license: MIT
 compatibility: skills.sh / Ren Deep Research (Strands SDK 1.57.2 / strands-harness
   0.1.2)

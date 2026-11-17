@@ -3,7 +3,7 @@ name: verification-before-completion
 description: Use when about to claim work is complete, fixed, or passing, before committing
   or creating PRs - requires running verification commands and confirming output before
   making any success claims; evidence before assertions always
-allowed-tools: extract_article_content http_request brave_web_search brave_answer
+allowed-tools: extract_article_content http_request tavily_search exa_search olostep_search_web olostep_answers tavily_extract exa_get_contents olostep_scrape_website bright_data
 license: MIT
 compatibility: skills.sh / Ren Deep Research (Strands SDK 1.57.2 / strands-harness
   0.1.2)

@@ -1,0 +1,61 @@
+  /Users/tims-stuff/.local/share/uv/python/cpython-3.14.5-macos-aarch64-none/lib/python3.14/pty.py:66: DeprecationWarning: This process (pid=97862) is multi-threaded, use of forkpty() may lead to deadlocks in the child.
+    pid, fd = os.forkpty()
+
+agent/tests/test_harness_agents.py::test_stored_specialist_answers_over_native_a2a
+  /Users/tims-stuff/RonBrowserRebuild/venv/lib/python3.14/site-packages/websockets/legacy/__init__.py:6: DeprecationWarning: websockets.legacy is deprecated; see https://websockets.readthedocs.io/en/stable/howto/upgrade.html for upgrade instructions
+    warnings.warn(  # deprecated in 14.0 - 2024-11-09
+
+agent/tests/test_harness_agents.py::test_stored_specialist_answers_over_native_a2a
+  /Users/tims-stuff/RonBrowserRebuild/venv/lib/python3.14/site-packages/uvicorn/protocols/websockets/websockets_impl.py:17: DeprecationWarning: websockets.server.WebSocketServerProtocol is deprecated
+    from websockets.server import WebSocketServerProtocol
+
+agent/tests/test_harness_agents.py::test_stored_specialist_answers_over_native_a2a
+  /Users/tims-stuff/.local/share/uv/python/cpython-3.14.5-macos-aarch64-none/lib/python3.14/asyncio/threads.py:25: DeprecationWarning: 'asyncio.iscoroutinefunction' is deprecated and slated for removal in Python 3.16; use inspect.iscoroutinefunction() instead
+    return await loop.run_in_executor(None, func_call)
+
+agent/tests/test_harness_agents.py: 1 warning
+agent/tests/test_issue_chat.py: 1 warning
+agent/tests/test_panel_api.py: 37 warnings
+agent/tests/test_panel_end_to_end.py: 21 warnings
+agent/tests/test_ren_mcp.py: 1 warning
+agent/tests/test_tool_repair.py: 1 warning
+  /Users/tims-stuff/RonBrowserRebuild/venv/lib/python3.14/site-packages/supabase/_async/client.py:310: DeprecationWarning: The 'timeout' parameter is deprecated. Please configure it in the http client instead.
+    return AsyncPostgrestClient(
+
+agent/tests/test_harness_agents.py: 1 warning
+agent/tests/test_issue_chat.py: 1 warning
+agent/tests/test_panel_api.py: 37 warnings
+agent/tests/test_panel_end_to_end.py: 21 warnings
+agent/tests/test_ren_mcp.py: 1 warning
+agent/tests/test_tool_repair.py: 1 warning
+  /Users/tims-stuff/RonBrowserRebuild/venv/lib/python3.14/site-packages/supabase/_async/client.py:310: DeprecationWarning: The 'verify' parameter is deprecated. Please configure it in the http client instead.
+    return AsyncPostgrestClient(
+
+agent/tests/test_issue_agents.py::test_goal_uses_native_judge_and_revises_before_completion
+  /Users/tims-stuff/RonBrowserRebuild/agent/api/core/issue_agents.py:533: UserWarning: strands:goal-loop has no max_attempts or timeout; execution is unbounded
+    goal_plugin = GoalLoop(goal=run["message"][6:].strip(), preserve_context=True,
+
+agent/tests/test_issue_chat.py::test_options_reach_the_harness_agent
+  /Users/tims-stuff/RonBrowserRebuild/agent/api/core/issue_agents.py:375: UserWarning: strands:goal-loop has no max_attempts or timeout; execution is unbounded
+    consumer_plugins.append(GoalLoop(goal=goal, judge=JudgeConfig(model=side_model_factory("goal-judge")),
+
+agent/tests/test_panel_composition.py::test_goal_continues_beyond_three_attempts
+agent/tests/test_panel_composition.py::test_goal_judge_fresh_and_background_delegation_foreground_only
+agent/tests/test_panel_composition.py::test_native_question_pause_preserved_with_goal_and_runtime[False]
+agent/tests/test_panel_composition.py::test_native_question_pause_preserved_with_goal_and_runtime[True]
+  /Users/tims-stuff/RonBrowserRebuild/agent/api/core/panel_agent.py:1402: UserWarning: strands:goal-loop has no max_attempts or timeout; execution is unbounded
+    plugins.append(GoalLoop(goal=goal, judge=JudgeConfig(model=model_factory("goal-judge"))
+
+agent/tests/test_ren_mcp.py::test_the_desktop_serves_itself_on_a_socket_it_dials_with_the_token
+  /Users/tims-stuff/RonBrowserRebuild/venv/lib/python3.14/site-packages/websockets/legacy/server.py:1178: DeprecationWarning: remove second argument of ws_handler
+    warnings.warn("remove second argument of ws_handler", DeprecationWarning)
+
+agent/tests/test_teaching_journal.py::test_journal_actions_match_original_markdown_and_mirror_entries
+  /Users/tims-stuff/RonBrowserRebuild/agent/tests/test_teaching_journal.py:32: DeprecationWarning: 'asyncio.iscoroutinefunction' is deprecated and slated for removal in Python 3.16; use inspect.iscoroutinefunction() instead
+    assert asyncio.iscoroutinefunction(func), "Bidi tool executor awaits async tools"
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED agent/tests/test_panel_composition.py::test_browser_kwarg_configures_only_the_selected_server
+1 failed, 878 passed, 3 skipped, 142 warnings in 50.59s
+DONE

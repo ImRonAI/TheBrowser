@@ -1,0 +1,88 @@
+=== library ===
+citation-management copy-editing data-storytelling data-visualization find-skills pdf peer-review research scientific-critical-thinking scientific-slides scientific-visualization scientific-writing slidev theme-factory verification-before-completion 
+=== pytest ===
+..................                                                       [100%]
+=============================== warnings summary ===============================
+agent/tests/test_deep_research_api.py::test_all_eight_agent_composition_roots_register_deep_research_tools
+  /Users/tims-stuff/RonBrowserRebuild/venv/lib/python3.14/site-packages/a2a/server/apps/jsonrpc/fastapi_app.py:21: StarletteDeprecationWarning: 'HTTP_413_REQUEST_ENTITY_TOO_LARGE' is deprecated. Use 'HTTP_413_CONTENT_TOO_LARGE' instead.
+    from a2a.server.apps.jsonrpc.jsonrpc_app import (
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+18 passed, 1 warning in 7.06s
+=== node tests ===
+  duration_ms: 0.331042
+  type: 'test'
+  ...
+# Subtest: reduceDeepResearchEvent keeps each agent and sub-agent transcript in order, with tool names and payloads
+ok 7 - reduceDeepResearchEvent keeps each agent and sub-agent transcript in order, with tool names and payloads
+  ---
+  duration_ms: 0.3605
+  type: 'test'
+  ...
+# Subtest: a run list entry without transcripts does not erase the transcript a full snapshot gave
+ok 8 - a run list entry without transcripts does not erase the transcript a full snapshot gave
+  ---
+  duration_ms: 5.593083
+  type: 'test'
+  ...
+# (node:95550) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///Users/tims-stuff/RonBrowserRebuild/src/lib/deep-research-graph.test.ts is not specified and it doesn't parse as CommonJS.
+# Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+# To eliminate this warning, add "type": "module" to /Users/tims-stuff/RonBrowserRebuild/package.json.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: resolveScope walks into nested formations and refuses agents and unknown ids
+ok 9 - resolveScope walks into nested formations and refuses agents and unknown ids
+  ---
+  duration_ms: 0.748541
+  type: 'test'
+  ...
+# Subtest: leafAgents lists the agents under a formation
+ok 10 - leafAgents lists the agents under a formation
+  ---
+  duration_ms: 0.113583
+  type: 'test'
+  ...
+# Subtest: layoutScope layers left to right through loops and keeps cards the same size
+ok 11 - layoutScope layers left to right through loops and keeps cards the same size
+  ---
+  duration_ms: 0.625166
+  type: 'test'
+  ...
+# Subtest: an open agent pushes only the cards under it; a formation never opens in place
+ok 12 - an open agent pushes only the cards under it; a formation never opens in place
+  ---
+  duration_ms: 0.166
+  type: 'test'
+  ...
+# Subtest: scopeEdges are temporary until their source has started, and node status maps to the tool badge states
+ok 13 - scopeEdges are temporary until their source has started, and node status maps to the tool badge states
+  ---
+  duration_ms: 1.857334
+  type: 'test'
+  ...
+# Subtest: agentTranscript orders the work, resolves tool calls and splits off the result
+ok 14 - agentTranscript orders the work, resolves tool calls and splits off the result
+  ---
+  duration_ms: 1.269083
+  type: 'test'
+  ...
+# Subtest: agentTranscript still shows a run saved before transcripts existed
+ok 15 - agentTranscript still shows a run saved before transcripts existed
+  ---
+  duration_ms: 0.161083
+  type: 'test'
+  ...
+1..15
+# tests 15
+# suites 0
+# pass 15
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 106.659125
+=== typecheck ===
+
+> ronbrowser-rebuilt@1.0.0 typecheck
+> tsc --noEmit
+
+DONE

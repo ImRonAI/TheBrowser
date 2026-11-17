@@ -1,0 +1,153 @@
+    """Build the set Deep Research formation in ``FORMATION_TOPOLOGY`` as Strands ``Graph`` + ``Swarm``.
+
+    Every agent is a skill agent built by ``create_harness``: its system prompt is its skill's
+    ``SKILL.md``, it has the harness's built-in ``shell``, ``read``, ``write``, ``edit``,
+    ``programmatic_tool_caller`` and ``subagent`` tools plus the research tool pool, and it can load
+    any other skill in ``DEEP_RESEARCH_SKILLS_DIR``. Its sub-agents are the built-in ``subagent`` tool's.
+
+    ``execution_timeout`` is the whole run's budget and ``node_timeout`` one agent's. Strands applies
+    a Graph's node timeout to a nested Graph or Swarm as a whole, so only a graph of agents sets it
+    and each nested formation enforces it on its own agents.
+    """
+    clean_session_id = _validate_session_id(session_id)
+    clean_user_id = (user_id or "").strip() or "default"
+    normalized_depth = _normalize_depth(depth)
+
+    resolved_storage: Storage = (
+        cast(Storage, storage) if storage is not None else get_user_session_storage(clean_user_id)
+    )
+    base_artifacts_dir = (
+        Path(artifacts_dir).expanduser().resolve() if artifacts_dir is not None else default_artifacts_dir()
+    )
+    session_artifact_dir = base_artifacts_dir / clean_session_id
+
+    skills_by_name = load_deep_research_skills()
+    leaf_tool_pool = build_leaf_tool_pool(
+        user_id=clean_user_id,
+        storage=resolved_storage,
+        artifact_dir=session_artifact_dir,
+        session_id=clean_session_id,
+        depth=normalized_depth,
+        default_report_getter=default_report_getter,
+        default_title_getter=default_title_getter,
+        default_query_getter=default_query_getter,
+        default_citations_getter=default_citations_getter,
+        on_artifact_compiled=on_artifact_compiled,
+        extra_leaf_tools=extra_leaf_tools,
+    )
+
+    agents_sink = owned_agents if owned_agents is not None else []
+    agents_lock = threading.Lock()
+
+    def _track_agent(agent: Agent) -> Agent:
+        with agents_lock:
+            agents_sink.append(agent)
+        return agent
+
+    cached_default_model: Any = None
+
+    def _resolve_model() -> Any:
+        nonlocal cached_default_model
+        if model_factory is not None:
+            return model_factory()
+        if model is not None:
+            return model
+        if cached_default_model is None:
+            cached_default_model = _build_default_model()
+        return cached_default_model
+
+    # The harness's `environment` plugin (which would inject the working directory and the date) is
+    # off by design, so every agent is told its workspace, interpreter, QA budget and the date here.
+    workspace_note = (
+        "## Workspace\n"
+        f"Every file of this run lives in {session_artifact_dir}. Read what earlier agents saved there, save "
+        "your work there under absolute paths, and end with a short summary of what you did and the files you "
+        "wrote.\n"
+        f"- Python for scripts and charts: {sys.executable}\n"
+        "- Run independent sub-tasks in parallel by calling `subagent` several times in one turn.\n"
+        f"- A QA agent sends work back at most {_max_refinements_for_depth(normalized_depth)} time(s); after "
+        "that it records the remaining defects in qa-notes.md and approves.\n"
+        f"- Research depth: {normalized_depth}. Today is {datetime.now().astimezone().strftime('%A, %B %d, %Y')}."
+    )
+
+    def _make_skill_agent(node: Mapping[str, Any]) -> Agent:
+        """A formation agent as the AWS sample's skill agent: SKILL.md is its system prompt."""
+        skill = skills_by_name[node["skill"]]
+        return _track_agent(
+            create_harness(
+                name=node["id"],
+                agent_id=node["id"],
+                description=node["description"],
+                model=_resolve_model(),
+                instructions=(
+                    f"## Your role: {node['label']}\n{node['description']}\n\n{workspace_note}\n\n"
+                    f"## Skill: {skill.name}\n{skill.instructions}\n\n---\nLocation: {skill.path}/SKILL.md"
+                ),
+                skills=DEEP_RESEARCH_SKILLS_DIR,
+                tools=list(leaf_tool_pool.values()),
+                builtin_tools=["shell", "read", "write", "edit", "programmatic_tool_caller", "subagent"],
+                builtin_plugins=["todos"],
+                caching=False,
+                session=False,
+                memory=False,
+                background_tasks=False,
+                callback_handler=None,
+            )
+        )
+
+    # Shared native SnapshotSessionManager and MultiAgentPlugin across the outer Graph and every formation.
+    session_manager = SnapshotSessionManager(
+        session_id=clean_session_id,
+        storage=resolved_storage,
+        multi_agent_save_latest_on="node",
+    )
+    multiagent_plugin = DeepResearchMultiAgentPlugin(cancel_event=cancel_event)
+
+    def _build_formation(node: Mapping[str, Any]) -> Agent | Graph | Swarm:
+        """Build one ``FORMATION_TOPOLOGY`` node: a skill agent, a Swarm of its agents, or a Graph."""
+        if node["kind"] == "agent":
+            return _make_skill_agent(node)
+        children: Sequence[Mapping[str, Any]] = node.get("children") or node["nodes"]
+        members = {child["id"]: _build_formation(child) for child in children}
+        formation_id = node.get("orchestrator_id") or node["id"]
+        if node["kind"] == "swarm":
+            agents = cast(list[Agent], list(members.values()))
+            return Swarm(
+                agents,
+                entry_point=agents[0],
+                id=formation_id,
+                execution_timeout=execution_timeout,
+                node_timeout=node_timeout,
+                session_manager=session_manager,
+                plugins=[multiagent_plugin],
+            )
+        builder = GraphBuilder()
+        builder.set_graph_id(formation_id)
+        builder.reset_on_revisit(True)
+        for child_id, executor in members.items():
+            builder.add_node(executor, child_id)
+        for edge in node["edges"]:
+            builder.add_edge(
+                edge["from"],
+                edge["to"],
+                condition=qa_requests_revision(edge["from"], edge["to"]) if edge.get("conditional") else None,
+            )
+        # A feedback loop gives its first node an incoming edge, so entry points are set explicitly.
+        for child_id in members:
+            if not any(edge["to"] == child_id and not edge.get("conditional") for edge in node["edges"]):
+                builder.set_entry_point(child_id)
+        builder.set_execution_timeout(execution_timeout)
+        builder.set_max_node_executions(max_node_executions)
+        if all(child["kind"] == "agent" for child in children):
+            builder.set_node_timeout(node_timeout)
+        builder.set_session_manager(session_manager)
+        builder.set_plugins([multiagent_plugin])
+        return builder.build()
+
+    root_graph = cast(Graph, _build_formation(FORMATION_TOPOLOGY))
+    setattr(root_graph, "_deep_research_plugin", multiagent_plugin)
+    setattr(root_graph, "_deep_research_session_manager", session_manager)
+    setattr(root_graph, "_deep_research_owned_agents", agents_sink)
+    return root_graph
+
+

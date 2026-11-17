@@ -1,0 +1,65 @@
+def _offline_leaf_tools() -> list[Any]:
+    @tool
+    async def brave_web_search(query: str, count: int = 5) -> dict[str, Any]:
+        """Offline deterministic Brave web search double."""
+        return {
+            "query": query,
+            "count": count,
+            "results": [
+                {
+                    "title": "ArXiv QEC Benchmark",
+                    "url": "https://arxiv.org/abs/2401.00001",
+                    "description": "Empirical comparison of surface codes and qLDPC thresholds.",
+                },
+                {
+                    "title": "IBM Quantum LDPC Paper",
+                    "url": "https://research.ibm.com/publications/qldpc-2026",
+                    "description": "High-rate bivariate bicycle quantum LDPC code results.",
+                },
+            ],
+        }
+
+    @tool
+    async def brave_news_search(query: str, count: int = 5) -> dict[str, Any]:
+        """Offline deterministic Brave news search double."""
+        return {
+            "query": query,
+            "count": count,
+            "results": [
+                {
+                    "title": "Quantum Fault-Tolerance Hardware Update",
+                    "url": "https://www.nature.com/articles/s41586-026-00001-x",
+                    "description": "Logical error suppression below break-even reported.",
+                }
+            ],
+        }
+
+    @tool
+    async def brave_answer(query: str) -> dict[str, Any]:
+        """Offline deterministic Brave grounded answer double."""
+        return {
+            "query": query,
+            "answer": "Surface codes achieve ~1% threshold; qLDPC reduces physical qubit overhead.",
+            "citations": [
+                {
+                    "title": "ArXiv QEC Benchmark",
+                    "url": "https://arxiv.org/abs/2401.00001",
+                    "snippet": "Threshold ~1.0% under circuit-level noise.",
+                }
+            ],
+        }
+
+    @tool
+    async def extract_article_content(url: str) -> dict[str, Any]:
+        """Offline deterministic article extractor double."""
+        return {
+            "url": url,
+            "title": "ArXiv QEC Benchmark",
+            "source": "arxiv.org",
+            "status": "extracted",
+            "text": "# QEC Benchmark\nSurface code threshold is ~1.0%; qLDPC achieves ~0.7%.",
+        }
+
+    return [brave_web_search, brave_news_search, brave_answer, extract_article_content]
+
+

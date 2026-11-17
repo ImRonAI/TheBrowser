@@ -1,0 +1,271 @@
+def _agent(node_id: str, label: str, skill: str, description: str) -> dict[str, Any]:
+    """One formation agent: ``skill`` is its SKILL.md and ``description`` its role in the formation."""
+    return {
+        "id": node_id,
+        "label": label,
+        "kind": "agent",
+        "skill": skill,
+        "description": description,
+        "children": [],
+        "edges": [],
+    }
+
+
+def _revise(qa_id: str, agent_id: str) -> dict[str, Any]:
+    """A QA feedback edge: followed while the QA agent's verdict is ``REVISE: <agent_id>``."""
+    return {
+        "from": qa_id,
+        "to": agent_id,
+        "conditional": True,
+        "label": "QA sends it back",
+        "condition": f"REVISE: {agent_id}",
+    }
+
+
+#: The set formation. ``build_deep_research_graph`` builds the Strands Graph and Swarms from it and the
+#: renderer draws it. A Swarm's edges only lay its agents out: they hand off by their own decision.
+FORMATION_TOPOLOGY: dict[str, Any] = {
+    "id": "deep_research_graph",
+    "label": "Deep Research Formation",
+    "kind": "graph",
+    "nodes": [
+        {
+            "id": "research_swarm",
+            "label": "Research Swarm",
+            "kind": "swarm",
+            "orchestrator_id": "deep_research_research_swarm",
+            "description": (
+                "Parallel researchers gather sources, then a reference fact check, citations with a "
+                "reference list, and a QA of every reference and citation."
+            ),
+            "children": [
+                _agent(
+                    "researcher",
+                    "Researcher",
+                    "research",
+                    "Split the inquiry into independent questions and call `subagent` once per question in a "
+                    "single turn so they research in parallel from primary sources. Merge their findings, every "
+                    "claim with its source URL, into research.md, then hand off to fact_checker.",
+                ),
+                _agent(
+                    "fact_checker",
+                    "Fact Checker",
+                    "scientific-critical-thinking",
+                    "Reference fact checks only: open the source of every claim in research.md and confirm the "
+                    "source says it. Record a verdict per claim in fact-check.md, fix or remove what fails in "
+                    "research.md, then hand off to citation_manager.",
+                ),
+                _agent(
+                    "citation_manager",
+                    "Citation Manager",
+                    "citation-management",
+                    "Give every claim in research.md a numbered citation and document each source once in "
+                    "references.md (number, author or publisher, title, date, URL), then hand off to research_qa.",
+                ),
+                _agent(
+                    "research_qa",
+                    "Research QA",
+                    "peer-review",
+                    "Check all of research.md, fact-check.md and references.md: every claim cited, every citation "
+                    "in the reference list, every reference real and supporting its claim. Hand defects back to "
+                    "researcher, fact_checker or citation_manager and check again when the work returns. When it "
+                    "all passes, finish with APPROVED.",
+                ),
+            ],
+            "edges": [
+                {"from": "researcher", "to": "fact_checker", "label": "handoff_to_agent"},
+                {"from": "fact_checker", "to": "citation_manager", "label": "handoff_to_agent"},
+                {"from": "citation_manager", "to": "research_qa", "label": "handoff_to_agent"},
+                _revise("research_qa", "researcher"),
+                _revise("research_qa", "fact_checker"),
+                _revise("research_qa", "citation_manager"),
+            ],
+        },
+        {
+            "id": "data_analysis_graph",
+            "label": "Data Analysis Graph",
+            "kind": "graph",
+            "orchestrator_id": "deep_research_data_analysis",
+            "description": (
+                "Picks the data visuals that matter for the inquiry, builds them with code, ties each to its "
+                "citations, and QA returns rejected work to its author."
+            ),
+            "children": [
+                _agent(
+                    "visual_planner",
+                    "Visual Planner",
+                    "data-storytelling",
+                    "Read research.md and references.md and choose the data visuals that are meaningful for the "
+                    "inquiry. Specify each in visuals.md: what it shows, why it matters, the chart type, and the "
+                    "exact data points with their citation numbers.",
+                ),
+                _agent(
+                    "data_analyst",
+                    "Data Analyst",
+                    "data-visualization",
+                    "Build every visual in visuals.md by running Python code. Save each chart as "
+                    "figures/<name>.png with the script that made it as figures/<name>.py.",
+                ),
+                _agent(
+                    "visual_citation",
+                    "Visual Citation",
+                    "citation-management",
+                    "Tie every chart in figures/ to the citation(s) its data came from: add its caption and its "
+                    "source reference numbers from references.md to visuals.md.",
+                ),
+                _agent(
+                    "visual_qa",
+                    "Visual QA",
+                    "scientific-visualization",
+                    "Verify every chart in figures/ is cited, relevant to the inquiry and accurate against its "
+                    "cited data. List the defects, then end with one line: APPROVED, or REVISE: visual_planner, "
+                    "REVISE: data_analyst or REVISE: visual_citation for the one agent that must fix them.",
+                ),
+            ],
+            "edges": [
+                {"from": "visual_planner", "to": "data_analyst"},
+                {"from": "data_analyst", "to": "visual_citation"},
+                {"from": "visual_citation", "to": "visual_qa"},
+                _revise("visual_qa", "visual_planner"),
+                _revise("visual_qa", "data_analyst"),
+                _revise("visual_qa", "visual_citation"),
+            ],
+        },
+        {
+            "id": "writing_swarm",
+            "label": "Writing Swarm",
+            "kind": "swarm",
+            "orchestrator_id": "deep_research_writing_swarm",
+            "description": (
+                "Designs the report and slide-deck layouts, writes the report and the slide wording, and a "
+                "dedicated QA approves each."
+            ),
+            "children": [
+                _agent(
+                    "report_designer",
+                    "Report Designer",
+                    "theme-factory",
+                    "Design the layout of the report: its sections and their order, where each chart from "
+                    "figures/ goes, typography, colour and page style. Save it to report-layout.md, then hand off "
+                    "to deck_designer.",
+                ),
+                _agent(
+                    "deck_designer",
+                    "Deck Designer",
+                    "slidev",
+                    "Design the layout of the Slidev deck: the slide sequence, the layout and chart on each "
+                    "slide, theme and styling. Save it to deck-layout.md, then hand off to layout_qa.",
+                ),
+                _agent(
+                    "layout_qa",
+                    "Layout QA",
+                    "verification-before-completion",
+                    "Approve report-layout.md and deck-layout.md against the inquiry, research.md and figures/. "
+                    "Hand defects back to report_designer or deck_designer and check again when the work "
+                    "returns. When both pass, hand off to report_writer.",
+                ),
+                _agent(
+                    "report_writer",
+                    "Report Writer",
+                    "scientific-writing",
+                    "Write the full report to report.md following report-layout.md: every claim with its "
+                    "citation number, charts embedded as ![caption](figures/<name>.png), and the reference list "
+                    "from references.md at the end. Then hand off to report_qa.",
+                ),
+                _agent(
+                    "report_qa",
+                    "Report QA",
+                    "peer-review",
+                    "Approve report.md against research.md, references.md, figures/ and report-layout.md. Hand "
+                    "defects back to report_writer and check again when the work returns. When it passes, hand "
+                    "off to deck_writer.",
+                ),
+                _agent(
+                    "deck_writer",
+                    "Deck Writer",
+                    "scientific-slides",
+                    "Write the wording of every slide to deck-copy.md following deck-layout.md: title, points, "
+                    "speaker notes, citation numbers and the chart for the slide. Then hand off to deck_qa.",
+                ),
+                _agent(
+                    "deck_qa",
+                    "Deck QA",
+                    "copy-editing",
+                    "Approve deck-copy.md against report.md and deck-layout.md. Hand defects back to deck_writer "
+                    "and check again when the work returns. When it passes, finish with APPROVED.",
+                ),
+            ],
+            "edges": [
+                {"from": "report_designer", "to": "deck_designer", "label": "handoff_to_agent"},
+                {"from": "deck_designer", "to": "layout_qa", "label": "handoff_to_agent"},
+                {"from": "layout_qa", "to": "report_writer", "label": "handoff_to_agent"},
+                {"from": "report_writer", "to": "report_qa", "label": "handoff_to_agent"},
+                {"from": "report_qa", "to": "deck_writer", "label": "handoff_to_agent"},
+                {"from": "deck_writer", "to": "deck_qa", "label": "handoff_to_agent"},
+                _revise("layout_qa", "report_designer"),
+                _revise("layout_qa", "deck_designer"),
+                _revise("report_qa", "report_writer"),
+                _revise("deck_qa", "deck_writer"),
+            ],
+        },
+        {
+            "id": "production_graph",
+            "label": "Production Graph",
+            "kind": "graph",
+            "orchestrator_id": "deep_research_production",
+            "description": "Builds the styled PDF and the Slidev deck in parallel, each with its own QA.",
+            "children": [
+                _agent(
+                    "pdf_publisher",
+                    "PDF Publisher",
+                    "pdf",
+                    "Create the PDF: call compile_scholarly_pdf with css that styles report.md as "
+                    "report-layout.md specifies. It builds report.pdf from report.md with its charts, citations "
+                    "and reference page.",
+                ),
+                _agent(
+                    "pdf_qa",
+                    "PDF QA",
+                    "pdf",
+                    "Inspect report.pdf: charts present, styling as report-layout.md specifies, citations and "
+                    "the reference page intact. List the defects, then end with one line: APPROVED or "
+                    "REVISE: pdf_publisher.",
+                ),
+                _agent(
+                    "deck_producer",
+                    "Slidev Producer",
+                    "slidev",
+                    "Create the deck: write slides.md in Slidev Markdown from deck-copy.md and deck-layout.md, "
+                    "with styled charts from figures/ embedded as ![caption](figures/<name>.png) and citations, "
+                    "then call compile_slidev_deck to build it.",
+                ),
+                _agent(
+                    "deck_build_qa",
+                    "Slidev QA",
+                    "slidev",
+                    "Inspect slides.md and the built deck in slides/: every slide follows deck-layout.md, with "
+                    "its chart, styling and citations. List the defects, then end with one line: APPROVED or "
+                    "REVISE: deck_producer.",
+                ),
+            ],
+            "edges": [
+                {"from": "pdf_publisher", "to": "pdf_qa"},
+                {"from": "deck_producer", "to": "deck_build_qa"},
+                _revise("pdf_qa", "pdf_publisher"),
+                _revise("deck_build_qa", "deck_producer"),
+            ],
+        },
+    ],
+    "edges": [
+        {"from": "research_swarm", "to": "data_analysis_graph"},
+        {"from": "data_analysis_graph", "to": "writing_swarm"},
+        {"from": "writing_swarm", "to": "production_graph"},
+    ],
+}
+
+#: The Strands id of the outer Graph and of each nested formation.
+ORCHESTRATOR_IDS: Final[tuple[str, ...]] = (
+    FORMATION_TOPOLOGY["id"],
+    *(str(node["orchestrator_id"]) for node in FORMATION_TOPOLOGY["nodes"]),
+)
+

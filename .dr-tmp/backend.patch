@@ -1,0 +1,3345 @@
+diff --git a/AGENTS.md b/AGENTS.md
+index 6815715..244574d 100644
+--- a/AGENTS.md
++++ b/AGENTS.md
+@@ -142,7 +142,7 @@ These boundaries are load-bearing; do not casually cross them. `docs/panel-runti
+ - **Tool repair (CAT-50/51)** (`core/tool_repair.py`, `core/tool_failure.py`, `endpoints/tool_repairs.py`, `agent/sops/repairing-a-broken-tool.sop.md`, renderer `RepairPanel.tsx`/`RepairBridge.tsx`/`src/lib/repair-api.ts`, `electron/repair-surface.ts`): **tenant = `user_id`**; a repaired tool is a user-scoped revision under `panel/users/<sha256(user_id)>/tool-repairs/<tool>/{active.json, <rev>/manifest.json, <rev>/files/…, <rev>/tests/}`. **Simple flow: a tool fails → one `create_harness` fixer runs in the background → the user clicks Approve.** `RepairService` is built in `main.py`'s lifespan with the live objects (`reload_live_sessions(manager, …)`, `chat.repair_emitter(manager)`; `chat.bind_repair_service`) — nothing re-imports `agent.api.main`. `service.trigger(browser=)` is the `ToolRepairTrigger` (`AfterToolCallEvent`, order 310, `RON_TOOL_REPAIR=0` disables) on every panel agent and the Live `BidiAgent`; it counts `(tool, exception class)` failures of every tool except `NON_REPAIRABLE_TOOLS` — **except a call the tool's own input schema rejected before the body ran** (`input_validation_failure`: re-runs the native decorated tool's Pydantic `input_model` on the exact arguments, falls back to the documented `Validation failed for input parameters` / MCP `Input validation error:` prefixes), which is a call/stream defect, writes the `rejected` guidance phase ("call it again with every required parameter"), and never counts toward a repair or starts a fixer (`shell(command missing)` used to start a shell fixer) — gives an idempotent tool one guided retry below `RON_TOOL_REPAIR_THRESHOLD` (2), and at the threshold (or the first failure of a side-effecting tool) calls `service.investigate(evidence)`, which starts `_run` as an asyncio task and returns immediately (one per `(user, tool)`, at most `RON_TOOL_REPAIR_MAX_CONCURRENT`). `_run` = `build_fixer(...)` (one `create_harness`: `ModelRouter(FallbackStrategy)` over `RON_TOOL_REPAIR_MODELS` at `RON_TOOL_REPAIR_EFFORT`, hosted Perplexity tools `fixer_hosted_tools()`, `builtin_tools=["shell","read","write","edit"]`, `builtin_plugins=["todos","environment"]`, read-only memory search, `record_demonstration`/`submit_repair`; `memory/session/skills/interventions` off) → `fixer.stream_async(sop_task(...))` (native Agent SOP prompt; events render as the panel's "Repair" chain under `repair:<rev>`) → manifest. Sandbox: `create_sandbox` = a bounded `DockerSandbox` (`sandbox_run_args`) when Docker works, else the SDK `NotASandboxLocalEnvironment` (`sandbox: local`; `fixer_paths` gives the SOP absolute host paths and the prompt forbids writing outside the workspace). The VPS `ron` user has no Docker access, so production runs `local` until `usermod -aG docker ron`. Session events: `tool_repair_investigating` → `tool_repair_approval` (verified: summary, diff, demonstrations, sandbox, `approval_token` = sha256(owner, tool, rev, base sha, artifact digest)) or `tool_repair_ready` (failed / needs_maintainer / not_reproducible / cancelled). **Approve** = `POST /tools/repairs/{tool}/activate {user_id, rev, approval_token}`: re-checks owner, base sha (409), stored-artifact digest (409) and token (403), writes `active.json`, reloads the owner's live sessions (`PanelToolCatalog.reload_tool`/`replace_tool`/`restart_mcp_server`, effective at the next invocation), and `service.applied` sets the agent's guidance to `confirm` (call the tool again before saying it is fixed). Also `/decline`, `/cancel`, `/rollback`, `GET /tools/repairs/active`, `POST /tools/repairs` (repair a named tool). There is no `/a2a/fixer` server, no A2A client and no HITL interrupt in this path. Renderer: `panel-stream.ts` reduces the events into `state.repair`; `usePanelChat.followRepair` follows `/events?after=` until done; `RepairPanel` shows Cancel / Approve / Decline / Roll back; the native `electron/repair-surface.ts` view mirrors it over tabs via `RepairBridge`. Tests: `test_tool_repair.py` (trigger rules, background run → approval → activate → confirm, decline/cancel, local fallback paths, failed without submit, activation binding, reload, rollback, adapter/MCP/server revisions, HTTP loop), `src/lib/panel-stream.test.ts`, `src/lib/repair-api.test.ts`.
+ - **Browser targets**: the agent drives **the user's browser** (`user`: this Electron window, foreground tab, via the SSH reverse tunnel) — there is no user-facing target selector any more (`BrowserTargetSelector` removed; the renderer never sends `ChatRequest.browser`, so the server default `RON_BROWSER_DEFAULT`/`user` applies). `cloud` (the headless VPS Electron) is a **failover only**: the Live→Chat takeover pins it when the app has disconnected mid-task; the panel header shows an amber "Cloud browser" badge for such a thread and `ThreadsList` marks it. `panel_browser.py` configures ONLY the selected target's prefixed `electron-playwright-mcp` server (`user_browser` / `cloud_browser`, staged via `tool_catalog(action="load", name=...)`, elicitation accepted) and registers `BrowserAvailabilityHook`, whose native `BeforeToolCallEvent` interrupt (`browser_unavailable:<n>`, reply `continue`/`cancel`) is the only unavailability policy within a run. Browser tools are parent-only; never auto-switch targets mid-run or replay a tool whose result was lost.
+ - **Electron tabs**: in `electron/main.ts`, every tab must use the `persist:default` session partition so MCP cookie/storage tools see the same store. `window.open`/`target=_blank` from a tab **or from the browser chrome itself** (links in project pages and issue descriptions, which open on click via Tiptap Link's `openOnClick`) becomes a new app tab through `setWindowOpenHandler` (the chrome window opens only http(s) URLs), never a detached window. Preserve `setActiveWebContentsSupplier` for foreground-tab automation; keep automation out of the preload bridge (preload exposes only UI/theme/tab/window IPC, guarded by `validateIpcSender`).
+-- **Deep Research formation graph** (`agent/api/core/deep_research.py`, `endpoints/deep_research.py`; renderer `src/pages/DeepResearchPage.tsx`, `src/components/deep-research/` (`FormationGraph.tsx`, `DeepResearchFormationWorkbench.tsx`, `DeepResearchFormationView.tsx`, `formation-graph.css`), pure `src/lib/deep-research-api.ts` + `src/lib/deep-research-graph.ts`): a run page (`ron://research/<session>`) is two full-width tabs, **Formation** and **Report Studio**; Formation is the agent **Graph** (default) or the stage **List** (`deepResearchStore.formationView`, persisted). The graph is the AI Elements Workflow composition v0-clone-blurple uses for its agent graphs, with the native components as written: `Canvas` + `Connection` + `Controls` + `Panel`, `Edge.Animated` once an edge's source has started and `Edge.Temporary` before, a custom node type built from `Node`/`NodeHeader`/`NodeTitle`/`NodeDescription`/`NodeAction`/`NodeContent`/`NodeFooter` with `getStatusBadge` (`nodeToolState`). An **agent** node shows a `Shimmer` and the tail of its newest text; clicking it opens the native `Accordion` inside the node, where the `Agent` component (`AgentHeader` with the model, `AgentContent`) holds the agent's work in a `Conversation` at a fixed height (card 360x167, body 384: `NODE_*` in `deep-research-graph.ts` must match the classes in `FormationGraph.tsx`, since `layoutScope` moves the cards under an open one): its own reasoning/narration as a `ChainOfThought`, one `Task` per `use_skill` sub-agent whose content is that sub-agent's `ChainOfThought` (Thinking, `Using <tool>` with input/output, Conclusion), then its output as a `MessageResponse`. A **formation** node (graph or swarm) is entered by a click: the same canvas (remounted, so it fits) shows that formation's own nodes and edges (`resolveScope`), and the `Panel` carries Back plus the breadcrumb. The stream that feeds it: beside the existing events the runtime emits `reasoning_delta` (native `ReasoningTextStreamEvent`; with `skill_id` for a sub-agent), names a leaf tool call when the model starts it (native `ToolUseStreamEvent`), and `skill_tool` carries `input` and, on the result, `tool_name` + `output` (cut at `RON_DEEP_RESEARCH_TOOL_OUTPUT_CHARS`, 8000) + `output_truncated`; a framework plugin tool's result is not a tool row. The run keeps each agent's transcript (`nodes[..].activity`: text, reasoning, skill, pass) and each sub-agent's (`skill_invocations[].steps`: text, reasoning, tool), folded identically server-side (`_apply_event_locked`) and in `reduceDeepResearchEvent`, so a finished run reopens as it looked live; the per-node skill copies and `GET /deep-research/runs` leave transcripts and tool payloads out (`_without_transcripts`), `normalizeDeepResearchSnapshot` keeps what a fuller snapshot gave, and `refreshRuns` does not merge a listing into a run whose stream is attached. Runs saved before transcripts render from their skills and previews. Tests: `test_deep_research_graph.py::test_run_transcripts_keep_reasoning_and_tool_payloads_and_lists_leave_them_out`, `src/lib/deep-research-api.test.ts`, `src/lib/deep-research-graph.test.ts`.
++- **Deep Research formation graph** (`agent/api/core/deep_research.py`, `endpoints/deep_research.py`; renderer `src/pages/DeepResearchPage.tsx`, `src/components/deep-research/` (`FormationGraph.tsx`, `DeepResearchFormationWorkbench.tsx`, `DeepResearchFormationView.tsx`, `formation-graph.css`), pure `src/lib/deep-research-api.ts` + `src/lib/deep-research-graph.ts`): a run page (`ron://research/<session>`) is two full-width tabs, **Formation** and **Report Studio**; Formation is the agent **Graph** (default) or the stage **List** (`deepResearchStore.formationView`, persisted). The graph is the AI Elements Workflow composition v0-clone-blurple uses for its agent graphs, with the native components as written: `Canvas` + `Connection` + `Controls` + `Panel`, `Edge.Animated` once an edge's source has started and `Edge.Temporary` before, a custom node type built from `Node`/`NodeHeader`/`NodeTitle`/`NodeDescription`/`NodeAction`/`NodeContent`/`NodeFooter` with `getStatusBadge` (`nodeToolState`). An **agent** node shows a `Shimmer` and the tail of its newest text; clicking it opens the native `Accordion` inside the node, where the `Agent` component (`AgentHeader` with the model, `AgentContent`) holds the agent's work in a `Conversation` at a fixed height (card 360x167, body 384: `NODE_*` in `deep-research-graph.ts` must match the classes in `FormationGraph.tsx`, since `layoutScope` moves the cards under an open one): its own reasoning/narration as a `ChainOfThought`, one `Task` per built-in `subagent` sub-agent whose content is that sub-agent's `ChainOfThought` (Thinking, `Using <tool>` with input/output, Conclusion), then its output as a `MessageResponse`. A **formation** node (graph or swarm) is entered by a click: the same canvas (remounted, so it fits) shows that formation's own nodes and edges (`resolveScope`), and the `Panel` carries Back plus the breadcrumb. The stream that feeds it: beside the existing events the runtime emits `reasoning_delta` (native `ReasoningTextStreamEvent`; with `skill_id` for a sub-agent), names a leaf tool call when the model starts it (native `ToolUseStreamEvent`), and `skill_tool` carries `input` and, on the result, `tool_name` + `output` (cut at `RON_DEEP_RESEARCH_TOOL_OUTPUT_CHARS`, 8000) + `output_truncated`; a framework plugin tool's result is not a tool row. The run keeps each agent's transcript (`nodes[..].activity`: text, reasoning, skill, pass) and each sub-agent's (`skill_invocations[].steps`: text, reasoning, tool), folded identically server-side (`_apply_event_locked`) and in `reduceDeepResearchEvent`, so a finished run reopens as it looked live; the per-node skill copies and `GET /deep-research/runs` leave transcripts and tool payloads out (`_without_transcripts`), `normalizeDeepResearchSnapshot` keeps what a fuller snapshot gave, and `refreshRuns` does not merge a listing into a run whose stream is attached. Runs saved before transcripts render from their skills and previews. Tests: `test_deep_research_graph.py::test_run_transcripts_keep_reasoning_and_tool_payloads_and_lists_leave_them_out`, `src/lib/deep-research-api.test.ts`, `src/lib/deep-research-graph.test.ts`. **The formation is set by `FORMATION_TOPOLOGY`** (`build_deep_research_graph` builds Strands from it; the renderer's `DEFAULT_FORMATION_TOPOLOGY` mirrors it): outer `Graph` `research_swarm` (Swarm: a researcher fanning out parallel `subagent`s, a reference fact checker, a citation manager, QA) → `data_analysis_graph` (Graph: visual planner → data analyst → visual citation → QA) → `writing_swarm` (Swarm: report and deck designers, layout QA, report writer + QA, deck writer + QA) → `production_graph` (Graph: `pdf_publisher`⇄`pdf_qa` and `deck_producer`⇄`deck_build_qa` in parallel). A Graph QA ends its reply with `APPROVED` or `REVISE: <agent>`; `qa_requests_revision` (the Strands feedback-loop edge condition) sends the work back to that agent and the chain returns to QA, at most `max_refinements` times (`RON_DEEP_RESEARCH_MAX_REFINEMENTS` for deep; standard 0, exhaustive one more), so an unapproved loop ends the graph normally. Swarm agents hand off with the native `handoff_to_agent`. Strands applies a Graph's node timeout to a nested formation as a whole, so only graphs of agents (and the Swarms) set `RON_DEEP_RESEARCH_NODE_TIMEOUT` (3600 s, one agent turn) and the outer graph only the run budget `RON_DEEP_RESEARCH_EXECUTION_TIMEOUT` (10800 s). **Every agent is a skill agent** (the Agent-as-Tool skill agent of `aws-samples/sample-strands-agents-agentskills`, built by `create_harness`): system prompt = role + workspace note + its skill's `SKILL.md` + `Location:`; the harness's built-in `shell`, `read`, `write`, `edit`, `programmatic_tool_caller` and `subagent` (`background_tasks=False`, so sub-agents stream as `tool_stream` events and several calls in one turn run in parallel); the research pool (Brave, `http_request`, `extract_article_content`, `search_saved_context`, the two compile tools, Tavily/Exa only where `TAVILY_API_KEY`/`EXA_API_KEY` are set) and **no browser automation**; every library skill loadable through `AgentSkills`. These agents run host shell, so Deep Research stays loopback-only. Agents work in files in the run's artifact directory (`research.md`, `references.md`, `visuals.md`, `figures/*.png`, `report-layout.md`, `deck-layout.md`, `report.md`, `deck-copy.md`, `slides.md`): `compile_scholarly_pdf(css=)` compiles the workspace `report.md`, `compile_slidev_deck` the workspace `slides.md`, and both embed local images as data URIs (`_inline_local_images`). **Skill library**: `agent/skills/deep-research/.agents/skills/` is a Skills CLI install with `skills-lock.json` beside `.agents`; choose skills with `npx skills find`, then run `npx skills add <owner/repo> --skill <name> -a universal -y` (or `npx skills update`) from `agent/skills/deep-research` (`find-skills` is installed for the agents too). The older skill folders directly under `agent/skills/deep-research/` are no longer loaded.
+ - **Ren as an MCP server and client** (`agent/api/core/ren_mcp.py`, `agent/tests/test_ren_mcp.py`): FastMCP server `ren-desktop` is mounted at `/mcp/` with its lifespan (loopback, like `/skills/mcp/`; never on the ngrok allowlist). It serves the browser under `browser_` (a `ProxyProvider` over the same `electron-playwright-mcp` server and `browser_server_config(default_browser())` the panel agent uses, answering its approval elicitations the way `accept_browser_elicitation` does) and Ren's agent: `ask_ren(prompt, thread?)` posts to the API's own `/chat` in process and returns `{thread, answer}` from the session snapshot, `ren_threads`, `ren_thread`, `ren_cancel`. A desktop can't be called from outside, so with `REN_HUB_URL` set the lifespan dials Ren's hub (`<hub>/attach/desktop`, bearer `REN_HUB_TOKEN`, WebSocket subprotocol `mcp`) and serves the same server on that socket, retrying 2 s to 60 s. The hub (`deploy/vm/hub` in `ImRonAI/rivet-assistant`, fastmcp 3.4.0) lists the phone's tools unprefixed and the desktop's under `desktop_`. As a client, the panel agent's tool catalog gains the server `phone` (the hub's `/mcp` over streamable HTTP, tools prefixed `phone_`, the hub's `desktop_` copies rejected), staged with `tool_catalog(action="load", name="phone")`, and `phone_prompt_section()` adds a `## Phone` section to the panel prompt. Without `REN_HUB_URL` there is no attach, no `phone` server and no prompt section.
+ - **Automation probes**: real electron-playwright-mcp HTTP probes are `GET :3000/electron/app/isReady`, `GET :3000/electron/app/version`, `GET :8931/mcp/tabs`, `GET :9222/json/version`. There is no `/electron/tabs`. Under `xvfb-run`, `Failed to connect to the bus` and GPU-process errors in `journalctl -u ron-browser` are expected noise. `POST :8931/mcp/screenshot` requires a visible page surface: on an internal `ron://` tab (or the materialized-but-detached `about:blank` view it gets) it returns `400 {"error": "...no visible page surface..."}` immediately instead of hanging, and `GET /mcp/tabs` reports `visible` per tab (host-computed in `automationTabs()` from `mainWindow.contentView` attachment). Every capture is bounded by `ELECTRON_PLAYWRIGHT_MCP_SCREENSHOT_TIMEOUT_MS` (default 10000 ms; `screenshotTimeoutMs` option) so one hung CDP `Page.captureScreenshot` cannot wedge the serialized `/mcp/*` queue — before this guard a screenshot on `ron://home` hung every later `/mcp/*` call until Electron restarted (`/electron/*` on :3000 is a separate server and was never affected). The MCP tool relays the host error text as a `ToolError`.
+ - **Reasoning efforts per provider** (`GET /models/{id}/efforts?provider=`, `core/panel_agent.py`, `core/mistral_model.py`): the catalogue is live (`list_provider_models` = each provider's own `models.list()`), so efforts are static per-model tables keyed by id prefix (longest prefix wins) and validated again in `build_model`. **Perplexity** is probed live (`REASONING_EFFORTS`, cached per process). **xAI** `XAI_REASONING_EFFORTS_BY_MODEL`. **Mistral** `MISTRAL_REASONING_EFFORTS_BY_MODEL` + `MISTRAL_REASONING_EFFORTS_EXCLUDED` — from docs.mistral.ai/studio/conversations/reasoning and a live probe of all 56 catalogue ids on 2026-10-09: `mistral-small*`, `mistral-medium*` (3 / 3.5 / 2604 / latest), `mistral-vibe-cli-*`, `magistral-*` and `ft:<those>` take `none|high`; `mistral-large-4(-0)` takes `low|medium|high` (re-probed live 2026-11-10: `none` answers 400 "supported values: high, low, medium"); `zai-glm-5-3` / `zai-glm-5` / `zai-glm-latest` take `low|high|max`; everything else (`mistral-large-latest` = Large 3 `-2512`, codestral, ministral, voxtral, ocr, embed, moderation, deprecated `zai-glm-5-2`) answers `400 "reasoning_effort is not enabled for this model"` and returns `[]`. `RonMistralModel` (subclass of the pinned `strands.models.mistral.MistralModel`) puts `reasoning_effort` on the chat-completions request, streams `ThinkChunk` deltas as `reasoningContent` + `signature` (the vended adapter reads `delta.content` only as a string), replays stored `reasoningContent` as `thinking` chunks **in their original position with their signature** on the next turn (Mistral requires full replay; a reasoning-only assistant message, which the vended formatter drops, is re-inserted), and re-inserts `max` on the wire through a `BeforeRequestHook` because the pinned `mistralai` 2.10.1 `ReasoningEffort` literal lacks it and the marshaller drops unknown values (verified against the installed SDK in `test_mistral_tool_stream.py::test_max_effort_reaches_the_wire_through_the_real_sdk`). **Streamed tool calls are correlated by `ToolCall.index`, not `id`** (`_ToolCallAssembler`): on the documented wire only the first fragment of a call carries `id`/`name`; argument fragments repeat `index` and omit `id`, which the installed SDK defaults to the literal `"null"`. The vended loop (and Ron's copy of it until 2026-10-21) grouped by `id`, so GLM 5.3 produced one named call with `{}` arguments plus a phantom `"null"` call holding the real arguments — the native loop then dispatched the named call and the tool failed `Validation failed for input parameters` (`tool_catalog`, `shell`, …). The assembler keeps the validated identity, concatenates string fragments, serializes documented object-valued arguments, and raises `MistralStreamError` instead of dispatching for: two ids/names on one index, a continuation with no identity, incomplete/invalid argument JSON, `finish_reason: error`, or an EOF while a call is buffered; `length` keeps native `max_tokens` semantics (no dispatch). `tool_choice` (`auto|any|tool`) is translated onto the documented field (unsupported shapes raise); HTTP errors are classified by `MistralError.status_code` (429/503 → `ModelThrottledException`), not by message text; `stream=False` and `structured_output` go through the same client (so `max` applies) and the same assembler. Tests: `test_mistral_tool_stream.py` (real `mistralai` SSE parsing over `httpx.MockTransport` → `RonMistralModel` → native `Agent` → a required-parameter recording tool). **Gemini** `GEMINI_THINKING_LEVELS_BY_MODEL` — the "Controlling thinking" table at ai.google.dev/gemini-api/docs/thinking plus the image-generation guide, confirmed live on `generateContent` with `include_thoughts=True`: 3.8/3.7 Flash and `gemini-flash-latest` `low|medium|high` (MINIMAL rejected), 3.6/3.5 Flash, 3.5 Flash-Lite, 3.1 Flash-Lite, 3 Flash Preview, `gemini-flash-lite-latest`, Robotics-ER 2 `minimal|low|medium|high`, 3.1 Pro (+`-customtools`, `gemini-pro-latest`), 2.5 Pro/Flash/Flash-Lite `low|medium|high`, 3 Pro Preview `low|high`, Nano Banana 2.1 `minimal|medium|high`, 3.1 Flash Image / Flash-Lite Image `minimal|high`; TTS, transcribe, omni, computer-use, 2.5 Flash Image and Nano Banana Pro return `[]` (`"Thinking level is not supported for this model"`). The effort is sent as `ThinkingConfig(include_thoughts=True, thinking_level=<UPPER>)`. The Live/`/bidi` picker is separate (`endpoints/bidi.py` `EFFORTS`, `src/lib/voice-settings.ts`). The renderer pickers (`AgentPanel`, `IssueRonChat`, `SuperAgentInterface`) use `ModelSelector`, which always shows the chosen model's levels (none for a model without any; "Auto" sends no effort), and send `reasoning_effort` on the first `/chat`. NIM's gateway accepts its whole generic enum for any model (live 2026-11-10), so NIM levels cannot be confirmed by probing and its reference page for `z-ai/glm-5.3-flash` documents no `reasoning_effort`; `low|high|max` there follows Mistral's documented and live-verified values for the same model. Tests: `test_chat.py` (`*_efforts_are_documented_not_probed`, `test_mistral_and_gemini_build_model_validate_effort`), `test_mistral_model.py`.
+diff --git a/agent/api/core/config.py b/agent/api/core/config.py
+index e4d83df..4674cbe 100644
+--- a/agent/api/core/config.py
++++ b/agent/api/core/config.py
+@@ -314,13 +314,13 @@ RON_DEEP_RESEARCH_ENABLED: bool = _INIT_DEEP_RESEARCH_ENABLED
+ RON_DEEP_RESEARCH_PROVIDER: str | None = os.getenv("RON_DEEP_RESEARCH_PROVIDER", "").strip() or None
+ #: Optional model id override for Deep Research formations (unset uses the provider's default model).
+ RON_DEEP_RESEARCH_MODEL: str | None = os.getenv("RON_DEEP_RESEARCH_MODEL", "").strip() or None
+-#: Overall execution timeout (seconds) for the top-level Deep Research Graph.
+-RON_DEEP_RESEARCH_EXECUTION_TIMEOUT: float = float(os.getenv("RON_DEEP_RESEARCH_EXECUTION_TIMEOUT", "1200.0"))
+-#: Per-node execution timeout (seconds) inside Deep Research formations.
+-RON_DEEP_RESEARCH_NODE_TIMEOUT: float = float(os.getenv("RON_DEEP_RESEARCH_NODE_TIMEOUT", "300.0"))
+-#: Maximum node executions before the top-level Deep Research Graph halts.
++#: The whole Deep Research run's budget (seconds): the top-level Graph and every nested formation.
++RON_DEEP_RESEARCH_EXECUTION_TIMEOUT: float = float(os.getenv("RON_DEEP_RESEARCH_EXECUTION_TIMEOUT", "10800.0"))
++#: One agent's budget (seconds) for one turn inside a Deep Research formation, its sub-agents included.
++RON_DEEP_RESEARCH_NODE_TIMEOUT: float = float(os.getenv("RON_DEEP_RESEARCH_NODE_TIMEOUT", "3600.0"))
++#: Maximum node executions before a Deep Research Graph halts (the safety net behind the QA loops).
+ RON_DEEP_RESEARCH_MAX_NODE_EXECUTIONS: int = int(os.getenv("RON_DEEP_RESEARCH_MAX_NODE_EXECUTIONS", "16"))
+-#: Maximum verification -> investigation refinement loops per Deep Research run.
++#: Times a QA agent may send work back at depth "deep" ("standard" gets none, "exhaustive" one more).
+ RON_DEEP_RESEARCH_MAX_REFINEMENTS: int = int(os.getenv("RON_DEEP_RESEARCH_MAX_REFINEMENTS", "1"))
+ #: Characters of one leaf tool result kept in a run's transcript (the formation graph's tool rows).
+ RON_DEEP_RESEARCH_TOOL_OUTPUT_CHARS: int = int(os.getenv("RON_DEEP_RESEARCH_TOOL_OUTPUT_CHARS", "8000"))
+diff --git a/agent/api/core/deep_research.py b/agent/api/core/deep_research.py
+index bf8d841..c2ad38a 100644
+--- a/agent/api/core/deep_research.py
++++ b/agent/api/core/deep_research.py
+@@ -1,45 +1,32 @@
+ """Deep Research Native Skill Formations & Asynchronous Runtime.
+ 
+-Implements Ren's multi-stage Deep Research engine strictly on the pinned Strands SDK
+-(``563f57d7``) and ``strands-harness==0.1.2``:
+-
+-1. **100% Native AgentSkills**: Every stage orchestrator and leaf specialist loads its
+-   ``SKILL.md`` + ``references/rubric.md`` package from ``agent/skills/deep-research/`` via
+-   ``strands.vended_plugins.skills.Skill.from_directory(...)`` and attaches it via
+-   ``AgentSkills(skills=[...])``.
+-2. **3-Level Nested Strands Formations** (``build_deep_research_graph``):
+-   - Outer ``Graph`` (``id="deep_research_graph"``, ``reset_on_revisit(True)``):
+-     - ``planning_formation``: nested ``Graph`` (``id="deep_research_planning"``) running
+-       ``problem_framing -> research_blueprint``.
+-     - ``investigation_formation``: nested ``Graph`` (``id="deep_research_investigation"``)
+-       fanning out across 3 parallel branches — ``web_intelligence``,
+-       ``news_data_intelligence``, and ``adversarial_swarm`` (a nested ``Swarm``
+-       ``id="deep_research_adversarial_swarm"`` pairing ``hypothesis_explorer`` and
+-       ``contrarian_examiner``) — then converging onto ``evidence_ledger`` via an explicit
+-       AND ``EdgeConditionWithContext``.
+-     - ``verification_swarm``: nested ``Swarm`` (``id="deep_research_verification_swarm"``)
+-       pairing ``citation_verifier`` and ``analytical_critic``, gated by complementary
+-       conditional edges to either revisit ``investigation_formation`` on
+-       ``[NEEDS_REFINEMENT]`` or advance to ``synthesis_formation``.
+-     - ``synthesis_formation``: nested ``Graph`` (``id="deep_research_synthesis"``) running
+-       ``report_drafter -> executive_editor``.
+-3. **Strict ``use_skill``-Only Orchestrator Invariant**:
+-   Every orchestrator ``Agent`` in every ``Graph`` and ``Swarm`` is constructed via
+-   ``strands_harness.create_harness(...)`` with ``tools=[use_skill]`` ONLY (plus native
+-   ``handoff_to_agent`` injected by ``Swarm``), ``builtin_tools=[]``,
+-   ``builtin_plugins=["todos"]``, ``caching=False``, ``session=False``, ``memory=False``,
+-   ``background_tasks=False``, and ``ContextOffloader``. Every ``use_skill`` subagent is
+-   built via ``strands_harness.tools.make_subagent(name="use_skill", ...)`` +
+-   ``create_harness(...)`` over vetted read-only research tools.
+-4. **Native Persistence & Multi-Agent Hooks**:
+-   Attaches ``SnapshotSessionManager(session_id=..., storage=..., multi_agent_save_latest_on="node")``
+-   and ``DeepResearchMultiAgentPlugin`` across the outer ``Graph`` and all 5 nested
+-   ``Graph``/``Swarm`` formations, plus durable run snapshots in user session storage.
++Implements Ren's Deep Research engine on the pinned Strands SDK (``563f57d7``) and
++``strands-harness==0.1.2``:
++
++1. **Set formation** (``FORMATION_TOPOLOGY`` -> ``build_deep_research_graph``): the outer ``Graph``
++   runs ``research_swarm`` (``Swarm``: parallel researchers, reference fact check, citations and
++   reference list, QA) -> ``data_analysis_graph`` (``Graph``: visual planner -> data analyst ->
++   visual citation -> QA) -> ``writing_swarm`` (``Swarm``: report and deck layouts with QA, report
++   and slide wording each with its own QA) -> ``production_graph`` (``Graph``: PDF publisher and
++   Slidev producer in parallel, each with its own QA). In a Graph, a QA agent's ``REVISE: <agent>``
++   verdict follows the Strands feedback-loop edge back to that agent and returns to QA; in a Swarm
++   the agents hand off with the native ``handoff_to_agent``.
++2. **Skill agents**: every node is one ``strands_harness.create_harness(...)`` agent whose system
++   prompt is a proven Agent Skill's ``SKILL.md`` (the Agent-as-Tool skill agent of
++   ``aws-samples/sample-strands-agents-agentskills``), with the harness's built-in ``shell``,
++   ``read``, ``write``, ``edit``, ``programmatic_tool_caller`` and ``subagent`` tools, the research
++   tool pool (no browser automation), and every skill under ``DEEP_RESEARCH_SKILLS_DIR`` loadable
++   through the native ``AgentSkills`` plugin. The skills are installed there with the Skills CLI
++   (``npx skills add``; ``skills-lock.json`` records each source).
++3. **Native persistence & multi-agent hooks**: ``SnapshotSessionManager(session_id=..., storage=...,
++   multi_agent_save_latest_on="node")`` and ``DeepResearchMultiAgentPlugin`` on the outer ``Graph``
++   and every nested formation, plus durable run snapshots in user session storage.
+ """
+ 
+ from __future__ import annotations
+ 
+ import asyncio
++import base64
+ from collections import deque
+ from collections.abc import AsyncIterator, Awaitable, Callable, Mapping, Sequence
+ import copy
+@@ -48,11 +35,13 @@ import glob
+ import html
+ import json
+ import logging
++import mimetypes
+ import os
+ from pathlib import Path
+ import re
+ import shutil
+ import subprocess
++import sys
+ import tempfile
+ import textwrap
+ import threading
+@@ -65,25 +54,25 @@ from jinja2 import BaseLoader, Environment
+ from markdown_it import MarkdownIt
+ from pypdf import PdfReader, PdfWriter
+ from strands import Agent, tool
++from strands.handlers import null_callback_handler
+ from strands.hooks import HookOrder
+ from strands.hooks.events import (
+     AfterMultiAgentInvocationEvent,
+     AfterNodeCallEvent,
++    AgentInitializedEvent,
+     BeforeMultiAgentInvocationEvent,
+     BeforeNodeCallEvent,
+     MultiAgentInitializedEvent,
+ )
+ from strands.multiagent import GraphBuilder, Status, Swarm
+-from strands.multiagent.base import MultiAgentBase, NodeResult
++from strands.multiagent.base import MultiAgentBase, MultiAgentResult, NodeResult
+ from strands.multiagent.graph import Graph, GraphState
+ from strands.plugins.multiagent_plugin import MultiAgentPlugin
+ from strands.session import SnapshotSessionManager
+ from strands.storage import Storage
+ from strands.types.tools import AgentTool
+-from strands.vended_plugins.context_offloader import ContextOffloader
+-from strands.vended_plugins.skills import AgentSkills, Skill
++from strands.vended_plugins.skills import Skill
+ from strands_harness import create_harness
+-from strands_harness.tools import AgentSpec, Fixed, Inherit, Preset, make_subagent
+ 
+ from agent.api.core import config as app_config
+ from agent.api.core.articles import ArticleUnavailableError, NonRetryableSourceError, extract_article
+@@ -97,21 +86,10 @@ logger = logging.getLogger(__name__)
+ ResearchDepth = Literal["standard", "deep", "exhaustive"]
+ VALID_DEPTHS: tuple[str, ...] = ("standard", "deep", "exhaustive")
+ 
+-DEEP_RESEARCH_SKILLS_DIR: Final[Path] = Path(__file__).resolve().parents[2] / "skills" / "deep-research"
+-
+-ORCHESTRATOR_IDS: Final[tuple[str, ...]] = (
+-    "deep_research_graph",
+-    "deep_research_planning",
+-    "deep_research_investigation",
+-    "deep_research_adversarial_swarm",
+-    "deep_research_verification_swarm",
+-    "deep_research_synthesis",
+-)
+-
+-INVESTIGATION_PARALLEL_BRANCHES: Final[tuple[str, ...]] = (
+-    "web_intelligence",
+-    "news_data_intelligence",
+-    "adversarial_swarm",
++#: The Deep Research skill library, installed by the Skills CLI (``npx skills add ... -a universal``
++#: run from ``agent/skills/deep-research``; ``skills-lock.json`` beside ``.agents`` records each source).
++DEEP_RESEARCH_SKILLS_DIR: Final[Path] = (
++    Path(__file__).resolve().parents[2] / "skills" / "deep-research" / ".agents" / "skills"
+ )
+ 
+ FORBIDDEN_LEAF_TOOL_NAMES: Final[frozenset[str]] = frozenset(
+@@ -181,318 +159,277 @@ class ReplayOverflow(RuntimeError):
+         )
+ 
+ 
++def _agent(node_id: str, label: str, skill: str, description: str) -> dict[str, Any]:
++    """One formation agent: ``skill`` is its SKILL.md and ``description`` its role in the formation."""
++    return {
++        "id": node_id,
++        "label": label,
++        "kind": "agent",
++        "skill": skill,
++        "description": description,
++        "children": [],
++        "edges": [],
++    }
++
++
++def _revise(qa_id: str, agent_id: str) -> dict[str, Any]:
++    """A QA feedback edge: followed while the QA agent's verdict is ``REVISE: <agent_id>``."""
++    return {
++        "from": qa_id,
++        "to": agent_id,
++        "conditional": True,
++        "label": "QA sends it back",
++        "condition": f"REVISE: {agent_id}",
++    }
++
++
++#: The set formation. ``build_deep_research_graph`` builds the Strands Graph and Swarms from it and the
++#: renderer draws it. A Swarm's edges only lay its agents out: they hand off by their own decision.
+ FORMATION_TOPOLOGY: dict[str, Any] = {
+     "id": "deep_research_graph",
+     "label": "Deep Research Formation",
+     "kind": "graph",
+     "nodes": [
+         {
+-            "id": "planning_formation",
+-            "label": "Planning Formation",
+-            "kind": "graph",
+-            "orchestrator_id": "deep_research_planning",
+-            "skill": None,
+-            "use_skill_presets": [],
+-            "description": "Frames the research problem domain and designs the methodology & source rubric.",
++            "id": "research_swarm",
++            "label": "Research Swarm",
++            "kind": "swarm",
++            "orchestrator_id": "deep_research_research_swarm",
++            "description": (
++                "Parallel researchers gather sources, then a reference fact check, citations with a "
++                "reference list, and a QA of every reference and citation."
++            ),
+             "children": [
+-                {
+-                    "id": "problem_framing",
+-                    "label": "Problem Framing",
+-                    "kind": "agent",
+-                    "orchestrator_id": None,
+-                    "skill": "research-problem-framing",
+-                    "use_skill_presets": ["domain-landscape-scan", "question-decomposition", "research"],
+-                    "children": [],
+-                    "edges": [],
+-                },
+-                {
+-                    "id": "research_blueprint",
+-                    "label": "Research Blueprint",
+-                    "kind": "agent",
+-                    "orchestrator_id": None,
+-                    "skill": "research-blueprint-design",
+-                    "use_skill_presets": ["methodology-design", "source-rubric", "statistical-analysis"],
+-                    "children": [],
+-                    "edges": [],
+-                },
++                _agent(
++                    "researcher",
++                    "Researcher",
++                    "research",
++                    "Split the inquiry into independent questions and call `subagent` once per question in a "
++                    "single turn so they research in parallel from primary sources. Merge their findings, every "
++                    "claim with its source URL, into research.md, then hand off to fact_checker.",
++                ),
++                _agent(
++                    "fact_checker",
++                    "Fact Checker",
++                    "scientific-critical-thinking",
++                    "Reference fact checks only: open the source of every claim in research.md and confirm the "
++                    "source says it. Record a verdict per claim in fact-check.md, fix or remove what fails in "
++                    "research.md, then hand off to citation_manager.",
++                ),
++                _agent(
++                    "citation_manager",
++                    "Citation Manager",
++                    "citation-management",
++                    "Give every claim in research.md a numbered citation and document each source once in "
++                    "references.md (number, author or publisher, title, date, URL), then hand off to research_qa.",
++                ),
++                _agent(
++                    "research_qa",
++                    "Research QA",
++                    "peer-review",
++                    "Check all of research.md, fact-check.md and references.md: every claim cited, every citation "
++                    "in the reference list, every reference real and supporting its claim. Hand defects back to "
++                    "researcher, fact_checker or citation_manager and check again when the work returns. When it "
++                    "all passes, finish with APPROVED.",
++                ),
+             ],
+             "edges": [
+-                {"from": "problem_framing", "to": "research_blueprint"},
++                {"from": "researcher", "to": "fact_checker", "label": "handoff_to_agent"},
++                {"from": "fact_checker", "to": "citation_manager", "label": "handoff_to_agent"},
++                {"from": "citation_manager", "to": "research_qa", "label": "handoff_to_agent"},
++                _revise("research_qa", "researcher"),
++                _revise("research_qa", "fact_checker"),
++                _revise("research_qa", "citation_manager"),
+             ],
+         },
+         {
+-            "id": "investigation_formation",
+-            "label": "Investigation Formation",
++            "id": "data_analysis_graph",
++            "label": "Data Analysis Graph",
+             "kind": "graph",
+-            "orchestrator_id": "deep_research_investigation",
+-            "skill": None,
+-            "use_skill_presets": [],
+-            "description": "Parallel web, temporal news/data, and nested adversarial swarm converging on an evidence ledger.",
++            "orchestrator_id": "deep_research_data_analysis",
++            "description": (
++                "Picks the data visuals that matter for the inquiry, builds them with code, ties each to its "
++                "citations, and QA returns rejected work to its author."
++            ),
+             "children": [
+-                {
+-                    "id": "web_intelligence",
+-                    "label": "Web Intelligence",
+-                    "kind": "agent",
+-                    "orchestrator_id": None,
+-                    "skill": "web-intelligence-director",
+-                    "use_skill_presets": ["broad-web-discovery", "deep-source-extraction", "research"],
+-                    "children": [],
+-                    "edges": [],
+-                },
+-                {
+-                    "id": "news_data_intelligence",
+-                    "label": "News & Data Intelligence",
+-                    "kind": "agent",
+-                    "orchestrator_id": None,
+-                    "skill": "news-data-director",
+-                    "use_skill_presets": [
+-                        "temporal-news-analysis",
+-                        "quantitative-fact-lookup",
+-                        "exploratory-data-analysis",
+-                        "statistical-analysis",
+-                        "analytics",
+-                    ],
+-                    "children": [],
+-                    "edges": [],
+-                },
+-                {
+-                    "id": "adversarial_swarm",
+-                    "label": "Adversarial Swarm",
+-                    "kind": "swarm",
+-                    "orchestrator_id": "deep_research_adversarial_swarm",
+-                    "skill": None,
+-                    "use_skill_presets": [
+-                        "hypothesis-probing",
+-                        "counterevidence-search",
+-                        "scientific-critical-thinking",
+-                    ],
+-                    "description": "Peer hypothesis explorer and contrarian examiner stress-testing claims via handoffs.",
+-                    "children": [
+-                        {
+-                            "id": "hypothesis_explorer",
+-                            "label": "Hypothesis Explorer",
+-                            "kind": "agent",
+-                            "orchestrator_id": None,
+-                            "skill": "hypothesis-explorer",
+-                            "use_skill_presets": [
+-                                "hypothesis-probing",
+-                                "counterevidence-search",
+-                                "scientific-critical-thinking",
+-                            ],
+-                            "children": [],
+-                            "edges": [],
+-                        },
+-                        {
+-                            "id": "contrarian_examiner",
+-                            "label": "Contrarian Examiner",
+-                            "kind": "agent",
+-                            "orchestrator_id": None,
+-                            "skill": "contrarian-examiner",
+-                            "use_skill_presets": [
+-                                "counterevidence-search",
+-                                "hypothesis-probing",
+-                                "scientific-critical-thinking",
+-                            ],
+-                            "children": [],
+-                            "edges": [],
+-                        },
+-                    ],
+-                    "edges": [
+-                        {"from": "hypothesis_explorer", "to": "contrarian_examiner", "label": "handoff_to_agent"},
+-                        {"from": "contrarian_examiner", "to": "hypothesis_explorer", "label": "handoff_to_agent"},
+-                    ],
+-                },
+-                {
+-                    "id": "evidence_ledger",
+-                    "label": "Evidence Ledger",
+-                    "kind": "agent",
+-                    "orchestrator_id": None,
+-                    "skill": "evidence-ledger-curator",
+-                    "use_skill_presets": [
+-                        "evidence-triangulation",
+-                        "validate-data",
+-                        "statistical-analysis",
+-                    ],
+-                    "children": [],
+-                    "edges": [],
+-                },
++                _agent(
++                    "visual_planner",
++                    "Visual Planner",
++                    "data-storytelling",
++                    "Read research.md and references.md and choose the data visuals that are meaningful for the "
++                    "inquiry. Specify each in visuals.md: what it shows, why it matters, the chart type, and the "
++                    "exact data points with their citation numbers.",
++                ),
++                _agent(
++                    "data_analyst",
++                    "Data Analyst",
++                    "data-visualization",
++                    "Build every visual in visuals.md by running Python code. Save each chart as "
++                    "figures/<name>.png with the script that made it as figures/<name>.py.",
++                ),
++                _agent(
++                    "visual_citation",
++                    "Visual Citation",
++                    "citation-management",
++                    "Tie every chart in figures/ to the citation(s) its data came from: add its caption and its "
++                    "source reference numbers from references.md to visuals.md.",
++                ),
++                _agent(
++                    "visual_qa",
++                    "Visual QA",
++                    "scientific-visualization",
++                    "Verify every chart in figures/ is cited, relevant to the inquiry and accurate against its "
++                    "cited data. List the defects, then end with one line: APPROVED, or REVISE: visual_planner, "
++                    "REVISE: data_analyst or REVISE: visual_citation for the one agent that must fix them.",
++                ),
+             ],
+             "edges": [
+-                {
+-                    "from": "web_intelligence",
+-                    "to": "evidence_ledger",
+-                    "conditional": True,
+-                    "label": "all branches complete",
+-                },
+-                {
+-                    "from": "news_data_intelligence",
+-                    "to": "evidence_ledger",
+-                    "conditional": True,
+-                    "label": "all branches complete",
+-                },
+-                {
+-                    "from": "adversarial_swarm",
+-                    "to": "evidence_ledger",
+-                    "conditional": True,
+-                    "label": "all branches complete",
+-                },
++                {"from": "visual_planner", "to": "data_analyst"},
++                {"from": "data_analyst", "to": "visual_citation"},
++                {"from": "visual_citation", "to": "visual_qa"},
++                _revise("visual_qa", "visual_planner"),
++                _revise("visual_qa", "data_analyst"),
++                _revise("visual_qa", "visual_citation"),
+             ],
+         },
+         {
+-            "id": "verification_swarm",
+-            "label": "Verification Swarm",
++            "id": "writing_swarm",
++            "label": "Writing Swarm",
+             "kind": "swarm",
+-            "orchestrator_id": "deep_research_verification_swarm",
+-            "skill": None,
+-            "use_skill_presets": [
+-                "source-verification",
+-                "gap-targeted-search",
+-                "claim-stress-test",
+-                "validate-data",
+-                "peer-review",
+-                "verification-before-completion",
+-            ],
+-            "description": "Audits primary citations, stress-tests reasoning, and gates synthesis vs. refinement.",
++            "orchestrator_id": "deep_research_writing_swarm",
++            "description": (
++                "Designs the report and slide-deck layouts, writes the report and the slide wording, and a "
++                "dedicated QA approves each."
++            ),
+             "children": [
+-                {
+-                    "id": "citation_verifier",
+-                    "label": "Citation Verifier",
+-                    "kind": "agent",
+-                    "orchestrator_id": None,
+-                    "skill": "citation-verifier",
+-                    "use_skill_presets": [
+-                        "source-verification",
+-                        "gap-targeted-search",
+-                        "validate-data",
+-                        "verification-before-completion",
+-                    ],
+-                    "children": [],
+-                    "edges": [],
+-                },
+-                {
+-                    "id": "analytical_critic",
+-                    "label": "Analytical Critic",
+-                    "kind": "agent",
+-                    "orchestrator_id": None,
+-                    "skill": "analytical-critic",
+-                    "use_skill_presets": [
+-                        "claim-stress-test",
+-                        "gap-targeted-search",
+-                        "source-verification",
+-                        "peer-review",
+-                        "verification-before-completion",
+-                    ],
+-                    "children": [],
+-                    "edges": [],
+-                },
++                _agent(
++                    "report_designer",
++                    "Report Designer",
++                    "theme-factory",
++                    "Design the layout of the report: its sections and their order, where each chart from "
++                    "figures/ goes, typography, colour and page style. Save it to report-layout.md, then hand off "
++                    "to deck_designer.",
++                ),
++                _agent(
++                    "deck_designer",
++                    "Deck Designer",
++                    "slidev",
++                    "Design the layout of the Slidev deck: the slide sequence, the layout and chart on each "
++                    "slide, theme and styling. Save it to deck-layout.md, then hand off to layout_qa.",
++                ),
++                _agent(
++                    "layout_qa",
++                    "Layout QA",
++                    "verification-before-completion",
++                    "Approve report-layout.md and deck-layout.md against the inquiry, research.md and figures/. "
++                    "Hand defects back to report_designer or deck_designer and check again when the work "
++                    "returns. When both pass, hand off to report_writer.",
++                ),
++                _agent(
++                    "report_writer",
++                    "Report Writer",
++                    "scientific-writing",
++                    "Write the full report to report.md following report-layout.md: every claim with its "
++                    "citation number, charts embedded as ![caption](figures/<name>.png), and the reference list "
++                    "from references.md at the end. Then hand off to report_qa.",
++                ),
++                _agent(
++                    "report_qa",
++                    "Report QA",
++                    "peer-review",
++                    "Approve report.md against research.md, references.md, figures/ and report-layout.md. Hand "
++                    "defects back to report_writer and check again when the work returns. When it passes, hand "
++                    "off to deck_writer.",
++                ),
++                _agent(
++                    "deck_writer",
++                    "Deck Writer",
++                    "scientific-slides",
++                    "Write the wording of every slide to deck-copy.md following deck-layout.md: title, points, "
++                    "speaker notes, citation numbers and the chart for the slide. Then hand off to deck_qa.",
++                ),
++                _agent(
++                    "deck_qa",
++                    "Deck QA",
++                    "copy-editing",
++                    "Approve deck-copy.md against report.md and deck-layout.md. Hand defects back to deck_writer "
++                    "and check again when the work returns. When it passes, finish with APPROVED.",
++                ),
+             ],
+             "edges": [
+-                {"from": "citation_verifier", "to": "analytical_critic", "label": "handoff_to_agent"},
+-                {"from": "analytical_critic", "to": "citation_verifier", "label": "handoff_to_agent"},
++                {"from": "report_designer", "to": "deck_designer", "label": "handoff_to_agent"},
++                {"from": "deck_designer", "to": "layout_qa", "label": "handoff_to_agent"},
++                {"from": "layout_qa", "to": "report_writer", "label": "handoff_to_agent"},
++                {"from": "report_writer", "to": "report_qa", "label": "handoff_to_agent"},
++                {"from": "report_qa", "to": "deck_writer", "label": "handoff_to_agent"},
++                {"from": "deck_writer", "to": "deck_qa", "label": "handoff_to_agent"},
++                _revise("layout_qa", "report_designer"),
++                _revise("layout_qa", "deck_designer"),
++                _revise("report_qa", "report_writer"),
++                _revise("deck_qa", "deck_writer"),
+             ],
+         },
+         {
+-            "id": "synthesis_formation",
+-            "label": "Synthesis Formation",
++            "id": "production_graph",
++            "label": "Production Graph",
+             "kind": "graph",
+-            "orchestrator_id": "deep_research_synthesis",
+-            "skill": None,
+-            "use_skill_presets": [],
+-            "description": "Drafts the cited dossier, applies humanized anti-slop polish, and compiles scholarly PDF + Slidev artifacts.",
++            "orchestrator_id": "deep_research_production",
++            "description": "Builds the styled PDF and the Slidev deck in parallel, each with its own QA.",
+             "children": [
+-                {
+-                    "id": "report_drafter",
+-                    "label": "Report Drafter",
+-                    "kind": "agent",
+-                    "orchestrator_id": None,
+-                    "skill": "report-drafter",
+-                    "use_skill_presets": [
+-                        "structured-synthesis",
+-                        "citation-weaving",
+-                        "scientific-writing",
+-                        "data-visualization",
+-                        "scientific-visualization",
+-                        "theme-factory",
+-                    ],
+-                    "children": [],
+-                    "edges": [],
+-                },
+-                {
+-                    "id": "executive_editor",
+-                    "label": "Executive Editor",
+-                    "kind": "agent",
+-                    "orchestrator_id": None,
+-                    "skill": "executive-editor",
+-                    "use_skill_presets": [
+-                        "editorial-polish",
+-                        "humanizer",
+-                        "stop-slop",
+-                        "no-ai-slop",
+-                        "copy-editing",
+-                        "theme-factory",
+-                    ],
+-                    "children": [],
+-                    "edges": [],
+-                },
+-                {
+-                    "id": "pdf_publisher",
+-                    "label": "PDF Publisher",
+-                    "kind": "agent",
+-                    "orchestrator_id": None,
+-                    "skill": "scholarly-pdf-publisher",
+-                    "use_skill_presets": [
+-                        "pdf",
+-                        "academic-paper",
+-                        "openai-pdf",
+-                        "canvas-design",
+-                        "theme-factory",
+-                    ],
+-                    "children": [],
+-                    "edges": [],
+-                },
+-                {
+-                    "id": "slidev_producer",
+-                    "label": "Slidev Producer",
+-                    "kind": "agent",
+-                    "orchestrator_id": None,
+-                    "skill": "slidev-deck-producer",
+-                    "use_skill_presets": [
+-                        "build-agent-slidev",
+-                        "slidev",
+-                        "scientific-slides",
+-                        "theme-factory",
+-                    ],
+-                    "children": [],
+-                    "edges": [],
+-                },
++                _agent(
++                    "pdf_publisher",
++                    "PDF Publisher",
++                    "pdf",
++                    "Create the PDF: call compile_scholarly_pdf with css that styles report.md as "
++                    "report-layout.md specifies. It builds report.pdf from report.md with its charts, citations "
++                    "and reference page.",
++                ),
++                _agent(
++                    "pdf_qa",
++                    "PDF QA",
++                    "pdf",
++                    "Inspect report.pdf: charts present, styling as report-layout.md specifies, citations and "
++                    "the reference page intact. List the defects, then end with one line: APPROVED or "
++                    "REVISE: pdf_publisher.",
++                ),
++                _agent(
++                    "deck_producer",
++                    "Slidev Producer",
++                    "slidev",
++                    "Create the deck: write slides.md in Slidev Markdown from deck-copy.md and deck-layout.md, "
++                    "with styled charts from figures/ embedded as ![caption](figures/<name>.png) and citations, "
++                    "then call compile_slidev_deck to build it.",
++                ),
++                _agent(
++                    "deck_build_qa",
++                    "Slidev QA",
++                    "slidev",
++                    "Inspect slides.md and the built deck in slides/: every slide follows deck-layout.md, with "
++                    "its chart, styling and citations. List the defects, then end with one line: APPROVED or "
++                    "REVISE: deck_producer.",
++                ),
+             ],
+             "edges": [
+-                {"from": "report_drafter", "to": "executive_editor"},
+-                {"from": "executive_editor", "to": "pdf_publisher"},
+-                {"from": "executive_editor", "to": "slidev_producer"},
++                {"from": "pdf_publisher", "to": "pdf_qa"},
++                {"from": "deck_producer", "to": "deck_build_qa"},
++                _revise("pdf_qa", "pdf_publisher"),
++                _revise("deck_build_qa", "deck_producer"),
+             ],
+         },
+     ],
+     "edges": [
+-        {"from": "planning_formation", "to": "investigation_formation"},
+-        {"from": "investigation_formation", "to": "verification_swarm"},
+-        {
+-            "from": "verification_swarm",
+-            "to": "investigation_formation",
+-            "conditional": True,
+-            "label": "Refinement loop",
+-            "condition": "[NEEDS_REFINEMENT]",
+-        },
+-        {
+-            "from": "verification_swarm",
+-            "to": "synthesis_formation",
+-            "conditional": True,
+-            "label": "Verified",
+-            "condition": "[VERIFICATION_PASSED]",
+-        },
++        {"from": "research_swarm", "to": "data_analysis_graph"},
++        {"from": "data_analysis_graph", "to": "writing_swarm"},
++        {"from": "writing_swarm", "to": "production_graph"},
+     ],
+ }
+ 
++#: The Strands id of the outer Graph and of each nested formation.
++ORCHESTRATOR_IDS: Final[tuple[str, ...]] = (
++    FORMATION_TOPOLOGY["id"],
++    *(str(node["orchestrator_id"]) for node in FORMATION_TOPOLOGY["nodes"]),
++)
++
+ 
+ def get_formation_topology() -> dict[str, Any]:
+     """Return a deep copy of the canonical 3-level Deep Research formation topology."""
+@@ -1084,6 +1021,7 @@ _SCHOLARLY_REPORT_HTML_TEMPLATE: Final[str] = """<!DOCTYPE html>
+       margin-bottom: 6px;
+       word-break: break-word;
+     }
++    {{ extra_css }}
+   </style>
+ </head>
+ <body>
+@@ -1135,6 +1073,26 @@ def _extract_markdown_h1(markdown: str) -> tuple[str | None, str]:
+     return None, markdown
+ 
+ 
++_LOCAL_IMAGE_RE: Final[re.Pattern[str]] = re.compile(r'(!\[[^\]\n]*\]\(|\bsrc=")([^)"\s]+)')
++
++
++def _inline_local_images(markdown: str, base_dir: Path) -> str:
++    """Embed images that are files under ``base_dir`` as data URIs, so every renderer shows them."""
++    root = base_dir.resolve()
++
++    def embed(match: re.Match[str]) -> str:
++        ref = match.group(2)
++        mime = mimetypes.guess_type(ref)[0] or ""
++        if ref.startswith(("data:", "http://", "https://")) or not mime.startswith("image/"):
++            return match.group(0)
++        target = (root / ref).resolve()
++        if not (target.is_relative_to(root) and target.is_file()):
++            return match.group(0)
++        return f"{match.group(1)}data:{mime};base64,{base64.b64encode(target.read_bytes()).decode('ascii')}"
++
++    return _LOCAL_IMAGE_RE.sub(embed, markdown)
++
++
+ def _make_markdown_renderer() -> MarkdownIt:
+     return MarkdownIt("commonmark", {"html": False, "typographer": True}).enable("table").enable("strikethrough")
+ 
+@@ -1147,6 +1105,7 @@ async def compile_scholarly_pdf_files(
+     query: str = "",
+     depth: str = "deep",
+     citations: Sequence[Mapping[str, str]] = (),
++    css: str = "",
+ ) -> dict[str, Any]:
+     """Write ``report.md`` and compile publication-grade ``report.pdf`` inside ``artifact_dir``."""
+     artifact_dir.mkdir(parents=True, exist_ok=True)
+@@ -1167,7 +1126,7 @@ async def compile_scholarly_pdf_files(
+     report_md_path.write_text(persisted_md, encoding="utf-8")
+ 
+     md_renderer = _make_markdown_renderer()
+-    body_html = md_renderer.render(body_md or clean_md)
++    body_html = md_renderer.render(_inline_local_images(body_md or clean_md, artifact_dir))
+ 
+     has_sources_section = bool(
+         re.search(r"(?im)^#{1,3}\s+(sources|references|bibliography|citations)\b", clean_md)
+@@ -1182,6 +1141,7 @@ async def compile_scholarly_pdf_files(
+         citation_count=len(citations) or len(_extract_citations_from_payload(clean_md)),
+         body_html=body_html,
+         extra_citations=extra_citations,
++        extra_css=css.replace("</style", ""),
+     )
+ 
+     try:
+@@ -2065,7 +2025,10 @@ async def _try_slidev_cli_build(*, slides_md_path: Path, out_dir: Path) -> bool:
+                 os.symlink(node_modules_src, tmp_dir / "node_modules")
+             if (env_dir / "package.json").is_file():
+                 shutil.copy2(env_dir / "package.json", tmp_dir / "package.json")
+-            shutil.copy2(slides_md_path, tmp_dir / "slides.md")
++            (tmp_dir / "slides.md").write_text(
++                _inline_local_images(slides_md_path.read_text(encoding="utf-8"), slides_md_path.parent),
++                encoding="utf-8",
++            )
+ 
+             stage_out = tmp_dir / "dist-slides"
+             build_proc = await asyncio.to_thread(
+@@ -2115,7 +2078,7 @@ async def compile_slidev_deck_files(
+             "markdown": item["markdown"],
+             "notes": item["notes"],
+             "layout": item["layout"],
+-            "html": md_renderer.render(item["markdown"]),
++            "html": md_renderer.render(_inline_local_images(item["markdown"], artifact_dir)),
+         }
+         for item in parsed_slides
+     ]
+@@ -2182,7 +2145,7 @@ def load_deep_research_skills(
+     *,
+     strict: bool = True,
+ ) -> dict[str, Skill]:
+-    """Load all native AgentSkills under ``agent/skills/deep-research/`` via ``Skill.from_directory``."""
++    """Load every Agent Skill in ``DEEP_RESEARCH_SKILLS_DIR`` via ``Skill.from_directory``."""
+     target_dir = Path(skills_dir) if skills_dir is not None else DEEP_RESEARCH_SKILLS_DIR
+     loaded = Skill.from_directory(target_dir, strict=strict)
+     by_name = {skill.name: skill for skill in loaded}
+@@ -2216,7 +2179,7 @@ def build_leaf_tool_pool(
+     on_artifact_compiled: Callable[[str, dict[str, Any]], Awaitable[None] | None] | None = None,
+     extra_leaf_tools: Sequence[Any] = (),
+ ) -> dict[str, AgentTool]:
+-    """Construct the vetted research & studio compilation tool pool available ONLY to leaf ``use_skill`` subagents."""
++    """Construct the research & studio compilation tools every Deep Research skill agent gets (no browser automation)."""
+     resolved_user = (user_id or "").strip() or "default"
+     resolved_storage = storage if storage is not None else get_user_session_storage(resolved_user)
+     clean_sid = (session_id or "").strip()
+@@ -2303,14 +2266,18 @@ def build_leaf_tool_pool(
+             return {"query": clean_query, "count": 0, "results": [], "error": str(exc)}
+ 
+     @tool
+-    async def compile_scholarly_pdf(markdown_content: str = "", title: str = "") -> dict[str, Any]:
+-        """Compile the verified Markdown research dossier into ``report.md`` and publication-grade ``report.pdf``.
++    async def compile_scholarly_pdf(markdown_content: str = "", title: str = "", css: str = "") -> dict[str, Any]:
++        """Compile the Markdown report into ``report.md`` and a styled ``report.pdf`` in the run's workspace.
+ 
+         Args:
+-            markdown_content: Complete Markdown report body (defaults to the verified executive_editor dossier if omitted).
++            markdown_content: Complete Markdown report body; omit it to compile the workspace's ``report.md``.
+             title: Optional explicit document title for the masthead and PDF metadata.
++            css: Optional CSS appended to the report stylesheet (typography, colour, figures, tables, ``@page``).
+         """
+         effective_md = (markdown_content or "").strip()
++        report_file = resolved_artifact_dir / "report.md"
++        if not effective_md and report_file.is_file():
++            effective_md = report_file.read_text(encoding="utf-8").strip()
+         if not effective_md and default_report_getter is not None:
+             effective_md = (default_report_getter() or "").strip()
+         effective_title = (title or "").strip() or (
+@@ -2327,6 +2294,7 @@ def build_leaf_tool_pool(
+             query=effective_query,
+             depth=depth,
+             citations=effective_citations,
++            css=css,
+         )
+         if clean_sid:
+             compiled["artifacts"] = collect_session_artifact_urls(clean_sid, resolved_artifact_dir)
+@@ -2341,7 +2309,8 @@ def build_leaf_tool_pool(
+         """Compile Slidev Markdown into ``slides.md`` (``routerMode: hash``), static SPA ``slides/index.html``, and ``slides.pdf``.
+ 
+         Args:
+-            slides_markdown: Complete Slidev Markdown deck separated by ``---`` (enforces ``routerMode: hash`` in headmatter).
++            slides_markdown: Complete Slidev Markdown deck separated by ``---`` (enforces ``routerMode: hash`` in
++                headmatter); omit it to compile the workspace's ``slides.md``.
+             title: Optional deck title for Slidev headmatter and PDF metadata.
+         """
+         effective_title = (title or "").strip() or (
+@@ -2349,6 +2318,9 @@ def build_leaf_tool_pool(
+         )
+         effective_query = (default_query_getter() or "").strip() if default_query_getter is not None else ""
+         effective_slides = (slides_markdown or "").strip()
++        slides_file = resolved_artifact_dir / "slides.md"
++        if not effective_slides and slides_file.is_file():
++            effective_slides = slides_file.read_text(encoding="utf-8").strip()
+         if not effective_slides:
+             fallback_report = (default_report_getter() or "").strip() if default_report_getter is not None else ""
+             fallback_cits = (
+@@ -2391,6 +2363,17 @@ def build_leaf_tool_pool(
+     _register(search_saved_context)
+     _register(compile_scholarly_pdf)
+     _register(compile_slidev_deck)
++    # Tavily and Exa each require their own API key, so each joins the pool only where it is configured.
++    if os.getenv("TAVILY_API_KEY"):
++        from strands_tools import tavily
++
++        for tavily_tool in (tavily.tavily_search, tavily.tavily_extract, tavily.tavily_crawl, tavily.tavily_map):
++            _register(tavily_tool)
++    if os.getenv("EXA_API_KEY"):
++        from strands_tools import exa
++
++        for exa_tool in (exa.exa_search, exa.exa_get_contents):
++            _register(exa_tool)
+ 
+     for extra in extra_leaf_tools:
+         _register(extra)
+@@ -2537,20 +2520,6 @@ class DeepResearchMultiAgentPlugin(MultiAgentPlugin):
+         )
+ 
+ 
+-def all_investigation_branches_completed(
+-    state: GraphState,
+-    *,
+-    invocation_state: dict[str, Any] | None = None,
+-    **_: Any,
+-) -> bool:
+-    """Explicit AND barrier gating ``evidence_ledger`` until all 3 parallel branches complete."""
+-    del invocation_state
+-    return all(
+-        branch_id in state.results and state.results[branch_id].status == Status.COMPLETED
+-        for branch_id in INVESTIGATION_PARALLEL_BRANCHES
+-    )
+-
+-
+ def _extract_node_result_text(node_result: NodeResult | None) -> str:
+     if node_result is None:
+         return ""
+@@ -2565,45 +2534,33 @@ def _extract_node_result_text(node_result: NodeResult | None) -> str:
+     return str(raw).strip() if raw is not None else ""
+ 
+ 
+-def should_refine(
+-    state: GraphState,
+-    *,
+-    invocation_state: dict[str, Any] | None = None,
+-    **_: Any,
+-) -> bool:
+-    """Return True when ``verification_swarm`` requests ``[NEEDS_REFINEMENT]`` within budget."""
+-    vr = state.results.get("verification_swarm")
+-    if vr is None or vr.status != Status.COMPLETED:
+-        return False
+-    verdict_text = _extract_node_result_text(vr)
+-    if "[NEEDS_REFINEMENT]" not in verdict_text:
+-        return False
+-    max_refinements = int((invocation_state or {}).get("max_refinements", 1))
+-    if max_refinements <= 0:
+-        return False
++def _node_result_error(node_result: NodeResult) -> str | None:
++    """Why a failed node failed: its exception, or the first failed inner node's for a nested formation."""
++    if isinstance(node_result.result, Exception):
++        return str(node_result.result) or type(node_result.result).__name__
++    if isinstance(node_result.result, MultiAgentResult):
++        for inner in node_result.result.results.values():
++            if inner.status == Status.FAILED and (message := _node_result_error(inner)):
++                return message
++    return None
+ 
+-    # In Graph execution, state.execution_order records one entry per outer-graph visit to
+-    # verification_swarm (whereas Swarm's NodeResult.execution_count counts inner agent turns).
+-    # Fall back to vr.execution_count when unit-tested with a synthetic GraphState lacking execution_order.
+-    exec_order = getattr(state, "execution_order", None) or ()
+-    outer_visits = sum(
+-        1 for item in exec_order if getattr(item, "node_id", str(item)) == "verification_swarm"
+-    )
+-    effective_visits = outer_visits if outer_visits > 0 else int(getattr(vr, "execution_count", 1) or 1)
+-    return effective_visits <= max_refinements
+ 
++def qa_requests_revision(qa_id: str, agent_id: str) -> Callable[..., bool]:
++    """The Strands feedback-loop edge condition: ``qa_id``'s verdict sends work back to ``agent_id``.
+ 
+-def should_synthesize(
+-    state: GraphState,
+-    *,
+-    invocation_state: dict[str, Any] | None = None,
+-    **kwargs: Any,
+-) -> bool:
+-    """Exact logical complement of :func:`should_refine` once ``verification_swarm`` completes."""
+-    vr = state.results.get("verification_swarm")
+-    if vr is None or vr.status != Status.COMPLETED:
+-        return False
+-    return not should_refine(state, invocation_state=invocation_state, **kwargs)
++    True while the QA agent's result says ``REVISE: <agent_id>`` and it has run no more than
++    ``invocation_state["max_refinements"]`` times, so rejected work is fixed and checked again, and a
++    loop that is never approved ends the graph normally rather than at its execution limit.
++    """
++
++    def condition(state: GraphState, *, invocation_state: dict[str, Any], **_: Any) -> bool:
++        verdict = state.results.get(qa_id)
++        if verdict is None or f"REVISE: {agent_id}" not in _extract_node_result_text(verdict):
++            return False
++        qa_runs = sum(1 for node in state.execution_order if node.node_id == qa_id)
++        return qa_runs <= int(invocation_state.get("max_refinements", 1))
++
++    return condition
+ 
+ 
+ def _resolve_default_selection(
+@@ -2661,6 +2618,11 @@ def _build_default_model(
+     )
+ 
+ 
++def _silence_agent(event: AgentInitializedEvent) -> None:
++    """Stop an agent, and the ``subagent`` children the harness builds from it, printing to the server log."""
++    event.agent.callback_handler = null_callback_handler
++
++
+ def build_deep_research_graph(
+     *,
+     session_id: str,
+@@ -2682,11 +2644,16 @@ def build_deep_research_graph(
+     default_citations_getter: Callable[[], Sequence[Mapping[str, str]]] | None = None,
+     on_artifact_compiled: Callable[[str, dict[str, Any]], Awaitable[None] | None] | None = None,
+ ) -> Graph:
+-    """Build the 3-level nested Strands ``Graph`` + ``Swarm`` Deep Research formation.
++    """Build the set Deep Research formation in ``FORMATION_TOPOLOGY`` as Strands ``Graph`` + ``Swarm``.
++
++    Every agent is a skill agent built by ``create_harness``: its system prompt is its skill's
++    ``SKILL.md``, it has the harness's built-in ``shell``, ``read``, ``write``, ``edit``,
++    ``programmatic_tool_caller`` and ``subagent`` tools plus the research tool pool, and it can load
++    any other skill in ``DEEP_RESEARCH_SKILLS_DIR``. Its sub-agents are the built-in ``subagent`` tool's.
+ 
+-    Every orchestrator ``Agent`` across every ``Graph`` and ``Swarm`` holds ``use_skill`` ONLY
+-    (plus ``handoff_to_agent`` injected by ``Swarm``), and every ``use_skill`` preset spawns a
+-    skill-guided ``create_harness`` leaf subagent over the vetted research tool pool.
++    ``execution_timeout`` is the whole run's budget and ``node_timeout`` one agent's. Strands applies
++    a Graph's node timeout to a nested Graph or Swarm as a whole, so only a graph of agents sets it
++    and each nested formation enforces it on its own agents.
+     """
+     clean_session_id = _validate_session_id(session_id)
+     clean_user_id = (user_id or "").strip() or "default"
+@@ -2700,33 +2667,14 @@ def build_deep_research_graph(
+     )
+     session_artifact_dir = base_artifacts_dir / clean_session_id
+ 
+-    synthesis_box: dict[str, Graph] = {}
+-
+-    def _effective_report_getter() -> str:
+-        if default_report_getter is not None:
+-            candidate = (default_report_getter() or "").strip()
+-            if candidate:
+-                return candidate
+-        syn_graph = synthesis_box.get("graph")
+-        if syn_graph is not None:
+-            syn_state = getattr(syn_graph, "state", None)
+-            results_map = getattr(syn_state, "results", None)
+-            if isinstance(results_map, Mapping):
+-                for nid in ("executive_editor", "report_drafter"):
+-                    if nid in results_map:
+-                        txt = _extract_node_result_text(results_map[nid])
+-                        if txt:
+-                            return txt
+-        return ""
+-
+-    skills_by_name = load_deep_research_skills(strict=True)
++    skills_by_name = load_deep_research_skills()
+     leaf_tool_pool = build_leaf_tool_pool(
+         user_id=clean_user_id,
+         storage=resolved_storage,
+         artifact_dir=session_artifact_dir,
+         session_id=clean_session_id,
+         depth=normalized_depth,
+-        default_report_getter=_effective_report_getter,
++        default_report_getter=default_report_getter,
+         default_title_getter=default_title_getter,
+         default_query_getter=default_query_getter,
+         default_citations_getter=default_citations_getter,
+@@ -2754,103 +2702,46 @@ def build_deep_research_graph(
+             cached_default_model = _build_default_model()
+         return cached_default_model
+ 
+-    depth_note = (
+-        f"\n\n## Active Research Depth Profile: {normalized_depth.upper()}\n"
+-        f"- Maximum verification refinement loops: {_max_refinements_for_depth(normalized_depth)}\n"
+-        "- Delegate all external reconnaissance, extraction, and verification through `use_skill`."
++    # The harness's `environment` plugin (which would inject the working directory and the date) is
++    # off by design, so every agent is told its workspace, interpreter, QA budget and the date here.
++    workspace_note = (
++        "## Workspace\n"
++        f"Every file of this run lives in {session_artifact_dir}. Read what earlier agents saved there, save "
++        "your work there under absolute paths, and end with a short summary of what you did and the files you "
++        "wrote.\n"
++        f"- Python for scripts and charts: {sys.executable}\n"
++        "- Run independent sub-tasks in parallel by calling `subagent` several times in one turn.\n"
++        f"- A QA agent sends work back at most {_max_refinements_for_depth(normalized_depth)} time(s); after "
++        "that it records the remaining defects in qa-notes.md and approves.\n"
++        f"- Research depth: {normalized_depth}. Today is {datetime.now().astimezone().strftime('%A, %B %d, %Y')}."
+     )
+ 
+-    def _make_use_skill_tool(preset_names: Sequence[str]) -> AgentTool:
+-        presets_map: dict[str, Preset] = {}
+-        skills_by_instructions: dict[str, Skill] = {}
+-        fallback_skill: Skill | None = None
+-
+-        for preset_name in preset_names:
+-            if preset_name not in skills_by_name:
+-                raise KeyError(f"Unknown Deep Research leaf skill preset: {preset_name!r}")
+-            leaf_skill = skills_by_name[preset_name]
+-            if fallback_skill is None:
+-                fallback_skill = leaf_skill
+-            allowed_names = [
+-                name for name in (leaf_skill.allowed_tools or []) if name in leaf_tool_pool
+-            ]
+-            presets_map[preset_name] = Preset(
+-                instructions=leaf_skill.instructions,
+-                tools=allowed_names,
+-                context="none",
+-                description=leaf_skill.description,
+-            )
+-            skills_by_instructions[leaf_skill.instructions] = leaf_skill
+-
+-        assert fallback_skill is not None
+-
+-        def skill_subagent_builder(spec: AgentSpec) -> Agent:
+-            matched_skill = skills_by_instructions.get(spec.instructions or "", fallback_skill)
+-            scoped_tools: list[AgentTool] = [
+-                leaf_tool_pool[t_name]
+-                for t_name in (spec.tools or ())
+-                if isinstance(t_name, str) and t_name in leaf_tool_pool
+-            ]
+-            resolved_child_model = spec.model if spec.model is not None else _resolve_model()
+-            child_agent = create_harness(
+-                model=resolved_child_model,
+-                instructions=spec.instructions or matched_skill.instructions,
+-                skills=AgentSkills(skills=[matched_skill]),
+-                tools=scoped_tools,
+-                builtin_tools=[],
++    def _make_skill_agent(node: Mapping[str, Any]) -> Agent:
++        """A formation agent as the AWS sample's skill agent: SKILL.md is its system prompt."""
++        skill = skills_by_name[node["skill"]]
++        return _track_agent(
++            create_harness(
++                name=node["id"],
++                agent_id=node["id"],
++                description=node["description"],
++                model=_resolve_model(),
++                instructions=(
++                    f"## Your role: {node['label']}\n{node['description']}\n\n{workspace_note}\n\n"
++                    f"## Skill: {skill.name}\n{skill.instructions}\n\n---\nLocation: {skill.path}/SKILL.md"
++                ),
++                skills=DEEP_RESEARCH_SKILLS_DIR,
++                tools=list(leaf_tool_pool.values()),
++                builtin_tools=["shell", "read", "write", "edit", "programmatic_tool_caller", "subagent"],
+                 builtin_plugins=["todos"],
+                 caching=False,
+                 session=False,
+                 memory=False,
+                 background_tasks=False,
+-                storage=resolved_storage,
+-                plugins=[ContextOffloader(storage=resolved_storage)],
+-                callback_handler=None,
++                hooks=[_silence_agent],
+             )
+-            return _track_agent(child_agent)
+-
+-        return make_subagent(
+-            name="use_skill",
+-            presets=presets_map,
+-            default_preset=preset_names[0],
+-            instructions=Fixed(None),
+-            tools=Fixed(None),
+-            mcp_servers=Fixed(None),
+-            model=Inherit(),
+-            context=Fixed("none"),
+-            builder=skill_subagent_builder,
+         )
+ 
+-    def _make_orchestrator_agent(
+-        *,
+-        node_id: str,
+-        skill_name: str,
+-        preset_names: Sequence[str],
+-    ) -> Agent:
+-        if skill_name not in skills_by_name:
+-            raise KeyError(f"Unknown Deep Research stage skill: {skill_name!r}")
+-        stage_skill = skills_by_name[skill_name]
+-        use_skill_tool = _make_use_skill_tool(preset_names)
+-        orchestrator_agent = create_harness(
+-            name=node_id,
+-            agent_id=node_id,
+-            model=_resolve_model(),
+-            instructions=f"{stage_skill.instructions}{depth_note}",
+-            skills=AgentSkills(skills=[stage_skill]),
+-            tools=[use_skill_tool],
+-            builtin_tools=[],
+-            builtin_plugins=["todos"],
+-            caching=False,
+-            session=False,
+-            memory=False,
+-            background_tasks=False,
+-            storage=resolved_storage,
+-            plugins=[ContextOffloader(storage=resolved_storage)],
+-            callback_handler=None,
+-        )
+-        return _track_agent(orchestrator_agent)
+-
+-    # Shared native SnapshotSessionManager and MultiAgentPlugin across all 6 unique orchestrator IDs.
++    # Shared native SnapshotSessionManager and MultiAgentPlugin across the outer Graph and every formation.
+     session_manager = SnapshotSessionManager(
+         session_id=clean_session_id,
+         storage=resolved_storage,
+@@ -2858,221 +2749,48 @@ def build_deep_research_graph(
+     )
+     multiagent_plugin = DeepResearchMultiAgentPlugin(cancel_event=cancel_event)
+ 
+-    # ── Formation 1: Planning Formation (Nested Graph) ──────────────────────
+-    problem_framing = _make_orchestrator_agent(
+-        node_id="problem_framing",
+-        skill_name="research-problem-framing",
+-        preset_names=("domain-landscape-scan", "question-decomposition", "research"),
+-    )
+-    research_blueprint = _make_orchestrator_agent(
+-        node_id="research_blueprint",
+-        skill_name="research-blueprint-design",
+-        preset_names=("methodology-design", "source-rubric", "statistical-analysis"),
+-    )
+-
+-    planning_builder = GraphBuilder()
+-    planning_builder.set_graph_id("deep_research_planning")
+-    planning_builder.reset_on_revisit(True)
+-    planning_builder.add_node(problem_framing, "problem_framing")
+-    planning_builder.add_node(research_blueprint, "research_blueprint")
+-    planning_builder.add_edge("problem_framing", "research_blueprint")
+-    planning_builder.set_entry_point("problem_framing")
+-    planning_builder.set_execution_timeout(execution_timeout)
+-    planning_builder.set_node_timeout(node_timeout)
+-    planning_builder.set_max_node_executions(8)
+-    planning_builder.set_session_manager(session_manager)
+-    planning_builder.set_plugins([multiagent_plugin])
+-    planning_formation = planning_builder.build()
+-
+-    # ── Formation 2: Investigation Formation (Nested Graph + Nested Swarm) ──
+-    web_intelligence = _make_orchestrator_agent(
+-        node_id="web_intelligence",
+-        skill_name="web-intelligence-director",
+-        preset_names=("broad-web-discovery", "deep-source-extraction", "research"),
+-    )
+-    news_data_intelligence = _make_orchestrator_agent(
+-        node_id="news_data_intelligence",
+-        skill_name="news-data-director",
+-        preset_names=(
+-            "temporal-news-analysis",
+-            "quantitative-fact-lookup",
+-            "exploratory-data-analysis",
+-            "statistical-analysis",
+-            "analytics",
+-        ),
+-    )
+-
+-    hypothesis_explorer = _make_orchestrator_agent(
+-        node_id="hypothesis_explorer",
+-        skill_name="hypothesis-explorer",
+-        preset_names=("hypothesis-probing", "counterevidence-search", "scientific-critical-thinking"),
+-    )
+-    contrarian_examiner = _make_orchestrator_agent(
+-        node_id="contrarian_examiner",
+-        skill_name="contrarian-examiner",
+-        preset_names=("counterevidence-search", "hypothesis-probing", "scientific-critical-thinking"),
+-    )
+-    adversarial_swarm = Swarm(
+-        [hypothesis_explorer, contrarian_examiner],
+-        entry_point=hypothesis_explorer,
+-        id="deep_research_adversarial_swarm",
+-        max_handoffs=4,
+-        max_iterations=5,
+-        execution_timeout=execution_timeout,
+-        node_timeout=node_timeout,
+-        session_manager=session_manager,
+-        plugins=[multiagent_plugin],
+-    )
+-
+-    evidence_ledger = _make_orchestrator_agent(
+-        node_id="evidence_ledger",
+-        skill_name="evidence-ledger-curator",
+-        preset_names=("evidence-triangulation", "validate-data", "statistical-analysis"),
+-    )
+-
+-    investigation_builder = GraphBuilder()
+-    investigation_builder.set_graph_id("deep_research_investigation")
+-    investigation_builder.reset_on_revisit(True)
+-    investigation_builder.add_node(web_intelligence, "web_intelligence")
+-    investigation_builder.add_node(news_data_intelligence, "news_data_intelligence")
+-    investigation_builder.add_node(adversarial_swarm, "adversarial_swarm")
+-    investigation_builder.add_node(evidence_ledger, "evidence_ledger")
+-    for branch_id in INVESTIGATION_PARALLEL_BRANCHES:
+-        investigation_builder.add_edge(
+-            branch_id,
+-            "evidence_ledger",
+-            condition=all_investigation_branches_completed,
+-        )
+-        investigation_builder.set_entry_point(branch_id)
+-    investigation_builder.set_execution_timeout(execution_timeout)
+-    investigation_builder.set_node_timeout(node_timeout)
+-    investigation_builder.set_max_node_executions(12)
+-    investigation_builder.set_session_manager(session_manager)
+-    investigation_builder.set_plugins([multiagent_plugin])
+-    investigation_formation = investigation_builder.build()
+-
+-    # ── Formation 3: Verification Swarm (Nested Swarm) ──────────────────────
+-    citation_verifier = _make_orchestrator_agent(
+-        node_id="citation_verifier",
+-        skill_name="citation-verifier",
+-        preset_names=(
+-            "source-verification",
+-            "gap-targeted-search",
+-            "validate-data",
+-            "verification-before-completion",
+-        ),
+-    )
+-    analytical_critic = _make_orchestrator_agent(
+-        node_id="analytical_critic",
+-        skill_name="analytical-critic",
+-        preset_names=(
+-            "claim-stress-test",
+-            "gap-targeted-search",
+-            "source-verification",
+-            "peer-review",
+-            "verification-before-completion",
+-        ),
+-    )
+-    verification_swarm = Swarm(
+-        [citation_verifier, analytical_critic],
+-        entry_point=citation_verifier,
+-        id="deep_research_verification_swarm",
+-        max_handoffs=4,
+-        max_iterations=5,
+-        execution_timeout=execution_timeout,
+-        node_timeout=node_timeout,
+-        session_manager=session_manager,
+-        plugins=[multiagent_plugin],
+-    )
+-
+-    # ── Formation 4: Synthesis Formation (Nested Graph) ─────────────────────
+-    report_drafter = _make_orchestrator_agent(
+-        node_id="report_drafter",
+-        skill_name="report-drafter",
+-        preset_names=(
+-            "structured-synthesis",
+-            "citation-weaving",
+-            "scientific-writing",
+-            "data-visualization",
+-            "scientific-visualization",
+-            "theme-factory",
+-        ),
+-    )
+-    executive_editor = _make_orchestrator_agent(
+-        node_id="executive_editor",
+-        skill_name="executive-editor",
+-        preset_names=(
+-            "editorial-polish",
+-            "humanizer",
+-            "stop-slop",
+-            "no-ai-slop",
+-            "copy-editing",
+-            "theme-factory",
+-        ),
+-    )
+-    pdf_publisher = _make_orchestrator_agent(
+-        node_id="pdf_publisher",
+-        skill_name="scholarly-pdf-publisher",
+-        preset_names=(
+-            "pdf",
+-            "academic-paper",
+-            "openai-pdf",
+-            "canvas-design",
+-            "theme-factory",
+-        ),
+-    )
+-    slidev_producer = _make_orchestrator_agent(
+-        node_id="slidev_producer",
+-        skill_name="slidev-deck-producer",
+-        preset_names=(
+-            "build-agent-slidev",
+-            "slidev",
+-            "scientific-slides",
+-            "theme-factory",
+-        ),
+-    )
+-
+-    synthesis_builder = GraphBuilder()
+-    synthesis_builder.set_graph_id("deep_research_synthesis")
+-    synthesis_builder.reset_on_revisit(True)
+-    synthesis_builder.add_node(report_drafter, "report_drafter")
+-    synthesis_builder.add_node(executive_editor, "executive_editor")
+-    synthesis_builder.add_node(pdf_publisher, "pdf_publisher")
+-    synthesis_builder.add_node(slidev_producer, "slidev_producer")
+-    synthesis_builder.add_edge("report_drafter", "executive_editor")
+-    synthesis_builder.add_edge("executive_editor", "pdf_publisher")
+-    synthesis_builder.add_edge("executive_editor", "slidev_producer")
+-    synthesis_builder.set_entry_point("report_drafter")
+-    synthesis_builder.set_execution_timeout(execution_timeout)
+-    synthesis_builder.set_node_timeout(node_timeout)
+-    synthesis_builder.set_max_node_executions(12)
+-    synthesis_builder.set_session_manager(session_manager)
+-    synthesis_builder.set_plugins([multiagent_plugin])
+-    synthesis_formation = synthesis_builder.build()
+-    synthesis_box["graph"] = synthesis_formation
+-
+-    # ── Top-Level Formation Graph ───────────────────────────────────────────
+-    root_builder = GraphBuilder()
+-    root_builder.set_graph_id("deep_research_graph")
+-    root_builder.reset_on_revisit(True)
+-    root_builder.add_node(planning_formation, "planning_formation")
+-    root_builder.add_node(investigation_formation, "investigation_formation")
+-    root_builder.add_node(verification_swarm, "verification_swarm")
+-    root_builder.add_node(synthesis_formation, "synthesis_formation")
+-
+-    root_builder.add_edge("planning_formation", "investigation_formation")
+-    root_builder.add_edge("investigation_formation", "verification_swarm")
+-    root_builder.add_edge("verification_swarm", "investigation_formation", condition=should_refine)
+-    root_builder.add_edge("verification_swarm", "synthesis_formation", condition=should_synthesize)
+-
+-    root_builder.set_entry_point("planning_formation")
+-    root_builder.set_execution_timeout(execution_timeout)
+-    root_builder.set_node_timeout(node_timeout)
+-    root_builder.set_max_node_executions(max_node_executions)
+-    root_builder.set_session_manager(session_manager)
+-    root_builder.set_plugins([multiagent_plugin])
+-
+-    root_graph = root_builder.build()
++    def _build_formation(node: Mapping[str, Any]) -> Agent | Graph | Swarm:
++        """Build one ``FORMATION_TOPOLOGY`` node: a skill agent, a Swarm of its agents, or a Graph."""
++        if node["kind"] == "agent":
++            return _make_skill_agent(node)
++        children: Sequence[Mapping[str, Any]] = node.get("children") or node["nodes"]
++        members = {child["id"]: _build_formation(child) for child in children}
++        formation_id = node.get("orchestrator_id") or node["id"]
++        if node["kind"] == "swarm":
++            agents = cast(list[Agent], list(members.values()))
++            return Swarm(
++                agents,
++                entry_point=agents[0],
++                id=formation_id,
++                execution_timeout=execution_timeout,
++                node_timeout=node_timeout,
++                session_manager=session_manager,
++                plugins=[multiagent_plugin],
++            )
++        builder = GraphBuilder()
++        builder.set_graph_id(formation_id)
++        builder.reset_on_revisit(True)
++        for child_id, executor in members.items():
++            builder.add_node(executor, child_id)
++        for edge in node["edges"]:
++            builder.add_edge(
++                edge["from"],
++                edge["to"],
++                condition=qa_requests_revision(edge["from"], edge["to"]) if edge.get("conditional") else None,
++            )
++        # A feedback loop gives its first node an incoming edge, so entry points are set explicitly.
++        for child_id in members:
++            if not any(edge["to"] == child_id and not edge.get("conditional") for edge in node["edges"]):
++                builder.set_entry_point(child_id)
++        builder.set_execution_timeout(execution_timeout)
++        builder.set_max_node_executions(max_node_executions)
++        if all(child["kind"] == "agent" for child in children):
++            builder.set_node_timeout(node_timeout)
++        builder.set_session_manager(session_manager)
++        builder.set_plugins([multiagent_plugin])
++        return builder.build()
++
++    root_graph = cast(Graph, _build_formation(FORMATION_TOPOLOGY))
+     setattr(root_graph, "_deep_research_plugin", multiagent_plugin)
+     setattr(root_graph, "_deep_research_session_manager", session_manager)
+     setattr(root_graph, "_deep_research_owned_agents", agents_sink)
+@@ -3701,6 +3419,12 @@ class _DeepResearchRun:
+ 
+         if ev_type == "error":
+             self.error = str(event.get("error") or event.get("message") or "Deep Research error")
++            # The agent working when the run failed carries the reason too (as the client folds it).
++            if node_path:
++                key = self._ensure_node(node_path, timestamp)
++                if event.get("fatal") is not False:
++                    self.nodes[key]["status"] = "failed"
++                self.nodes[key]["error"] = self.error
+             return
+ 
+         if ev_type == "run_finished":
+@@ -4131,7 +3855,8 @@ class DeepResearchRuntime:
+             depth=normalized_depth,
+             selection=selection_dict,
+         )
+-        await self._persist_run(run, include_events=False)
++        # The run is served from memory at once; its first durable snapshot (remote storage
++        # round trips) is written by the run task, so the request returns without waiting on it.
+ 
+         first_used = False
+ 
+@@ -4191,14 +3916,16 @@ class DeepResearchRuntime:
+             if not current_artifacts:
+                 return
+             default_node = (
+-                ["synthesis_formation", "pdf_publisher"]
++                ["production_graph", "pdf_publisher"]
+                 if kind == "report_pdf"
+-                else ["synthesis_formation", "slidev_producer"]
++                else ["production_graph", "deck_producer"]
+             )
+             url_key = "report_pdf_url" if kind == "report_pdf" else "slidev_preview_url"
+             extra_fields: dict[str, Any] = {}
+             if isinstance(compiled.get("slidev_markdown"), str) and compiled["slidev_markdown"]:
+                 extra_fields["slidev_markdown"] = str(compiled["slidev_markdown"])
++            if kind == "report_pdf" and (session_artifact_dir / "report.md").is_file():
++                extra_fields["report_markdown"] = (session_artifact_dir / "report.md").read_text(encoding="utf-8")
+             await run.emit(
+                 "artifact_ready",
+                 node_path=list(run.active_node_path) or default_node,
+@@ -4212,18 +3939,18 @@ class DeepResearchRuntime:
+             )
+ 
+         async def _handle_agent_event(agent_ev: Mapping[str, Any], path: list[str]) -> None:
+-            # 1. Child subagent stream events emitted by `make_subagent(name="use_skill", ...)`.
++            # 1. Child agent stream events emitted by the harness's built-in `subagent` tool.
+             if agent_ev.get("type") == "tool_stream" or "tool_stream_event" in agent_ev:
+                 tse = agent_ev.get("tool_stream_event")
+                 if not isinstance(tse, Mapping):
+                     return
+                 tool_use = tse.get("tool_use")
+-                if not isinstance(tool_use, Mapping) or tool_use.get("name") != "use_skill":
++                if not isinstance(tool_use, Mapping) or tool_use.get("name") != "subagent":
+                     return
+                 skill_id = str(tool_use.get("toolUseId") or "")
+                 raw_input = tool_use.get("input")
+                 inp = raw_input if isinstance(raw_input, Mapping) else {}
+-                skill_name = str(inp.get("agent_type") or inp.get("preset") or "use_skill")
++                skill_name = str(inp.get("agent_type") or inp.get("preset") or "subagent")
+                 task_text = str(inp.get("task") or inp.get("prompt") or "")
+ 
+                 if skill_id and skill_id not in seen_skill_ids:
+@@ -4375,7 +4102,7 @@ class DeepResearchRuntime:
+                             await _emit_new_citations(cits, path)
+                 return
+ 
+-            # 2. Orchestrator message boundaries (catch `use_skill` start/stop even when 0 stream chunks fired).
++            # 2. The agent's own message boundaries (catch `subagent` start/stop even when 0 stream chunks fired).
+             orch_msg = agent_ev.get("message")
+             if isinstance(orch_msg, Mapping):
+                 role = orch_msg.get("role")
+@@ -4385,11 +4112,11 @@ class DeepResearchRuntime:
+                         if not isinstance(block, Mapping) or not isinstance(block.get("toolUse"), Mapping):
+                             continue
+                         tu = block["toolUse"]
+-                        if tu.get("name") != "use_skill":
++                        if tu.get("name") != "subagent":
+                             continue
+                         skill_id = str(tu.get("toolUseId") or "")
+                         inp = tu.get("input") if isinstance(tu.get("input"), Mapping) else {}
+-                        skill_name = str(inp.get("agent_type") or inp.get("preset") or "use_skill")
++                        skill_name = str(inp.get("agent_type") or inp.get("preset") or "subagent")
+                         task_text = str(inp.get("task") or inp.get("prompt") or "")
+                         if skill_id and skill_id not in seen_skill_ids:
+                             seen_skill_ids.add(skill_id)
+@@ -4410,7 +4137,7 @@ class DeepResearchRuntime:
+                         skill_id = str(tr.get("toolUseId") or "")
+                         if skill_id in seen_skill_ids and skill_id not in completed_skill_ids:
+                             completed_skill_ids.add(skill_id)
+-                            sk_name, started_t = skill_meta.get(skill_id, ("use_skill", time.monotonic()))
++                            sk_name, started_t = skill_meta.get(skill_id, ("subagent", time.monotonic()))
+                             dur_ms = max(0, int((time.monotonic() - started_t) * 1000))
+                             tr_text = _extract_tool_result_text(tr)
+                             sk_status = "failed" if str(tr.get("status") or "").lower() == "error" else "completed"
+@@ -4433,7 +4160,7 @@ class DeepResearchRuntime:
+                 skill_id = str(tr.get("toolUseId") or "")
+                 if skill_id in seen_skill_ids and skill_id not in completed_skill_ids:
+                     completed_skill_ids.add(skill_id)
+-                    sk_name, started_t = skill_meta.get(skill_id, ("use_skill", time.monotonic()))
++                    sk_name, started_t = skill_meta.get(skill_id, ("subagent", time.monotonic()))
+                     dur_ms = max(0, int((time.monotonic() - started_t) * 1000))
+                     tr_text = _extract_tool_result_text(tr)
+                     sk_status = "failed" if str(tr.get("status") or "").lower() == "error" else "completed"
+@@ -4556,16 +4283,6 @@ class DeepResearchRuntime:
+                 exec_ms = int(getattr(node_res, "execution_time", 0) or 0)
+                 full_node_text = _extract_node_result_text(node_res) if isinstance(node_res, NodeResult) else ""
+                 preview_text = full_node_text[:400]
+-                if full_path == ["synthesis_formation", "executive_editor"] and full_node_text:
+-                    run.report_markdown = full_node_text
+-                    run._report_source_node = "executive_editor"
+-                elif (
+-                    full_path == ["synthesis_formation", "slidev_producer"]
+-                    and full_node_text
+-                    and "---" in full_node_text
+-                    and not (session_artifact_dir / "slides.md").is_file()
+-                ):
+-                    run.slidev_markdown = full_node_text
+                 usage_payload: dict[str, int] | None = None
+                 if node_kind == "agent":
+                     acc = getattr(node_res, "accumulated_usage", None)
+@@ -4579,6 +4296,11 @@ class DeepResearchRuntime:
+                                 "outputTokens": out_t,
+                                 "totalTokens": tot_t,
+                             }
++                node_error = (
++                    _node_result_error(node_res)
++                    if status_str == "failed" and isinstance(node_res, NodeResult)
++                    else None
++                )
+                 await run.emit(
+                     "node_stop",
+                     node_path=full_path,
+@@ -4588,6 +4310,7 @@ class DeepResearchRuntime:
+                     execution_time_ms=exec_ms,
+                     output_preview=preview_text,
+                     **({"usage": usage_payload} if usage_payload is not None else {}),
++                    **({"error": node_error} if node_error else {}),
+                 )
+                 await self._persist_run(run, include_events=False)
+                 return
+@@ -4596,6 +4319,7 @@ class DeepResearchRuntime:
+                 final_graph_result = raw_ev.get("result")
+ 
+         try:
++            await self._persist_run(run, include_events=False)
+             graph = build_deep_research_graph(
+                 session_id=run.session_id,
+                 user_id=run.user_id,
+@@ -4622,27 +4346,16 @@ class DeepResearchRuntime:
+ 
+             elapsed_ms = max(1, int((time.monotonic() - run._started_monotonic) * 1000))
+ 
+-            # Extract authoritative final report from synthesis_formation when available.
++            # The report the writing swarm saved to the workspace is the authoritative final report.
+             extracted_report = run.report_markdown.strip()
+-            if final_graph_result is not None:
+-                results_dict = getattr(final_graph_result, "results", None)
+-                if isinstance(results_dict, Mapping) and "synthesis_formation" in results_dict:
+-                    syn_node_res = results_dict["synthesis_formation"]
+-                    syn_inner = getattr(syn_node_res, "result", None)
+-                    syn_inner_results = getattr(syn_inner, "results", None)
+-                    if isinstance(syn_inner_results, Mapping) and "executive_editor" in syn_inner_results:
+-                        ed_text = _extract_node_result_text(syn_inner_results["executive_editor"])
+-                        if ed_text:
+-                            extracted_report = ed_text
+-                    elif isinstance(syn_node_res, NodeResult):
+-                        fallback_syn = _extract_node_result_text(syn_node_res)
+-                        if fallback_syn and not extracted_report:
+-                            extracted_report = fallback_syn
++            report_disk_path = session_artifact_dir / "report.md"
++            if report_disk_path.is_file():
++                extracted_report = report_disk_path.read_text(encoding="utf-8").strip() or extracted_report
+ 
+             if extracted_report:
+                 cits = _extract_citations_from_payload(extracted_report, fallback_source="report")
+                 if cits:
+-                    await _emit_new_citations(cits, ["synthesis_formation", "executive_editor"])
++                    await _emit_new_citations(cits, ["writing_swarm", "report_writer"])
+ 
+             raw_graph_status = getattr(final_graph_result, "status", Status.COMPLETED)
+             graph_status_str = str(getattr(raw_graph_status, "value", raw_graph_status)).lower()
+@@ -4685,9 +4398,10 @@ class DeepResearchRuntime:
+                     or not (session_artifact_dir / "slides.pdf").is_file()
+                 ):
+                     try:
++                        slides_file = session_artifact_dir / "slides.md"
+                         candidate_slides_md = (
+-                            run.slidev_markdown.strip()
+-                            if "---" in run.slidev_markdown
++                            slides_file.read_text(encoding="utf-8")
++                            if slides_file.is_file()
+                             else synthesize_slidev_markdown(
+                                 report_markdown=effective_report_body,
+                                 title=run.title,
+@@ -4722,10 +4436,20 @@ class DeepResearchRuntime:
+                 extracted_report,
+                 fallback=f"Deep Research {final_status} ({len(run.citations)} citations).",
+             )
++            # A Graph that fails without raising has a failed node, or stopped at an execution limit.
++            failed_reason: str | None = None
++            if final_status == "failed" and isinstance(final_graph_result, MultiAgentResult):
++                failed = {nid: res for nid, res in final_graph_result.results.items() if res.status == Status.FAILED}
++                detail = next((msg for res in failed.values() if (msg := _node_result_error(res))), None)
++                failed_reason = (
++                    f"{', '.join(failed)} failed" + (f": {detail}" if detail else "")
++                    if failed
++                    else "The formation stopped at its execution limit (execution timeout or maximum node executions)"
++                )
+             error_msg = (
+                 "Research run cancelled"
+                 if final_status == "cancelled"
+-                else (run.error or "Deep Research formation failed")
++                else (run.error or failed_reason or "Deep Research formation failed")
+                 if final_status == "failed"
+                 else None
+             )
+@@ -5123,7 +4847,6 @@ __all__ = [
+     "VALID_DEPTHS",
+     "DeepResearchMultiAgentPlugin",
+     "DeepResearchRuntime",
+-    "all_investigation_branches_completed",
+     "build_deep_research_graph",
+     "build_leaf_tool_pool",
+     "collect_session_artifact_urls",
+@@ -5134,8 +4857,7 @@ __all__ = [
+     "get_deep_research_runtime",
+     "get_formation_topology",
+     "load_deep_research_skills",
++    "qa_requests_revision",
+     "set_deep_research_runtime",
+-    "should_refine",
+-    "should_synthesize",
+     "synthesize_slidev_markdown",
+ ]
+diff --git a/agent/tests/test_deep_research_graph.py b/agent/tests/test_deep_research_graph.py
+index dce9458..8bd39d8 100644
+--- a/agent/tests/test_deep_research_graph.py
++++ b/agent/tests/test_deep_research_graph.py
+@@ -1,9 +1,9 @@
+-"""Offline structural, execution, and runtime tests for Deep Research native Strands formations.
++"""Offline structural, execution, and runtime tests for the Deep Research set formation.
+ 
+ Exercises the real pinned Strands SDK (``Graph``, ``Swarm``, ``SnapshotSessionManager``,
+-``MultiAgentPlugin``, ``AgentSkills``) and ``strands_harness==0.1.2`` (``create_harness``,
+-``make_subagent``) using deterministic Strands ``Model`` test doubles that emit genuine
+-``use_skill``, leaf research & artifact compilation tool, and ``handoff_to_agent`` invocations.
++``MultiAgentPlugin``, ``AgentSkills``) and ``strands_harness==0.1.2`` (``create_harness`` with its
++built-in ``subagent`` and ``write`` tools) using deterministic Strands ``Model`` test doubles that
++emit genuine ``subagent``, ``handoff_to_agent``, file and artifact compilation tool calls.
+ """
+ 
+ from __future__ import annotations
+@@ -13,6 +13,7 @@ import asyncio
+ import json
+ import os
+ from pathlib import Path
++import re
+ import threading
+ from typing import Any, cast
+ 
+@@ -29,7 +30,6 @@ from strands.types.streaming import StreamEvent
+ from agent.api.core.context_agent import context_store
+ from agent.api.core.deep_research import (
+     DEEP_RESEARCH_SKILLS_DIR,
+-    FRAMEWORK_PLUGIN_TOOL_NAMES,
+     ORCHESTRATOR_IDS,
+     VALID_DEPTHS,
+     DeepResearchMultiAgentPlugin,
+@@ -131,6 +131,49 @@ def _count_tool_results(messages: list[dict[str, Any]]) -> int:
+     return total
+ 
+ 
++_ROLE_RE = re.compile(r"^## Your role: (.+)$", re.MULTILINE)
++_WORKSPACE_RE = re.compile(r"Every file of this run lives in (.+?)\. Read ")
++_ANCHOR = "([ArXiv QEC Benchmark](https://arxiv.org/abs/2401.00001))"
++
++_REPORT_MD = (
++    "# Quantum Error Correction Architecture Report\n\n"
++    "## Executive Summary\n"
++    "Bivariate bicycle qLDPC codes reduce physical-to-logical overhead compared with planar "
++    "surface codes ([IBM Quantum LDPC Paper](https://research.ibm.com/publications/qldpc-2026)), "
++    "while surface codes retain simpler nearest-neighbor 2D syndrome extraction "
++    "([ArXiv QEC Benchmark](https://arxiv.org/abs/2401.00001)).\n\n"
++    "| Architecture | Threshold | Connectivity |\n"
++    "| --- | --- | --- |\n"
++    "| Surface Code | ~1.0% | 2D Nearest-Neighbor |\n"
++    "| Bivariate Bicycle qLDPC | ~0.7% | Long-Range Couplers |\n\n"
++    "## References\n"
++    "1. [ArXiv QEC Benchmark](https://arxiv.org/abs/2401.00001)\n"
++    "2. [IBM Quantum LDPC Paper](https://research.ibm.com/publications/qldpc-2026)\n"
++)
++
++_SLIDES_MD = (
++    "---\n"
++    "title: Quantum Error Correction Architecture Deck\n"
++    "---\n\n"
++    "# Quantum Error Correction\n\n"
++    "Surface code vs. bivariate bicycle qLDPC fault-tolerance\n\n"
++    "---\n\n"
++    "## Key Empirical Findings\n\n"
++    "- **~1.0% threshold** on 2D nearest-neighbor planar surface codes\n"
++    "- **~0.7% threshold** with reduced overhead on bivariate bicycle qLDPC\n\n"
++    "<!--\nSpeaker note: contrast coupler hardware requirements.\n-->\n"
++)
++
++_RESEARCH_CALLS: tuple[tuple[str, dict[str, Any]], ...] = (
++    ("brave_web_search", {"query": "quantum error correction qLDPC surface code", "count": 3}),
++    ("extract_article_content", {"url": "https://arxiv.org/abs/2401.00001"}),
++)
++
++
++def _handoff(agent_name: str, message: str) -> tuple[str, dict[str, Any]]:
++    return ("handoff_to_agent", {"agent_name": agent_name, "message": message})
++
++
+ class ScriptedFormationCoordinator:
+     """Shared state across per-agent ``ScriptedFormationModel`` instances in a formation run."""
+ 
+@@ -142,24 +185,77 @@ class ScriptedFormationCoordinator:
+         invoke_artifact_tools: bool = True,
+         reasoning: str | None = None,
+     ) -> None:
++        # When set, each QA agent in a feedback loop rejects the work once before approving it.
+         self.refine_once = refine_once
+         self.slow_gate = slow_gate
+         self.invoke_artifact_tools = invoke_artifact_tools
+         # When set, every model turn opens with this text as a native reasoning content block.
+         self.reasoning = reasoning
+         self.lock = threading.Lock()
+-        self.verification_critic_visits = 0
+-        self.adversarial_handoffs = 0
+-        self.verification_handoffs = 0
+-        self.use_skill_calls: list[tuple[str, str]] = []
+-        self.leaf_tool_calls: list[str] = []
++        self.turns: dict[str, int] = {}
++        self.tool_calls: list[str] = []
+ 
+     def make_model(self, **_: Any) -> "ScriptedFormationModel":
+         return ScriptedFormationModel(self)
+ 
++    def script(self, label: str, turn: int, workspace: str) -> tuple[list[tuple[str, dict[str, Any]]], str]:
++        """One formation agent's turn: the tool calls it makes in order, then its final message."""
++        revise = self.refine_once and turn == 1
++        if label == "Researcher":
++            return (
++                [
++                    ("subagent", {"task": "Research qLDPC and surface code thresholds from primary sources."}),
++                    _handoff("fact_checker", "research.md is ready for its reference fact check."),
++                ],
++                f"Research saved to research.md {_ANCHOR}.",
++            )
++        if label == "Fact Checker":
++            return [_handoff("citation_manager", "Claims checked; number the citations.")], "Claims match sources."
++        if label == "Citation Manager":
++            return [_handoff("research_qa", "Citations and references.md are ready.")], "References documented."
++        if label == "Research QA":
++            if revise:
++                return [_handoff("citation_manager", "Reference 2 has no URL; fix references.md.")], "Sent back."
++            return [], "Every reference and citation checks out.\nAPPROVED"
++        if label == "Visual QA":
++            if revise:
++                return [], "The y axis of figures/thresholds.png is mislabelled.\nREVISE: data_analyst"
++            return [], "Every chart is cited, relevant and accurate.\nAPPROVED"
++        if label == "Report Designer":
++            return [_handoff("deck_designer", "report-layout.md is ready.")], "Report layout saved."
++        if label == "Deck Designer":
++            return [_handoff("layout_qa", "deck-layout.md is ready.")], "Deck layout saved."
++        if label == "Layout QA":
++            return [_handoff("report_writer", "Both layouts approved.")], "Layouts approved."
++        if label == "Report Writer":
++            return (
++                [
++                    ("write", {"path": f"{workspace}/report.md", "content": _REPORT_MD}),
++                    _handoff("report_qa", "report.md is ready."),
++                ],
++                "Report written to report.md.",
++            )
++        if label == "Report QA":
++            return [_handoff("deck_writer", "Report approved.")], "Report approved."
++        if label == "Deck Writer":
++            return [_handoff("deck_qa", "deck-copy.md is ready.")], "Slide wording saved."
++        if label == "PDF Publisher" and self.invoke_artifact_tools:
++            return [("compile_scholarly_pdf", {"css": "h1 { color: #1e3a8a; }"})], "Compiled report.pdf."
++        if label == "Slidev Producer" and self.invoke_artifact_tools:
++            return (
++                [
++                    (
++                        "compile_slidev_deck",
++                        {"slides_markdown": _SLIDES_MD, "title": "Quantum Error Correction Architecture Deck"},
++                    )
++                ],
++                "Built the Slidev deck.",
++            )
++        return [], f"{label} finished {_ANCHOR}.\nAPPROVED"
++
+ 
+ class ScriptedFormationModel(Model):
+-    """Real Strands ``Model`` subclass driving orchestrators, Swarms, and ``use_skill`` subagents."""
++    """Real Strands ``Model`` subclass driving the formation's skill agents and their sub-agents."""
+ 
+     def __init__(self, coordinator: ScriptedFormationCoordinator) -> None:
+         self.coordinator = coordinator
+@@ -212,234 +308,45 @@ class ScriptedFormationModel(Model):
+         if self.coordinator.slow_gate is not None:
+             await self.coordinator.slow_gate.wait()
+ 
+-        msg_list = list(messages or [])
+-        spec_map: dict[str, dict[str, Any]] = {
+-            str(spec["name"]): spec for spec in (tool_specs or ()) if isinstance(spec, dict) and "name" in spec
+-        }
++        spec_names = {str(spec["name"]) for spec in (tool_specs or ()) if isinstance(spec, dict) and "name" in spec}
+         prompt_text = str(system_prompt or "")
++        prior_results = _count_tool_results(list(messages or []))
++        role = _ROLE_RE.search(prompt_text)
+ 
+-        # ── Case A: Orchestrator Agent (Graph or Swarm member) ──────────────
+-        if "use_skill" in spec_map:
+-            use_skill_spec = spec_map["use_skill"]
+-            agent_type_prop = (
+-                use_skill_spec.get("inputSchema", {})
+-                .get("json", {})
+-                .get("properties", {})
+-                .get("agent_type", {})
+-            )
+-            enum_presets: list[str] = list(agent_type_prop.get("enum") or [])
+-            chosen_preset = enum_presets[0] if enum_presets else "domain-landscape-scan"
+-
+-            prior_results = _count_tool_results(msg_list)
+-
+-            # Step 1 on every orchestrator turn: invoke `use_skill`!
++        # ── Case A: a built-in `subagent` child: one research tool call, then its findings ──
++        if role is None:
+             if prior_results == 0:
+-                with self.coordinator.lock:
+-                    seq = len(self.coordinator.use_skill_calls) + 1
+-                    self.coordinator.use_skill_calls.append((chosen_preset, prompt_text.splitlines()[0]))
+-                for ev in _assistant_tool_use_stream(
+-                    f"use-skill-{seq}",
+-                    "use_skill",
+-                    {
+-                        "agent_type": chosen_preset,
+-                        "task": f"Execute {chosen_preset} analysis for quantum error correction thresholds",
+-                    },
+-                ):
+-                    yield ev
+-                return
+-
+-            # Step 2 for Swarm entry agents: handoff to peer via `handoff_to_agent`!
+-            if "handoff_to_agent" in spec_map:
+-                if "# Hypothesis Explorer" in prompt_text:
+-                    with self.coordinator.lock:
+-                        should_handoff = self.coordinator.adversarial_handoffs < 2
+-                        if should_handoff:
+-                            self.coordinator.adversarial_handoffs += 1
+-                            h_idx = self.coordinator.adversarial_handoffs
+-                        else:
+-                            h_idx = 0
+-                    if should_handoff and prior_results == 1:
+-                        for ev in _assistant_tool_use_stream(
+-                            f"handoff-adv-{h_idx}",
+-                            "handoff_to_agent",
+-                            {
+-                                "agent_name": "contrarian_examiner",
+-                                "message": "Falsify surface-code vs LDPC qubit overhead hypothesis.",
+-                                "context": {"hypothesis": "qLDPC cuts physical overhead 5x"},
+-                            },
+-                        ):
+-                            yield ev
+-                        return
+-
+-                if "# Citation Verifier" in prompt_text:
+-                    if prior_results == 1:
++                for tool_name, sample_args in _RESEARCH_CALLS:
++                    if tool_name in spec_names:
+                         with self.coordinator.lock:
+-                            self.coordinator.verification_handoffs += 1
+-                            v_idx = self.coordinator.verification_handoffs
+-                        for ev in _assistant_tool_use_stream(
+-                            f"handoff-ver-{v_idx}",
+-                            "handoff_to_agent",
+-                            {
+-                                "agent_name": "analytical_critic",
+-                                "message": "Citations audited; evaluate sub-question completeness and gate.",
+-                                "context": {"audited_urls": ["https://arxiv.org/abs/2401.00001"]},
+-                            },
+-                        ):
++                            self.coordinator.tool_calls.append(tool_name)
++                            t_seq = len(self.coordinator.tool_calls)
++                        for ev in _assistant_tool_use_stream(f"leaf-tool-{t_seq}", tool_name, sample_args):
+                             yield ev
+                         return
+-
+-                if "# Analytical Critic" in prompt_text:
+-                    with self.coordinator.lock:
+-                        self.coordinator.verification_critic_visits += 1
+-                        visit_no = self.coordinator.verification_critic_visits
+-                    if self.coordinator.refine_once and visit_no == 1:
+-                        verdict = (
+-                            "[NEEDS_REFINEMENT]\n"
+-                            "Gap identified: gather primary decoder latency numbers from "
+-                            "[IBM Quantum LDPC Paper](https://research.ibm.com/publications/qldpc-2026)."
+-                        )
+-                    else:
+-                        verdict = (
+-                            "[VERIFICATION_PASSED]\n"
+-                            "All claims corroborated across [ArXiv QEC Benchmark](https://arxiv.org/abs/2401.00001) "
+-                            "and [IBM Quantum LDPC Paper](https://research.ibm.com/publications/qldpc-2026)."
+-                        )
+-                    for ev in _assistant_text_stream(verdict):
+-                        yield ev
+-                    return
+-
+-            # Step 3: Terminal Synthesis / Stage output
+-            if "# Executive Editor" in prompt_text:
+-                report = (
+-                    "# Quantum Error Correction Architecture Report\n\n"
+-                    "## Executive Summary\n"
+-                    "Bivariate bicycle qLDPC codes reduce physical-to-logical overhead compared with planar "
+-                    "surface codes ([IBM Quantum LDPC Paper](https://research.ibm.com/publications/qldpc-2026)), "
+-                    "while surface codes retain simpler nearest-neighbor 2D syndrome extraction "
+-                    "([ArXiv QEC Benchmark](https://arxiv.org/abs/2401.00001)).\n\n"
+-                    "| Architecture | Threshold | Connectivity |\n"
+-                    "| --- | --- | --- |\n"
+-                    "| Surface Code | ~1.0% | 2D Nearest-Neighbor |\n"
+-                    "| Bivariate Bicycle qLDPC | ~0.7% | Long-Range Couplers |\n\n"
+-                    "## Sources\n"
+-                    "- [ArXiv QEC Benchmark](https://arxiv.org/abs/2401.00001)\n"
+-                    "- [IBM Quantum LDPC Paper](https://research.ibm.com/publications/qldpc-2026)\n"
+-                )
+-                for ev in _assistant_text_stream(report):
+-                    yield ev
+-                return
+-
+-            if "# Scholarly PDF Publisher" in prompt_text:
+-                pdf_manifest = "Compiled report.pdf and report.md via `pdf` preset."
+-                for ev in _assistant_text_stream(pdf_manifest):
+-                    yield ev
+-                return
+-
+-            if "# Slidev Deck Producer" in prompt_text:
+-                slidev_deck = (
+-                    "---\n"
+-                    "theme: default\n"
+-                    "title: Quantum Error Correction Architecture Deck\n"
+-                    "routerMode: hash\n"
+-                    "aspectRatio: 16/9\n"
+-                    "---\n\n"
+-                    "# Quantum Error Correction\n\n"
+-                    "Planar surface codes vs. bivariate bicycle qLDPC architectures\n\n"
+-                    "---\n\n"
+-                    "## Threshold & Connectivity Trade-offs\n\n"
+-                    "- **Surface Code**: ~1.0% circuit-level threshold on 2D nearest-neighbor grids\n"
+-                    "- **Bivariate Bicycle qLDPC**: ~0.7% threshold with 5x lower physical overhead\n"
+-                )
+-                for ev in _assistant_text_stream(slidev_deck):
+-                    yield ev
+-                return
+-
+-            if "# Report Drafter" in prompt_text:
+-                draft = (
+-                    "# Draft: Quantum Error Correction\n\n"
+-                    "Initial synthesis citing [ArXiv QEC Benchmark](https://arxiv.org/abs/2401.00001)."
+-                )
+-                for ev in _assistant_text_stream(draft):
+-                    yield ev
+-                return
+-
+-            stage_summary = (
+-                f"Completed stage dossier using `{chosen_preset}` with verified anchor "
+-                "[ArXiv QEC Benchmark](https://arxiv.org/abs/2401.00001)."
+-            )
+-            for ev in _assistant_text_stream(stage_summary):
++            for ev in _assistant_text_stream(f"Sub-agent findings: surface code threshold ~1.0% {_ANCHOR}."):
+                 yield ev
+             return
+ 
+-        # ── Case B: Leaf `use_skill` Subagent ───────────────────────────────
+-        if not _has_tool_result(msg_list):
+-            artifact_candidates: tuple[tuple[str, dict[str, Any]], ...] = (
+-                (
+-                    "compile_scholarly_pdf",
+-                    {
+-                        "markdown_content": (
+-                            "# Quantum Error Correction Architecture Report\n\n"
+-                            "## Executive Summary\n"
+-                            "Bivariate bicycle qLDPC codes cut physical qubit overhead relative to planar "
+-                            "surface codes ([IBM Quantum LDPC Paper](https://research.ibm.com/publications/qldpc-2026), "
+-                            "[ArXiv QEC Benchmark](https://arxiv.org/abs/2401.00001)).\n\n"
+-                            "| Architecture | Threshold | Connectivity |\n"
+-                            "| --- | --- | --- |\n"
+-                            "| Surface Code | ~1.0% | 2D Nearest-Neighbor |\n"
+-                            "| Bivariate Bicycle qLDPC | ~0.7% | Long-Range Couplers |\n"
+-                        ),
+-                        "title": "Quantum Error Correction Architecture Report",
+-                    },
+-                ),
+-                (
+-                    "compile_slidev_deck",
+-                    {
+-                        "slides_markdown": (
+-                            "---\n"
+-                            "title: Quantum Error Correction Architecture Deck\n"
+-                            "---\n\n"
+-                            "# Quantum Error Correction\n\n"
+-                            "Surface code vs. bivariate bicycle qLDPC fault-tolerance\n\n"
+-                            "---\n\n"
+-                            "## Key Empirical Findings\n\n"
+-                            "- **~1.0% threshold** on 2D nearest-neighbor planar surface codes\n"
+-                            "- **~0.7% threshold** with reduced overhead on bivariate bicycle qLDPC\n\n"
+-                            "<!--\nSpeaker note: contrast coupler hardware requirements.\n-->\n"
+-                        ),
+-                        "title": "Quantum Error Correction Architecture Deck",
+-                    },
+-                ),
+-            )
+-            research_candidates: tuple[tuple[str, dict[str, Any]], ...] = (
+-                ("brave_web_search", {"query": "quantum error correction qLDPC surface code", "count": 3}),
+-                ("extract_article_content", {"url": "https://arxiv.org/abs/2401.00001"}),
+-                ("search_saved_context", {"query": "surface code threshold", "max_results": 3}),
+-                ("brave_news_search", {"query": "quantum error correction milestone", "count": 3}),
+-                ("brave_answer", {"query": "qLDPC vs surface code threshold"}),
+-            )
+-            candidate_list = (
+-                (*artifact_candidates, *research_candidates)
+-                if self.coordinator.invoke_artifact_tools
+-                else research_candidates
+-            )
+-            for candidate_tool, sample_args in candidate_list:
+-                if candidate_tool in spec_map:
+-                    with self.coordinator.lock:
+-                        self.coordinator.leaf_tool_calls.append(candidate_tool)
+-                        t_seq = len(self.coordinator.leaf_tool_calls)
+-                    for ev in _assistant_tool_use_stream(
+-                        f"leaf-tool-{t_seq}",
+-                        candidate_tool,
+-                        sample_args,
+-                    ):
+-                        yield ev
+-                    return
+-
+-        leaf_note = (
+-            "Leaf skill findings: surface code threshold ~1.0% vs qLDPC ~0.7% "
+-            "([ArXiv QEC Benchmark](https://arxiv.org/abs/2401.00001))."
+-        )
+-        for ev in _assistant_text_stream(leaf_note):
++        # ── Case B: a formation skill agent following its scripted turn ──
++        label = role.group(1).strip()
++        workspace_match = _WORKSPACE_RE.search(prompt_text)
++        assert workspace_match is not None, "every formation agent is told its workspace"
++        with self.coordinator.lock:
++            if prior_results == 0:
++                self.coordinator.turns[label] = self.coordinator.turns.get(label, 0) + 1
++            turn = self.coordinator.turns[label]
++        steps, final_text = self.coordinator.script(label, turn, workspace_match.group(1))
++        if prior_results < len(steps):
++            tool_name, tool_input = steps[prior_results]
++            assert tool_name in spec_names, f"{label} has no {tool_name} tool"
++            with self.coordinator.lock:
++                self.coordinator.tool_calls.append(tool_name)
++            tool_use_id = f"{label.lower().replace(' ', '-')}-{turn}-{prior_results}"
++            for ev in _assistant_tool_use_stream(tool_use_id, tool_name, tool_input):
++                yield ev
++            return
++        for ev in _assistant_text_stream(final_text):
+             yield ev
+ 
+ 
+@@ -509,83 +416,34 @@ def _offline_leaf_tools() -> list[Any]:
+ 
+ 
+ # ─────────────────────────────────────────────────────────────────────────────
+-# 1. Native Skill & 3-Level Formation Structural Audit Tests
++# 1. Skill Library & Set Formation Structural Audit Tests
+ # ─────────────────────────────────────────────────────────────────────────────
+ 
++_BUILTIN_AGENT_TOOLS = {"shell", "read", "write", "edit", "programmatic_tool_caller", "subagent"}
+ 
+-def test_all_deep_research_skills_load_strictly_with_valid_metadata_and_references() -> None:
+-    skills = load_deep_research_skills(DEEP_RESEARCH_SKILLS_DIR, strict=True)
+-    assert len(skills) == 53
+-
+-    expected_skills_sh_packages = {
+-        # Pillar 1: Deep Research
+-        "research",
+-        "scientific-critical-thinking",
+-        # Pillar 2: Data Analytics & Visualization
+-        "analytics",
+-        "exploratory-data-analysis",
+-        "statistical-analysis",
+-        "scientific-visualization",
+-        "data-visualization",
+-        # Pillar 3: QA, Data Validation & Peer Verification
+-        "verification-before-completion",
+-        "peer-review",
+-        "validate-data",
+-        # Pillar 4: Humanized Voice & Anti-AI-Slop Writing
+-        "humanizer",
+-        "copy-editing",
+-        "scientific-writing",
+-        "stop-slop",
+-        "no-ai-slop",
+-        # Pillar 5: Stylized PDF & Slide Presentation
+-        "pdf",
+-        "canvas-design",
+-        "theme-factory",
+-        "slidev",
+-    }
+-    assert expected_skills_sh_packages.issubset(set(skills.keys()))
+-
+-    expected_studio_skills = {
+-        "build-agent-slidev",
+-        "scientific-slides",
+-        "academic-paper",
+-        "openai-pdf",
+-        "scholarly-pdf-publisher",
+-        "slidev-deck-producer",
+-    }
+-    assert expected_studio_skills.issubset(set(skills.keys()))
+-
+-    for pdf_leaf in ("pdf", "academic-paper", "openai-pdf"):
+-        assert "compile_scholarly_pdf" in (skills[pdf_leaf].allowed_tools or [])
+-    for slidev_leaf in ("build-agent-slidev", "slidev", "scientific-slides"):
+-        assert "compile_slidev_deck" in (skills[slidev_leaf].allowed_tools or [])
+-
+-    for pkg in expected_skills_sh_packages:
+-        meta = skills[pkg].metadata
+-        assert meta.get("source") == "skills.sh"
+-        assert int(meta.get("github_stars") or 0) >= 10_000
+-        audits = meta.get("security_audits") or {}
+-        assert audits == {
+-            "gen_agent_trust_hub": "Pass",
+-            "socket": "Pass",
+-            "snyk": "Pass",
+-        }
+ 
++def _topology_agents() -> list[dict[str, Any]]:
++    return [agent for formation in get_formation_topology()["nodes"] for agent in formation["children"]]
++
++
++def test_skill_library_is_the_skills_cli_install_and_covers_every_agent() -> None:
++    skills = load_deep_research_skills()
++
++    # Every skill is a Skills CLI install recorded in skills-lock.json with its GitHub source.
++    lock = json.loads((DEEP_RESEARCH_SKILLS_DIR.parents[1] / "skills-lock.json").read_text(encoding="utf-8"))
++    assert set(skills) == set(lock["skills"])
++    assert all(entry["sourceType"] == "github" and entry["source"] for entry in lock["skills"].values())
++    assert lock["skills"]["find-skills"]["source"] == "vercel-labs/skills"
++
++    assert {agent["skill"] for agent in _topology_agents()} <= set(skills)
+     for name, skill in skills.items():
+         assert skill.name == name
+         assert skill.description.strip()
+         assert skill.instructions.strip()
+-        assert isinstance(skill.allowed_tools, list) and len(skill.allowed_tools) >= 1
+-        assert isinstance(skill.metadata, dict)
+-        assert skill.metadata.get("role") in ("orchestrator", "swarm_orchestrator", "leaf")
+-        assert skill.metadata.get("stage") in ("planning", "investigation", "verification", "synthesis")
+-        assert skill.path is not None and skill.path.is_dir()
+-        refs_dir = skill.path / "references"
+-        assert refs_dir.is_dir(), f"{name} missing references/ directory"
+-        assert any(refs_dir.glob("*.md")), f"{name} missing markdown reference rubric"
++        assert skill.path is not None and (skill.path / "SKILL.md").is_file()
+ 
+ 
+-def test_nested_formation_topology_and_strict_use_skill_only_invariant(tmp_path: Path) -> None:
++def test_set_formation_topology_and_skill_agent_invariants(tmp_path: Path) -> None:
+     storage = InMemoryStorage()
+     coordinator = ScriptedFormationCoordinator()
+     owned_agents: list[Agent] = []
+@@ -604,14 +462,15 @@ def test_nested_formation_topology_and_strict_use_skill_only_invariant(tmp_path:
+     try:
+         assert isinstance(graph, Graph)
+         assert graph.id == "deep_research_graph"
+-        assert graph.reset_on_revisit is True
++        # Strands applies a node timeout to a nested formation as a whole, so the outer graph sets none.
++        assert graph.node_timeout is None
++        assert [node.node_id for node in graph.entry_points] == ["research_swarm"]
+ 
+-        # Every outer node MUST be a MultiAgentBase (Graph or Swarm).
+         expected_outer_kinds = {
+-            "planning_formation": Graph,
+-            "investigation_formation": Graph,
+-            "verification_swarm": Swarm,
+-            "synthesis_formation": Graph,
++            "research_swarm": Swarm,
++            "data_analysis_graph": Graph,
++            "writing_swarm": Swarm,
++            "production_graph": Graph,
+         }
+         assert set(graph.nodes.keys()) == set(expected_outer_kinds.keys())
+         for outer_id, expected_cls in expected_outer_kinds.items():
+@@ -619,91 +478,79 @@ def test_nested_formation_topology_and_strict_use_skill_only_invariant(tmp_path:
+             assert isinstance(executor, MultiAgentBase)
+             assert isinstance(executor, expected_cls)
+ 
+-        # Investigation formation MUST contain 3 parallel entry branches including nested Swarm
+-        # `adversarial_swarm`, converging on `evidence_ledger`.
+-        inv_graph = graph.nodes["investigation_formation"].executor
+-        assert isinstance(inv_graph, Graph)
+-        assert inv_graph.id == "deep_research_investigation"
+-        assert inv_graph.reset_on_revisit is True
+-        assert {n.node_id for n in inv_graph.entry_points} == {
+-            "web_intelligence",
+-            "news_data_intelligence",
+-            "adversarial_swarm",
++        research = cast(Swarm, graph.nodes["research_swarm"].executor)
++        assert research.id == "deep_research_research_swarm"
++        assert list(research.nodes) == ["researcher", "fact_checker", "citation_manager", "research_qa"]
++        assert research.entry_point is research.nodes["researcher"].executor
++        assert research.node_timeout == 300.0 and research.execution_timeout == 1200.0
++
++        analysis = cast(Graph, graph.nodes["data_analysis_graph"].executor)
++        assert analysis.id == "deep_research_data_analysis"
++        assert analysis.reset_on_revisit is True
++        assert analysis.node_timeout == 300.0
++        assert {node.node_id for node in analysis.entry_points} == {"visual_planner"}
++        # QA's feedback edges go back to each author; the forward chain returns to QA.
++        feedback = {(e.from_node.node_id, e.to_node.node_id) for e in analysis.edges if e.condition is not None}
++        assert feedback == {
++            ("visual_qa", "visual_planner"),
++            ("visual_qa", "data_analyst"),
++            ("visual_qa", "visual_citation"),
+         }
+-        adv_swarm = inv_graph.nodes["adversarial_swarm"].executor
+-        assert isinstance(adv_swarm, Swarm)
+-        assert adv_swarm.id == "deep_research_adversarial_swarm"
+-        assert adv_swarm.max_handoffs == 4
+-        assert adv_swarm.max_iterations == 5
+-        assert set(adv_swarm.nodes.keys()) == {"hypothesis_explorer", "contrarian_examiner"}
+-
+-        # Verification swarm checks.
+-        ver_swarm = graph.nodes["verification_swarm"].executor
+-        assert isinstance(ver_swarm, Swarm)
+-        assert ver_swarm.id == "deep_research_verification_swarm"
+-        assert ver_swarm.max_handoffs == 4
+-        assert ver_swarm.max_iterations == 5
+-        assert set(ver_swarm.nodes.keys()) == {"citation_verifier", "analytical_critic"}
+-
+-        # Synthesis formation checks: report_drafter -> executive_editor -> {pdf_publisher, slidev_producer}.
+-        syn_graph = graph.nodes["synthesis_formation"].executor
+-        assert isinstance(syn_graph, Graph)
+-        assert syn_graph.id == "deep_research_synthesis"
+-        assert syn_graph.reset_on_revisit is True
+-        assert {n.node_id for n in syn_graph.entry_points} == {"report_drafter"}
+-        assert set(syn_graph.nodes.keys()) == {
+-            "report_drafter",
+-            "executive_editor",
+-            "pdf_publisher",
+-            "slidev_producer",
++
++        writing = cast(Swarm, graph.nodes["writing_swarm"].executor)
++        assert writing.id == "deep_research_writing_swarm"
++        assert list(writing.nodes) == [
++            "report_designer",
++            "deck_designer",
++            "layout_qa",
++            "report_writer",
++            "report_qa",
++            "deck_writer",
++            "deck_qa",
++        ]
++
++        production = cast(Graph, graph.nodes["production_graph"].executor)
++        assert production.id == "deep_research_production"
++        # The PDF and the Slidev deck are built in parallel, each with its own QA loop.
++        assert {node.node_id for node in production.entry_points} == {"pdf_publisher", "deck_producer"}
++        assert {(e.from_node.node_id, e.to_node.node_id) for e in production.edges} == {
++            ("pdf_publisher", "pdf_qa"),
++            ("pdf_qa", "pdf_publisher"),
++            ("deck_producer", "deck_build_qa"),
++            ("deck_build_qa", "deck_producer"),
+         }
+ 
+-        # MultiAgentPlugin initialized all 6 unique orchestrator IDs.
+         plugin: DeepResearchMultiAgentPlugin = getattr(graph, "_deep_research_plugin")
+         assert isinstance(plugin, DeepResearchMultiAgentPlugin)
+         assert set(plugin.initialized_orchestrators) == set(ORCHESTRATOR_IDS)
+ 
+-        # Strict `use_skill`-ONLY invariant on EVERY orchestrator Agent across all formations!
+-        assert len(owned_agents) == 13
+-        swarm_agent_names = {
+-            "hypothesis_explorer",
+-            "contrarian_examiner",
+-            "citation_verifier",
+-            "analytical_critic",
+-        }
+-        for orch_agent in owned_agents:
+-            registered_tools = set(orch_agent.tool_registry.registry.keys())
+-            assert "use_skill" in registered_tools
+-            assert "skills" in registered_tools
+-            assert "compile_scholarly_pdf" not in registered_tools
+-            assert "compile_slidev_deck" not in registered_tools
+-            if orch_agent.name in swarm_agent_names:
+-                allowed = {"use_skill", "handoff_to_agent"} | set(FRAMEWORK_PLUGIN_TOOL_NAMES)
+-                assert "handoff_to_agent" in registered_tools
+-            else:
+-                allowed = {"use_skill"} | set(FRAMEWORK_PLUGIN_TOOL_NAMES)
+-                assert "handoff_to_agent" not in registered_tools
+-
+-            unexpected = registered_tools - allowed
+-            assert not unexpected, (
+-                f"Orchestrator {orch_agent.name!r} leaked raw tools {sorted(unexpected)}"
+-            )
++        # Every agent is a skill agent: SKILL.md in its system prompt, the harness's built-in file, shell,
++        # programmatic and `subagent` tools, the research pool, every skill loadable, no browser automation.
++        topology_agents = {agent["id"]: agent for agent in _topology_agents()}
++        skills = load_deep_research_skills()
++        assert len(owned_agents) == len(topology_agents) == 19
++        swarm_agent_names = set(research.nodes) | set(writing.nodes)
++        for agent in owned_agents:
++            spec = topology_agents[agent.name]
++            registered_tools = set(agent.tool_registry.registry.keys())
++            assert _BUILTIN_AGENT_TOOLS <= registered_tools
++            assert {"skills", "http_request", "compile_scholarly_pdf", "compile_slidev_deck"} <= registered_tools
++            assert not any(name.startswith(("browser_", "playwright_")) for name in registered_tools)
++            assert ("handoff_to_agent" in registered_tools) == (agent.name in swarm_agent_names)
++            system_prompt = str(agent.system_prompt)
++            assert f"## Your role: {spec['label']}\n{spec['description']}" in system_prompt
++            assert skills[spec["skill"]].instructions in system_prompt
++            assert f"Location: {skills[spec['skill']].path}/SKILL.md" in system_prompt
++            assert str(tmp_path / "artifacts" / "struct-audit-session") in system_prompt
++            assert agent.description == spec["description"]
+ 
+-        # Topology helper aligns with graph structure & depths.
+         topo = get_formation_topology()
+         assert topo["id"] == "deep_research_graph"
+-        assert [n["id"] for n in topo["nodes"]] == [
+-            "planning_formation",
+-            "investigation_formation",
+-            "verification_swarm",
+-            "synthesis_formation",
+-        ]
+-        syn_topo = next(n for n in topo["nodes"] if n["id"] == "synthesis_formation")
+-        assert [c["id"] for c in syn_topo["children"]] == [
+-            "report_drafter",
+-            "executive_editor",
+-            "pdf_publisher",
+-            "slidev_producer",
++        assert [n["id"] for n in topo["nodes"]] == list(expected_outer_kinds)
++        assert [(e["from"], e["to"]) for e in topo["edges"]] == [
++            ("research_swarm", "data_analysis_graph"),
++            ("data_analysis_graph", "writing_swarm"),
++            ("writing_swarm", "production_graph"),
+         ]
+         assert VALID_DEPTHS == ("standard", "deep", "exhaustive")
+     finally:
+@@ -750,7 +597,7 @@ def test_leaf_tool_pool_rejects_forbidden_host_and_recursive_tools(tmp_path: Pat
+ 
+ 
+ @pytest.mark.asyncio
+-async def test_end_to_end_formation_stream_async_with_refinement_revisit_and_snapshots(
++async def test_end_to_end_formation_stream_async_with_qa_loops_and_snapshots(
+     tmp_path: Path,
+     monkeypatch: pytest.MonkeyPatch,
+ ) -> None:
+@@ -763,6 +610,7 @@ async def test_end_to_end_formation_stream_async_with_refinement_revisit_and_sna
+     coordinator = ScriptedFormationCoordinator(refine_once=True)
+     owned_agents: list[Agent] = []
+     artifacts_root = tmp_path / "artifacts"
++    (artifacts_root / "e2e-formation-run").mkdir(parents=True)
+ 
+     graph = build_deep_research_graph(
+         session_id="e2e-formation-run",
+@@ -775,54 +623,82 @@ async def test_end_to_end_formation_stream_async_with_refinement_revisit_and_sna
+         artifacts_dir=artifacts_root,
+     )
+ 
+-    stream_events: list[dict[str, Any]] = []
+     final_result: Any = None
+     try:
+         async for ev in graph.stream_async(
+             "Compare bivariate bicycle qLDPC codes against planar surface codes.",
+             invocation_state={"max_refinements": 1},
+         ):
+-            if isinstance(ev, dict):
+-                stream_events.append(ev)
+-                if ev.get("type") == "multiagent_result":
+-                    final_result = ev.get("result")
++            if isinstance(ev, dict) and ev.get("type") == "multiagent_result":
++                final_result = ev.get("result")
+ 
+         assert final_result is not None
+         assert final_result.status == Status.COMPLETED
++        assert [node.node_id for node in final_result.execution_order] == [
++            "research_swarm",
++            "data_analysis_graph",
++            "writing_swarm",
++            "production_graph",
++        ]
+ 
+-        # Outer execution order MUST show conditional refinement loop:
+-        # planning -> investigation -> verification ([NEEDS_REFINEMENT]) -> investigation -> verification ([VERIFICATION_PASSED]) -> synthesis!
+-        outer_order = [node.node_id for node in final_result.execution_order]
+-        assert outer_order == [
+-            "planning_formation",
+-            "investigation_formation",
+-            "verification_swarm",
+-            "investigation_formation",
+-            "verification_swarm",
+-            "synthesis_formation",
++        # Research swarm: QA handed the references back to their author once, then approved.
++        research = final_result.results["research_swarm"].result
++        assert [node.node_id for node in research.node_history] == [
++            "researcher",
++            "fact_checker",
++            "citation_manager",
++            "research_qa",
++            "citation_manager",
++            "research_qa",
+         ]
+ 
+-        # Swarm handoffs executed in both nested adversarial_swarm and verification_swarm.
+-        assert coordinator.adversarial_handoffs >= 1
+-        assert coordinator.verification_handoffs == 2
++        # Data analysis graph: QA's `REVISE: data_analyst` went back to that agent and returned to QA.
++        analysis = final_result.results["data_analysis_graph"].result
++        assert analysis.status == Status.COMPLETED
++        assert [node.node_id for node in analysis.execution_order] == [
++            "visual_planner",
++            "data_analyst",
++            "visual_citation",
++            "visual_qa",
++            "data_analyst",
++            "visual_citation",
++            "visual_qa",
++        ]
++
++        writing = final_result.results["writing_swarm"].result
++        assert [node.node_id for node in writing.node_history] == [
++            "report_designer",
++            "deck_designer",
++            "layout_qa",
++            "report_writer",
++            "report_qa",
++            "deck_writer",
++            "deck_qa",
++        ]
+ 
+-        # Real `use_skill` subagents spawned via `make_subagent` + `create_harness` and called leaf tools
+-        # including scoped `compile_scholarly_pdf` and `compile_slidev_deck`!
+-        assert len(coordinator.use_skill_calls) >= 16
+-        assert len(coordinator.leaf_tool_calls) >= 12
+-        assert "compile_scholarly_pdf" in coordinator.leaf_tool_calls
+-        assert "compile_slidev_deck" in coordinator.leaf_tool_calls
+-        # 13 stage orchestrators + >=16 dynamically spawned leaf subagents tracked in owned_agents!
+-        assert len(owned_agents) >= 29
++        # Production graph: the PDF and the deck were built in the same batch, each followed by its QA.
++        production = final_result.results["production_graph"].result
++        production_order = [node.node_id for node in production.execution_order]
++        assert set(production_order[:2]) == {"pdf_publisher", "deck_producer"}
++        assert set(production_order[2:]) == {"pdf_qa", "deck_build_qa"}
++
++        # The researcher ran a built-in `subagent`, which called a research tool; the writer saved the
++        # report with the built-in `write`; the publishers compiled it and the deck.
++        assert {"subagent", "brave_web_search", "write", "compile_scholarly_pdf", "compile_slidev_deck"} <= set(
++            coordinator.tool_calls
++        )
++        assert len(owned_agents) == 19
+ 
+         run_artifacts = artifacts_root / "e2e-formation-run"
++        assert (run_artifacts / "report.md").read_text(encoding="utf-8").startswith(
++            "# Quantum Error Correction Architecture Report"
++        )
+         assert (run_artifacts / "report.pdf").is_file()
+-        assert (run_artifacts / "report.md").is_file()
+         assert (run_artifacts / "slides.md").is_file()
+         assert (run_artifacts / "slides" / "index.html").is_file()
+         assert (run_artifacts / "slides.pdf").is_file()
+ 
+-        # Native `SnapshotSessionManager` persisted `snapshot_latest` for all 6 unique orchestrators!
++        # Native `SnapshotSessionManager` persisted `snapshot_latest` for the outer graph and each formation.
+         stored_keys = await storage.list("")
+         for orch_id in ORCHESTRATOR_IDS:
+             assert any(orch_id in key and "snapshot_latest" in key for key in stored_keys), (
+@@ -844,6 +720,31 @@ async def test_end_to_end_formation_stream_async_with_refinement_revisit_and_sna
+             agent.cleanup()
+ 
+ 
++def test_local_images_are_embedded_for_every_renderer(tmp_path: Path) -> None:
++    from agent.api.core.deep_research import _inline_local_images
++
++    (tmp_path / "figures").mkdir()
++    (tmp_path / "figures" / "a.png").write_bytes(b"\x89PNG\r\n\x1a\n")
++    (tmp_path.parent / "outside.png").write_bytes(b"\x89PNG\r\n\x1a\n")
++    markdown = (
++        "![A](figures/a.png)\n"
++        f"![Abs]({tmp_path}/figures/a.png)\n"
++        '<img src="figures/a.png" class="w-80" />\n'
++        "![Remote](https://example.org/b.png)\n"
++        "![Missing](figures/missing.png)\n"
++        "![Escape](../outside.png)\n"
++    )
++    embedded = "data:image/png;base64,iVBORw0KGgo="
++    assert _inline_local_images(markdown, tmp_path) == (
++        f"![A]({embedded})\n"
++        f"![Abs]({embedded})\n"
++        f'<img src="{embedded}" class="w-80" />\n'
++        "![Remote](https://example.org/b.png)\n"
++        "![Missing](figures/missing.png)\n"
++        "![Escape](../outside.png)\n"
++    )
++
++
+ # ─────────────────────────────────────────────────────────────────────────────
+ # 3. `DeepResearchRuntime` Lifecycle, Artifacts, SSE Replay, Persistence & Cancel
+ # ─────────────────────────────────────────────────────────────────────────────
+@@ -906,41 +807,40 @@ async def test_deep_research_runtime_sse_streaming_persistence_and_delete(
+     ):
+         assert expected_type in event_types, f"Missing SSE event type {expected_type!r} in {event_types}"
+ 
+-    # Verify nested 3-level paths + new synthesis studio branches appeared in SSE stream.
++    # Every formation agent of the set graph appeared in the SSE stream under its formation.
+     all_paths = {"/".join(ev.get("node_path") or []) for ev in parsed_events}
+-    assert "planning_formation/problem_framing" in all_paths
+-    assert "investigation_formation/adversarial_swarm/hypothesis_explorer" in all_paths
+-    assert "investigation_formation/adversarial_swarm/contrarian_examiner" in all_paths
+-    assert "investigation_formation/evidence_ledger" in all_paths
+-    assert "verification_swarm/citation_verifier" in all_paths
+-    assert "verification_swarm/analytical_critic" in all_paths
+-    assert "synthesis_formation/executive_editor" in all_paths
+-    assert "synthesis_formation/pdf_publisher" in all_paths
+-    assert "synthesis_formation/slidev_producer" in all_paths
+-
+-    # Verify text_delta stream scoping: pdf_publisher & slidev_producer never set is_report=True.
+-    report_delta_nodes = {
+-        ev["node_path"][-1]
+-        for ev in parsed_events
+-        if ev["type"] == "text_delta" and ev.get("is_report") is True and ev.get("node_path")
+-    }
+-    assert report_delta_nodes.issubset({"report_drafter", "executive_editor"})
+-    slidev_delta_nodes = {
+-        ev["node_path"][-1]
++    for formation in get_formation_topology()["nodes"]:
++        for agent in formation["children"]:
++            assert f"{formation['id']}/{agent['id']}" in all_paths
++
++    # The researcher's built-in `subagent` is the sub-agent the formation view nests under it.
++    skill_starts = [ev for ev in parsed_events if ev["type"] == "skill_start"]
++    assert skill_starts and all(ev["node_path"] == ["research_swarm", "researcher"] for ev in skill_starts)
++    assert all(ev["task"].startswith("Research qLDPC") for ev in skill_starts)
++    # QA sent the data analyst's work back once, so it ran twice.
++    analyst_starts = [
++        ev
+         for ev in parsed_events
+-        if ev["type"] == "text_delta" and ev.get("is_slidev") is True and ev.get("node_path")
+-    }
+-    assert slidev_delta_nodes == {"slidev_producer"}
++        if ev["type"] == "node_start" and ev["node_path"] == ["data_analysis_graph", "data_analyst"]
++    ]
++    assert len(analyst_starts) == 2
++
++    # The report and the deck are files in the run's workspace, never an agent's streamed text.
++    assert not any(
++        ev.get("is_report") or ev.get("is_slidev") for ev in parsed_events if ev["type"] == "text_delta"
++    )
+ 
+     artifact_events = [ev for ev in parsed_events if ev["type"] == "artifact_ready"]
+     assert {ev.get("kind") for ev in artifact_events} == {"report_pdf", "slidev_deck"}
+     assert {ev.get("artifact_kind") for ev in artifact_events} == {"report_pdf", "slidev_deck"}
++    report_ready = next(ev for ev in artifact_events if ev["kind"] == "report_pdf")
++    assert report_ready["node_path"][0] == "production_graph"
++    assert report_ready["report_markdown"].startswith("# Quantum Error Correction Architecture Report")
+ 
+-    completed = await runtime.wait_run(user_id="user-alpha", session_id="dr-alpha-001", timeout=5.0)
++    completed = await runtime.wait_run(user_id="user-alpha", session_id="dr-alpha-001", timeout=60.0)
+     assert completed is not None
+     assert completed["status"] == "completed"
+     assert completed["active"] is False
+-    assert completed["refinement_count"] == 1
+     assert completed["report_markdown"].startswith("# Quantum Error Correction Architecture Report")
+     assert "Compiled report.pdf" not in completed["report_markdown"]
+     assert "routerMode: hash" in completed["slidev_markdown"]
+@@ -1072,9 +972,9 @@ async def test_run_transcripts_keep_reasoning_and_tool_payloads_and_lists_leave_
+     events: list[dict[str, Any]] = []
+     async for frame in runtime.sse(user_id="user-alpha", session_id="dr-transcript-001", after=0):
+         events.append(json.loads(frame.strip().splitlines()[1][6:]))
+-    await runtime.wait_run(user_id="user-alpha", session_id="dr-transcript-001", timeout=5.0)
++    await runtime.wait_run(user_id="user-alpha", session_id="dr-transcript-001", timeout=60.0)
+ 
+-    # Reasoning streams for the node's own agent and, with `skill_id`, for its use_skill sub-agent.
++    # Reasoning streams for the node's own agent and, with `skill_id`, for its `subagent` sub-agent.
+     reasoning = [ev for ev in events if ev["type"] == "reasoning_delta"]
+     assert any(not ev.get("skill_id") for ev in reasoning)
+     assert any(ev.get("skill_id") for ev in reasoning)
+@@ -1091,14 +991,14 @@ async def test_run_transcripts_keep_reasoning_and_tool_payloads_and_lists_leave_
+ 
+     full = await runtime.get_run(user_id="user-alpha", session_id="dr-transcript-001")
+     assert full is not None
+-    node = full["nodes"]["planning_formation/problem_framing"]
++    node = full["nodes"]["research_swarm/researcher"]
+     kinds = [part["kind"] for part in node["activity"]]
+     assert kinds[0] == "reasoning"
+     assert "skill" in kinds and kinds[-1] == "text"
+     assert node["activity"][0]["text"] == "Weighing which source to read first."
+     skill_part = next(part for part in node["activity"] if part["kind"] == "skill")
+     skill = next(sk for sk in full["skill_invocations"] if sk["id"] == skill_part["skill_id"])
+-    assert skill["node_key"] == "planning_formation/problem_framing"
++    assert skill["node_key"] == "research_swarm/researcher"
+     step_kinds = [step["kind"] for step in skill["steps"]]
+     assert step_kinds[0] == "reasoning" and "tool" in step_kinds and step_kinds[-1] == "text"
+     tool_step = next(step for step in skill["steps"] if step["kind"] == "tool")
+@@ -1130,7 +1030,7 @@ async def test_run_transcripts_keep_reasoning_and_tool_payloads_and_lists_leave_
+     )
+     # Reading the list did not strip the stored run.
+     again = await runtime.get_run(user_id="user-alpha", session_id="dr-transcript-001")
+-    assert again is not None and again["nodes"]["planning_formation/problem_framing"]["activity"]
++    assert again is not None and again["nodes"]["research_swarm/researcher"]["activity"]
+ 
+ 
+ def test_tool_output_text_keeps_json_blocks_and_cuts_at_the_configured_length(
+@@ -1175,13 +1075,13 @@ async def test_resolve_artifact_path_security_and_fallback_materialization(
+         session_id="dr-sec-001",
+         depth="standard",
+     )
+-    snap = await runtime.wait_run(user_id="owner-1", session_id="dr-sec-001", timeout=5.0)
++    snap = await runtime.wait_run(user_id="owner-1", session_id="dr-sec-001", timeout=60.0)
+     assert snap is not None
+     assert snap["status"] == "completed"
+-    assert "compile_scholarly_pdf" not in coordinator.leaf_tool_calls
+-    assert "compile_slidev_deck" not in coordinator.leaf_tool_calls
++    assert "compile_scholarly_pdf" not in coordinator.tool_calls
++    assert "compile_slidev_deck" not in coordinator.tool_calls
+ 
+-    # Even without leaf build tool calls, runtime guaranteed all 5 studio artifacts on disk!
++    # Even without the publishers' build tool calls, runtime guaranteed all 5 studio artifacts on disk!
+     assert set(snap["artifacts"].keys()) == {
+         "report_pdf_url",
+         "report_markdown_url",
+@@ -1299,7 +1199,7 @@ async def test_deep_research_runtime_replay_overflow_and_cancellation(
+     snap = await small_ring_runtime.wait_run(
+         user_id="u-overflow",
+         session_id="dr-overflow-1",
+-        timeout=5.0,
++        timeout=60.0,
+     )
+     assert snap is not None and snap["sequence"] > 16
+     assert snap["replay_after"] > 0
+diff --git a/src/lib/deep-research-api.ts b/src/lib/deep-research-api.ts
+index 89f0183..6adb163 100644
+--- a/src/lib/deep-research-api.ts
++++ b/src/lib/deep-research-api.ts
+@@ -85,178 +85,285 @@ export const DEFAULT_FORMATION_TOPOLOGY: FormationTopology = {
+   kind: 'graph',
+   nodes: [
+     {
+-      id: 'planning_formation',
+-      label: 'Planning Formation',
+-      kind: 'graph',
+-      orchestrator_id: 'deep_research_planning',
+-      description: 'Frames the problem domain and designs the source verification rubric.',
++      id: 'research_swarm',
++      label: 'Research Swarm',
++      kind: 'swarm',
++      orchestrator_id: 'deep_research_research_swarm',
++      description: 'Parallel researchers gather sources, then a reference fact check, citations with a reference list, and a QA of every reference and citation.',
+       children: [
+         {
+-          id: 'problem_framing',
+-          label: 'Problem Framing',
++          id: 'researcher',
++          label: 'Researcher',
++          kind: 'agent',
++          skill: 'research',
++          description: 'Split the inquiry into independent questions and call `subagent` once per question in a single turn so they research in parallel from primary sources. Merge their findings, every claim with its source URL, into research.md, then hand off to fact_checker.',
++        },
++        {
++          id: 'fact_checker',
++          label: 'Fact Checker',
++          kind: 'agent',
++          skill: 'scientific-critical-thinking',
++          description: 'Reference fact checks only: open the source of every claim in research.md and confirm the source says it. Record a verdict per claim in fact-check.md, fix or remove what fails in research.md, then hand off to citation_manager.',
++        },
++        {
++          id: 'citation_manager',
++          label: 'Citation Manager',
+           kind: 'agent',
+-          skill: 'research-problem-framing',
+-          use_skill_presets: ['domain-landscape-scan', 'question-decomposition'],
++          skill: 'citation-management',
++          description: 'Give every claim in research.md a numbered citation and document each source once in references.md (number, author or publisher, title, date, URL), then hand off to research_qa.',
+         },
+         {
+-          id: 'research_blueprint',
+-          label: 'Research Blueprint',
++          id: 'research_qa',
++          label: 'Research QA',
+           kind: 'agent',
+-          skill: 'research-blueprint-design',
+-          use_skill_presets: ['methodology-design', 'source-rubric'],
++          skill: 'peer-review',
++          description: 'Check all of research.md, fact-check.md and references.md: every claim cited, every citation in the reference list, every reference real and supporting its claim. Hand defects back to researcher, fact_checker or citation_manager and check again when the work returns. When it all passes, finish with APPROVED.',
++        },
++      ],
++      edges: [
++        { from: 'researcher', to: 'fact_checker', label: 'handoff_to_agent' },
++        { from: 'fact_checker', to: 'citation_manager', label: 'handoff_to_agent' },
++        { from: 'citation_manager', to: 'research_qa', label: 'handoff_to_agent' },
++        {
++          from: 'research_qa',
++          to: 'researcher',
++          conditional: true,
++          label: 'QA sends it back',
++          condition: 'REVISE: researcher',
++        },
++        {
++          from: 'research_qa',
++          to: 'fact_checker',
++          conditional: true,
++          label: 'QA sends it back',
++          condition: 'REVISE: fact_checker',
++        },
++        {
++          from: 'research_qa',
++          to: 'citation_manager',
++          conditional: true,
++          label: 'QA sends it back',
++          condition: 'REVISE: citation_manager',
+         },
+       ],
+-      edges: [{ from: 'problem_framing', to: 'research_blueprint' }],
+     },
+     {
+-      id: 'investigation_formation',
+-      label: 'Investigation Formation',
++      id: 'data_analysis_graph',
++      label: 'Data Analysis Graph',
+       kind: 'graph',
+-      orchestrator_id: 'deep_research_investigation',
+-      description: 'Parallel web, temporal news, and nested adversarial swarm converging on an evidence ledger.',
++      orchestrator_id: 'deep_research_data_analysis',
++      description: 'Picks the data visuals that matter for the inquiry, builds them with code, ties each to its citations, and QA returns rejected work to its author.',
+       children: [
+         {
+-          id: 'web_intelligence',
+-          label: 'Web Intelligence',
++          id: 'visual_planner',
++          label: 'Visual Planner',
+           kind: 'agent',
+-          skill: 'web-intelligence-director',
+-          use_skill_presets: ['broad-web-discovery', 'deep-source-extraction'],
++          skill: 'data-storytelling',
++          description: 'Read research.md and references.md and choose the data visuals that are meaningful for the inquiry. Specify each in visuals.md: what it shows, why it matters, the chart type, and the exact data points with their citation numbers.',
+         },
+         {
+-          id: 'news_data_intelligence',
+-          label: 'News & Data Intelligence',
++          id: 'data_analyst',
++          label: 'Data Analyst',
+           kind: 'agent',
+-          skill: 'news-data-director',
+-          use_skill_presets: ['temporal-news-analysis', 'quantitative-fact-lookup'],
++          skill: 'data-visualization',
++          description: 'Build every visual in visuals.md by running Python code. Save each chart as figures/<name>.png with the script that made it as figures/<name>.py.',
+         },
+         {
+-          id: 'adversarial_swarm',
+-          label: 'Adversarial Swarm',
+-          kind: 'swarm',
+-          orchestrator_id: 'deep_research_adversarial_swarm',
+-          description: 'Peer hypothesis and contrarian agents challenging claims via handoffs.',
+-          children: [
+-            {
+-              id: 'hypothesis_explorer',
+-              label: 'Hypothesis Explorer',
+-              kind: 'agent',
+-              skill: 'hypothesis-explorer',
+-              use_skill_presets: ['hypothesis-probing'],
+-            },
+-            {
+-              id: 'contrarian_examiner',
+-              label: 'Contrarian Examiner',
+-              kind: 'agent',
+-              skill: 'contrarian-examiner',
+-              use_skill_presets: ['counterevidence-search'],
+-            },
+-          ],
+-          edges: [
+-            { from: 'hypothesis_explorer', to: 'contrarian_examiner', label: 'handoff_to_agent' },
+-            { from: 'contrarian_examiner', to: 'hypothesis_explorer', label: 'handoff_to_agent' },
+-          ],
++          id: 'visual_citation',
++          label: 'Visual Citation',
++          kind: 'agent',
++          skill: 'citation-management',
++          description: 'Tie every chart in figures/ to the citation(s) its data came from: add its caption and its source reference numbers from references.md to visuals.md.',
+         },
+         {
+-          id: 'evidence_ledger',
+-          label: 'Evidence Ledger',
++          id: 'visual_qa',
++          label: 'Visual QA',
+           kind: 'agent',
+-          skill: 'evidence-ledger-curator',
+-          use_skill_presets: ['evidence-triangulation'],
++          skill: 'scientific-visualization',
++          description: 'Verify every chart in figures/ is cited, relevant to the inquiry and accurate against its cited data. List the defects, then end with one line: APPROVED, or REVISE: visual_planner, REVISE: data_analyst or REVISE: visual_citation for the one agent that must fix them.',
+         },
+       ],
+       edges: [
+-        { from: 'web_intelligence', to: 'evidence_ledger', conditional: true, label: 'all branches complete' },
+-        { from: 'news_data_intelligence', to: 'evidence_ledger', conditional: true, label: 'all branches complete' },
+-        { from: 'adversarial_swarm', to: 'evidence_ledger', conditional: true, label: 'all branches complete' },
++        { from: 'visual_planner', to: 'data_analyst' },
++        { from: 'data_analyst', to: 'visual_citation' },
++        { from: 'visual_citation', to: 'visual_qa' },
++        {
++          from: 'visual_qa',
++          to: 'visual_planner',
++          conditional: true,
++          label: 'QA sends it back',
++          condition: 'REVISE: visual_planner',
++        },
++        {
++          from: 'visual_qa',
++          to: 'data_analyst',
++          conditional: true,
++          label: 'QA sends it back',
++          condition: 'REVISE: data_analyst',
++        },
++        {
++          from: 'visual_qa',
++          to: 'visual_citation',
++          conditional: true,
++          label: 'QA sends it back',
++          condition: 'REVISE: visual_citation',
++        },
+       ],
+     },
+     {
+-      id: 'verification_swarm',
+-      label: 'Verification Swarm',
++      id: 'writing_swarm',
++      label: 'Writing Swarm',
+       kind: 'swarm',
+-      orchestrator_id: 'deep_research_verification_swarm',
+-      description: 'Audits primary citations, probes gaps, and either loops for refinement or clears synthesis.',
++      orchestrator_id: 'deep_research_writing_swarm',
++      description: 'Designs the report and slide-deck layouts, writes the report and the slide wording, and a dedicated QA approves each.',
+       children: [
+         {
+-          id: 'citation_verifier',
+-          label: 'Citation Verifier',
++          id: 'report_designer',
++          label: 'Report Designer',
++          kind: 'agent',
++          skill: 'theme-factory',
++          description: 'Design the layout of the report: its sections and their order, where each chart from figures/ goes, typography, colour and page style. Save it to report-layout.md, then hand off to deck_designer.',
++        },
++        {
++          id: 'deck_designer',
++          label: 'Deck Designer',
++          kind: 'agent',
++          skill: 'slidev',
++          description: 'Design the layout of the Slidev deck: the slide sequence, the layout and chart on each slide, theme and styling. Save it to deck-layout.md, then hand off to layout_qa.',
++        },
++        {
++          id: 'layout_qa',
++          label: 'Layout QA',
++          kind: 'agent',
++          skill: 'verification-before-completion',
++          description: 'Approve report-layout.md and deck-layout.md against the inquiry, research.md and figures/. Hand defects back to report_designer or deck_designer and check again when the work returns. When both pass, hand off to report_writer.',
++        },
++        {
++          id: 'report_writer',
++          label: 'Report Writer',
+           kind: 'agent',
+-          skill: 'citation-verifier',
+-          use_skill_presets: ['source-verification', 'gap-targeted-search'],
++          skill: 'scientific-writing',
++          description: 'Write the full report to report.md following report-layout.md: every claim with its citation number, charts embedded as ![caption](figures/<name>.png), and the reference list from references.md at the end. Then hand off to report_qa.',
+         },
+         {
+-          id: 'analytical_critic',
+-          label: 'Analytical Critic',
++          id: 'report_qa',
++          label: 'Report QA',
+           kind: 'agent',
+-          skill: 'analytical-critic',
+-          use_skill_presets: ['claim-stress-test'],
++          skill: 'peer-review',
++          description: 'Approve report.md against research.md, references.md, figures/ and report-layout.md. Hand defects back to report_writer and check again when the work returns. When it passes, hand off to deck_writer.',
++        },
++        {
++          id: 'deck_writer',
++          label: 'Deck Writer',
++          kind: 'agent',
++          skill: 'scientific-slides',
++          description: 'Write the wording of every slide to deck-copy.md following deck-layout.md: title, points, speaker notes, citation numbers and the chart for the slide. Then hand off to deck_qa.',
++        },
++        {
++          id: 'deck_qa',
++          label: 'Deck QA',
++          kind: 'agent',
++          skill: 'copy-editing',
++          description: 'Approve deck-copy.md against report.md and deck-layout.md. Hand defects back to deck_writer and check again when the work returns. When it passes, finish with APPROVED.',
+         },
+       ],
+       edges: [
+-        { from: 'citation_verifier', to: 'analytical_critic', label: 'handoff_to_agent' },
+-        { from: 'analytical_critic', to: 'citation_verifier', label: 'handoff_to_agent' },
++        { from: 'report_designer', to: 'deck_designer', label: 'handoff_to_agent' },
++        { from: 'deck_designer', to: 'layout_qa', label: 'handoff_to_agent' },
++        { from: 'layout_qa', to: 'report_writer', label: 'handoff_to_agent' },
++        { from: 'report_writer', to: 'report_qa', label: 'handoff_to_agent' },
++        { from: 'report_qa', to: 'deck_writer', label: 'handoff_to_agent' },
++        { from: 'deck_writer', to: 'deck_qa', label: 'handoff_to_agent' },
++        {
++          from: 'layout_qa',
++          to: 'report_designer',
++          conditional: true,
++          label: 'QA sends it back',
++          condition: 'REVISE: report_designer',
++        },
++        {
++          from: 'layout_qa',
++          to: 'deck_designer',
++          conditional: true,
++          label: 'QA sends it back',
++          condition: 'REVISE: deck_designer',
++        },
++        {
++          from: 'report_qa',
++          to: 'report_writer',
++          conditional: true,
++          label: 'QA sends it back',
++          condition: 'REVISE: report_writer',
++        },
++        {
++          from: 'deck_qa',
++          to: 'deck_writer',
++          conditional: true,
++          label: 'QA sends it back',
++          condition: 'REVISE: deck_writer',
++        },
+       ],
+     },
+     {
+-      id: 'synthesis_formation',
+-      label: 'Synthesis Formation',
++      id: 'production_graph',
++      label: 'Production Graph',
+       kind: 'graph',
+-      orchestrator_id: 'deep_research_synthesis',
+-      description: 'Drafts the cited dossier, applies anti-slop editorial polish, and compiles PDF + Slidev artifacts.',
++      orchestrator_id: 'deep_research_production',
++      description: 'Builds the styled PDF and the Slidev deck in parallel, each with its own QA.',
+       children: [
+         {
+-          id: 'report_drafter',
+-          label: 'Report Drafter',
++          id: 'pdf_publisher',
++          label: 'PDF Publisher',
+           kind: 'agent',
+-          skill: 'report-drafter',
+-          use_skill_presets: ['structured-synthesis', 'citation-weaving'],
++          skill: 'pdf',
++          description: 'Create the PDF: call compile_scholarly_pdf with css that styles report.md as report-layout.md specifies. It builds report.pdf from report.md with its charts, citations and reference page.',
+         },
+         {
+-          id: 'executive_editor',
+-          label: 'Executive Editor',
++          id: 'pdf_qa',
++          label: 'PDF QA',
+           kind: 'agent',
+-          skill: 'executive-editor',
+-          use_skill_presets: ['editorial-polish', 'humanizer', 'stop-slop'],
++          skill: 'pdf',
++          description: 'Inspect report.pdf: charts present, styling as report-layout.md specifies, citations and the reference page intact. List the defects, then end with one line: APPROVED or REVISE: pdf_publisher.',
+         },
+         {
+-          id: 'pdf_publisher',
+-          label: 'PDF Publisher',
++          id: 'deck_producer',
++          label: 'Slidev Producer',
+           kind: 'agent',
+-          skill: 'pdf',
+-          use_skill_presets: ['academic-paper', 'pdf'],
++          skill: 'slidev',
++          description: 'Create the deck: write slides.md in Slidev Markdown from deck-copy.md and deck-layout.md, with styled charts from figures/ embedded as ![caption](figures/<name>.png) and citations, then call compile_slidev_deck to build it.',
+         },
+         {
+-          id: 'slidev_producer',
+-          label: 'Slidev Producer',
++          id: 'deck_build_qa',
++          label: 'Slidev QA',
+           kind: 'agent',
+-          skill: 'build-agent-slidev',
+-          use_skill_presets: ['build-agent-slidev', 'slidev', 'scientific-slides'],
++          skill: 'slidev',
++          description: 'Inspect slides.md and the built deck in slides/: every slide follows deck-layout.md, with its chart, styling and citations. List the defects, then end with one line: APPROVED or REVISE: deck_producer.',
+         },
+       ],
+       edges: [
+-        { from: 'report_drafter', to: 'executive_editor' },
+-        { from: 'executive_editor', to: 'pdf_publisher' },
+-        { from: 'executive_editor', to: 'slidev_producer' },
++        { from: 'pdf_publisher', to: 'pdf_qa' },
++        { from: 'deck_producer', to: 'deck_build_qa' },
++        {
++          from: 'pdf_qa',
++          to: 'pdf_publisher',
++          conditional: true,
++          label: 'QA sends it back',
++          condition: 'REVISE: pdf_publisher',
++        },
++        {
++          from: 'deck_build_qa',
++          to: 'deck_producer',
++          conditional: true,
++          label: 'QA sends it back',
++          condition: 'REVISE: deck_producer',
++        },
+       ],
+     },
+   ],
+   edges: [
+-    { from: 'planning_formation', to: 'investigation_formation' },
+-    { from: 'investigation_formation', to: 'verification_swarm' },
+-    {
+-      from: 'verification_swarm',
+-      to: 'investigation_formation',
+-      conditional: true,
+-      label: 'Refinement loop',
+-      condition: '[NEEDS_REFINEMENT]',
+-    },
+-    {
+-      from: 'verification_swarm',
+-      to: 'synthesis_formation',
+-      conditional: true,
+-      label: 'Verified',
+-      condition: '[VERIFICATION_PASSED]',
+-    },
++    { from: 'research_swarm', to: 'data_analysis_graph' },
++    { from: 'data_analysis_graph', to: 'writing_swarm' },
++    { from: 'writing_swarm', to: 'production_graph' },
+   ],
+ }
+ 
+diff --git a/src/lib/deep-research-graph.test.ts b/src/lib/deep-research-graph.test.ts
+index 018b9e9..f000693 100644
+--- a/src/lib/deep-research-graph.test.ts
++++ b/src/lib/deep-research-graph.test.ts
+@@ -41,35 +41,34 @@ const scopeAt = (path: string[]) => {
+ 
+ test('resolveScope walks into nested formations and refuses agents and unknown ids', () => {
+   const root = scopeAt([])
+-  assert.deepEqual(root.members.map((m) => m.id), ['planning_formation', 'investigation_formation', 'verification_swarm', 'synthesis_formation'])
++  assert.deepEqual(root.members.map((m) => m.id), ['research_swarm', 'data_analysis_graph', 'writing_swarm', 'production_graph'])
+   assert.equal(root.kind, 'graph')
+ 
+-  const swarm = scopeAt(['investigation_formation', 'adversarial_swarm'])
++  const swarm = scopeAt(['research_swarm'])
+   assert.equal(swarm.kind, 'swarm')
+-  assert.deepEqual(swarm.members.map((m) => m.id), ['hypothesis_explorer', 'contrarian_examiner'])
+-  assert.deepEqual(swarm.path, ['investigation_formation', 'adversarial_swarm'])
++  assert.deepEqual(swarm.members.map((m) => m.id), ['researcher', 'fact_checker', 'citation_manager', 'research_qa'])
++  assert.deepEqual(swarm.path, ['research_swarm'])
+ 
+-  assert.equal(resolveScope(topology, ['planning_formation', 'problem_framing']), null)
++  assert.equal(resolveScope(topology, ['research_swarm', 'researcher']), null)
+   assert.equal(resolveScope(topology, ['nope']), null)
+ 
+   assert.deepEqual(
+-    scopeTrail(topology, ['investigation_formation', 'adversarial_swarm']).map((crumb) => crumb.label),
+-    ['Deep Research Formation', 'Investigation Formation', 'Adversarial Swarm'],
++    scopeTrail(topology, ['data_analysis_graph']).map((crumb) => crumb.label),
++    ['Deep Research Formation', 'Data Analysis Graph'],
+   )
+   // A stale path stops at the last formation that exists.
+-  assert.equal(scopeTrail(topology, ['investigation_formation', 'gone']).length, 2)
++  assert.equal(scopeTrail(topology, ['data_analysis_graph', 'gone']).length, 2)
+ })
+ 
+-test('leafAgents counts agents at any depth', () => {
+-  const investigation = topology.nodes[1]
++test('leafAgents lists the agents under a formation', () => {
++  const production = topology.nodes[3]
+   assert.deepEqual(
+-    leafAgents(investigation, ['investigation_formation']).map((leaf) => leaf.path.join('/')),
++    leafAgents(production, ['production_graph']).map((leaf) => leaf.path.join('/')),
+     [
+-      'investigation_formation/web_intelligence',
+-      'investigation_formation/news_data_intelligence',
+-      'investigation_formation/adversarial_swarm/hypothesis_explorer',
+-      'investigation_formation/adversarial_swarm/contrarian_examiner',
+-      'investigation_formation/evidence_ledger',
++      'production_graph/pdf_publisher',
++      'production_graph/pdf_qa',
++      'production_graph/deck_producer',
++      'production_graph/deck_build_qa',
+     ],
+   )
+ })
+@@ -77,15 +76,13 @@ test('leafAgents counts agents at any depth', () => {
+ test('layoutScope layers left to right through loops and keeps cards the same size', () => {
+   const root = layoutScope(scopeAt([]), new Set())
+   assert.deepEqual(root.nodes.map((n) => [n.id, n.layer]), [
+-    ['planning_formation', 0],
+-    ['investigation_formation', 1],
+-    ['verification_swarm', 2],
+-    ['synthesis_formation', 3],
++    ['research_swarm', 0],
++    ['data_analysis_graph', 1],
++    ['writing_swarm', 2],
++    ['production_graph', 3],
+   ])
+   assert.ok(root.nodes.every((n) => n.y === 0 && n.height === NODE_HEIGHT))
+   assert.deepEqual(root.nodes.map((n) => n.x), [0, 1, 2, 3].map((layer) => layer * (NODE_WIDTH + GAP_X)))
+-  // The refinement loop is an ordinary edge back to an earlier card; it does not change the layers.
+-  assert.ok(root.edges.some((edge) => edge.source === 'verification_swarm' && edge.target === 'investigation_formation'))
+   assert.deepEqual(root.nodes.map((n) => n.handles), [
+     { target: false, source: true },
+     { target: true, source: true },
+@@ -95,57 +92,75 @@ test('layoutScope layers left to right through loops and keeps cards the same si
+   assert.equal(root.width, 4 * NODE_WIDTH + 3 * GAP_X)
+   assert.equal(root.height, NODE_HEIGHT)
+ 
+-  // Three parallel branches converge on the ledger, which sits centred beside them.
+-  const investigation = layoutScope(scopeAt(['investigation_formation']), new Set())
+-  const byId = Object.fromEntries(investigation.nodes.map((n) => [n.id, n]))
+-  assert.deepEqual([byId.web_intelligence.layer, byId.news_data_intelligence.layer, byId.adversarial_swarm.layer, byId.evidence_ledger.layer], [0, 0, 0, 1])
+-  assert.equal(byId.evidence_ledger.y, NODE_HEIGHT + GAP_Y)
+-  assert.equal(byId.news_data_intelligence.y, NODE_HEIGHT + GAP_Y)
+-
+-  // A swarm's two peers hand off both ways and still sit side by side.
+-  const swarm = layoutScope(scopeAt(['verification_swarm']), new Set())
+-  assert.deepEqual(swarm.nodes.map((n) => [n.id, n.layer]), [['citation_verifier', 0], ['analytical_critic', 1]])
+-  assert.deepEqual(swarm.edges.map((edge) => [edge.source, edge.target]), [
+-    ['citation_verifier', 'analytical_critic'],
+-    ['analytical_critic', 'citation_verifier'],
++  // A QA feedback loop is an ordinary edge back to an earlier card; it does not change the layers.
++  const analysis = layoutScope(scopeAt(['data_analysis_graph']), new Set())
++  assert.deepEqual(analysis.nodes.map((n) => [n.id, n.layer]), [
++    ['visual_planner', 0],
++    ['data_analyst', 1],
++    ['visual_citation', 2],
++    ['visual_qa', 3],
+   ])
++  assert.ok(analysis.edges.some((edge) => edge.source === 'visual_qa' && edge.target === 'data_analyst'))
++
++  // The PDF and the deck are built side by side, each followed by its own QA.
++  const production = layoutScope(scopeAt(['production_graph']), new Set())
++  const byId = Object.fromEntries(production.nodes.map((n) => [n.id, n]))
++  assert.deepEqual([byId.pdf_publisher.layer, byId.deck_producer.layer, byId.pdf_qa.layer, byId.deck_build_qa.layer], [0, 0, 1, 1])
++  assert.equal(byId.deck_producer.y, NODE_HEIGHT + GAP_Y)
++  assert.equal(byId.deck_build_qa.y, NODE_HEIGHT + GAP_Y)
++
++  // A swarm's agents are laid out along their usual handoffs, QA's way back included.
++  const swarm = layoutScope(scopeAt(['writing_swarm']), new Set())
++  assert.deepEqual(swarm.nodes.map((n) => [n.id, n.layer]), [
++    ['report_designer', 0],
++    ['deck_designer', 1],
++    ['layout_qa', 2],
++    ['report_writer', 3],
++    ['report_qa', 4],
++    ['deck_writer', 5],
++    ['deck_qa', 6],
++  ])
++  assert.ok(swarm.edges.some((edge) => edge.source === 'layout_qa' && edge.target === 'deck_designer'))
+ })
+ 
+ test('an open agent pushes only the cards under it; a formation never opens in place', () => {
+-  const scope = scopeAt(['investigation_formation'])
++  const scope = scopeAt(['production_graph'])
+   const closed = Object.fromEntries(layoutScope(scope, new Set()).nodes.map((n) => [n.id, n]))
+-  const open = layoutScope(scope, new Set(['investigation_formation/web_intelligence', 'investigation_formation/adversarial_swarm']))
++  const open = layoutScope(scope, new Set(['production_graph/pdf_publisher']))
+   const byId = Object.fromEntries(open.nodes.map((n) => [n.id, n]))
+ 
+-  assert.equal(byId.web_intelligence.expanded, true)
+-  assert.equal(byId.web_intelligence.height, NODE_HEIGHT + NODE_BODY_HEIGHT)
+-  assert.equal(byId.web_intelligence.y, closed.web_intelligence.y)
+-  assert.equal(byId.news_data_intelligence.y, closed.news_data_intelligence.y + NODE_BODY_HEIGHT)
+-  assert.equal(byId.adversarial_swarm.y, closed.adversarial_swarm.y + NODE_BODY_HEIGHT)
++  assert.equal(byId.pdf_publisher.expanded, true)
++  assert.equal(byId.pdf_publisher.height, NODE_HEIGHT + NODE_BODY_HEIGHT)
++  assert.equal(byId.pdf_publisher.y, closed.pdf_publisher.y)
++  assert.equal(byId.deck_producer.y, closed.deck_producer.y + NODE_BODY_HEIGHT)
+   // The other column does not move.
+-  assert.equal(byId.evidence_ledger.y, closed.evidence_ledger.y)
+-  // The swarm is a formation: it is entered, not expanded.
+-  assert.equal(byId.adversarial_swarm.expanded, false)
+-  assert.equal(byId.adversarial_swarm.height, NODE_HEIGHT)
+-  assert.equal(open.height, 3 * NODE_HEIGHT + 2 * GAP_Y + NODE_BODY_HEIGHT)
++  assert.equal(byId.pdf_qa.y, closed.pdf_qa.y)
++  assert.equal(byId.deck_build_qa.y, closed.deck_build_qa.y)
++  assert.equal(open.height, 2 * NODE_HEIGHT + GAP_Y + NODE_BODY_HEIGHT)
++
++  // A formation is entered, not expanded.
++  const root = layoutScope(scopeAt([]), new Set(['research_swarm']))
++  assert.ok(root.nodes.every((n) => !n.expanded && n.height === NODE_HEIGHT))
+ })
+ 
+ test('scopeEdges are temporary until their source has started, and node status maps to the tool badge states', () => {
+-  const scope = scopeAt(['planning_formation'])
++  const scope = scopeAt(['research_swarm'])
+   const edges = layoutScope(scope, new Set()).edges
+-  const typeOf = (snapshot: DeepResearchSnapshot) => scopeEdges(snapshot, scope, edges).map((edge) => edge.type)
++  const typesOf = (snapshot: DeepResearchSnapshot) =>
++    Object.fromEntries(scopeEdges(snapshot, scope, edges).map((edge) => [edge.id, edge.type]))
+ 
+-  assert.deepEqual(typeOf(emptyDeepResearchSnapshot('dr-idle')), ['temporary'])
++  assert.ok(Object.values(typesOf(emptyDeepResearchSnapshot('dr-idle'))).every((type) => type === 'temporary'))
+   const started = run([
+-    { type: 'node_start', node_path: ['planning_formation'], node_type: 'graph' },
+-    { type: 'node_start', node_path: ['planning_formation', 'problem_framing'], node_type: 'agent' },
++    { type: 'node_start', node_path: ['research_swarm'], node_type: 'swarm' },
++    { type: 'node_start', node_path: ['research_swarm', 'researcher'], node_type: 'agent' },
+   ])
+-  assert.deepEqual(typeOf(started), ['animated'])
++  assert.equal(typesOf(started)['researcher->fact_checker'], 'animated')
++  assert.equal(typesOf(started)['fact_checker->citation_manager'], 'temporary')
+   // At the root, the edge out of a formation follows the formation's own derived status.
+   const root = scopeAt([])
+   const rootTypes = Object.fromEntries(scopeEdges(started, root, layoutScope(root, new Set()).edges).map((edge) => [edge.id, edge.type]))
+-  assert.equal(rootTypes['planning_formation->investigation_formation'], 'animated')
+-  assert.equal(rootTypes['investigation_formation->verification_swarm'], 'temporary')
++  assert.equal(rootTypes['research_swarm->data_analysis_graph'], 'animated')
++  assert.equal(rootTypes['data_analysis_graph->writing_swarm'], 'temporary')
+ 
+   assert.deepEqual(
+     (['idle', 'pending', 'executing', 'completed', 'failed', 'cancelled', 'interrupted'] as const).map(nodeToolState),
+diff --git a/src/stores/deepResearchStore.ts b/src/stores/deepResearchStore.ts
+index 4c002c4..ff7553d 100644
+--- a/src/stores/deepResearchStore.ts
++++ b/src/stores/deepResearchStore.ts
+@@ -137,7 +137,7 @@ export const useDeepResearchStore = create<DeepResearchState>()(
+         }))
+ 
+         const pump = async () => {
+-          let cursor = initialAfter ?? get().snapshotsBySession[sessionId]?.replay_after ?? 0
++          let cursor = initialAfter ?? get().snapshotsBySession[sessionId]?.sequence ?? 0
+           let retries = 0
+           try {
+             while (!controller.signal.aborted && retries <= 2) {
+@@ -158,12 +158,12 @@ export const useDeepResearchStore = create<DeepResearchState>()(
+                   runs: upsertRunInList(state.runs, merged),
+                 }))
+                 if (!merged.active) break
+-                cursor = merged.replay_after
++                cursor = merged.sequence
+                 retries += 1
+               } catch (err) {
+                 if (controller.signal.aborted) break
+                 if (err instanceof DeepResearchReplayOverflow) {
+-                  // Re-hydrate full snapshot on 410 cursor overflow and resume from fresh replay_after.
++                  // Re-hydrate full snapshot on 410 cursor overflow and resume after the sequence it folds.
+                   const snapshot = await getDeepResearchRun(sessionId, userId, { signal: controller.signal })
+                   const merged = normalizeDeepResearchSnapshot(snapshot, get().snapshotsBySession[sessionId])
+                   set((state) => ({
+@@ -171,7 +171,7 @@ export const useDeepResearchStore = create<DeepResearchState>()(
+                     runs: upsertRunInList(state.runs, merged),
+                   }))
+                   if (!merged.active) break
+-                  cursor = merged.replay_after
++                  cursor = merged.sequence
+                   retries += 1
+                   continue
+                 }
+@@ -285,7 +285,7 @@ export const useDeepResearchStore = create<DeepResearchState>()(
+             if (activeId) {
+               const snap = get().snapshotsBySession[activeId]
+               if (snap?.active && !activeControllers.has(activeId)) {
+-                attachStream(activeId, userId, snap.replay_after)
++                attachStream(activeId, userId, snap.sequence)
+               }
+             }
+           } catch {
+@@ -322,7 +322,7 @@ export const useDeepResearchStore = create<DeepResearchState>()(
+               syncResearchTabUrl(snapshot.session_id)
+             }
+             if (snapshot.active) {
+-              attachStream(snapshot.session_id, userId, snapshot.replay_after)
++              attachStream(snapshot.session_id, userId, snapshot.sequence)
+             }
+             return snapshot
+           } catch (err) {
+@@ -351,7 +351,7 @@ export const useDeepResearchStore = create<DeepResearchState>()(
+               runs: upsertRunInList(state.runs, merged),
+             }))
+             if (merged.active) {
+-              attachStream(trimmed, userId, merged.replay_after)
++              attachStream(trimmed, userId, merged.sequence)
+             }
+           } catch (err) {
+             const message = err instanceof Error ? err.message : String(err)

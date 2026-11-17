@@ -5,7 +5,7 @@ description: Performs bounded, local exploratory analysis of explicitly supporte
   FASTA/FASTQ, and basic image metadata inspection; missingness/leakage audits; outlier
   and transformation sensitivity; and rigorous EDA report scaffolds. Other domain
   formats are reference-only and unknown formats fail closed.
-allowed-tools: brave_rich_answer brave_answer brave_web_search http_request extract_article_content
+allowed-tools: tavily_search exa_search olostep_search_web olostep_answers tavily_extract exa_get_contents olostep_scrape_website bright_data http_request extract_article_content
   search_saved_context
 license: MIT
 compatibility: skills.sh / Ren Deep Research (Strands SDK 1.57.2 / strands-harness

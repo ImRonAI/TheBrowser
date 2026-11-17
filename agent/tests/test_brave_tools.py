@@ -89,7 +89,17 @@ def brave_client_fixture():
         set_search_client(None)
 
 
-def test_brave_tools_exports_all_seven_tools():
+def test_brave_tools_are_off_unless_ron_brave_tools_is_1(monkeypatch):
+    monkeypatch.delenv("RON_BRAVE_TOOLS", raising=False)
+    assert brave_tools() == []
+    assert not set(BRAVE_TOOL_NAMES) & {t.tool_name for t in build_core_tools(PROJECT_TOOLS_DIR)}
+    assert not set(BRAVE_TOOL_NAMES) & {t.tool_name for t in live_host_tools(PROJECT_TOOLS_DIR)}
+    monkeypatch.setenv("RON_BRAVE_TOOLS", "1")
+    assert tuple(t.tool_name for t in brave_tools()) == BRAVE_TOOL_NAMES
+
+
+def test_brave_tools_exports_all_seven_tools(monkeypatch):
+    monkeypatch.setenv("RON_BRAVE_TOOLS", "1")
     tools = brave_tools()
     names = tuple(t.tool_name for t in tools)
     assert names == BRAVE_TOOL_NAMES
@@ -179,6 +189,7 @@ def test_brave_tools_surface_brave_search_errors_cleanly():
 
 
 def test_perplexity_search_flag_gates_core_and_live_tools(monkeypatch):
+    monkeypatch.setenv("RON_BRAVE_TOOLS", "1")
     monkeypatch.setenv("RON_PERPLEXITY_SEARCH", "0")
     core_disabled = {t.tool_name for t in build_core_tools(PROJECT_TOOLS_DIR)}
     live_disabled = {t.tool_name for t in live_host_tools(PROJECT_TOOLS_DIR)}

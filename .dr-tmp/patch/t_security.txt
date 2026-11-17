@@ -1,0 +1,126 @@
+@pytest.mark.asyncio
+async def test_resolve_artifact_path_security_and_fallback_materialization(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Exercise deterministic pure-Python PDF-1.4 fallback (`RON_CHROMIUM_EXECUTABLE=__none__`)
+    # AND runtime pre-`run_finished` materialization when leaf build tools were skipped.
+    monkeypatch.setenv("RON_SLIDEV_DISABLE_CLI", "1")
+    monkeypatch.setenv("RON_CHROMIUM_EXECUTABLE", "__none__")
+
+    storage = InMemoryStorage()
+    coordinator = ScriptedFormationCoordinator(refine_once=False, invoke_artifact_tools=False)
+    artifacts_root = tmp_path / "artifacts"
+    outside_secret = tmp_path / "outside-secret.txt"
+    outside_secret.write_text("top-secret", encoding="utf-8")
+
+    runtime = DeepResearchRuntime(
+        storage_factory=lambda _uid: storage,
+        model_builder=coordinator.make_model,
+        extra_leaf_tools=_offline_leaf_tools(),
+        artifacts_dir=artifacts_root,
+    )
+
+    await runtime.start_run(
+        user_id="owner-1",
+        query="Evaluate solid-state electrolyte dendrite suppression",
+        session_id="dr-sec-001",
+        depth="standard",
+    )
+    snap = await runtime.wait_run(user_id="owner-1", session_id="dr-sec-001", timeout=60.0)
+    assert snap is not None
+    assert snap["status"] == "completed"
+    assert "compile_scholarly_pdf" not in coordinator.tool_calls
+    assert "compile_slidev_deck" not in coordinator.tool_calls
+
+    # Even without the publishers' build tool calls, runtime guaranteed all 5 studio artifacts on disk!
+    assert set(snap["artifacts"].keys()) == {
+        "report_pdf_url",
+        "report_markdown_url",
+        "slidev_preview_url",
+        "slidev_pdf_url",
+        "slidev_markdown_url",
+    }
+    assert "routerMode: hash" in snap["slidev_markdown"]
+
+    fallback_pdf = runtime.resolve_artifact_path(
+        session_id="dr-sec-001",
+        relative_path="report.pdf",
+        user_id="owner-1",
+    )
+    assert fallback_pdf is not None and fallback_pdf.is_file()
+    reader = PdfReader(str(fallback_pdf))
+    assert len(reader.pages) >= 1
+
+    # Sub-asset requests with user_id=None or "default" succeed; wrong user_id is rejected.
+    assert (
+        runtime.resolve_artifact_path(
+            session_id="dr-sec-001",
+            relative_path="slides/index.html",
+            user_id=None,
+        )
+        is not None
+    )
+    assert (
+        runtime.resolve_artifact_path(
+            session_id="dr-sec-001",
+            relative_path="slides/assets/deck.css",
+            user_id="default",
+        )
+        is not None
+    )
+    assert (
+        runtime.resolve_artifact_path(
+            session_id="dr-sec-001",
+            relative_path="report.pdf",
+            user_id="intruder",
+        )
+        is None
+    )
+
+    # Symlink escape inside session artifact directory MUST be rejected by realpath containment.
+    escape_link = artifacts_root / "dr-sec-001" / "escape.txt"
+    os.symlink(outside_secret, escape_link)
+    assert (
+        runtime.resolve_artifact_path(
+            session_id="dr-sec-001",
+            relative_path="escape.txt",
+            user_id="owner-1",
+        )
+        is None
+    )
+
+    # Path traversal, dotfiles, backslashes, NUL bytes, absolute paths, and bad session IDs MUST return None.
+    for bad_rel in (
+        "",
+        "../outside-secret.txt",
+        "slides/../../outside-secret.txt",
+        "/etc/passwd",
+        "~/report.pdf",
+        "report.pdf\x00.txt",
+        "slides\\index.html",
+        ".owner.json",
+        "does-not-exist.pdf",
+    ):
+        assert (
+            runtime.resolve_artifact_path(
+                session_id="dr-sec-001",
+                relative_path=bad_rel,
+                user_id="owner-1",
+            )
+            is None
+        ), f"Expected None for unsafe relative_path {bad_rel!r}"
+
+    for bad_sid in ("", "../dr-sec-001", "dr/sec", ".hidden"):
+        assert (
+            runtime.resolve_artifact_path(
+                session_id=bad_sid,
+                relative_path="report.pdf",
+                user_id="owner-1",
+            )
+            is None
+        )
+
+    await runtime.aclose()
+
+

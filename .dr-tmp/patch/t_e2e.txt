@@ -1,0 +1,154 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# 2. End-to-End Real Formation Execution (`Graph.stream_async`)
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_end_to_end_formation_stream_async_with_qa_loops_and_snapshots(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("RON_SLIDEV_DISABLE_CLI", "1")
+    storage = InMemoryStorage()
+    await context_store("researcher-1", storage=storage).add(
+        "Prior lab note: surface code circuit-level threshold is ~1.0%."
+    )
+
+    coordinator = ScriptedFormationCoordinator(refine_once=True)
+    owned_agents: list[Agent] = []
+    artifacts_root = tmp_path / "artifacts"
+    (artifacts_root / "e2e-formation-run").mkdir(parents=True)
+
+    graph = build_deep_research_graph(
+        session_id="e2e-formation-run",
+        user_id="researcher-1",
+        storage=storage,
+        model_factory=coordinator.make_model,
+        depth="deep",
+        owned_agents=owned_agents,
+        extra_leaf_tools=_offline_leaf_tools(),
+        artifacts_dir=artifacts_root,
+    )
+
+    final_result: Any = None
+    try:
+        async for ev in graph.stream_async(
+            "Compare bivariate bicycle qLDPC codes against planar surface codes.",
+            invocation_state={"max_refinements": 1},
+        ):
+            if isinstance(ev, dict) and ev.get("type") == "multiagent_result":
+                final_result = ev.get("result")
+
+        assert final_result is not None
+        assert final_result.status == Status.COMPLETED
+        assert [node.node_id for node in final_result.execution_order] == [
+            "research_swarm",
+            "data_analysis_graph",
+            "writing_swarm",
+            "production_graph",
+        ]
+
+        # Research swarm: QA handed the references back to their author once, then approved.
+        research = final_result.results["research_swarm"].result
+        assert [node.node_id for node in research.node_history] == [
+            "researcher",
+            "fact_checker",
+            "citation_manager",
+            "research_qa",
+            "citation_manager",
+            "research_qa",
+        ]
+
+        # Data analysis graph: QA's `REVISE: data_analyst` went back to that agent and returned to QA.
+        analysis = final_result.results["data_analysis_graph"].result
+        assert analysis.status == Status.COMPLETED
+        assert [node.node_id for node in analysis.execution_order] == [
+            "visual_planner",
+            "data_analyst",
+            "visual_citation",
+            "visual_qa",
+            "data_analyst",
+            "visual_citation",
+            "visual_qa",
+        ]
+
+        writing = final_result.results["writing_swarm"].result
+        assert [node.node_id for node in writing.node_history] == [
+            "report_designer",
+            "deck_designer",
+            "layout_qa",
+            "report_writer",
+            "report_qa",
+            "deck_writer",
+            "deck_qa",
+        ]
+
+        # Production graph: the PDF and the deck were built in the same batch, each followed by its QA.
+        production = final_result.results["production_graph"].result
+        production_order = [node.node_id for node in production.execution_order]
+        assert set(production_order[:2]) == {"pdf_publisher", "deck_producer"}
+        assert set(production_order[2:]) == {"pdf_qa", "deck_build_qa"}
+
+        # The researcher ran a built-in `subagent`, which called a research tool; the writer saved the
+        # report with the built-in `write`; the publishers compiled it and the deck.
+        assert {"subagent", "brave_web_search", "write", "compile_scholarly_pdf", "compile_slidev_deck"} <= set(
+            coordinator.tool_calls
+        )
+        assert len(owned_agents) == 19
+
+        run_artifacts = artifacts_root / "e2e-formation-run"
+        assert (run_artifacts / "report.md").read_text(encoding="utf-8").startswith(
+            "# Quantum Error Correction Architecture Report"
+        )
+        assert (run_artifacts / "report.pdf").is_file()
+        assert (run_artifacts / "slides.md").is_file()
+        assert (run_artifacts / "slides" / "index.html").is_file()
+        assert (run_artifacts / "slides.pdf").is_file()
+
+        # Native `SnapshotSessionManager` persisted `snapshot_latest` for the outer graph and each formation.
+        stored_keys = await storage.list("")
+        for orch_id in ORCHESTRATOR_IDS:
+            assert any(orch_id in key and "snapshot_latest" in key for key in stored_keys), (
+                f"Missing SnapshotSessionManager snapshot_latest for {orch_id} in {stored_keys}"
+            )
+
+        # Native `DeepResearchMultiAgentPlugin` recorded all 5 multiagent lifecycle hook types!
+        plugin: DeepResearchMultiAgentPlugin = getattr(graph, "_deep_research_plugin")
+        fired_hooks = {entry["hook"] for entry in plugin.events}
+        assert fired_hooks == {
+            "MultiAgentInitializedEvent",
+            "BeforeMultiAgentInvocationEvent",
+            "BeforeNodeCallEvent",
+            "AfterNodeCallEvent",
+            "AfterMultiAgentInvocationEvent",
+        }
+    finally:
+        for agent in owned_agents:
+            agent.cleanup()
+
+
+def test_local_images_are_embedded_for_every_renderer(tmp_path: Path) -> None:
+    from agent.api.core.deep_research import _inline_local_images
+
+    (tmp_path / "figures").mkdir()
+    (tmp_path / "figures" / "a.png").write_bytes(b"\x89PNG\r\n\x1a\n")
+    (tmp_path.parent / "outside.png").write_bytes(b"\x89PNG\r\n\x1a\n")
+    markdown = (
+        "![A](figures/a.png)\n"
+        f"![Abs]({tmp_path}/figures/a.png)\n"
+        '<img src="figures/a.png" class="w-80" />\n'
+        "![Remote](https://example.org/b.png)\n"
+        "![Missing](figures/missing.png)\n"
+        "![Escape](../outside.png)\n"
+    )
+    embedded = "data:image/png;base64,iVBORw0KGgo="
+    assert _inline_local_images(markdown, tmp_path) == (
+        f"![A]({embedded})\n"
+        f"![Abs]({embedded})\n"
+        f'<img src="{embedded}" class="w-80" />\n'
+        "![Remote](https://example.org/b.png)\n"
+        "![Missing](figures/missing.png)\n"
+        "![Escape](../outside.png)\n"
+    )
+
+
