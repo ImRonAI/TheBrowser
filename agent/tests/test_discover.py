@@ -9,6 +9,12 @@ from fastapi import FastAPI
 from agent.api.core import brave_search as bs
 from agent.api.endpoints.discover import router
 
+
+@pytest.fixture(autouse=True)
+def _brave_engine(monkeypatch):
+    """Discover's feed comes from Brave while ``RON_BRAVE_TOOLS=1``, which these tests drive."""
+    monkeypatch.setenv("RON_BRAVE_TOOLS", "1")
+
 NEWS = {"type": "news_result", "title": "Honda unveiled an e-MTB", "url": "https://electrek.co/2026/09/22/honda",
         "description": "Honda is best known for motorcycles", "age": "3 days ago", "page_age": "2026-09-22T13:02:13",
         "profile": {"name": "Electrek", "url": "https://electrek.co/2026/09/22/honda"},

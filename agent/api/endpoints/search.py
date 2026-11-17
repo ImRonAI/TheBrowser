@@ -1,11 +1,12 @@
-"""Browser search HTTP surface: Brave fan-out + Brave Answers + the GLM Search and Shopping agents.
+"""Browser search HTTP surface: the result sections, the answer and the Search and Shopping agents.
 
 One ``POST /search/stream`` runs one query and merges every source onto a single SSE response:
 
-- Brave ``web``/``news``/``videos``/``images``/``places`` at per-endpoint maximum counts, each
-  isolated (one failing source never blanks the page — same rule as Discover);
-- the answer: Brave Answers itself (``BraveAnswersClient.stream``), forwarded as ``agent.*`` events
-  with its citations;
+- ``web``/``news``/``videos``/``images``/``places`` at per-provider maximum counts, each isolated (one
+  failing source never blanks the page — same rule as Discover): Tavily, Exa and Apify
+  (``core/web_search.py``), or Brave while ``RON_BRAVE_TOOLS=1``;
+- the answer: Exa's streamed answer (``web_search.exa_answer``), or Brave Answers while
+  ``RON_BRAVE_TOOLS=1``, forwarded as ``agent.*`` events with its citations;
 - shopping: the Shopping agent (``agent/api/configs/search/shopping.json`` via ``create_harness()``
   on GLM-5.3-Flash, Brave tools only) streamed as ``shopping.*`` events with online retailer and
   local brick-and-mortar store links.
@@ -30,10 +31,11 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field, model_validator
 
+from agent.api.core import config as app_config
+from agent.api.core import web_search
 from agent.api.core.brave_search import (
     FeedLocation,
     SectionRequest,
-    run_section,
 )
 from agent.api.core.config import (
     PERPLEXITY_API_KEY,
@@ -43,6 +45,7 @@ from agent.api.core.config import (
     RON_SEARCH_SHOPPING_DOMAINS,
     RON_SEARCH_SHOPPING_MODEL,
     XAI_API_KEY,
+    brave_tools_enabled,
     perplexity_agent_api_enabled,
 )
 from agent.api.core.prompt_attachments import ATTACHMENTS_MAX, ATTACHMENTS_TOTAL_MAX, PromptAttachment
@@ -65,8 +68,8 @@ from agent.api.endpoints.discover import get_client as get_brave_client
 
 router = APIRouter()
 
-#: Per-kind Brave counts: web caps at 20 per page; news/images/videos at 50
-#: (the SectionRequest ceiling); place_search at 20.
+#: Per-kind counts: Brave's web and Tavily cap at 20 per page; news/images/videos at 50 (the
+#: SectionRequest ceiling, which Tavily's 20 caps again); Brave's place_search and Apify's places at 20.
 SECTION_COUNTS: dict[str, int] = {"web": 20, "news": 50, "videos": 50, "images": 50, "places": 20}
 
 
@@ -96,13 +99,22 @@ def _xai_configured() -> bool:
     return bool(XAI_API_KEY)
 
 
+def _answer_configured() -> bool:
+    """The answer lane's provider: Brave Answers while ``RON_BRAVE_TOOLS=1``, Exa otherwise."""
+    return answers_client().configured if brave_tools_enabled() else bool(app_config.EXA_API_KEY)
+
+
+def _sections_configured(request: Request) -> bool:
+    return get_brave_client(request).configured if brave_tools_enabled() else web_search.configured()
+
+
 def _search_agent_configured() -> bool:
-    """The answer lane (Brave Answers) or the search model provider (follow-ups, shopping) is usable."""
+    """The answer lane or the search model provider (follow-ups, shopping) is usable."""
     import os
 
     if os.getenv("RON_SEARCH_AGENT", "1") == "0":
         return False
-    return answers_client().configured or search_provider_configured()
+    return _answer_configured() or search_provider_configured()
 
 
 def _perplexity_configured() -> bool:
@@ -122,12 +134,14 @@ async def search_status(request: Request):
     return {
         "configured": {
             "brave": get_brave_client(request).configured,
+            "sections": _sections_configured(request),
             "xai": _xai_configured(),
-            "answers": answers_client().configured,
+            "answers": _answer_configured(),
             "search_provider": search_provider_configured(),
             "perplexity": _perplexity_configured(),
         },
         "provider": RON_SEARCH_PROVIDER,
+        "engine": "brave" if brave_tools_enabled() else "web",
         "levels": list(SEARCH_LEVELS),
         "reasoning_efforts": dict(LEVEL_REASONING_EFFORT),
         "default_level": RON_SEARCH_DEFAULT_LEVEL,
@@ -149,12 +163,13 @@ async def search_stream(body: SearchRequest, request: Request) -> StreamingRespo
             },
         )
     client = get_brave_client(request)
-    if not client.configured and not _agent_configured():
+    if not _sections_configured(request) and not _agent_configured():
         raise HTTPException(
             503,
             {
                 "code": "not_configured",
-                "message": "Neither BRAVE_SEARCH_API_KEY nor the search model provider API key (XAI_API_KEY) is set",
+                "message": "No search provider key (Tavily, Exa, Apify, or Brave while RON_BRAVE_TOOLS=1) and no "
+                           "search model provider key is set",
             },
         )
 
@@ -162,8 +177,8 @@ async def search_stream(body: SearchRequest, request: Request) -> StreamingRespo
     queue: asyncio.Queue[tuple[str, dict[str, Any]] | None] = asyncio.Queue()
     started = time.monotonic()
 
-    async def run_brave() -> None:
-        if not client.configured:
+    async def run_sections() -> None:
+        if brave_tools_enabled() and not client.configured:
             for kind in SECTION_COUNTS:
                 await queue.put((
                     "section",
@@ -182,7 +197,7 @@ async def search_stream(body: SearchRequest, request: Request) -> StreamingRespo
             return
 
         async def one(kind: str, count: int) -> None:
-            section = await run_section(
+            section = await web_search.run_feed_section(
                 client,
                 SectionRequest(kind=kind, q=body.q, count=count),
                 body.location,
@@ -236,7 +251,7 @@ async def search_stream(body: SearchRequest, request: Request) -> StreamingRespo
     async def run_all() -> None:
         tasks: list[asyncio.Task[Any]] = []
         if not body.follow_up:
-            tasks.append(asyncio.create_task(run_brave()))
+            tasks.append(asyncio.create_task(run_sections()))
         if _agent_configured():
             if stream_agent is not _sa_module.stream_agent:
                 tasks.append(asyncio.create_task(run_legacy_agent("agent", build_agent_request(body.q, level))))
