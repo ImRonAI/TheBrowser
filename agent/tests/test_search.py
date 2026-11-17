@@ -78,9 +78,11 @@ def answers(key: str | None = "answers-key", recorded: list[dict] | None = None)
 
 @pytest.fixture(autouse=True)
 def _offline_answers(monkeypatch):
-    """No test reaches Brave Answers unless it installs a client."""
+    """No test reaches Brave Answers unless it installs a client. These tests drive the Brave engine, which
+    ``RON_BRAVE_TOOLS=1`` turns on."""
     from agent.api.core import brave_answers_tool
 
+    monkeypatch.setenv("RON_BRAVE_TOOLS", "1")
     monkeypatch.setattr(brave_answers_tool, "_CLIENT", answers(None))
     monkeypatch.setattr(sa.app_config, "GEMINI_API_KEY", None)
     sa.clear_search_sessions()
@@ -130,6 +132,10 @@ def test_native_strands_harness_configs_and_progressive_efforts(monkeypatch, tmp
     from agent.api.core.gemini_model import RonGeminiModel
 
     monkeypatch.setattr(sa.app_config, "GEMINI_API_KEY", "gemini-test-key")
+    monkeypatch.setenv("RON_BRAVE_TOOLS", "0")
+    for key in ("TAVILY_API_KEY", "EXA_API_KEY", "APIFY_TOKEN"):
+        monkeypatch.setattr(sa.app_config, key, "set")
+    monkeypatch.setattr(sa.app_config, "OLOSTEP_API_KEY", None)
 
     # level -> (config effort, the thinking_level gemini-4-hydrogen is sent: LOW | MEDIUM | HIGH)
     expected_efforts = {
@@ -158,9 +164,9 @@ def test_native_strands_harness_configs_and_progressive_efforts(monkeypatch, tmp
         assert agent.model.config["params"]["thinking_config"].thinking_level == expected_effort
         assert not any(name.startswith("x_") or name == "web_search" for name in agent.tool_names)
         assert "subagent" in agent.tool_names
-        assert "brave_web_search" in agent.tool_names
-        assert "brave_local_search" in agent.tool_names
-        assert "web_fetch" in agent.tool_names
+        assert {"tavily_search", "exa_search", "places_search", "http_request", "web_fetch"} <= set(agent.tool_names)
+        assert not any(name.startswith("brave_") for name in agent.tool_names)
+        assert "brave_" not in cfg["instructions"]
         assert agent._session_manager is not None
 
     shop_cfg = sa.load_search_harness_config("shopping")
@@ -173,7 +179,7 @@ def test_native_strands_harness_configs_and_progressive_efforts(monkeypatch, tmp
     assert shop_agent.model.config["model_id"] == "gemini-4-hydrogen"
     assert "gemini_tools" not in shop_agent.model.config
     assert shop_agent.model.config["params"]["thinking_config"].thinking_level == "MEDIUM"
-    assert "brave_local_search" in shop_agent.tool_names
+    assert {"tavily_search", "places_search"} <= set(shop_agent.tool_names)
     assert "Seattle, WA" in (shop_agent.system_prompt or "")
 
 
@@ -344,8 +350,9 @@ def test_search_status(monkeypatch):
             return response.json()
 
     body = asyncio.run(scenario())
-    assert body["configured"] == {"brave": True, "xai": True, "answers": True, "search_provider": True,
-                                  "perplexity": True}
+    assert body["configured"] == {"brave": True, "sections": True, "xai": True, "answers": True,
+                                  "search_provider": True, "perplexity": True}
+    assert body["engine"] == "brave"
     assert body["provider"] == "gemini"
     assert body["levels"] == list(sa.SEARCH_LEVELS)
     assert body["reasoning_efforts"] == dict(sa.LEVEL_REASONING_EFFORT)
@@ -371,8 +378,8 @@ def test_perplexity_agent_api_disabled(monkeypatch):
             return status_body, parse_sse(stream_resp.text)
 
     status_body, events = asyncio.run(scenario())
-    assert status_body["configured"] == {"brave": True, "xai": False, "answers": False, "search_provider": False,
-                                         "perplexity": False}
+    assert status_body["configured"] == {"brave": True, "sections": True, "xai": False, "answers": False,
+                                         "search_provider": False, "perplexity": False}
     assert recorded == []
 
     by_name: dict[str, list[dict]] = {}
