@@ -1,4 +1,5 @@
 """Projects API: verified Supabase identity and one shared mutation path."""
+import base64
 import json
 from datetime import datetime, timezone
 from typing import Annotated, Any, Literal
@@ -7,6 +8,8 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, ConfigDict, Field
 
+from agent.api.core import document_export
+from agent.api.core.document_export import ExportFormat
 from agent.api.core.projects import ProjectIdentity, ProjectService, project_identity
 
 router = APIRouter(prefix="/projects")
@@ -425,6 +428,17 @@ async def delete_document(document_id: UUID, identity: Identity):
     if not rows:
         raise HTTPException(404, "Document not found or not accessible")
     return {"deleted": True}
+
+
+@router.get("/documents/{document_id}/export")
+async def export_document(document_id: UUID, format: ExportFormat, identity: Identity):
+    """The saved page as a PDF, HTML or Word file: its name, media type and bytes in base64."""
+    rows = await ProjectService(identity).rows("project_documents", select="title,content", id=f"eq.{document_id}")
+    if not rows:
+        raise HTTPException(404, "Document not found or not accessible")
+    exported = await document_export.export_document(rows[0]["title"], rows[0]["content"] or "", format)
+    return {"filename": exported["filename"], "media_type": exported["media_type"],
+            "data": base64.b64encode(exported["data"]).decode("ascii")}
 
 
 @router.get("/documents/{document_id}/skill")

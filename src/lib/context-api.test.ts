@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
-  agentServesInterest, agoLabel, approveAgentTurn, phoneTurn, browsingDue, browsingTurn, cadenceLabel, contextAddedTurn, contextResults, createContextClient, dataUrlBlob, defaultCadence, discoverTopics,
+  agentServesInterest, agoLabel, approveAgentTurn, phoneTurn, browsingDue, browsingTurn, cadenceLabel, contextAddedTurn, contextResults, createContextClient, dataUrlBlob, defaultCadence, dreamTime, dreamTopicLabel, discoverTopics,
   formatBytes, interestsFromOutput, isObservable, latestReply, plainSummary, recommendationFromOutput, recordVisit, runErrorLine, runHeadline, runNotifications, runStatusLabel, searchMarkdown,
   type AgentRun, type ContextItem,
 } from './context-api.ts'
@@ -188,4 +188,21 @@ test('phoneTurn names the apps, what Ren did and the current graph', () => {
   assert.match(turn, /- 2026-11-15 09:05 Set a reminder: stretch/)
   assert.match(turn, /Current interest graph: Running \(0\.50\)/)
   assert.match(phoneTurn({ since: 0, until: 0, apps: [], actions: [] }, []), /\(none\)[\s\S]*\(nothing\)/)
+})
+
+test('a dream notice names each topic by its heading and the agent whose folder it is in, and sends the checklist', async () => {
+  assert.equal(dreamTime('20261117T201500123456'), '2026-11-17T20:15:00Z')
+  assert.deepEqual(dreamTopicLabel({ key: 'memory/brain/panel/travel.md', text: '# Travel plans\nFlies from SLC.' }), { title: 'Travel plans', agent: 'panel' })
+  assert.deepEqual(dreamTopicLabel({ key: 'memory/brain/search-page/old-flights.md', text: null }), { title: 'old flights', agent: 'search-page' })
+  const sent: { url: string; body: string }[] = []
+  const fetcher = (async (url: string, init?: RequestInit) => {
+    sent.push({ url, body: String(init?.body ?? '') })
+    return new Response(JSON.stringify(url.includes('?') ? { dream: null } : { reviewed: 'v' }), { status: 200 })
+  }) as typeof fetch
+  const client = createContextClient('http://api.test/', 'u 1', fetcher)
+  assert.equal(await client.dream(), null)
+  await client.reviewDream('20261117T201500123456', [{ key: 'memory/brain/panel/travel.md', right: false, comment: 'Ogden' }])
+  assert.equal(sent[0].url, 'http://api.test/context/dream?user_id=u%201')
+  assert.equal(sent[1].url, 'http://api.test/context/dream/20261117T201500123456')
+  assert.deepEqual(JSON.parse(sent[1].body), { user_id: 'u 1', topics: [{ key: 'memory/brain/panel/travel.md', right: false, comment: 'Ogden' }] })
 })

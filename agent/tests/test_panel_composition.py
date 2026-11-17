@@ -263,7 +263,7 @@ def test_default_native_formations_execute_and_release_children(offline, monkeyp
 
     async def create(*args, **kwargs):
         child = await original(*args, **kwargs)
-        assert not child.tool_registry.registry
+        assert set(child.tool_registry.registry) == {"search_memory", "journal"}  # the parent's second brain
         cleanup = Mock(wraps=child.cleanup)
         child.cleanup = cleanup
         cleanups.append(cleanup)

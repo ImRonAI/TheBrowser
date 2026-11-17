@@ -14,7 +14,7 @@
  *
  * Uses Inter (`font-sans`) and `useElementWidth` for container-driven responsiveness across Light, Dark, and Glass themes.
  */
-import { useMemo, useRef, useState, type ComponentProps } from 'react'
+import { useEffect, useMemo, useRef, useState, type ComponentProps } from 'react'
 import {
   Activity,
   ArrowLeftRight,
@@ -27,6 +27,7 @@ import {
   Download,
   ExternalLink,
   FileCode2,
+  FilePen,
   FileText,
   Layers,
   Loader2,
@@ -39,6 +40,9 @@ import { RenMark } from '@/components/brand'
 import { useElementWidth } from '@/hooks/useElementWidth'
 import { API_BASE_URL } from '@/lib/api-base'
 import { createContextClient } from '@/lib/context-api'
+import { documentsLibraryUrl } from '@/lib/project-documents'
+import { openInternalUrl } from '@/components/board/task-detail/editor/extensions/blocks/workspace'
+import { useDeepResearchStore } from '@/stores/deepResearchStore'
 import {
   humanizeIdentifier,
   researchUrl,
@@ -311,6 +315,9 @@ export function DeepResearchReportStudio({ snapshot, userId }: DeepResearchRepor
   const [copied, setCopied] = useState(false)
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
   const [saveError, setSaveError] = useState('')
+  const saveReportAsDocument = useDeepResearchStore((state) => state.saveReportAsDocument)
+  const [documentState, setDocumentState] = useState<'idle' | 'saving' | 'error'>('idle')
+  const [documentError, setDocumentError] = useState('')
 
   const reportPdfUrl = useMemo(
     () => resolveResearchArtifactUrl(snapshot.artifacts?.report_pdf_url, userId),
@@ -364,6 +371,23 @@ export function DeepResearchReportStudio({ snapshot, userId }: DeepResearchRepor
   const showPdfIframe = Boolean(reportPdfUrl) && (reportFormat === 'pdf' || !hasReportText)
   const deckEmbedUrl = slidevPreviewUrl || slidevPdfUrl
   const showDeckIframe = Boolean(deckEmbedUrl) && (deckFormat === 'interactive' || !hasSlidevText)
+
+  // A finished run's report is kept as a Document under Deep Research, once.
+  const reportReady = snapshot.status === 'completed' && hasReportText
+  const saveDocument = () => {
+    setDocumentState('saving')
+    setDocumentError('')
+    saveReportAsDocument(snapshot.session_id, userId)
+      .then(() => setDocumentState('idle'))
+      .catch((err: unknown) => {
+        setDocumentState('error')
+        setDocumentError(err instanceof Error ? err.message : 'Could not save the report as a Document')
+      })
+  }
+  useEffect(() => {
+    if (reportReady && !snapshot.document_id) saveDocument()
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once per finished run without a Document
+  }, [reportReady, snapshot.document_id, snapshot.session_id])
 
   const handleCopyMarkdown = async () => {
     const text = buildContextExportMarkdown(snapshot)
@@ -503,6 +527,37 @@ export function DeepResearchReportStudio({ snapshot, userId }: DeepResearchRepor
                   </button>
                 ))}
               </div>
+            )}
+
+            {reportReady && (
+              <button
+                type="button"
+                disabled={documentState === 'saving'}
+                onClick={() =>
+                  snapshot.document_id ? openInternalUrl(documentsLibraryUrl(snapshot.document_id)) : saveDocument()
+                }
+                title={
+                  documentState === 'error'
+                    ? documentError
+                    : snapshot.document_id
+                      ? 'Open the report in Documents › Deep Research'
+                      : 'Saving the report to Documents › Deep Research'
+                }
+                className="inline-flex h-7 items-center gap-1.5 rounded-lg border border-blurple-600/35 bg-blurple-600/10 px-2.5 font-sans text-[11.5px] font-medium text-volt transition-colors hover:bg-blurple-600/15 disabled:opacity-60 dark:border-blurple-400/35 dark:bg-blurple-400/15 dark:hover:bg-blurple-400/25"
+              >
+                {documentState === 'saving' || (!snapshot.document_id && documentState === 'idle') ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+                ) : (
+                  <FilePen className="h-3.5 w-3.5" aria-hidden />
+                )}
+                <span>
+                  {snapshot.document_id
+                    ? compact ? 'Document' : 'Open Document'
+                    : documentState === 'error'
+                      ? 'Retry Document'
+                      : 'Saving Document…'}
+                </span>
+              </button>
             )}
 
             {reportPdfDownloadUrl && (

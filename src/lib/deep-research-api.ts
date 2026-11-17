@@ -12,9 +12,10 @@
  */
 import { API_BASE_URL } from './api-base.ts'
 
-export type ResearchDepth = 'standard' | 'deep' | 'exhaustive'
-export const RESEARCH_DEPTHS: readonly ResearchDepth[] = ['standard', 'deep', 'exhaustive']
-export const DEFAULT_RESEARCH_DEPTH: ResearchDepth = 'deep'
+/** The levels of `LEVELS` in `agent/api/core/deep_research.py`, as Perplexity's Agent API names its efforts. */
+export type ResearchDepth = 'fast' | 'low' | 'medium' | 'high' | 'xhigh' | 'ultra'
+export const RESEARCH_DEPTHS: readonly ResearchDepth[] = ['fast', 'low', 'medium', 'high', 'xhigh', 'ultra']
+export const DEFAULT_RESEARCH_DEPTH: ResearchDepth = 'medium'
 
 export interface DepthMetadata {
   id: ResearchDepth
@@ -24,9 +25,12 @@ export interface DepthMetadata {
 }
 
 export const DEPTH_METADATA: readonly DepthMetadata[] = [
-  { id: 'standard', label: 'Standard', badge: 'Focused', description: 'A focused pass over the strongest sources.' },
-  { id: 'deep', label: 'Deep', badge: 'Multi-angle', description: 'More questions, more sources, more checking.' },
-  { id: 'exhaustive', label: 'Exhaustive', badge: 'Max rigor', description: 'Every angle the agents can find.' },
+  { id: 'fast', label: 'Fast', badge: '5–8 pages', description: 'A quick answer from the strongest sources.' },
+  { id: 'low', label: 'Low', badge: '8–12 pages', description: 'A short report on the main questions.' },
+  { id: 'medium', label: 'Medium', badge: '12–17 pages', description: 'Several angles, checked and cited.' },
+  { id: 'high', label: 'High', badge: '17–23 pages', description: 'More questions, more sources, more checking.' },
+  { id: 'xhigh', label: 'Extra High', badge: '23–30 pages', description: 'A long investigation with code and data.' },
+  { id: 'ultra', label: 'Ultra', badge: '30–40 pages', description: 'Every angle the agents can find.' },
 ]
 
 export type FormationNodeKind = 'graph' | 'swarm' | 'agent'
@@ -71,28 +75,28 @@ export const DEFAULT_FORMATION_TOPOLOGY: FormationTopology = {
           label: 'Researcher',
           kind: 'agent',
           skill: 'research',
-          description: 'Researches the inquiry from primary sources and writes research.md, every claim with its source URL.',
+          description: 'Researches the inquiry from primary sources, follows every claim back to the source that owns it, and writes research.md, every claim with its source URL.',
         },
         {
           id: 'fact_checker',
           label: 'Fact Checker',
           kind: 'agent',
           skill: 'scientific-critical-thinking',
-          description: 'Opens the source of every claim in research.md, records a verdict per claim in fact-check.md and fixes or removes what fails.',
+          description: 'The only agent that opens sources: opens the source of every claim in research.md, records a verdict per claim in fact-check.md and fixes or removes what fails.',
         },
         {
           id: 'citation_manager',
           label: 'Citation Manager',
           kind: 'agent',
           skill: 'citation-management',
-          description: 'Numbers the citations in research.md and lists each source once in references.md.',
+          description: 'Numbers the citations in research.md and lists each source once in references.md, from the URLs in research.md and fact-check.md, without opening them.',
         },
         {
           id: 'research_qa',
           label: 'Research QA',
           kind: 'agent',
           skill: 'peer-review',
-          description: 'Checks research.md, fact-check.md and references.md: every claim cited, every citation in the reference list, every reference real and supporting its claim.',
+          description: 'Checks research.md, fact-check.md and references.md against each other, without opening sources: every claim cited, every citation in the reference list, every claim passed in fact-check.md.',
         },
       ],
       edges: [],
@@ -129,7 +133,7 @@ export const DEFAULT_FORMATION_TOPOLOGY: FormationTopology = {
           label: 'Visual QA',
           kind: 'agent',
           skill: 'scientific-visualization',
-          description: 'Checks every chart in figures/ is cited, relevant and accurate against its data, and fixes what is not.',
+          description: 'Checks every chart in figures/ against its data and citations in visuals.md and its script, without opening sources, and fixes what is not.',
         },
       ],
       edges: [
@@ -156,7 +160,7 @@ export const DEFAULT_FORMATION_TOPOLOGY: FormationTopology = {
           label: 'Deck Designer',
           kind: 'agent',
           skill: 'slidev',
-          description: 'Designs the Slidev deck in deck-layout.md: the slide sequence, each slide\'s layout and chart, theme and styling.',
+          description: 'Designs the Slidev deck in deck-layout.md: an art direction that follows the subject, the theme, palette, type and motion, and each slide\'s layout, chart, Vue component and transition, with three.js scenes where the subject has a shape worth seeing in 3D.',
         },
         {
           id: 'layout_qa',
@@ -170,14 +174,14 @@ export const DEFAULT_FORMATION_TOPOLOGY: FormationTopology = {
           label: 'Report Writer',
           kind: 'agent',
           skill: 'scientific-writing',
-          description: 'Writes report.md as report-layout.md lays it out: every claim with its citation number, charts as ![caption](figures/<name>.png), and the reference list at the end.',
+          description: 'Writes report.md, the run\'s Document, as report-layout.md lays it out: every claim with its citation number, charts as ![caption](figures/<name>.png), processes and timelines as workflows, real videos, pages, maps and PDFs as embeds, and the reference list at the end.',
         },
         {
           id: 'report_qa',
           label: 'Report QA',
           kind: 'agent',
           skill: 'peer-review',
-          description: 'Checks report.md against research.md, references.md, figures/ and report-layout.md.',
+          description: 'Checks report.md against research.md, references.md, figures/ and report-layout.md, without opening sources.',
         },
         {
           id: 'deck_writer',
@@ -221,14 +225,14 @@ export const DEFAULT_FORMATION_TOPOLOGY: FormationTopology = {
           label: 'Slidev Producer',
           kind: 'agent',
           skill: 'slidev',
-          description: 'Writes slides.md in Slidev Markdown from deck-copy.md and deck-layout.md with the charts from figures/, builds it into slides/ (slidev build --out slides --base ./) and exports slides.pdf.',
+          description: 'Builds the deck as a Slidev project in the workspace from deck-copy.md and deck-layout.md: slides.md (routerMode: hash), the charts from figures/, Vue components in components/ with three.js scenes, layouts and styles; builds it into slides/ (slidev build --out slides --base ./) and exports slides.pdf.',
         },
         {
           id: 'deck_build_qa',
           label: 'Slidev QA',
           kind: 'agent',
           skill: 'slidev',
-          description: 'Checks slides.md, slides/ and slides.pdf against deck-layout.md: every slide\'s chart, styling and citations; fixes what is not.',
+          description: 'Checks slides.md, slides/ and slides.pdf against deck-layout.md by looking at every slide: art direction, nothing clipped or overflowing, charts, 3D scenes and citations in place; fixes what is not.',
         },
       ],
       edges: [
@@ -371,6 +375,8 @@ export interface DeepResearchSnapshot {
   report_markdown: string
   slidev_markdown: string
   artifacts: DeepResearchArtifacts
+  /** The Document the report was saved as (`ron://documents/<id>`), once it is saved. */
+  document_id: string | null
 }
 
 /** One kept Strands stream event and its position in the run (the SSE `id`). */
@@ -606,6 +612,7 @@ export function emptyDeepResearchSnapshot(sessionId: string, init?: Partial<Deep
     report_markdown: '',
     slidev_markdown: '',
     artifacts: {},
+    document_id: null,
     ...init,
   }
 }
@@ -637,6 +644,7 @@ function withMeta(snapshot: DeepResearchSnapshot, raw: Json): DeepResearchSnapsh
       : snapshot.selection,
     error: raw.error === undefined ? snapshot.error : asString(raw.error) || null,
     active_node_path: status === 'running' ? snapshot.active_node_path : [],
+    document_id: raw.document_id === undefined ? snapshot.document_id : asString(raw.document_id) || null,
   }
 }
 
@@ -1076,6 +1084,34 @@ export async function cancelDeepResearchRun(
   previous?: DeepResearchSnapshot,
 ): Promise<DeepResearchSnapshot> {
   return normalizeDeepResearchSnapshot(await request(runPath(sessionId, userId, '/cancel'), options, { method: 'POST' }), previous)
+}
+
+/** The run's report as a Document page: its title and the editor's HTML, with workflows and figures in place. */
+export interface ReportDocument {
+  title: string
+  content: string
+  document_id: string | null
+}
+
+export async function fetchReportDocument(sessionId: string, userId = 'default', options: RequestOptions = {}): Promise<ReportDocument> {
+  const raw = asRecord(await request(runPath(sessionId, userId, '/document'), options))
+  return { title: asString(raw.title), content: asString(raw.content), document_id: asString(raw.document_id) || null }
+}
+
+/** Record the Document the report was saved as on the run. */
+export async function saveReportDocument(
+  sessionId: string,
+  documentId: string,
+  userId = 'default',
+  options: RequestOptions = {},
+  previous?: DeepResearchSnapshot,
+): Promise<DeepResearchSnapshot> {
+  const raw = await request(runPath(sessionId, userId, '/document'), options, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ document_id: documentId }),
+  })
+  return normalizeDeepResearchSnapshot(raw, previous)
 }
 
 export async function deleteDeepResearchRun(sessionId: string, userId = 'default', options: RequestOptions = {}): Promise<void> {

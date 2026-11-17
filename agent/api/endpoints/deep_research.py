@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import mimetypes
 from pathlib import Path, PurePosixPath
-from typing import Annotated, Literal
+from typing import Annotated
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
@@ -75,7 +75,7 @@ class StartDeepResearchRequest(BaseModel):
     query: str
     user_id: str = "default"
     context: str = ""
-    depth: Literal["standard", "deep", "exhaustive"] = "deep"
+    depth: deep_research.ResearchDepth = deep_research.DEFAULT_DEPTH
     provider: str | None = None
     model_id: str | None = None
     reasoning_effort: str | None = None
@@ -175,6 +175,31 @@ async def stream_deep_research_events(
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
+
+
+@router.get("/runs/{session_id}/document")
+async def get_deep_research_document(session_id: str, user_id: str = "default") -> dict[str, object]:
+    """report.md as a Document's title and content, and the Document it was saved as (404 without a report)."""
+    document = await deep_research.report_document(user_id=user_id, session_id=session_id)
+    if document is None:
+        raise HTTPException(status_code=404, detail="Deep Research report not found")
+    return document
+
+
+class ReportDocument(BaseModel):
+    document_id: str
+
+
+@router.post("/runs/{session_id}/document")
+async def set_deep_research_document(
+    session_id: str, body: ReportDocument, user_id: str = "default"
+) -> deep_research.RunMeta:
+    """Record the Document the renderer saved the report as."""
+    meta = await deep_research.set_report_document(user_id=user_id, session_id=session_id,
+                                                   document_id=body.document_id)
+    if meta is None:
+        raise HTTPException(status_code=404, detail="Deep Research run not found")
+    return meta
 
 
 @router.post("/runs/{session_id}/cancel")

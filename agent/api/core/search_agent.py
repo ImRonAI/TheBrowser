@@ -36,6 +36,8 @@ from urllib.parse import quote_plus, urlsplit
 
 import httpx
 from strands import Agent
+from strands.memory import MemoryManager
+from strands.memory.types import MemoryStore
 from strands.types.tools import AgentTool
 from strands_harness import (
     HARNESS_CONTRACT,
@@ -49,6 +51,7 @@ from strands_harness.tools.subagent import AgentSpec, Choice, Fixed, Preset, mak
 from agent.api.core import config as app_config
 from agent.api.core.brave_answers_tool import answers_client
 from agent.api.core.brave_search import BraveSearchError
+from agent.api.core.dreaming import JOURNAL_DIRECTIVE, agent_memory
 from agent.api.core.panel_agent import (
     NIM_REASONING_EFFORTS_BY_MODEL, PROVIDERS, build_model, gemini_thinking_levels, mistral_reasoning_efforts,
     provider_api_key, telnyx_reasoning_efforts, xai_reasoning_efforts,
@@ -82,6 +85,9 @@ LEVEL_REASONING_EFFORT: dict[SearchLevel, str] = {
 
 SEARCH_CONFIGS_DIR: Path = Path(__file__).resolve().parent.parent / "configs" / "search"
 MAX_SEARCH_SESSIONS = 64
+#: The search results page's agents' folders in the user's second brain (the panel's Search destination is ``search``).
+SEARCH_PAGE_FOLDER = "search-page"
+SHOPPING_FOLDER = "shopping"
 
 #: Native output-item types that carry source material the results page renders.
 SOURCES_ITEM_TYPES = frozenset({"search_results", "x_search_results"})
@@ -174,6 +180,7 @@ def build_harness_from_config(
     extra_tools: Sequence[Any] = (),
     session_override: bool | dict[str, Any] | None = None,
     instructions_suffix: str | None = None,
+    memory: Sequence[MemoryStore] = (),
 ) -> Agent:
     """Construct a ``strands.Agent`` from a portable Strands Harness config via ``create_harness()``.
 
@@ -185,11 +192,15 @@ def build_harness_from_config(
        into a ``RonXAIModel`` instance with the level's ``reasoning_effort`` applied on the instance
        and ``effort="auto"`` passed to ``create_harness`` (since ``create_harness`` ignores ``effort``
        on pre-built ``Model`` instances).
+    4. ``memory`` (``dreaming.agent_memory``) is the user's second brain and the agent's journal, with
+       ``JOURNAL_DIRECTIVE`` on its instructions; the config's own ``memory`` stays off.
     """
     merged = dict(config)
     if instructions_suffix:
         base_inst = str(merged.get("instructions") or "").rstrip()
         merged["instructions"] = f"{base_inst}\n\n{instructions_suffix.strip()}" if base_inst else instructions_suffix.strip()
+    if memory:
+        merged["instructions"] = f"{merged.get('instructions') or ''}{JOURNAL_DIRECTIVE}"
     if session_override is not None:
         merged["session"] = session_override
 
@@ -223,6 +234,8 @@ def build_harness_from_config(
     added = [*brave_tools(), *web_tools(), installed_http_request(), *extra_tools]
     kwargs["tools"] = [*existing, *(t for t in added if getattr(t, "tool_name", None) not in seen)]
 
+    if memory:
+        kwargs["memory"] = MemoryManager(stores=list(memory))
     hooks = [XAIStatePruner()] if resolved_provider == "xai" else []
     return create_harness(callback_handler=None, hooks=hooks, **kwargs)
 
@@ -256,8 +269,10 @@ def build_shopping_harness(
     model_id: str | None = None,
     location: Any | None = None,
     country: str = "US",
+    memory: Sequence[MemoryStore] = (),
 ) -> Agent:
-    """Build the Shopping Specialist child agent via ``create_harness()`` from ``shopping.json``."""
+    """Build the Shopping Specialist via ``create_harness()`` from ``shopping.json``. On its own it has its own
+    folder (``shopping``); as the Search agent's subagent it gets its parent's ``memory``."""
     config = load_search_harness_config("shopping")
     if spec is not None and spec.instructions:
         config["instructions"] = spec.instructions
@@ -269,6 +284,7 @@ def build_shopping_harness(
         effort_override=str(config.get("effort") or "medium"),
         session_override=False,
         instructions_suffix=loc_note or None,
+        memory=memory,
     )
 
 
@@ -280,6 +296,7 @@ def build_shopping_subagent_tool(
     country: str = "US",
     builder_override: Callable[[AgentSpec], Agent] | None = None,
     on_invoked: Callable[[], None] | None = None,
+    memory: Sequence[MemoryStore] = (),
 ) -> AgentTool:
     """Build the native ``subagent`` tool (``make_subagent``) backed by ``create_harness()``."""
     shopping_cfg = load_search_harness_config("shopping")
@@ -297,6 +314,7 @@ def build_shopping_subagent_tool(
             model_id=model_id,
             location=location,
             country=country,
+            memory=memory,
         )
 
     return make_subagent(
@@ -335,6 +353,7 @@ def create_search_agent(
     if level not in SEARCH_LEVELS:
         raise ValueError(f"Unknown search level {level!r}; expected one of {SEARCH_LEVELS}")
     config = load_search_harness_config(level)
+    memory = agent_memory(user_id, SEARCH_PAGE_FOLDER)
     resolved_provider = (provider or app_config.RON_SEARCH_PROVIDER).strip().lower()
     resolved_model_id = model_id or app_config.RON_SEARCH_AGENT_MODEL
     effort = resolve_search_effort(resolved_provider, resolved_model_id, level, str(config.get("effort") or "low"))
@@ -346,6 +365,7 @@ def create_search_agent(
         country=country,
         builder_override=shopping_builder,
         on_invoked=on_shopping_invoked,
+        memory=memory,
     )
 
     session_opt: bool | dict[str, Any] = (
@@ -365,6 +385,7 @@ def create_search_agent(
         extra_tools=[shopping_tool, *deep_research_tools(user_id=user_id)],
         session_override=session_opt,
         instructions_suffix="\n\n".join(suffix_parts) if suffix_parts else None,
+        memory=memory,
     )
 
 
@@ -738,6 +759,7 @@ async def stream_search_session(
     model_id: str | None = None,
     shopping_model_id: str | None = None,
     attachments: Sequence[Any] = (),
+    user_id: str = "default",
 ) -> AsyncIterator[tuple[str, dict[str, Any]]]:
     """Run the Strands Harness Search Agent (and its ``create_harness()`` shopping subagent) and yield
     ``(sse_event_name, payload)`` pairs for ``POST /search/stream``.
@@ -752,7 +774,7 @@ async def stream_search_session(
     if not follow_up and not attachments:
         async for event in _stream_answer_and_shopping(
             q, session_id=session_id, shopping=shopping, country=country, location=location,
-            provider=resolved_provider, shopping_model_id=resolved_shopping_model,
+            provider=resolved_provider, shopping_model_id=resolved_shopping_model, user_id=user_id,
         ):
             yield event
         return
@@ -767,6 +789,7 @@ async def stream_search_session(
     agent, entry = get_or_create_search_session(
         session_id or "ephemeral",
         level,
+        user_id=user_id,
         provider=resolved_provider,
         model_id=resolved_model_id,
         shopping_model_id=resolved_shopping_model,
@@ -920,12 +943,13 @@ async def _answer_events(q: str, session_id: str | None, country: str) -> AsyncI
 
 
 async def _shopping_events(
-    q: str, *, provider: str, model_id: str, location: Any | None, country: str,
+    q: str, *, provider: str, model_id: str, location: Any | None, country: str, user_id: str = "default",
 ) -> AsyncIterator[tuple[str, dict[str, Any]]]:
     """The ``create_harness()`` Shopping agent for ``q`` as ``shopping.*`` events."""
     if not search_provider_configured(provider):
         raise SearchAgentError("not_configured", f"The {provider} API key is not set", status=503)
-    shopping_agent = build_shopping_harness(provider=provider, model_id=model_id, location=location, country=country)
+    shopping_agent = build_shopping_harness(provider=provider, model_id=model_id, location=location, country=country,
+                                            memory=agent_memory(user_id, SHOPPING_FOLDER))
     text: list[str] = []
     async for raw_event in shopping_agent.stream_async(q):
         if not isinstance(raw_event, Mapping):
@@ -944,7 +968,7 @@ async def _shopping_events(
 
 async def _stream_answer_and_shopping(
     q: str, *, session_id: str | None, shopping: bool, country: str, location: Any | None,
-    provider: str, shopping_model_id: str,
+    provider: str, shopping_model_id: str, user_id: str = "default",
 ) -> AsyncIterator[tuple[str, dict[str, Any]]]:
     """A new search: the answer (Exa's, or Brave Answers while ``RON_BRAVE_TOOLS=1``) and the Shopping agent
     run side by side; one failing lane is reported as its own ``source_error`` and never stops the other."""
@@ -970,7 +994,7 @@ async def _stream_answer_and_shopping(
     lanes = [pump("agent", answer(q, session_id, country))]
     if shopping:
         lanes.append(pump("shopping", _shopping_events(q, provider=provider, model_id=shopping_model_id,
-                                                       location=location, country=country)))
+                                                       location=location, country=country, user_id=user_id)))
     tasks = [asyncio.create_task(lane) for lane in lanes]
     try:
         remaining = len(tasks)

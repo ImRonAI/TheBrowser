@@ -7,7 +7,9 @@ The agents run on ``ScriptedModel``, a Strands ``Model`` that calls ``subagent``
 from __future__ import annotations
 
 import asyncio
+import base64
 from collections.abc import AsyncGenerator, AsyncIterator, Iterator
+import io
 import json
 from pathlib import Path
 import re
@@ -15,13 +17,16 @@ from typing import Any
 
 from fastapi import FastAPI
 import httpx
+from PIL import Image
 import pytest
+from strands import Agent, tool
 from strands.models.model import Model
 from strands.multiagent import Status, Swarm
 from strands.multiagent.base import MultiAgentResult, NodeResult
 from strands.multiagent.graph import Graph
 from strands.storage import InMemoryStorage
 from strands.types.streaming import StreamEvent
+from strands.vended_plugins.context_injector import ContextInjector
 
 from agent.api.core import config as app_config
 from agent.api.core import deep_research, panel_storage
@@ -129,6 +134,25 @@ def test_every_agent_has_its_skill_and_swarms_have_no_edges() -> None:
             assert formation["edges"] == []
 
 
+def test_each_agent_gets_only_the_listed_sections_of_its_skill() -> None:
+    skills = {skill.name: skill for skill in deep_research.Skill.from_directory(deep_research.DEEP_RESEARCH_SKILLS_DIR)}
+    agents = {agent["id"]: agent for agent in _agents()}
+    assert set(deep_research.SKILL_SECTIONS) <= set(agents)
+    for agent_id, headings in deep_research.SKILL_SECTIONS.items():
+        skill = skills[agents[agent_id]["skill"]]
+        text = deep_research.skill_sections(skill.instructions, headings)
+        assert len(text) < len(skill.instructions)
+        for heading in headings:
+            assert re.search(rf"^#+ {re.escape(heading)}$", text, re.MULTILINE)
+
+
+def test_skill_sections_end_at_the_next_heading_of_their_level_and_skip_code_fences() -> None:
+    body = "# Skill\n## Keep\ntext\n```sh\n# not a heading\n```\n### Inner\nmore\n## Drop\ngone\n"
+    assert deep_research.skill_sections(body, ("Keep",)) == "## Keep\ntext\n```sh\n# not a heading\n```\n### Inner\nmore"
+    with pytest.raises(ValueError):
+        deep_research.skill_sections(body, ("Missing",))
+
+
 def test_every_swarm_agent_is_told_when_to_hand_off_and_only_the_last_check_ends_it() -> None:
     for formation in deep_research.FORMATION_TOPOLOGY["nodes"]:
         ids = [agent["id"] for agent in formation["children"]]
@@ -143,7 +167,7 @@ def test_every_swarm_agent_is_told_when_to_hand_off_and_only_the_last_check_ends
 
 def test_the_formation_is_a_graph_of_swarms_and_graphs(isolated: None) -> None:
     graph = deep_research.build_deep_research_graph(
-        session_id="dr-build", user_id="u1", model=ScriptedModel(), depth="deep"
+        session_id="dr-build", user_id="u1", model=ScriptedModel(), depth="medium"
     )
     assert isinstance(graph, Graph)
     kinds = {node_id: type(node.executor) for node_id, node in graph.nodes.items()}
@@ -161,6 +185,139 @@ def test_the_formation_is_a_graph_of_swarms_and_graphs(isolated: None) -> None:
     assert {node.node_id for node in production.entry_points} == {"pdf_publisher", "deck_producer"}
     for node in graph.nodes.values():
         assert getattr(node.executor, "_session_manager", None) is None
+
+
+def _formation_agents(graph: Graph) -> dict[str, Agent]:
+    agents: dict[str, Agent] = {}
+    for node in graph.nodes.values():
+        executor = node.executor
+        if isinstance(executor, Swarm):
+            agents.update({node_id: swarm_node.executor for node_id, swarm_node in executor.nodes.items()})
+        elif isinstance(executor, Graph):
+            for inner_id, inner in executor.nodes.items():
+                assert isinstance(inner.executor, Agent)
+                agents[inner_id] = inner.executor
+    return agents
+
+
+def test_six_levels_from_fast_to_ultra_each_with_its_prompt_and_size() -> None:
+    assert deep_research.VALID_DEPTHS == ("fast", "low", "medium", "high", "xhigh", "ultra")
+    levels = deep_research.LEVELS
+    assert (levels["fast"]["pages"], levels["ultra"]["pages"]) == ((5, 8), (30, 40))
+    for field in ("sources", "figures", "slides", "turns"):
+        values = [levels[depth][field] for depth in deep_research.VALID_DEPTHS]
+        assert values == sorted(set(values)), field
+    prompts = {depth: deep_research.level_prompt(depth, "Tuesday, November 17, 2026") for depth in deep_research.VALID_DEPTHS}
+    assert len(set(prompts.values())) == 6
+    assert "at most three per sentence" in prompts["fast"] and "Finish complete" not in prompts["fast"]
+    assert all("Finish complete" in prompts[depth] for depth in ("low", "medium", "high", "xhigh", "ultra"))
+    assert "## Sandbox" in prompts["xhigh"] and "## Sandbox" not in prompts["high"]
+    assert "a long run is expected" in prompts["ultra"]
+    assert "5 to 8 pages" in prompts["fast"] and "30 to 40 pages" in prompts["ultra"]
+    assert "You have 100 turns" in prompts["ultra"]
+
+
+def test_each_agent_has_the_level_prompt_its_budget_and_its_tools(isolated: None) -> None:
+    graph = deep_research.build_deep_research_graph(session_id="dr-tools", user_id="u1", model=ScriptedModel(),
+                                                    depth="ultra")
+    agents = _formation_agents(graph)
+    assert len(agents) == 19
+    for agent_id, agent in agents.items():
+        assert (agent.system_prompt or "").count("# Deep Research: Ultra") == 1, agent_id
+        tools = set(agent.tool_names)
+        assert ("skills" in tools) == (agent_id in deep_research.SLIDEV_AGENTS), agent_id
+        assert ("render_workflow" in tools) == (agent_id == "report_writer"), agent_id
+        assert "subagent" in tools
+    deck = agents["deck_producer"].system_prompt or ""
+    assert "three.js" in deck and "routerMode: hash" in deck
+
+
+class LoopingModel(Model):
+    """Calls ``note`` on every turn, recording the text the last user message carried into each call."""
+
+    def __init__(self) -> None:
+        self.calls: list[str] = []
+
+    def update_config(self, **model_config: Any) -> None:
+        del model_config
+
+    def get_config(self) -> dict[str, Any]:
+        return {"model_id": "looping"}
+
+    async def structured_output(
+        self, output_model: Any, prompt: Any, system_prompt: Any = None, **kwargs: Any
+    ) -> AsyncGenerator[dict[str, Any], None]:
+        raise NotImplementedError
+        yield {}
+
+    async def stream(
+        self, messages: Any, tool_specs: list[Any] | None = None, system_prompt: str | None = None, **kwargs: Any
+    ) -> AsyncIterator[StreamEvent]:
+        last = list(messages)[-1]
+        self.calls.append("".join(block.get("text", "") for block in last.get("content") or ()))
+        for event in _tool_use(f"t{len(self.calls)}", "note", {"text": str(len(self.calls))}):
+            yield event
+
+
+@tool
+def note(text: str) -> str:
+    """Note something down.
+
+    Args:
+        text: What to note.
+    """
+    return text
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("name", ["researcher", "a-subagent"])
+async def test_the_turn_budget_reminds_the_last_turns_and_ends_the_invocation(name: str) -> None:
+    budget = deep_research.TurnBudget(7, frozenset({"researcher"}))
+    model = LoopingModel()
+    agent = Agent(name=name, model=model, tools=[note], callback_handler=None,
+                  plugins=[budget, ContextInjector(budget.reminder, trigger="everyTurn")])
+    result = await agent.invoke_async("Research it.")
+    assert len(model.calls) == 7
+    assert str(result).strip() == "My 7 turns are spent."
+    reminded = [call for call in model.calls if "<system-reminder>" in call]
+    assert len(reminded) == deep_research.WRAP_UP_TURNS
+    assert "Turn 3 of 7: 4 left after this one." in model.calls[2]
+    assert "Turn 7 of 7: 0 left after this one." in model.calls[6]
+    assert ("Stop delegating" in model.calls[6]) == (name == "researcher")
+
+
+@pytest.mark.asyncio
+async def test_the_report_becomes_document_html_with_workflow_blocks_and_inline_figures(
+    isolated: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    model = ScriptedModel()
+    monkeypatch.setattr(deep_research, "build_model", lambda *args, **kwargs: model)
+    monkeypatch.setattr(deep_research, "resolve_selection", lambda *args: ("gemini", "scripted"))
+    meta = await deep_research.start_run(user_id="u1", query="Grid storage", depth="fast")
+    session_id = meta["session_id"]
+    await _wait_until_done("u1", session_id)
+    workspace = deep_research.artifacts_dir(session_id)
+    (workspace / "figures").mkdir()
+    Image.new("RGB", (3200, 1000), (85, 67, 255)).save(workspace / "figures" / "cost.png")
+    workflow = {"title": "Permitting", "steps": [{"id": "a", "label": "Apply"}, {"id": "b", "label": "Approve"}]}
+    (workspace / "report.md").write_text(
+        "# Grid storage costs\n\nCosts fell[1].\n\n![Cost per kWh](figures/cost.png)\n\n```workflow\n"
+        + json.dumps(workflow) + "\n```\n\n```embeds\n[YouTube: Tour](https://www.youtube.com/watch?v=dQw4w9WgXcQ)\n```\n",
+        encoding="utf-8",
+    )
+    document = await deep_research.report_document(user_id="u1", session_id=session_id)
+    assert document is not None and document["title"] == "Grid storage costs" and document["document_id"] is None
+    content = str(document["content"])
+    assert content.startswith("<p>Costs fell[1].</p>")
+    figure = re.search(r'<img src="data:image/webp;base64,([^"]+)"', content)
+    assert figure is not None
+    with Image.open(io.BytesIO(base64.b64decode(figure.group(1)))) as image:
+        assert (image.format, image.size) == ("WEBP", (1600, 500))
+    assert '<workflow-block data-id="' in content and 'data-title="Permitting"' in content and "<li>Apply</li>" in content
+    assert '<code class="language-embeds">' in content
+    saved = await deep_research.set_report_document(user_id="u1", session_id=session_id, document_id="doc-1")
+    assert saved is not None and saved["document_id"] == "doc-1"
+    assert await deep_research.report_document(user_id="u2", session_id=session_id) is None
 
 
 def test_filter_event_keeps_documented_fields_through_nested_streams() -> None:
@@ -225,7 +382,7 @@ async def test_a_run_streams_the_sdk_events_and_reopens_from_storage(
     monkeypatch.setattr(deep_research, "build_model", lambda *args, **kwargs: model)
     monkeypatch.setattr(deep_research, "resolve_selection", lambda *args: ("gemini", "scripted"))
 
-    meta = await deep_research.start_run(user_id="u1", query="Surface codes vs qLDPC", depth="standard")
+    meta = await deep_research.start_run(user_id="u1", query="Surface codes vs qLDPC", depth="fast")
     session_id = meta["session_id"]
     run = await _wait_until_done("u1", session_id)
     assert run["status"] == "completed", run["error"]
@@ -328,3 +485,30 @@ async def test_endpoints_are_loopback_only_and_serve_the_workspace(isolated: Non
         assert download.headers["content-disposition"] == 'attachment; filename="report.md"'
         assert (await client.get("/deep-research/runs/dr-missing")).status_code == 404
         assert (await client.post("/deep-research/runs", json={"query": "  "})).status_code == 422
+        assert (await client.post("/deep-research/runs", json={"query": "x", "depth": "deep"})).status_code == 422
+        assert (await client.get("/deep-research/runs/dr-missing/document")).status_code == 404
+        assert (await client.post("/deep-research/runs/dr-missing/document", json={"document_id": "d"})).status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_a_run_saved_before_the_levels_is_listed_and_opened(isolated: None) -> None:
+    """A run.json as the earlier version saved it: an old depth, and no document_id."""
+    legacy = {
+        "session_id": "dr-legacy", "user_id": "u1", "query": "Grid bottlenecks", "context": "", "title": "Grid",
+        "depth": "deep", "status": "failed", "active": False, "created_at": "2026-11-17T11:49:13+00:00",
+        "updated_at": "2026-11-17T12:05:01+00:00", "completed_at": None,
+        "selection": {"provider": "mistral", "model_id": "mistral-large-latest", "reasoning_effort": None},
+        "error": "The server stopped during this run.",
+    }
+    storage = panel_storage.get_user_session_storage("u1")
+    await storage.write("deep_research/runs/dr-legacy/run.json", json.dumps(legacy).encode())
+    await storage.write("deep_research/runs/dr-legacy/events.json", b"[]")
+    app = FastAPI()
+    app.include_router(deep_research_endpoints.router)
+    local = httpx.ASGITransport(app=app, client=("127.0.0.1", 52100))
+    async with httpx.AsyncClient(transport=local, base_url="http://test") as client:
+        listed = await client.get("/deep-research/runs", params={"user_id": "u1"})
+        assert listed.status_code == 200
+        assert [(run["depth"], run["document_id"]) for run in listed.json()["runs"]] == [("medium", None)]
+        opened = await client.get("/deep-research/runs/dr-legacy", params={"user_id": "u1"})
+        assert opened.status_code == 200 and opened.json()["depth"] == "medium"
