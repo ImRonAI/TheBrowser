@@ -154,9 +154,11 @@ def test_real_constructor_defaults_stream_and_complete_cleanup(offline):
     assert kwargs["background_tasks"] is False
     assert kwargs["retry_strategy"]._max_attempts == 6
     names = set(agent.tool_registry.registry)
-    # User-mandated core set is always registered; think is Perplexity-only.
+    # User-mandated core set is always registered, Brave's while RON_BRAVE_TOOLS=1 (off here); think is Perplexity-only.
+    from agent.api.core.brave_tools import BRAVE_TOOL_NAMES
     from agent.api.core.panel_tools import CORE_TOOL_NAMES
-    assert set(CORE_TOOL_NAMES) <= names
+    assert set(CORE_TOOL_NAMES) - set(BRAVE_TOOL_NAMES) <= names
+    assert not set(BRAVE_TOOL_NAMES) & names
     assert {"ask_user", "think", "research_review", "reasoning_swarm", "nested_research_review",
             "retrieve_offloaded_content"} <= names
     assert "review" not in names and "load_tool" not in names and "discover_tools" not in names

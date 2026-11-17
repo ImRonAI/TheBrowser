@@ -80,6 +80,7 @@ from strands_harness import create_harness
 from agent.api.core import config as app_config
 from agent.api.core.articles import ArticleUnavailableError, NonRetryableSourceError, extract_article
 from agent.api.core.brave_tools import brave_tools
+from agent.api.core.web_tools import web_tools
 from agent.api.core.context_agent import context_store
 from agent.api.core.dreaming import JOURNAL_DIRECTIVE, agent_memory
 from agent.api.core.panel_storage import get_user_session_storage
@@ -2367,17 +2368,10 @@ def build_leaf_tool_pool(
     _register(search_saved_context)
     _register(compile_scholarly_pdf)
     _register(compile_slidev_deck)
-    # Tavily and Exa each require their own API key, so each joins the pool only where it is configured.
-    if os.getenv("TAVILY_API_KEY"):
-        from strands_tools import tavily
-
-        for tavily_tool in (tavily.tavily_search, tavily.tavily_extract, tavily.tavily_crawl, tavily.tavily_map):
-            _register(tavily_tool)
-    if os.getenv("EXA_API_KEY"):
-        from strands_tools import exa
-
-        for exa_tool in (exa.exa_search, exa.exa_get_contents):
-            _register(exa_tool)
+    # Tavily, Exa, Bright Data and Olostep each require their own API key, so each joins the pool only where it is
+    # configured (core/web_tools.py).
+    for web_tool in web_tools():
+        _register(web_tool)
 
     for extra in extra_leaf_tools:
         _register(extra)

@@ -88,6 +88,12 @@ def live_host_tools(tools_dir: Path) -> list[AgentTool]:
     """
     tools: list[AgentTool] = []
     for name in LIVE_HOST_TOOLS:
+        if name == "http_request":
+            # Strands' vended http_request, as every agent here has it.
+            from agent.api.core.panel_tools import installed_http_request
+
+            tools.append(installed_http_request())
+            continue
         module = importlib.import_module(f"strands_tools.{name}")
         loaded = [value for value in load_tools_from_module(module, name) if value.tool_name == name]
         if not loaded:
@@ -97,10 +103,12 @@ def live_host_tools(tools_dir: Path) -> list[AgentTool]:
         root = tools_dir.expanduser().resolve()
         search = import_vendored_module(root, root / "research" / "perplexity_search_api.py").perplexity_search_api
         tools.append(tool(name="perplexity_search")(search.__wrapped__))
-    # Brave Answers + Brave Search vertical tools, the same native async tools the text agent carries.
+    # Brave (while RON_BRAVE_TOOLS turns it on), Tavily, Exa, Bright Data and Olostep, as the text agent carries them.
     from agent.api.core.brave_tools import brave_tools
+    from agent.api.core.web_tools import web_tools
 
     tools.extend(brave_tools())
+    tools.extend(web_tools())
     from agent.api.core.render_ui_tool import render_ui_tools
 
     tools.extend(render_ui_tools())

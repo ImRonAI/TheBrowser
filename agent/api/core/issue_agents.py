@@ -348,6 +348,7 @@ def create_issue_chat_agent(*, user_id: str, session_id: str, issue_id: str, pro
     from agent.api.core.a2a_tools import a2a_tools
     from agent.api.core.brave_tools import brave_tools
     from agent.api.core.media_understanding import media_tools
+    from agent.api.core.web_tools import web_tools
     from agent.api.core.panel_storage import get_user_session_storage
     from agent.api.core.panel_tools import installed_http_request
     from agent.api.core.render_ui_tool import render_ui_tools
@@ -387,6 +388,7 @@ def create_issue_chat_agent(*, user_id: str, session_id: str, issue_id: str, pro
             installed_http_request(),
             *media,
             *brave_tools(),
+            *web_tools(),
             *deep_research_tools(user_id=user_id),
             *render_ui_tools(),
             *learned,
@@ -547,6 +549,7 @@ class IssueAgentRuntime:
                     additional_tools=assigned)
                 from agent.api.core.a2a_tools import a2a_tools
                 from agent.api.core.brave_tools import brave_tools
+                from agent.api.core.web_tools import web_tools
                 from agent.api.core.deep_research_tools import deep_research_tools
                 from agent.api.core.media_understanding import media_tools
                 from agent.api.core.panel_tools import installed_http_request
@@ -556,7 +559,7 @@ class IssueAgentRuntime:
                     provider=agent_record["provider"], model_id=agent_record["model_id"])]
                 agent = config_to_agent({"name": "Task Ren", "model": agent_record["model_id"], "prompt": prompt + JOURNAL_DIRECTIVE, "tools": []},
                     model=model,
-                    tools=[*assigned, *intake, *brave_tools(), *deep_research_tools(user_id=service.identity.user_id), *learned, *a2a_tools()],
+                    tools=[*assigned, *intake, *brave_tools(), *web_tools(), *deep_research_tools(user_id=service.identity.user_id), *learned, *a2a_tools()],
                     description="Private canonical issue assistant",
                     memory_manager={"stores": [get_teaching_service().get_memory_store(service.identity.user_id, agent_scope),
                                                *agent_memory(service.identity.user_id, agent_scope)],

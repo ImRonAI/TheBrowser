@@ -6,7 +6,7 @@ description: 'When the user wants to set up or audit analytics, or asks whether 
   never full-period spend by partial-period results. For conversions in ad platforms,
   see conversion-tracking. For attribution or platforms that over-claim, see attribution.
   For tests, see ab-testing.'
-allowed-tools: brave_rich_answer brave_answer brave_web_search extract_article_content
+allowed-tools: tavily_search exa_search olostep_search_web olostep_answers tavily_extract exa_get_contents olostep_scrape_website bright_data extract_article_content
   search_saved_context
 license: MIT
 compatibility: skills.sh / Ren Deep Research (Strands SDK 1.57.2 / strands-harness
