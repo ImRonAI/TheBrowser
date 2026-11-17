@@ -199,7 +199,7 @@ def test_chat_providers_allowlist_limits_picker_catalogue_and_chat(monkeypatch):
     body = client.get("/models").json()
     assert listed == ["nim", "mistral"]
     assert [item["provider"] for item in body["data"]] == ["nim", "mistral"]
-    assert (body["default_provider"], body["default_model"]) == ("nim", app_config.NIM_DEFAULT_MODEL)
+    assert (body["default_provider"], body["default_model"]) == ("mistral", app_config.MISTRAL_DEFAULT_MODEL)
     for provider, model in (("gemini", "gemini-flash-lite-latest"), ("", "gemini-flash-lite-latest"), ("xai", "grok-4.3")):
         res = client.post("/chat", json={"session_id": "s", "user_id": "u", "message": "hi", "provider": provider, "model": model})
         assert res.status_code == 400
