@@ -9,15 +9,10 @@ the rest). Each provider joins only where its key is set.
 
 from __future__ import annotations
 
-import logging
-import threading
-
-from strands.tools.mcp import MCPClient
 from strands.types.tools import AgentTool
 
 from agent.api.core import config as app_config
-
-logger = logging.getLogger(__name__)
+from agent.api.core.hosted_mcp import HostedMCP
 
 #: The vended tools' names, and the prefix of Olostep's.
 TAVILY_TOOL_NAMES: tuple[str, ...] = ("tavily_search", "tavily_extract", "tavily_crawl", "tavily_map")
@@ -25,9 +20,7 @@ EXA_TOOL_NAMES: tuple[str, ...] = ("exa_search", "exa_get_contents")
 BRIGHT_DATA_TOOL_NAMES: tuple[str, ...] = ("bright_data",)
 OLOSTEP_PREFIX = "olostep"
 
-_olostep_lock = threading.Lock()
-_olostep_client: MCPClient | None = None
-_olostep_tools: list[AgentTool] = []
+_olostep = HostedMCP(OLOSTEP_PREFIX)
 
 
 def is_web_tool(name: str) -> bool:
@@ -48,29 +41,10 @@ def configured_vended_names() -> tuple[str, ...]:
 
 
 def olostep_tools() -> list[AgentTool]:
-    """Olostep's MCP tools from the process-wide client, started on first use; none without ``OLOSTEP_API_KEY``.
-
-    A server that can't be reached leaves Olostep out of this agent and is tried again for the next.
-    """
-    global _olostep_client, _olostep_tools
+    """Olostep's MCP tools from the process-wide client (``HostedMCP``); none without ``OLOSTEP_API_KEY``."""
     if not app_config.OLOSTEP_API_KEY:
         return []
-    with _olostep_lock:
-        if _olostep_client is None:
-            client = MCPClient(
-                url=app_config.OLOSTEP_MCP_URL,
-                headers={"Authorization": f"Bearer {app_config.OLOSTEP_API_KEY}"},
-                prefix=OLOSTEP_PREFIX,
-            )
-            try:
-                client.start()
-                _olostep_tools = list(client.list_tools_sync())
-            except Exception:
-                logger.exception("Olostep's MCP server didn't start; its tools are left out")
-                client.stop(None, None, None)
-                return []
-            _olostep_client = client
-        return list(_olostep_tools)
+    return _olostep.tools(app_config.OLOSTEP_MCP_URL, app_config.OLOSTEP_API_KEY)
 
 
 def web_tools() -> list[AgentTool]:

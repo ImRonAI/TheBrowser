@@ -108,7 +108,7 @@ def test_article_reaches_native_model_and_restored_history(monkeypatch, destinat
                 if destination != 'panel':
                     assert f'You are {destination.title()} Agent.' in builds[0]['system_prompt']
                 context_tools = {tool.tool_name for tool in builds[0]['extra_tools']}
-                assert context_tools == ({'update_interest_graph', 'recommend_agent'} if destination == 'context' else
+                assert context_tools == ({'update_interest_graph', 'recommend_agent', 'schedule_agent'} if destination == 'context' else
                                          WORKSPACE_TOOLS if destination == 'panel' else set())
                 # Only Ren's own panel chat is told about its document and project tools.
                 from agent.api.core.workspace_tools import workspace_prompt

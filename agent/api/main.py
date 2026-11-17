@@ -65,11 +65,12 @@ async def lifespan(app: FastAPI):
     chat.bind_repair_service(repairs)
     # Saved specialists run at the cadence their owner picked, each run a panel session on this runtime
     # (core/agent_schedules.py); the Context widget shows finished runs as notifications.
-    from agent.api.core.agent_schedules import AgentScheduler
+    from agent.api.core.agent_schedules import AgentScheduler, bind_scheduler
     from agent.api.core.config import AGENT_SCHEDULE_TICK_SECONDS, AGENT_SCHEDULES_ENABLED
 
     schedules = AgentScheduler(manager, tick=AGENT_SCHEDULE_TICK_SECONDS, enabled=AGENT_SCHEDULES_ENABLED)
     app.state.agent_scheduler = schedules
+    bind_scheduler(schedules)
     schedules.start()
     mounted_routes = []
     try:
