@@ -318,3 +318,59 @@ def test_the_dream_runs_once_the_user_has_been_idle(monkeypatch: pytest.MonkeyPa
         assert model.calls == 1 and await _keys("memory/journal/") == []
 
     asyncio.run(run())
+
+
+def test_a_review_corrects_any_agents_topic_and_teaches_every_later_dream(monkeypatch: pytest.MonkeyPatch) -> None:
+    model = _dreams_with(monkeypatch,
+        [("add_memory", {"entries": ["# Travel\nThe user flies from SLC."], "stores": ["brain/panel"]})],
+        "Done.",
+        [("search_memory", {"query": "travel"})],
+        [("add_memory", {"entries": ["# Travel\nThe user flies from Ogden."], "stores": ["brain/panel"]}),
+         ("add_memory", {"entries": ["# Airports\nAsk before storing an airport."], "stores": ["brain/dreaming"]})],
+    )
+
+    async def run() -> None:
+        await dreaming.agent_memory("u1", "panel")[1].add("flies from SLC")
+        version = await dreaming.dream("u1")
+        assert version is not None
+        await dreaming.dream_feedback("u1", version, [("memory/brain/panel/travel.md", False, "Ogden, not SLC")])
+        assert await dreaming.dream("u1") is not None
+        storage = panel_storage.get_user_session_storage("u1")
+        assert (await storage.read("memory/brain/panel/travel.md") or b"").decode() == "# Travel\nThe user flies from Ogden."
+        await dreaming.agent_memory("u1", "panel")[1].add("likes aisle seats")
+        await dreaming.dream("u1")
+
+    asyncio.run(run())
+    review = json.loads(model.seen[2])[0]["content"][0]["text"]
+    assert "Agent: dreaming\nIts own store: brain/dreaming\n" in review and "Topics in brain/panel: travel" in review
+    assert "- memory/brain/panel/travel.md: wrong. Ogden, not SLC" in review
+    later = json.loads(model.seen[-1])[0]["content"][0]["text"]
+    assert later.startswith("How this user wants their memory kept, from their reviews of earlier dreams:\n# Airports")
+
+
+def test_a_countdown_cut_by_a_restart_is_resumed(monkeypatch: pytest.MonkeyPatch) -> None:
+    from agent.api.core import config
+
+    model = _dreams_with(monkeypatch)
+    monkeypatch.setattr(config, "RON_MEMORY_IDLE_SECONDS", 0.05)
+
+    async def run() -> None:
+        await dreaming.agent_memory("u1", "panel")[1].add("first")
+        await asyncio.gather(*dreaming._tasks)
+        assert await panel_storage.get_panel_storage().list("panel/dreams-pending/")
+        for timer in dreaming._timers.values():  # the process stops
+            timer.cancel()
+        dreaming._timers.clear()
+        await dreaming.resume_dreams()
+        await asyncio.sleep(0.1)
+        await asyncio.gather(*dreaming._tasks)
+        assert model.calls == 1 and await _keys("memory/journal/") == []
+        assert await panel_storage.get_panel_storage().list("panel/dreams-pending/") == []
+
+    asyncio.run(run())
+
+
+def test_a_subagent_inherits_its_parents_search_and_journal() -> None:
+    tools = {tool.tool_name: tool for tool in dreaming.agent_memory_tools("u1", "panel")}
+    assert set(tools) == {"search_memory", "journal"}
+    assert dreaming.inherited_memory({**tools, "shell": tools["journal"]}) == [tools["search_memory"], tools["journal"]]

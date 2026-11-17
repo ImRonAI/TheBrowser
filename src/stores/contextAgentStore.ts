@@ -12,7 +12,7 @@ import { API_BASE_URL } from '@/lib/api-base'
 import { cancelRon, ronSessionId, runRon } from '@/lib/ron-run'
 import {
   approveAgentTurn, browsingDue, browsingTurn, cadenceLabel, contextAddedTurn, contextResults, createContextClient, dataUrlBlob, latestReply,
-  phoneTurn, recordVisit, whenLabel, type AgentCadence, type AgentRecommendation, type AgentRun, type ContextItem, type NewContextFile, type NewContextItem,
+  phoneTurn, recordVisit, whenLabel, type AgentCadence, type AgentRecommendation, type AgentRun, type ContextItem, type Dream, type TopicReview, type NewContextFile, type NewContextItem,
   type PhoneActivity, type SpecialistAgent, type Visit,
 } from '@/lib/context-api'
 import { startScreenRecording, type ScreenRecording } from '@/lib/screen-recorder'
@@ -52,6 +52,10 @@ interface ContextAgentState {
   busy: string | null
   /** The specialists' runs, newest first (`/context/runs`); finished unseen ones are the widget's notifications. */
   runs: AgentRun[]
+  /** The newest dream the user has not reviewed (`/context/dream`): the widget's memory notification. */
+  dream: Dream | null
+  /** The dream's checklist is open (ren mobile gives the widget the whole screen for it). */
+  reviewingDream: boolean
   /** Agent id whose schedule is being saved, or whose Run now is starting. */
   scheduling: string | null
   starting: string | null
@@ -83,6 +87,10 @@ interface ContextAgentState {
   runNow: (agent: SpecialistAgent) => Promise<void>
   /** The user opened or dismissed this run's notification. */
   markRunSeen: (runId: string) => Promise<void>
+  refreshDream: () => Promise<void>
+  setReviewingDream: (reviewing: boolean) => void
+  /** Close the dream's notification; topics marked wrong or commented go to the dreaming agent. Empty dismisses. */
+  reviewDream: (topics: TopicReview[]) => Promise<void>
   ask: (question: string) => Promise<void>
   cancel: () => Promise<void>
 }
@@ -141,14 +149,15 @@ export const useContextAgentStore = create<ContextAgentState>()(persist((set, ge
   return {
     userId: 'default', watchBrowsing: true, visits: [], recommendations: [], handled: [], agentInterests: {}, tab: 'interests', pinned: false, asks: [], unseen: false,
     status: 'idle', activity: '', error: '', notice: '', items: [], itemsLoaded: false, agents: [], agentsSignInRequired: false,
-    building: null, recordingSince: null, busy: null, runs: [], scheduling: null, starting: null,
+    building: null, recordingSince: null, busy: null, runs: [], dream: null, reviewingDream: false, scheduling: null, starting: null,
 
     setUser: (userId) => {
       if (userId === get().userId && get().itemsLoaded) return
-      set({ userId, items: [], itemsLoaded: false, agents: [], agentsSignInRequired: false, runs: [], error: '', notice: '' })
+      set({ userId, items: [], itemsLoaded: false, agents: [], agentsSignInRequired: false, runs: [], dream: null, reviewingDream: false, error: '', notice: '' })
       void get().refreshItems()
       void get().refreshAgents()
       void get().refreshRuns()
+      void get().refreshDream()
     },
     setTab: (tab) => set({ tab, ...(tab === 'agents' ? { unseen: false } : {}) }),
     setPinned: (pinned) => set({ pinned }),
@@ -358,6 +367,29 @@ export const useContextAgentStore = create<ContextAgentState>()(persist((set, ge
         await client(get().userId).markRunSeen(runId)
       } catch (error) {
         set({ error: `Could not mark the run as read: ${messageOf(error)}` })
+      }
+    },
+
+    refreshDream: async () => {
+      const userId = get().userId
+      try {
+        const dream = await client(userId).dream()
+        if (get().userId === userId && dream?.version !== get().dream?.version) set({ dream, reviewingDream: false })
+      } catch {
+        // Best effort, like the runs: the next poll tries again.
+      }
+    },
+
+    setReviewingDream: (reviewingDream) => set({ reviewingDream }),
+
+    reviewDream: async (topics) => {
+      const dream = get().dream
+      if (!dream) return
+      set({ dream: null, reviewingDream: false })
+      try {
+        await client(get().userId).reviewDream(dream.version, topics)
+      } catch (error) {
+        set({ dream, error: `Your review was not sent: ${messageOf(error)}` })
       }
     },
 

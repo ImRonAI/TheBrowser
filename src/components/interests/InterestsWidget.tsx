@@ -16,6 +16,7 @@ import { ContextTray } from './ContextTray'
 import { ContextAgents } from './ContextAgents'
 import { ContextAsk } from './ContextAsk'
 import { AgentRunNotice } from './AgentRuns'
+import { DreamNotice } from './DreamNotice'
 import { runNotifications } from '@/lib/context-api'
 
 const TABS: { id: ContextTab; label: string }[] = [
@@ -79,6 +80,8 @@ export function InterestsWidget() {
       </AnimatePresence>
       {/* A specialist's finished run (scheduled or Run now): Review opens its session in the Agent Panel. */}
       {!isExpanded && !hidden && <AgentRunNotice />}
+      {/* A dream that filed new memories: Review is a checklist with comments for the dreaming agent. */}
+      {!isExpanded && !hidden && <DreamNotice />}
       <AnimatePresence>
         {isExpanded && <ExpandedPanel key="expanded" onClose={close} />}
       </AnimatePresence>

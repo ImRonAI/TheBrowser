@@ -481,7 +481,7 @@ async def _create_runtime_agent(*, user_id, session_id, selection, options, runt
         else system_prompt_for(selection["provider"], browser=browser) + {
             "panel": "",
             "search": "\nYou are Search Agent. Research the user's question, verify claims with search tools, and cite original sources.",
-            "context": context_agent_prompt(),
+            "context": context_agent_prompt(user_id),
         }[destination] + agent_prompt
     )
     return await asyncio.to_thread(

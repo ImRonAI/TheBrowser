@@ -61,6 +61,12 @@ export interface AgentRun {
   status: AgentRunStatus; summary: string; error: string; started_at: string; finished_at: string | null; seen_at: string | null
 }
 
+/** A dream's notification (`GET /context/dream`): each topic it changed, as it reads now (null: the dream deleted it). */
+export interface DreamTopic { key: string; text: string | null }
+export interface Dream { version: string; topics: DreamTopic[] }
+/** The user's review of one topic: right or wrong, with an optional comment for the dreaming agent. */
+export interface TopicReview { key: string; right: boolean; comment: string }
+
 export type InterestCategory = 'technology' | 'design' | 'ai' | 'privacy' | 'productivity' | 'learning' | 'entertainment' | 'news' | 'other'
 export interface AgentInterest { label: string; weight: number; category: InterestCategory; reason: string }
 export interface AgentRecommendation { id: string; name: string; description: string; interest: string; rationale: string; tools: string[]; skills: string[] }
@@ -133,7 +139,28 @@ export function createContextClient(apiBase: string, userId: string, fetcher: ty
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user_id: userId }),
       })
     },
+    /** The newest dream the user has not reviewed or dismissed, or null. */
+    dream: async (): Promise<Dream | null> => (await json<{ dream: Dream | null }>(`/context/dream?user_id=${user}`)).dream,
+    /** Close the dream's notification; a non-empty review goes to the dreaming agent. */
+    reviewDream: async (version: string, topics: TopicReview[]): Promise<void> => {
+      await json(`/context/dream/${encodeURIComponent(version)}`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user_id: userId, topics }),
+      })
+    },
   }
+}
+
+/** When the dream ran, as ISO: its version is `YYYYMMDDTHHMMSSffffff` in UTC (core/dreaming.py). */
+export function dreamTime(version: string): string {
+  const v = version
+  return `${v.slice(0, 4)}-${v.slice(4, 6)}-${v.slice(6, 8)}T${v.slice(9, 11)}:${v.slice(11, 13)}:${v.slice(13, 15)}Z`
+}
+
+/** "memory/brain/<agent>/<topic>.md" as the notice names it: the topic's heading, else its file name, and the agent. */
+export function dreamTopicLabel(topic: DreamTopic): { title: string; agent: string } {
+  const [, , agent = '', file = ''] = topic.key.split('/')
+  const heading = topic.text?.split('\n', 1)[0].replace(/^#+\s*/, '').trim()
+  return { title: heading || file.replace(/\.md$/, '').replace(/-/g, ' '), agent }
 }
 
 // ---------------------------------------------------------------- scheduled runs

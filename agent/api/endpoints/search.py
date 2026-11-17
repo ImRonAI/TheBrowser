@@ -48,6 +48,7 @@ from agent.api.core.config import (
     brave_tools_enabled,
     perplexity_agent_api_enabled,
 )
+from agent.api.endpoints.chat import Identifier
 from agent.api.core.prompt_attachments import ATTACHMENTS_MAX, ATTACHMENTS_TOTAL_MAX, PromptAttachment
 from agent.api.core.search_agent import (
     LEVEL_REASONING_EFFORT,
@@ -79,6 +80,8 @@ class SearchRequest(BaseModel):
     country: str = Field(default="US", min_length=2, max_length=3)
     location: FeedLocation | None = None
     shopping: bool = True
+    #: Whose second brain the Search and Shopping agents read and journal to (``core/dreaming.py``).
+    user_id: Identifier = "default"
     session_id: str | None = Field(default=None, max_length=128)
     follow_up: bool = False
     #: Context attached to this search (``src/lib/search-attachments.ts``); answered by the Search agent.
@@ -229,6 +232,7 @@ async def search_stream(body: SearchRequest, request: Request) -> StreamingRespo
                 country=body.country,
                 location=body.location,
                 attachments=body.prompt_attachments,
+                user_id=body.user_id,
             ):
                 await queue.put((ev_name, payload))
         except SearchAgentError as error:

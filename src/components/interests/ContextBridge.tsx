@@ -10,7 +10,7 @@ const RUNS_CHECK_MS = 30_000
  * Feeds the Context Agent: the active tab's page visits (title + URL, never page content), the page
  * context menu's "Add to Ron context" entries, and a timer that sends batched browsing turns. Also keeps the
  * specialists' runs fresh (every 30 s and when the window regains focus), so a finished scheduled run shows as a
- * notification on the orb.
+ * notification on the orb, as does a dream that filed new memories.
  */
 export function ContextBridge() {
   const userId = useAuthStore((state) => state.user?.id || 'default')
@@ -33,7 +33,10 @@ export function ContextBridge() {
   }, [])
 
   useEffect(() => {
-    const refresh = () => { void useContextAgentStore.getState().refreshRuns() }
+    const refresh = () => {
+      void useContextAgentStore.getState().refreshRuns()
+      void useContextAgentStore.getState().refreshDream()
+    }
     const timer = window.setInterval(refresh, RUNS_CHECK_MS)
     window.addEventListener('focus', refresh)
     return () => { window.clearInterval(timer); window.removeEventListener('focus', refresh) }

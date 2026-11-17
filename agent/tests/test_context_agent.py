@@ -122,20 +122,20 @@ def test_recommend_agent_returns_a_recommendation_with_an_id() -> None:
 
 def test_prompt_names_the_agent_tools_mcp_server_only_when_configured(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("RON_AGENT_TOOLS_MCP_URL", raising=False)
-    assert "ron_tools" not in ctx.context_agent_prompt()
+    assert "ron_tools" not in ctx.context_agent_prompt("u1")
     monkeypatch.setenv("RON_AGENT_TOOLS_MCP_URL", "https://tools.example.com/mcp")
-    assert '"ron_tools": {"url": "https://tools.example.com/mcp"' in ctx.context_agent_prompt()
+    assert '"ron_tools": {"url": "https://tools.example.com/mcp"' in ctx.context_agent_prompt("u1")
 
 
 def test_opencode_and_the_computer_join_only_when_the_computer_is_configured(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(ctx.app_config, "COMPUTER_MCP_URL", "")
     monkeypatch.setattr(ctx.app_config, "COMPUTER_MCP_TOKEN", "")
-    assert "opencode run" not in ctx.context_agent_prompt()
+    assert "opencode run" not in ctx.context_agent_prompt("u1")
     names = [t.tool_name for t in ctx.context_agent_tools("default")]
     assert names == ["update_interest_graph", "recommend_agent", "schedule_agent"]
     monkeypatch.setattr(ctx.app_config, "COMPUTER_MCP_URL", "https://computer.example.com/mcp")
     monkeypatch.setattr(ctx.app_config, "COMPUTER_MCP_TOKEN", "token")
-    assert "opencode run --standalone --auto" in ctx.context_agent_prompt()
+    assert "REN_USER_ID=u1 opencode run --standalone --auto" in ctx.context_agent_prompt("u1")
     assert "register_application" in [t.tool_name for t in ctx.context_agent_tools("default")]
 
 
@@ -237,3 +237,28 @@ def test_profile_follows_the_account_and_keeps_the_newer_save(client: TestClient
     assert client.get("/context/profile", params={"user_id": "default"}).status_code == 401
     assert client.put("/context/profile", json={"user_id": "default", "profile": profile}).status_code == 401
     assert client.put("/context/profile", json={"user_id": user, "profile": {**profile, "extra": 1}}).status_code == 422
+
+
+def test_a_dream_notifies_once_and_its_review_reaches_the_dreaming_journal(client: TestClient,
+                                                                           monkeypatch: pytest.MonkeyPatch) -> None:
+    from agent.api.core import dreaming
+
+    monkeypatch.setattr(dreaming, "_timers", {})
+    assert client.get("/context/dream", params={"user_id": "u1"}).json() == {"dream": None}
+    storage = panel_storage.get_user_session_storage("u1")
+    version = "20261117T201500123456"
+    asyncio.run(storage.write("memory/brain/panel/travel.md", b"# Travel\nThe user flies from SLC."))
+    asyncio.run(storage.write(f"memory/dreams/{version}.json",
+                              json.dumps({"memory/brain/panel/travel.md": None, "memory/brain/panel/old.md": "# Old"}).encode()))
+    dream = client.get("/context/dream", params={"user_id": "u1"}).json()["dream"]
+    assert dream == {"version": version, "topics": [
+        {"key": "memory/brain/panel/travel.md", "text": "# Travel\nThe user flies from SLC."},
+        {"key": "memory/brain/panel/old.md", "text": None}]}
+    review = {"user_id": "u1", "topics": [{"key": "memory/brain/panel/travel.md", "right": False, "comment": "Ogden"},
+                                          {"key": "memory/brain/panel/old.md", "right": True}]}
+    assert client.post(f"/context/dream/{version}", json=review).json() == {"reviewed": version}
+    assert client.get("/context/dream", params={"user_id": "u1"}).json() == {"dream": None}
+    notes = asyncio.run(dreaming.Journal("u1", dreaming.DREAMING).notes())
+    assert "- memory/brain/panel/travel.md: wrong. Ogden\n- memory/brain/panel/old.md: right" in notes
+    assert client.post("/context/dream/latest", json=review).status_code == 422
+    assert client.post(f"/context/dream/{version}", json={"topics": [{"key": "../x", "right": True}]}).status_code == 422
