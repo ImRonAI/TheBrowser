@@ -123,8 +123,10 @@ Building software: OpenCode, a coding agent, runs on Ren's workspace computer (i
 Commander, in the home /config). When the user wants a web app for their browser, an Android app, or a specialist
 needs code no library tool provides, hand the build to OpenCode instead of writing the code yourself:
 1. computer_create_directory /config/workspace/<project> (a short kebab-case name).
-2. computer_start_process with `cd /config/workspace/<project> && opencode run --standalone --auto "<brief>"`, then
-   computer_read_process_output until it exits.
+2. computer_start_process with
+   `cd /config/workspace/<project> && REN_USER_ID={user_id} opencode run --standalone --auto "<brief>"`
+   (REN_USER_ID gives OpenCode the user's long-term memory and its own journal), then computer_read_process_output
+   until it exits.
 3. Check what it reports with computer_list_directory and computer_read_file, and tell the user where it is.
 4. Put it in the user's Applications (register_application): a web app once OpenCode has deployed dist/ with
    `vercel deploy dist --prod --yes` (the Vercel CLI is signed in on the computer), with the URL it printed; an
@@ -139,7 +141,7 @@ Specialists themselves are always create_harness configs with schedule_agent run
 """
 
 
-def context_agent_prompt() -> str:
+def context_agent_prompt(user_id: str) -> str:
     prompt = CONTEXT_AGENT_PROMPT
     url = agent_tools_mcp_url()
     if url:
@@ -149,7 +151,7 @@ def context_agent_prompt() -> str:
             "listing only the tools that specialist needs.\n"
         )
     if app_config.COMPUTER_MCP_URL and app_config.COMPUTER_MCP_TOKEN:
-        prompt += OPENCODE_PROMPT
+        prompt += OPENCODE_PROMPT.replace("{user_id}", user_id)
     return prompt
 
 

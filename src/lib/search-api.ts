@@ -41,6 +41,8 @@ export interface SearchRequestBody {
   country?: string
   location?: { location?: string; latitude?: number; longitude?: number }
   shopping?: boolean
+  /** Whose second brain the Search and Shopping agents use; `default` for a guest. */
+  user_id?: string
   session_id?: string | null
   follow_up?: boolean
   /** Context attached on the home page; the backend answers such a search with the Search agent. */

@@ -22,7 +22,9 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from starlette.websockets import WebSocketState
 from strands import LocalAgent, ToolContext, tool
 from strands.bidi import BidiAgent
+from strands.memory import MemoryManager
 
+from agent.api.core.dreaming import agent_memory
 from agent.api.core.live_io import LessonStopped, TeachingObserveInput, WebSocketOutput, local_origin
 from agent.api.core.native_sop import native_sop_prompt
 from agent.api.core.teaching import _scope, get_teaching_service
@@ -44,7 +46,10 @@ SOPS_DIR = Path(__file__).resolve().parents[2] / "sops"
 TEACHING_MODELS = (DEFAULT_MODEL,)
 
 #: Tools owned by the lesson itself; always allowed by the workspace policy.
-LESSON_TOOL_NAMES = frozenset({"journal", "copy_into_lesson", "finish_observation", "list_learned_skills", "use_skill"})
+LESSON_TOOL_NAMES = frozenset({"journal", "copy_into_lesson", "finish_observation", "list_learned_skills", "use_skill",
+                               "search_memory"})
+RECORDER_MEMORY = (" Before you ask the user something they may have told Ren before, check long-term memory with "
+                   "search_memory. Never mention that you checked it.")
 
 _OBSERVER_PROMPT = (
     "You are Ren in a live teaching lesson. The user is showing you, on their shared screen, how "
@@ -192,6 +197,9 @@ async def observe(websocket: WebSocket, session_id: str, user_id: str, agent_id:
     finished = False
     inputs = TeachingObserveInput(websocket,
         stop_grace_seconds=float(os.getenv("RON_TEACHING_STOP_GRACE_SECONDS", "20")))
+    # The recorder's second brain: it searches the whole brain, and what the user settles in the debrief
+    # goes into its own journal, which the dream files into brain/teaching-recorder (core/dreaming.py).
+    brain, recorder_journal = agent_memory(user_id, "teaching-recorder")
 
     async def journal(kind: str, text: str) -> None:
         # Entries after "Finish demonstration" are the spoken debrief: corrections, answers and the
@@ -201,6 +209,8 @@ async def observe(websocket: WebSocket, session_id: str, user_id: str, agent_id:
         elif inputs.debriefing and kind in ("user_speech", "assistant_speech"):
             kind = f"debrief_{kind}"
         entry = await service.append_journal(user_id, agent_id, session_id, text, kind)
+        if kind == "summary" or kind.startswith("debrief"):
+            await recorder_journal.add(f"{kind}: {text}")
         logger.info("lesson=<%s>, sequence=<%d>, kind=<%s>, chars=<%d> | journaled", session_id, entry["sequence"], kind, len(text))
         if websocket.client_state == WebSocketState.CONNECTED:
             await websocket.send_text(json.dumps({"type": "journal", "entry": entry}))
@@ -229,8 +239,9 @@ async def observe(websocket: WebSocket, session_id: str, user_id: str, agent_id:
         agent = BidiAgent(
             model=live_model(model, voice, effort),
             name="Ren skill teacher",
-            tools=[create_lesson_journal(workspace, journal), create_copy_tool(workspace, journal), finish_observation, *learned],
-            system_prompt=_OBSERVER_PROMPT + f" The lesson workspace is {workspace}.",
+            tools=[create_lesson_journal(workspace, journal), create_copy_tool(workspace, journal), finish_observation, *learned,
+                   *MemoryManager(stores=[brain], injection=False).tools],
+            system_prompt=_OBSERVER_PROMPT + f" The lesson workspace is {workspace}." + RECORDER_MEMORY,
             messages=cast(Any, initial_seed(session, sop_prompt)),
             hooks=[LessonWorkspacePolicy(workspace, lesson_tools=set(LESSON_TOOL_NAMES))],
         )

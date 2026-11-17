@@ -10,6 +10,8 @@ from typing import TYPE_CHECKING, Any
 from urllib.parse import urlsplit
 
 from strands import Agent
+from strands.memory import MemoryManager
+from strands.memory.types import MemoryStore
 from strands.models.model import Model
 from strands.tools.mcp import MCPClient
 
@@ -43,8 +45,11 @@ def create_a2a_agent_factory(
     name: str,
     description: str,
     system_prompt: str,
+    memory: Callable[[], Sequence[MemoryStore]] | None = None,
 ) -> Callable[[str], Agent]:
     """Make native per-context agents with fresh state and explicit assignments.
+
+    ``memory`` gives every context the same second brain and journal (``dreaming.agent_memory``).
 
     Factories are synchronous because that is the native A2A factory contract.
     Return fresh models/tools where they have mutable per-conversation state.
@@ -67,6 +72,7 @@ def create_a2a_agent_factory(
             session_manager=None,
             checkpointing=False,
             load_tools_from_directory=False,
+            memory_manager=MemoryManager(stores=list(memory())) if memory is not None else None,
         )
         try:
             for value in tools:

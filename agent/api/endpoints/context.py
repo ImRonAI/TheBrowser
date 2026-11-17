@@ -9,12 +9,14 @@ loopback-only: never add ``/context`` to the ngrok allowlist.
 
 from __future__ import annotations
 
+import asyncio
+import json
 import logging
 from typing import Annotated, Any, Literal
 from urllib.parse import urlsplit
 from uuid import UUID
 
-from fastapi import APIRouter, File, Form, HTTPException, Query, Request, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, Path, Query, Request, UploadFile
 from fastapi.responses import Response
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -282,6 +284,55 @@ async def mark_run_seen(run_id: UUID, body: RunSeen, request: Request) -> dict[s
     if not await _scheduler(request).mark_seen(_owner(body.user_id), str(run_id)):
         raise HTTPException(404, "Unknown run")
     return {"seen": str(run_id)}
+
+
+class TopicReview(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    key: str = Field(pattern=r"^memory/brain/[^/]+/[^/]+\.md$", max_length=400)
+    right: bool
+    comment: str = Field(default="", max_length=2000)
+
+
+class DreamReview(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    user_id: Identifier = "default"
+    #: Empty dismisses the notice without a review.
+    topics: list[TopicReview] = Field(default_factory=list, max_length=200)
+
+
+@router.get("/dream")
+async def newest_dream(user_id: Identifier = "default") -> dict[str, Any]:
+    """The newest dream the user has not reviewed or dismissed: each topic it changed, as it reads now (null when
+    the dream deleted it). The Context widget's notification; null when there is none."""
+    from agent.api.core.dreaming import SEEN
+    from agent.api.core.panel_storage import get_user_session_storage
+
+    storage = get_user_session_storage(user_id)
+    versions = sorted(key for key in await storage.list("memory/dreams/") if key.endswith(".json"))
+    if not versions:
+        return {"dream": None}
+    version = versions[-1].rsplit("/", 1)[-1].removesuffix(".json")
+    if (await storage.read(SEEN) or b"").decode() == version:
+        return {"dream": None}
+    keys = list(json.loads(await storage.read(versions[-1]) or b"{}"))
+    texts = await asyncio.gather(*(storage.read(key) for key in keys))
+    return {"dream": {"version": version, "topics": [
+        {"key": key, "text": None if text is None else text.decode("utf-8", "replace")}
+        for key, text in zip(keys, texts, strict=True)]}}
+
+
+@router.post("/dream/{version}")
+async def review_dream(version: Annotated[str, Path(pattern=r"^\d{8}T\d{12}$")], body: DreamReview) -> dict[str, Any]:
+    """Close the notification. A review goes to the dreaming agent, which applies it in the background with its
+    next dream and keeps what it teaches for every dream after (``dreaming.dream_feedback``)."""
+    from agent.api.core.dreaming import SEEN, dream_feedback
+    from agent.api.core.panel_storage import get_user_session_storage
+
+    if body.topics:
+        await dream_feedback(body.user_id, version,
+                             [(topic.key, topic.right, topic.comment) for topic in body.topics])
+    await get_user_session_storage(body.user_id).write(SEEN, version.encode("ascii"))
+    return {"reviewed": version}
 
 
 class ProfileAnswer(BaseModel):

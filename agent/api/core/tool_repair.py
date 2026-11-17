@@ -53,13 +53,14 @@ from typing import Any
 from strands import Agent, tool
 from strands.multiagent.a2a._converters import convert_input_to_message
 from strands.hooks import AfterToolCallEvent, HookProvider, HookRegistry
+from strands.memory import MemoryManager
 from strands.models.routing import FallbackStrategy, ModelRouter
 from strands.types.tools import AgentTool
 from strands.vended_plugins.context_injector import ContextInjector, InjectionContext
 from strands_harness import create_harness
-from strands_harness.memory import resolve_memory
 
 from agent.api.core import config
+from agent.api.core.dreaming import JOURNAL_DIRECTIVE, agent_memory
 from agent.api.core.native_sop import native_sop_prompt
 from agent.api.core.panel_storage import _ScopedStorage, _user_scope, get_panel_storage
 from agent.api.core.tool_observation import (
@@ -1017,13 +1018,6 @@ class _AdaptedTool(AgentTool):
                     yield event
 
 
-def _memory_search_tools(user_id: str) -> list[AgentTool]:
-    from agent.api.core.panel_agent import user_memory_config
-
-    stores = user_memory_config(user_id, "panel")["stores"]
-    return list(resolve_memory(stores=list(stores), writable=False).tools)
-
-
 def _with_hosted_tools(model: Any, hosted: list[dict[str, Any]]) -> Any:
     """Put the fixer's server-side ``tools`` on the Perplexity model's request params (never on
     ``Agent.tools``); a scripted test model without ``params`` is left alone."""
@@ -1048,7 +1042,8 @@ def build_fixer(run: RepairRun, *, models: Sequence[str], effort: str | None = D
     with the workspace writable and every source read-only), ``todos`` and ``environment`` for the
     multi-step SOP, the harness context manager (oversized tool results offloaded to a temporary
     directory), native throttling retry and the harness system-prompt contract. Ron adds only its
-    domain: ``record_demonstration``/``submit_repair`` and read-only memory search. The SOP is the
+    domain: ``record_demonstration``/``submit_repair``, and the user's second brain with the fixer's own
+    journal (``dreaming.agent_memory``, folder ``tool-fixer``). The SOP is the
     agent's input (``sop_task``). The user approves the submitted revision in the panel; the fixer
     never applies anything itself.
     """
@@ -1065,18 +1060,14 @@ def build_fixer(run: RepairRun, *, models: Sequence[str], effort: str | None = D
         (run.workspace / folder).mkdir(exist_ok=True)
     environment, run.sandbox = sandbox or (sandbox_factory or create_sandbox)(run)
     tools: list[Any] = [*_repair_tools(run)]
-    try:
-        tools.extend(_memory_search_tools(run.user_id))
-    except Exception as error:  # memory is optional for a repair
-        logger.info("error=<%s> | fixer runs without memory search", error)
     # Native A2A over fixer-only peers (never Ron's own /a2a agent, which runs host tools).
     a2a = fixer_a2a_provider(a2a_agents)
     if a2a is not None:
         tools.extend(a2a.tools)  # the provider vends plain AgentTools (not an SDK ToolProvider)
     return create_harness(
-        model=router, instructions=FIXER_PROMPT, tools=tools,
+        model=router, instructions=FIXER_PROMPT + JOURNAL_DIRECTIVE, tools=tools,
         builtin_tools=["shell", "read", "write", "edit"], builtin_plugins=["todos", "environment"],
-        sandbox=environment, memory=False, session=False, skills=False, caching=None,
+        sandbox=environment, memory=MemoryManager(stores=agent_memory(run.user_id, "tool-fixer")), session=False, skills=False, caching=None,
         background_tasks=False, interventions=None, callback_handler=None, load_tools_from_directory=False,
         name="Ren Tool Fixer",
         description="Reproduces a failed Ren tool, repairs it in its workspace and submits a revision for the user's approval.",
