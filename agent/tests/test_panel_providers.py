@@ -341,7 +341,7 @@ def test_config_schema_and_hosted_tool_separation(provider):
     assert payload["tools"] == []  # Composition supplies managed tools; hosted tools belong to models.
 
 
-def test_nim_is_the_default_provider_and_builds_the_sdk_openai_model(monkeypatch):
+def test_mistral_is_the_default_provider_and_nim_builds_the_sdk_openai_model(monkeypatch):
     import httpx
     from strands.models.openai import OpenAIModel
 
@@ -351,6 +351,8 @@ def test_nim_is_the_default_provider_and_builds_the_sdk_openai_model(monkeypatch
     monkeypatch.setattr(app_config, "NVIDIA_NIM_API_KEY", "nvapi-test")
     monkeypatch.setattr(app_config, "MISTRAL_API_KEY", "mistral-test")
     monkeypatch.delenv("NIM_READ_TIMEOUT", raising=False)
+    assert panel_agent.default_selection() == ("mistral", app_config.MISTRAL_DEFAULT_MODEL)
+    monkeypatch.setattr(app_config, "MISTRAL_API_KEY", None)
     assert panel_agent.default_selection() == ("nim", "z-ai/glm-5.3-flash")
 
     model = panel_agent.build_model("nim", "z-ai/glm-5.3-flash", "max")
@@ -369,7 +371,7 @@ def test_nim_is_the_default_provider_and_builds_the_sdk_openai_model(monkeypatch
         panel_agent.build_model("nim", "z-ai/glm-5.3-flash", "medium")
 
 
-def test_gemini_4_hydrogen_is_the_primary_default_text_agent_and_live_stays_3_8_live(monkeypatch):
+def test_gemini_4_hydrogen_is_gemini_default_text_model_and_live_stays_3_8_live(monkeypatch):
     from agent.api.core import config as app_config
     from agent.api.core.gemini_model import RonGeminiModel
     from agent.api.endpoints import bidi
@@ -378,7 +380,7 @@ def test_gemini_4_hydrogen_is_the_primary_default_text_agent_and_live_stays_3_8_
     monkeypatch.setattr(app_config, "NVIDIA_NIM_API_KEY", "nvapi-test")
     monkeypatch.setattr(app_config, "MISTRAL_API_KEY", "mistral-test")
     assert panel_agent.provider_default_model("gemini") == "gemini-4-hydrogen"
-    assert panel_agent.default_selection() == ("gemini", "gemini-4-hydrogen")
+    assert panel_agent.default_selection() == ("mistral", app_config.MISTRAL_DEFAULT_MODEL)
     assert bidi.DEFAULT_MODEL == "gemini-3.8-live"
 
     model = panel_agent.build_model("gemini", "gemini-4-hydrogen", "high")

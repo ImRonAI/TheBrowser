@@ -71,7 +71,6 @@ from agent.api.core.config import (
     NVIDIA_NIM_BASE_URL,
     TELNYX_DEFAULT_MODEL,
     TELNYX_INFERENCE_BASE_URL,
-    PANEL_ENVIRONMENT_CONTEXT,
     PANEL_CONTEXT_COMPRESSION_THRESHOLD,
     PANEL_INTERVENTIONS,
     PANEL_TODOS,
@@ -108,7 +107,7 @@ from agent.api.core.panel_tools import (
 logger = logging.getLogger(__name__)
 
 ProviderName = Literal["telnyx", "gemini", "nim", "perplexity", "xai", "mistral", "openai", "anthropic"]
-#: Order is preference: the first configured provider is the default (``default_selection``).
+#: Order is preference: after ``DEFAULT_PROVIDER``, the first configured provider is the default (``default_selection``).
 PROVIDERS: tuple[ProviderName, ...] = (
     "telnyx",
     "gemini",
@@ -119,6 +118,9 @@ PROVIDERS: tuple[ProviderName, ...] = (
     "openai",
     "anthropic",
 )
+#: Every agent's default provider while it has a key, on its own default model (owner, 2026-11-17); every other
+#: provider stays a choice.
+DEFAULT_PROVIDER: ProviderName = "mistral"
 CONFIG_DIR = Path(__file__).resolve().parent.parent / "configs"
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 #: Project tool library browsed/loaded by tool_catalog (never added to sys.path).
@@ -523,8 +525,8 @@ def infer_provider(model_id: str) -> ProviderName | None:
     Native ids have no slash. Vendor-prefixed ids remain Perplexity catalogue ids.
     """
     if not model_id:
-        ready = configured_providers()
-        return ready[0] if ready else None
+        selection = default_selection()
+        return selection[0] if selection else None
     lowered = model_id.lower()
     if lowered.startswith(("moonshotai/", "zai-org/", "poolside/", "qwen/")):
         return "telnyx"
@@ -1375,20 +1377,14 @@ def create_panel_agent(
             catalog.add_tools(music_generation_tools(user_id))
             # Native BeforeToolCallEvent cancel: an active mcp_client connection is never re-connected or re-loaded.
             plugins = [MCPConnectionGuard()]
-            # Harness builtin plugins (strands_harness.plugins): Todos keeps the task list in
-            # agent.state — session-snapshotted and re-injected before every model call — so a
-            # stall-respawned instance resumes mid-task with its plan; EnvironmentContext injects
-            # platform/date/cwd/AGENTS.md before each user turn.
-            from strands_harness.plugins import EnvironmentContext, Todos
+            # Harness builtin plugin Todos (strands_harness.plugins) keeps the task list in agent.state —
+            # session-snapshotted and re-injected before every model call — so a stall-respawned instance resumes
+            # mid-task with its plan. Never EnvironmentContext: it reads `pwd` and AGENTS.md from os.getcwd()
+            # (strands/sandbox/not_a_sandbox_local_environment.py), which is Ren's own repository, and would hand the
+            # user's agent Ren's path and developer instructions.
+            from strands_harness.plugins import Todos
             if PANEL_TODOS:
                 plugins.append(Todos())
-            if PANEL_ENVIRONMENT_CONTEXT and agent_scope != "build":
-                # Not for the Build Agent: EnvironmentContext probes `pwd` and reads AGENTS.md through agent.sandbox
-                # (strands_harness/plugins/environment.py `_gather`), and the default NotASandboxLocalEnvironment
-                # resolves both against os.getcwd() (strands/sandbox/not_a_sandbox_local_environment.py), which is the
-                # Ron repository: it would hand Ron's own AGENTS.md to the agent as its project's. The Build Agent's
-                # prompt names its workspace instead (core/build_workspace.py).
-                plugins.append(EnvironmentContext())
         if repair_config.enabled and not is_document:
             # userTurn note "<tool> was repaired and is active", once per live session (agent.state).
             plugins.append(revision_notice(user_id))
@@ -1547,7 +1543,7 @@ def default_selection() -> tuple[ProviderName, str] | None:
     ready = configured_providers()
     if not ready:
         return None
-    provider = ready[0]
+    provider = DEFAULT_PROVIDER if DEFAULT_PROVIDER in ready else ready[0]
     return provider, provider_default_model(provider)
 
 

@@ -792,9 +792,13 @@ async def chat(request: ChatRequest, http_request: Request) -> StreamingResponse
                 # Server-derived from the verified credential and issue row: the agent factory builds from these alone.
                 selection.update(issue_id=request.issue_id, project_id=issue["project_id"], owner_id=identity.user_id)
         if explicit_selection or not existing:
-            provider = _resolve_provider(request)
+            default = None if request.provider.strip() or request.model else default_selection()
+            provider = default[0] if default else _resolve_provider(request)
             _require_provider_key(provider)
-            selection.update(provider=provider, model_id=request.model or provider_default_model(provider))
+            selection.update(
+                provider=provider,
+                model_id=request.model or (default[1] if default else provider_default_model(provider)),
+            )
         if "reasoning_effort" in request.model_fields_set or not existing:
             selection["reasoning_effort"] = request.reasoning_effort
         # The renderer always sends `browser`; an omitted field never changes a pinned

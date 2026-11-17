@@ -176,10 +176,8 @@ def test_real_constructor_defaults_stream_and_complete_cleanup(offline):
         "facts", "remember", "feedback", "context", "tasks", "learned-skills", "brain", "journal/panel"]
     assert [s.name for s in agent.memory_manager._stores if s.extraction] == ["journal/panel"]
     texts = [b["text"] for m in models[0].calls[-1] for b in m["content"] if "text" in b]
-    # PANEL_ENVIRONMENT_CONTEXT (default on) injects the harness environment block
-    # (platform/date/cwd/AGENTS.md) before the user turn.
-    assert texts[0] == "hello"
-    assert len(texts) == 2 and texts[1].startswith("\n\n<system-reminder>\n<environment>"), texts[1][:80]
+    # No harness environment block: the server's cwd is Ren's own repository.
+    assert texts == ["hello"]
     agent.cleanup()
     agent.cleanup()
 
@@ -819,7 +817,7 @@ def test_harness_builtin_plugins_and_todo_tool(offline):
     agent = build()
     kwargs = constructed[-1][1]
     assert any(isinstance(p, Todos) for p in kwargs["plugins"])
-    assert any(isinstance(p, EnvironmentContext) for p in kwargs["plugins"])
+    assert not any(isinstance(p, EnvironmentContext) for p in kwargs["plugins"])
     # The Todos plugin vends todo_write; the list lives in agent.state (snapshot-persisted).
     assert "todo_write" in agent.tool_registry.registry
 
@@ -828,7 +826,6 @@ def test_harness_plugins_gated_and_interventions_resolved(offline, monkeypatch):
     from strands_harness.plugins import EnvironmentContext, Todos
     build, models, catalogs, constructed, storage = offline
     monkeypatch.setattr(composition, "PANEL_TODOS", False)
-    monkeypatch.setattr(composition, "PANEL_ENVIRONMENT_CONTEXT", False)
     monkeypatch.setattr(composition, "PANEL_INTERVENTIONS", "ask")
     build()
     kwargs = constructed[-1][1]
