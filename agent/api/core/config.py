@@ -73,6 +73,11 @@ BRIGHTDATA_API_KEY = os.getenv("BRIGHTDATA_API_KEY")
 OLOSTEP_API_KEY = os.getenv("OLOSTEP_API_KEY")
 OLOSTEP_MCP_URL = "https://mcp.olostep.com/mcp"
 
+# Ren's workspace computer: Desktop Commander over MCP (the VM's emrys-computer, https://<vm>/computer/mcp, its token as
+# the bearer), where OpenCode runs. The Context Agent hands app and agent builds to OpenCode there (core/context_agent.py).
+COMPUTER_MCP_URL = os.getenv("RON_COMPUTER_MCP_URL", "").strip()
+COMPUTER_MCP_TOKEN = os.getenv("RON_COMPUTER_MCP_TOKEN", "").strip()
+
 # Perplexity Agent API. GET /v1/models is the model catalogue that backs the
 # picker; POST /v1/responses runs a turn (OpenAI Responses wire format).
 # Verified live 2026-08-09: /v1/models returns 39 ids. This is PINNED, not
