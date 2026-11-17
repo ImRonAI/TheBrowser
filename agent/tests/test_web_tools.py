@@ -6,7 +6,7 @@ import pytest
 
 from agent.api.core import config as app_config
 from agent.api.core import web_tools as web
-from agent.api.core.deep_research import build_leaf_tool_pool
+from agent.api.core.deep_research import research_tools
 from agent.api.core.live_tools import live_host_tools
 from agent.api.core.panel_agent import PROJECT_TOOLS_DIR
 from agent.api.core.panel_tools import DOCUMENT_TOOL_NAMES, build_core_tools
@@ -34,14 +34,13 @@ def test_each_provider_joins_with_its_key(keys: pytest.MonkeyPatch) -> None:
     assert tuple(t.tool_name for t in web.web_tools()) == VENDED
 
 
-def test_every_agent_tool_set_carries_them(keys: pytest.MonkeyPatch, tmp_path) -> None:
+def test_every_agent_tool_set_carries_them(keys: pytest.MonkeyPatch) -> None:
     for name in ("TAVILY_API_KEY", "EXA_API_KEY", "BRIGHTDATA_API_KEY"):
         keys.setattr(app_config, name, "set")
     assert set(VENDED) <= {t.tool_name for t in build_core_tools(PROJECT_TOOLS_DIR)}
     assert set(VENDED) <= {t.tool_name for t in build_core_tools(PROJECT_TOOLS_DIR, names=DOCUMENT_TOOL_NAMES)}
     assert set(VENDED) <= {t.tool_name for t in live_host_tools(PROJECT_TOOLS_DIR)}
-    pool = build_leaf_tool_pool(artifact_dir=tmp_path)
-    assert set(VENDED) | {"http_request"} <= pool.keys()
+    assert set(VENDED) | {"http_request"} <= {t.tool_name for t in research_tools()}
 
 
 def test_http_request_is_strands_vended_tool() -> None:

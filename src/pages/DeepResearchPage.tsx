@@ -89,7 +89,7 @@ export function DeepResearchPage({ sessionId = null }: { sessionId?: string | nu
     ? (snapshotsBySession[effectiveSessionId] ??
       emptyDeepResearchSnapshot(effectiveSessionId, {
         user_id: userId,
-        status: 'executing',
+        status: 'running',
         active: true,
       }))
     : null

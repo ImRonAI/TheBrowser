@@ -42,8 +42,11 @@ from typing import Any, Final, Literal
 from pydantic import BaseModel, ConfigDict, Field
 from strands import tool
 from strands.storage import Storage
+from strands.types.tools import AgentTool
 from strands.vended_memory_stores.file_memory_store import FileMemoryStore
 
+from agent.api.core import config as app_config
+from agent.api.core.hosted_mcp import HostedMCP
 from agent.api.core.panel_storage import get_user_session_storage
 
 CONTEXT_STORE: Final = "context"
@@ -104,8 +107,10 @@ Turns you receive:
   pick a search provider's library tools: the configured ones are already there, and the rest need API keys
   this host does not have and fail when the agent runs. Add library tools only for capabilities those lack. When create_harness reports an
   error (a missing field, a tool that cannot load), fix the config and call it again.
-  Report the saved agent's name and what it will do in two sentences, and suggest how often it is worth running
-  (the user sets that with Schedule on the agent's card in the Agents tab; Ren notifies them after each run).
+  Then give it its run times with schedule_agent: the cadence its recurring work needs (a daily digest every day at
+  a morning hour, a price watch every few hours, a weekly review once a week) in the user's time zone, and the task
+  each run does. Report the saved agent's name, what it will do and when it runs in two sentences (the user can
+  change the schedule on the agent's card in the Agents tab; Ren notifies them after each run).
 - Anything else is the user talking to you about their interests, context or agents: answer briefly.
 
 Use search_memory to read the user's saved context (store "context"). Reply in at most two short sentences
@@ -113,15 +118,36 @@ after tool calls; the widget shows the graph and recommendations itself.
 """
 
 
+OPENCODE_PROMPT: Final = """
+Building software: OpenCode, a coding agent, runs on Ren's workspace computer (its computer_* tools, Desktop
+Commander, in the home /config). When the user wants a web app for their browser, an Android app, or a specialist
+needs code no library tool provides, hand the build to OpenCode instead of writing the code yourself:
+1. computer_create_directory /config/workspace/<project> (a short kebab-case name).
+2. computer_start_process with `cd /config/workspace/<project> && opencode run --standalone --auto "<brief>"`, then
+   computer_read_process_output until it exits.
+3. Check what it reports with computer_list_directory and computer_read_file, and tell the user where it is.
+The brief says what to build and for whom, the stack, where the result goes and how OpenCode checks it works:
+- Web app: a static site or a Vite app the desktop browser opens, built to dist/, with its own index.html.
+- Android app: Kotlin and Jetpack Compose in Ren's Ink & Volt look (volt #5543FF in light and #8D98FE in dark,
+  ink #0B0C17, flat surfaces, 10 dp controls, 12 dp cards, Bricolage Grotesque, Inter and JetBrains Mono), built
+  with `./gradlew assembleDebug`, the APK's path reported.
+- Code for a specialist: a Strands @tool module the specialist's config lists in tools, nothing else.
+Specialists themselves are always create_harness configs with schedule_agent run times, never code OpenCode writes.
+"""
+
+
 def context_agent_prompt() -> str:
+    prompt = CONTEXT_AGENT_PROMPT
     url = agent_tools_mcp_url()
-    if not url:
-        return CONTEXT_AGENT_PROMPT
-    return CONTEXT_AGENT_PROMPT + (
-        "\nAgent tools come from Ren's agent tools MCP server. When you build a specialist, add "
-        f'"mcpServers": {{"ron_tools": {{"url": "{url}", "toolFilters": {{"allowed": [<tool names>]}}}}}} '
-        "listing only the tools that specialist needs.\n"
-    )
+    if url:
+        prompt += (
+            "\nAgent tools come from Ren's agent tools MCP server. When you build a specialist, add "
+            f'"mcpServers": {{"ron_tools": {{"url": "{url}", "toolFilters": {{"allowed": [<tool names>]}}}}}} '
+            "listing only the tools that specialist needs.\n"
+        )
+    if app_config.COMPUTER_MCP_URL and app_config.COMPUTER_MCP_TOKEN:
+        prompt += OPENCODE_PROMPT
+    return prompt
 
 
 class Interest(BaseModel):
@@ -186,8 +212,48 @@ async def recommend_agent(name: str, description: str, interest: str, rationale:
     ]}
 
 
-def context_agent_tools() -> list[Any]:
-    return [update_interest_graph, recommend_agent]
+def schedule_agent_tool(user_id: str) -> AgentTool:
+    """``schedule_agent`` bound to one signed-in user: a saved specialist's run times (``core/agent_schedules.py``)."""
+
+    @tool
+    async def schedule_agent(agent_id: str, every: Literal["hours", "day", "weekdays", "week"], task: str,
+                             timezone: str, hours: int = 24, time: str = "08:00", weekday: int = 0) -> dict[str, Any]:
+        """Run a saved specialist at fixed times, as Schedule on its card in the Agents tab does.
+
+        Args:
+            agent_id: The specialist's id, from create_harness or list_harness_agents.
+            every: "hours" (every `hours` hours), "day", "weekdays" (Monday to Friday) or "week" (on `weekday`).
+            task: What each run does, in one or two sentences.
+            timezone: The user's IANA time zone, e.g. "America/Los_Angeles".
+            hours: Hours between runs when every is "hours" (1-168).
+            time: Local time of day, 24-hour "HH:MM", for day, weekdays and week.
+            weekday: 0 = Monday ... 6 = Sunday, for week.
+        """
+        from agent.api.core.agent_schedules import Cadence, bound_scheduler, cadence_label
+        from agent.api.core.harness_agents import owner_uuid
+
+        cadence = Cadence(every=every, hours=hours, time=time, weekday=weekday, timezone=timezone)
+        schedule = await bound_scheduler().set_schedule(owner_uuid(user_id), agent_id, cadence, task=task)
+        return {"status": "success", "content": [
+            {"json": {"agent_schedule": {"agent_id": agent_id, **schedule}}},
+            {"text": f"Scheduled {cadence_label(cadence)}; next run {schedule['next_run_at']}."},
+        ]}
+
+    return schedule_agent
+
+
+_computer = HostedMCP("computer")
+
+
+def computer_tools() -> list[AgentTool]:
+    """Desktop Commander on Ren's workspace computer, where OpenCode runs; none unless both RON_COMPUTER_MCP_* are set."""
+    if not (app_config.COMPUTER_MCP_URL and app_config.COMPUTER_MCP_TOKEN):
+        return []
+    return _computer.tools(app_config.COMPUTER_MCP_URL, app_config.COMPUTER_MCP_TOKEN)
+
+
+def context_agent_tools(user_id: str) -> list[AgentTool]:
+    return [update_interest_graph, recommend_agent, schedule_agent_tool(user_id), *computer_tools()]
 
 
 # --------------------------------------------------------------------------- context items

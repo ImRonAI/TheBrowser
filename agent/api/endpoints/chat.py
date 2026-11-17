@@ -489,7 +489,7 @@ async def _create_runtime_agent(*, user_id, session_id, selection, options, runt
         provider=selection["provider"], model_id=selection["model_id"],
         session_id=session_id, user_id=user_id,
         system_prompt=destination_prompt,
-        extra_tools=(context_agent_tools() if destination == "context" else []) + agent_tools,
+        extra_tools=(context_agent_tools(user_id) if destination == "context" else []) + agent_tools,
         reasoning_effort=selection.get("reasoning_effort"),
         options=options, runtime_options=runtime_options,
         browser=browser,
