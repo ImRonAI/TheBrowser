@@ -11,7 +11,7 @@ import { createJSONStorage, persist } from 'zustand/middleware'
 import { API_BASE_URL } from '@/lib/api-base'
 import { cancelRon, ronSessionId, runRon } from '@/lib/ron-run'
 import {
-  approveAgentTurn, browsingDue, browsingTurn, cadenceLabel, contextAddedTurn, contextResults, createContextClient, dataUrlBlob, latestReply,
+  APPLICATIONS_CHANGED, approveAgentTurn, browsingDue, browsingTurn, cadenceLabel, contextAddedTurn, contextResults, createContextClient, dataUrlBlob, latestReply,
   phoneTurn, recordVisit, whenLabel, type AgentCadence, type AgentRecommendation, type AgentRun, type ContextItem, type Dream, type TopicReview, type NewContextFile, type NewContextItem,
   type PhoneActivity, type SpecialistAgent, type Visit,
 } from '@/lib/context-api'
@@ -135,6 +135,28 @@ export const useContextAgentStore = create<ContextAgentState>()(persist((set, ge
     set({ tab: 'context', items: [item, ...get().items.filter((entry) => entry.id !== item.id)], notice: `Added “${item.title || item.kind}” to your context.` })
     run(contextAddedTurn(item, graph()), 'Reading what you added').catch((error) => set({ error: messageOf(error) }))
     return item
+  }
+
+  /** An approved app: OpenCode builds it on Ren's workspace computer and the Context Agent lists it under Applications. */
+  const buildApp = async (recommendation: AgentRecommendation) => {
+    const userId = get().userId
+    if (isGuestUserId(userId)) { set({ error: 'Sign in to build apps.' }); return }
+    set({ building: recommendation.id, error: '', notice: '' })
+    const started = Date.now() / 1000
+    try {
+      const reply = await run(approveAgentTurn(recommendation), `Building ${recommendation.name}`)
+      const name = recommendation.name.trim().toLowerCase()
+      const fresh = (await client(userId).applications()).filter((app) => app.created_at >= started)
+      const built = fresh.find((app) => app.name.trim().toLowerCase() === name) ?? fresh[0]
+      if (!built) throw new Error(reply || 'Context Agent did not finish the app.')
+      window.dispatchEvent(new Event(APPLICATIONS_CHANGED))
+      set({ handled: [...get().handled, recommendation.id], recommendations: get().recommendations.filter((item) => item.id !== recommendation.id),
+        notice: reply || `${built.name} is in your Applications.` })
+    } catch (error) {
+      set({ error: `${recommendation.name} was not built: ${messageOf(error)}` })
+    } finally {
+      set({ building: null })
+    }
   }
 
   /**
@@ -300,6 +322,7 @@ export const useContextAgentStore = create<ContextAgentState>()(persist((set, ge
     },
 
     approve: async (recommendation) => {
+      if (recommendation.kind === 'web' || recommendation.kind === 'android') return buildApp(recommendation)
       if (isGuestUserId(get().userId)) { set({ error: 'Sign in to save agents.' }); return }
       set({ building: recommendation.id, error: '', notice: '' })
       // create_harness upserts by name: a rebuilt agent keeps its id and gets a new updated_at.

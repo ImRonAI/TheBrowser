@@ -69,7 +69,23 @@ export interface TopicReview { key: string; right: boolean; comment: string }
 
 export type InterestCategory = 'technology' | 'design' | 'ai' | 'privacy' | 'productivity' | 'learning' | 'entertainment' | 'news' | 'other'
 export interface AgentInterest { label: string; weight: number; category: InterestCategory; reason: string }
-export interface AgentRecommendation { id: string; name: string; description: string; interest: string; rationale: string; tools: string[]; skills: string[] }
+/** What a recommendation builds: a specialist agent (`recommend_agent`) or an app OpenCode makes (`recommend_app`). */
+export type RecommendationKind = 'agent' | 'web' | 'android'
+export interface AgentRecommendation { id: string; kind: RecommendationKind; name: string; description: string; interest: string; rationale: string; tools: string[]; skills: string[] }
+
+/** An app OpenCode built for the account (`register_application`, `GET /context/applications`). */
+export interface Application {
+  id: string
+  name: string
+  kind: 'web' | 'android'
+  location: string
+  description: string
+  created_at: number
+  icon?: string
+}
+
+/** Sent on `window` when an app joins the account's Applications, so the sidebar lists it at once. */
+export const APPLICATIONS_CHANGED = 'ren:applications-changed'
 
 export const CONTEXT_DESTINATION = 'context' as const
 const CATEGORIES: InterestCategory[] = ['technology', 'design', 'ai', 'privacy', 'productivity', 'learning', 'entertainment', 'news', 'other']
@@ -118,6 +134,7 @@ export function createContextClient(apiBase: string, userId: string, fetcher: ty
       return await response.blob()
     },
     remove: async (id: string): Promise<void> => { await json(`/context/items/${encodeURIComponent(id)}?user_id=${user}`, { method: 'DELETE' }) },
+    applications: async (): Promise<Application[]> => (await json<{ applications: Application[] }>(`/context/applications?user_id=${user}`)).applications,
     agents: async (): Promise<{ agents: SpecialistAgent[]; signInRequired: boolean }> => {
       const body = await json<{ agents: SpecialistAgent[]; sign_in_required: boolean }>(`/context/agents?user_id=${user}`)
       return { agents: body.agents, signInRequired: body.sign_in_required }
@@ -307,6 +324,10 @@ export function contextAddedTurn(item: ContextItem, graph: { label: string; weig
 }
 
 export function approveAgentTurn(recommendation: AgentRecommendation): string {
+  // Recommendations saved before apps existed carry no kind: they are agents.
+  if (recommendation.kind === 'web' || recommendation.kind === 'android') {
+    return `[approve_app ${recommendation.id}] Build the ${recommendation.kind === 'web' ? 'web' : 'Android'} app "${recommendation.name}" now.\nRecommendation: ${JSON.stringify(recommendation)}`
+  }
   return `[approve_agent ${recommendation.id}] Build "${recommendation.name}" now.\nRecommendation: ${JSON.stringify(recommendation)}`
 }
 
@@ -340,8 +361,9 @@ export function recommendationFromOutput(output: unknown): AgentRecommendation |
   const entry = record(jsonBlock(output, 'agent_recommendation'))
   const strings = (value: unknown) => Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : []
   if (typeof entry.id !== 'string' || typeof entry.name !== 'string') return null
+  const kind: RecommendationKind = entry.kind === 'web' || entry.kind === 'android' ? entry.kind : 'agent'
   return {
-    id: entry.id, name: entry.name, description: String(entry.description ?? ''), interest: String(entry.interest ?? ''),
+    id: entry.id, kind, name: entry.name, description: String(entry.description ?? ''), interest: String(entry.interest ?? ''),
     rationale: String(entry.rationale ?? ''), tools: strings(entry.tools), skills: strings(entry.skills),
   }
 }
@@ -363,7 +385,7 @@ export function contextResults(messages: PanelMessage[]): ContextRunResults {
   const created: string[] = []
   for (const part of finishedTools(messages)) {
     if (part.name === 'update_interest_graph') interests = interestsFromOutput(part.output) ?? interests
-    else if (part.name === 'recommend_agent') {
+    else if (part.name === 'recommend_agent' || part.name === 'recommend_app') {
       const recommendation = recommendationFromOutput(part.output)
       if (recommendation) recommendations.push(recommendation)
     } else if (part.name === 'create_harness') {

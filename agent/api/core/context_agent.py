@@ -12,6 +12,10 @@ drives it with prompt turns:
 * ``[approve_agent <id>]`` — the user approved a recommendation: the agent writes the specialist's
   system prompt (``instructions``), assigns tools and Agent Skills, and saves it with the existing
   ``create_harness`` tool (strands_harness portable agent config, stored in Supabase ``harness_agents``).
+* ``[approve_app <id>]`` — the user approved an app :func:`recommend_app` suggested (only when Ren's workspace
+  computer is configured): OpenCode builds it there and :func:`register_application_tool` lists it under
+  Applications, a web app in the desktop sidebar and on the phone's home, an Android app on the phone's home,
+  which downloads its APK (``GET /context/applications/{id}/apk``) and installs it.
 
 Both tools return a native tool result whose first block is ``{"json": {...}}``. The panel runtime
 forwards ``content`` verbatim and the SDK keeps it in the session, so the renderer applies the graph and
@@ -119,9 +123,18 @@ after tool calls; the widget shows the graph and recommendations itself.
 
 
 OPENCODE_PROMPT: Final = """
+Apps: Ren can build the user small apps of their own. When what the user does (browsing, the apps on their phone,
+saved context) shows a recurring need that an app would serve better than a specialist (a tracker, a planner, a
+calculator, a dashboard for something they check often), call recommend_app ONCE: kind "web" for an app their
+browser opens, "android" for an app on their phone. At most one recommendation per turn, agent or app; never repeat
+one.
+- "[approve_app <id>]" means the user approved that app. Build it now with OpenCode as below, register it, and
+  report in two sentences what it does and where it is (a web app: Applications in the sidebar and on the phone's
+  home; an Android app: Applications on the home page of Ren on their phone, where a tap installs it).
+
 Building software: OpenCode, a coding agent, runs on Ren's workspace computer (its computer_* tools, Desktop
-Commander, in the home /config). When the user wants a web app for their browser, an Android app, or a specialist
-needs code no library tool provides, hand the build to OpenCode instead of writing the code yourself:
+Commander, in the home /config). When the user approves an app, wants a web app for their browser or an Android app,
+or a specialist needs code no library tool provides, hand the build to OpenCode instead of writing the code yourself:
 1. computer_create_directory /config/workspace/<project> (a short kebab-case name).
 2. computer_start_process with
    `cd /config/workspace/<project> && REN_USER_ID={user_id} opencode run --standalone --auto "<brief>"`
@@ -129,13 +142,18 @@ needs code no library tool provides, hand the build to OpenCode instead of writi
    until it exits.
 3. Check what it reports with computer_list_directory and computer_read_file, and tell the user where it is.
 4. Put it in the user's Applications (register_application): a web app once OpenCode has deployed dist/ with
-   `vercel deploy dist --prod --yes` (the Vercel CLI is signed in on the computer), with the URL it printed; an
-   Android app with the APK's path.
+   `vercel deploy dist --prod --yes` (the Vercel CLI is signed in on the computer), with the URL it printed and its
+   icon at <url>/icon.png; an Android app with the APK's full path.
 The brief says what to build and for whom, the stack, where the result goes and how OpenCode checks it works:
-- Web app: a static site or a Vite app the desktop browser opens, built to dist/, with its own index.html.
+- Web app: a static site or a Vite app the browser opens on a desktop and on a phone, built to dist/, with its own
+  index.html and a 512x512 icon.png at the root of dist/ that index.html links as its icon and apple-touch-icon.
 - Android app: Kotlin and Jetpack Compose in Ren's Ink & Volt look (volt #5543FF in light and #8D98FE in dark,
-  ink #0B0C17, flat surfaces, 10 dp controls, 12 dp cards, Bricolage Grotesque, Inter and JetBrains Mono), built
-  with `./gradlew assembleDebug`, the APK's path reported.
+  ink #0B0C17, flat surfaces, 10 dp controls, 12 dp cards, Bricolage Grotesque, Inter and JetBrains Mono), with a
+  launcher icon. The computer has JDK 21 (JAVA_HOME), the Android SDK with platform 36 and build-tools 36.0.0
+  (ANDROID_HOME, /config/Android/Sdk) and Gradle 8.14.3 on PATH: the project uses AGP 8.13.2 and Kotlin 2.3.21,
+  compileSdk and targetSdk 36, minSdk 29, applicationId com.ren.apps.<project without dashes>, and a wrapper made
+  with `gradle wrapper --gradle-version 8.14.3`; `./gradlew assembleDebug` builds
+  app/build/outputs/apk/debug/app-debug.apk, whose full path OpenCode reports.
 - Code for a specialist: a Strands @tool module the specialist's config lists in tools, nothing else.
 Specialists themselves are always create_harness configs with schedule_agent run times, never code OpenCode writes.
 """
@@ -217,6 +235,31 @@ async def recommend_agent(name: str, description: str, interest: str, rationale:
     ]}
 
 
+@tool
+async def recommend_app(name: str, kind: Literal["web", "android"], description: str, interest: str,
+                        rationale: str) -> dict[str, Any]:
+    """Recommend one app OpenCode could build for the user, a web app or an Android app.
+
+    The widget shows it with Build and Dismiss buttons; approval arrives as "[approve_app <id>]".
+
+    Args:
+        name: App name, 1-4 words (e.g. "Espresso Log").
+        kind: "web" for an app the browser opens, "android" for an app installed on the user's phone.
+        description: One sentence: what the app does for the user.
+        interest: The interest label or need it serves.
+        rationale: One sentence: why now, from what the user did.
+    """
+    clean = {"name": name.strip(), "description": description.strip(), "interest": interest.strip(),
+             "rationale": rationale.strip()}
+    if not 1 <= len(clean["name"]) <= 80 or not clean["description"]:
+        raise ValueError("An app recommendation needs a name (1-80 characters) and a description.")
+    recommendation = {"id": "rec-" + secrets.token_hex(5), "kind": kind, **clean, "tools": [], "skills": []}
+    return {"status": "success", "content": [
+        {"json": {"agent_recommendation": recommendation}},
+        {"text": f"Recommended the {kind} app {recommendation['name']} ({recommendation['id']}); the user decides."},
+    ]}
+
+
 def schedule_agent_tool(user_id: str) -> AgentTool:
     """``schedule_agent`` bound to one signed-in user: a saved specialist's run times (``core/agent_schedules.py``)."""
 
@@ -248,6 +291,9 @@ def schedule_agent_tool(user_id: str) -> AgentTool:
 
 
 APPLICATIONS_KEY: Final = "applications.json"
+# Where OpenCode's projects are on Ren's workspace computer; on the VM the backend mounts that home read-only, so it
+# serves the APKs OpenCode builds there (``GET /context/applications/{id}/apk``).
+APPS_DIR: Final = os.getenv("RON_APPS_DIR", "/config/workspace").rstrip("/")
 
 
 class Application(BaseModel):
@@ -260,6 +306,7 @@ class Application(BaseModel):
     location: str = Field(min_length=1, max_length=2048)
     description: str = Field(max_length=400)
     created_at: float
+    icon: str = Field(default="", max_length=2048)
 
 
 class Applications(BaseModel):
@@ -282,20 +329,25 @@ def register_application_tool(user_id: str) -> AgentTool:
 
     @tool
     async def register_application(name: str, kind: Literal["web", "android"], location: str,
-                                   description: str) -> dict[str, Any]:
-        """List an app OpenCode built under Applications in the user's sidebar; one with the same name is replaced.
+                                   description: str, icon: str = "") -> dict[str, Any]:
+        """List an app OpenCode built under the user's Applications; one with the same name is replaced.
 
         Args:
             name: The app's name, 1-80 characters.
             kind: "web" for a web app the browser opens, "android" for an APK.
-            location: The web app's https URL, or the APK's path on the workspace computer.
+            location: The web app's https URL, or the APK's full path on the workspace computer (under /config/workspace).
             description: One sentence: what the app does for the user.
+            icon: The web app's icon, https (its <url>/icon.png); empty for an Android app.
         """
         clean = name.strip()
         if kind == "web" and not location.startswith("https://"):
             raise ValueError("A web app's location is its https:// URL.")
+        if kind == "android" and not (location.startswith(APPS_DIR + "/") and location.endswith(".apk")):
+            raise ValueError(f"An Android app's location is its APK's full path under {APPS_DIR}.")
+        if icon and not icon.startswith("https://"):
+            raise ValueError("An icon is an https:// URL.")
         application = Application(id="app-" + secrets.token_hex(5), name=clean, kind=kind, location=location.strip(),
-                                  description=description.strip(), created_at=time.time())
+                                  description=description.strip(), created_at=time.time(), icon=icon.strip())
         others = [item for item in await read_applications(user_id) if item.name.casefold() != clean.casefold()]
         await write_applications(user_id, [application, *others])
         return {"status": "success", "content": [
@@ -319,7 +371,7 @@ def computer_tools() -> list[AgentTool]:
 def context_agent_tools(user_id: str) -> list[AgentTool]:
     tools = [update_interest_graph, recommend_agent, schedule_agent_tool(user_id)]
     computer = computer_tools()
-    return [*tools, *computer, register_application_tool(user_id)] if computer else tools
+    return [*tools, recommend_app, *computer, register_application_tool(user_id)] if computer else tools
 
 
 # --------------------------------------------------------------------------- context items
@@ -490,5 +542,5 @@ def interest_graph_from_result(content: list[dict[str, Any]]) -> list[dict[str, 
 __all__ = ["CONTEXT_AGENT_PROMPT", "CONTEXT_KINDS", "CONTEXT_STORE", "CONTEXT_STORE_DESCRIPTION", "Interest",
            "add_item", "agent_tools_mcp_url", "context_agent_prompt", "context_agent_tools", "context_store",
            "delete_item", "interest_graph_from_result", "item_markdown", "list_items", "new_item_id", "parse_item",
-           "read_file", "read_item", "recommend_agent", "thread_markdown", "update_interest_graph"]
+           "read_file", "read_item", "recommend_agent", "recommend_app", "thread_markdown", "update_interest_graph"]
 

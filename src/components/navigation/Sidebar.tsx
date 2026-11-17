@@ -10,7 +10,7 @@
  *   assist, search depth, submit → ron://search?q=…&level=…), focused by ⌘K
  * - the destinations (Home, Discover, Execute, Documents, Calendar, Vibe, Build; `destinations.ts`);
  *   Documents opens the library (ron://documents) and is the one lit while it shows
- * - Applications: the apps OpenCode built for the account (`ApplicationsSection`)
+ * - Applications: the web apps OpenCode built for the account, as icons (`ApplicationsSection`)
  * - open tabs
  */
 import { useEffect, useRef, useState } from 'react'
@@ -339,7 +339,7 @@ export function Sidebar() {
           </nav>
 
           {/* ── Applications ──────────────────────────────────────────────── */}
-          <ApplicationsSection label={<SectionLabel>Applications</SectionLabel>} rowClassName={ROW_HOVER} />
+          <ApplicationsSection label={<SectionLabel>Applications</SectionLabel>} />
 
           {/* ── Open tabs ─────────────────────────────────────────────────── */}
           <div className="mt-1 flex min-h-0 flex-1 flex-col no-drag">
