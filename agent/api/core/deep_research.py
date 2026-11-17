@@ -82,6 +82,8 @@ logger = logging.getLogger(__name__)
 ResearchDepth = Literal["fast", "low", "medium", "high", "xhigh", "ultra"]
 VALID_DEPTHS: Final[tuple[ResearchDepth, ...]] = ("fast", "low", "medium", "high", "xhigh", "ultra")
 DEFAULT_DEPTH: Final[ResearchDepth] = "medium"
+#: The levels runs were saved with before these: the lowest, the default and the highest.
+LEGACY_DEPTHS: Final[dict[str, ResearchDepth]] = {"standard": "low", "deep": "medium", "exhaustive": "ultra"}
 RunStatus = Literal["running", "completed", "failed", "cancelled"]
 JsonDict = dict[str, object]
 
@@ -925,6 +927,9 @@ async def _load_meta(user_id: str, session_id: str) -> RunMeta | None:
     if raw is None:
         return None
     meta: RunMeta = json.loads(raw)
+    # A run saved before the levels and Documents: its depth as the level it matches, and no Document.
+    meta["depth"] = LEGACY_DEPTHS.get(meta["depth"], meta["depth"])
+    meta.setdefault("document_id", None)
     if meta["active"]:
         meta.update(status="failed", active=False, error="The server stopped during this run.")
     return meta
