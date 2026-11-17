@@ -128,6 +128,12 @@ export interface ElectronWindow {
       reload: () => Promise<{ success: boolean }>
     }
 
+    // Screen share picker (electron/main.ts `pickScreenShareSource`, drawn by ScreenSharePicker)
+    screenShare?: {
+      onChoose: (callback: (request: ScreenShareRequest) => void) => () => void
+      choose: (requestId: string, sourceId: string | null) => void
+    }
+
     media?: {
       ensureAccess: (kind: 'microphone' | 'camera') => Promise<{ status: string; granted: boolean }>
       openSettings: (kind: 'microphone' | 'camera') => Promise<boolean>
@@ -139,6 +145,16 @@ declare global {
   interface Window {
     electron: ElectronWindow['electron']
   }
+}
+
+/** One screen or window `desktopCapturer` lists, with its thumbnail and app icon as data URLs ('' when absent). */
+export interface ScreenShareSource { id: string; name: string; kind: 'screen' | 'window'; thumbnail: string; icon: string }
+
+/** The main process asks the shell to pick what to share; `backdrop` is a still of the hidden page view, in CSS pixels. */
+export interface ScreenShareRequest {
+  requestId: string
+  sources: ScreenShareSource[]
+  backdrop: { image: string; x: number; y: number; width: number; height: number } | null
 }
 
 /** Payload of the page context menu's "Add to Ron context" (electron/main.ts `sendContextAdd`). */

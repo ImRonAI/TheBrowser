@@ -34,6 +34,15 @@ const electronAPI = {
     oauthRedirect: (): Promise<string> => ipcRenderer.invoke('auth:oauth-redirect'),
   },
 
+  screenShare: {
+    onChoose: (callback: (request: unknown) => void) => {
+      const handler = (_: unknown, request: unknown) => callback(request)
+      ipcRenderer.on('screen-share:choose', handler)
+      return () => ipcRenderer.removeListener('screen-share:choose', handler)
+    },
+    choose: (requestId: string, sourceId: string | null) => ipcRenderer.send('screen-share:chosen', requestId, sourceId),
+  },
+
   media: {
     ensureAccess: (kind: 'microphone' | 'camera'): Promise<{ status: string; granted: boolean }> =>
       ipcRenderer.invoke('media:ensure-access', kind),

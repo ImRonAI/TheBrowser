@@ -4,7 +4,6 @@ import { NodeSelection } from '@tiptap/pm/state'
 import { BubbleMenu } from '@tiptap/react/menus'
 import StarterKit from '@tiptap/starter-kit'
 import Placeholder from '@tiptap/extension-placeholder'
-import { Table } from '@tiptap/extension-table'
 import TableRow from '@tiptap/extension-table-row'
 import TableCell from '@tiptap/extension-table-cell'
 import TableHeader from '@tiptap/extension-table-header'
@@ -18,6 +17,8 @@ import { SlashCommand, suggestionOptions } from './extensions/slash-command'
 import { FileAttachmentExtension } from './extensions/FileAttachmentExtension'
 import { AskRonExtension } from './extensions/AskRonExtension'
 import { BLOCK_EXTENSIONS } from './extensions/blocks'
+import { RenTable } from './extensions/blocks/RenTable'
+import { TableMenu } from './TableMenu'
 import { ReferenceMention } from './extensions/ReferenceMention'
 import { 
   Bold, 
@@ -78,7 +79,8 @@ export function NotionEditor({
             return placeholder
         }
       }),
-      Table.configure({ resizable: true }),
+      // Resizable columns and a header colour; TableMenu adds and removes columns and rows.
+      RenTable,
       TableRow,
       TableHeader,
       TableCell,
@@ -186,6 +188,8 @@ export function NotionEditor({
           </MenuButton>
         </BubbleMenu>
       )}
+
+      {editor && !readOnly && <TableMenu editor={editor} />}
 
       <div className={preview ? 'relative' : 'relative min-h-[300px]'}>
         <EditorContent editor={editor} />
