@@ -30,17 +30,8 @@ from agent.api.endpoints import deep_research as deep_research_endpoints
 _ROLE_RE = re.compile(r"^## Your role: (.+)$", re.MULTILINE)
 
 #: Who each Swarm agent hands off to; a Swarm agent that hands off to nobody ends its Swarm.
-_HANDOFFS = {
-    "Researcher": "fact_checker",
-    "Fact Checker": "citation_manager",
-    "Citation Manager": "research_qa",
-    "Report Designer": "deck_designer",
-    "Deck Designer": "layout_qa",
-    "Layout QA": "report_writer",
-    "Report Writer": "report_qa",
-    "Report QA": "deck_writer",
-    "Deck Writer": "deck_qa",
-}
+#: The agent a Swarm agent's "## Handing off" section sends it to once its work is done.
+_DONE_HANDOFF_RE = re.compile(r"^## Handing off\n.*?When .*?hand off to (\w+)\.", re.MULTILINE)
 
 
 def _tool_use(tool_use_id: str, name: str, tool_input: dict[str, Any]) -> Iterator[StreamEvent]:
@@ -71,7 +62,8 @@ def _tool_results(messages: list[Any]) -> int:
 
 
 class ScriptedModel(Model):
-    """Each formation agent hands off as ``_HANDOFFS`` says; the researcher first runs one ``subagent``."""
+    """Each Swarm agent hands off as its instructions say once its work is done; the researcher first runs one
+    ``subagent``."""
 
     def __init__(self, gate: asyncio.Event | None = None) -> None:
         self.gate = gate
@@ -104,8 +96,9 @@ class ScriptedModel(Model):
         steps: list[tuple[str, dict[str, Any]]] = []
         if label == "Researcher" and "subagent" in {spec["name"] for spec in tool_specs or ()}:
             steps.append(("subagent", {"task": "Find the surface code threshold."}))
-        if label in _HANDOFFS:
-            steps.append(("handoff_to_agent", {"agent_name": _HANDOFFS[label], "message": f"{label} is done."}))
+        handoff = _DONE_HANDOFF_RE.search(system_prompt or "")
+        if handoff:
+            steps.append(("handoff_to_agent", {"agent_name": handoff.group(1), "message": f"{label} is done."}))
         if role and done == 0:
             self.roles.append(label)
         events = _tool_use(f"{label or 'sub'}-{done}", *steps[done]) if done < len(steps) else _text(f"{label} done.")
@@ -134,6 +127,18 @@ def test_every_agent_has_its_skill_and_swarms_have_no_edges() -> None:
     for formation in deep_research.FORMATION_TOPOLOGY["nodes"]:
         if formation["kind"] == "swarm":
             assert formation["edges"] == []
+
+
+def test_every_swarm_agent_is_told_when_to_hand_off_and_only_the_last_check_ends_it() -> None:
+    for formation in deep_research.FORMATION_TOPOLOGY["nodes"]:
+        ids = [agent["id"] for agent in formation["children"]]
+        if formation["kind"] == "graph":
+            assert not set(ids) & set(deep_research.SWARM_HANDOFFS)
+            continue
+        for agent_id in ids:
+            text = deep_research.SWARM_HANDOFFS[agent_id]
+            assert set(re.findall(r"hand off to (\w+)", text)) - {"the", "its"} <= set(ids)
+            assert ("without handing off" in text) == (agent_id == ids[-1])
 
 
 def test_the_formation_is_a_graph_of_swarms_and_graphs(isolated: None) -> None:
