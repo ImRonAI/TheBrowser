@@ -463,6 +463,12 @@ async def with_current_pages(service, issue: dict) -> list:
             for index, entry in enumerate(entries)]
 
 
+#: How agents write an Embed tabs block (the editor's "/" Embed tabs): read back the same way by ``html_to_markdown``.
+EMBED_TABS_MARKDOWN = (
+    "Embed tabs (several embeds shown as tabs: web pages, Google Maps, Figma, Loom, Vimeo, Google Drive, YouTube, video and audio files, PDFs, workflows) are one ```embeds fence with a line per tab, `[Kind: title](https://…)`, where Kind is Embed, Google Maps, Figma, Loom, Vimeo, Google Drive, YouTube, Video, Audio or PDF; a workflow tab is a ```workflow JSON fence inside it, and the outer fence then takes four backticks. Use only real links."
+)
+
+
 def markdown_to_html(markdown: str) -> str:
     """Markdown an agent writes, as the HTML the issue/page editor stores (CommonMark + tables)."""
     from markdown_it import MarkdownIt
@@ -470,6 +476,6 @@ def markdown_to_html(markdown: str) -> str:
     return MarkdownIt("commonmark", {"html": False}).enable("table").render(markdown or "")
 
 
-__all__ = ["CONTEXT_READING", "MEDIA_MODEL", "Media", "build_media_model", "describe_media", "download_attachment",
+__all__ = ["CONTEXT_READING", "EMBED_TABS_MARKDOWN", "MEDIA_MODEL", "Media", "build_media_model", "describe_media", "download_attachment",
            "download_public", "html_to_markdown", "is_youtube", "load_media", "markdown_to_html", "media_model",
            "media_tools", "normalize_image", "sample_frames", "with_current_pages", "youtube_preview"]

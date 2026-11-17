@@ -25,7 +25,7 @@ declare module '@tiptap/core' {
  */
 export const MediaBlock = Node.create({
   name: 'media',
-  group: 'block',
+  group: 'block embedTab',
   atom: true,
   draggable: true,
 

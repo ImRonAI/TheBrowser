@@ -7,7 +7,8 @@ import { Selection } from '@tiptap/pm/state'
  * replaced, otherwise the block goes right after the current one (`replaceRangeWith` moves the
  * insertion point out of anything that cannot hold it). The cursor then moves into the first
  * editable spot inside the new block; after an atom block (an embed, a card, …) it moves to the
- * paragraph below, which is created when nothing editable follows.
+ * paragraph below, which is created when nothing editable follows. A block with no text of its own yet (an
+ * empty Embed tabs block) is treated like an atom.
  */
 export function placeBlock(build: (schema: Schema) => PMNode | null) {
   return ({ tr, dispatch }: CommandProps): boolean => {
@@ -30,7 +31,9 @@ export function placeBlock(build: (schema: Schema) => PMNode | null) {
       return true
     })
     if (at < 0) return true
-    if (node.isAtom) {
+    let hasText = node.isTextblock
+    node.descendants((child) => { hasText ||= child.isTextblock; return !hasText })
+    if (node.isAtom || !hasText) {
       const end = at + node.nodeSize
       const $end = tr.doc.resolve(end)
       const paragraph = tr.doc.type.schema.nodes.paragraph

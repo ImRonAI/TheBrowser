@@ -81,6 +81,26 @@ def test_page_markdown_writes_references_and_task_items() -> None:
     assert html_to_markdown(html) == markdown
 
 
+def test_page_markdown_writes_embed_tabs_as_one_embeds_fence() -> None:
+    graph = json.dumps({"steps": [{"id": "s1", "label": "Start", "kind": "start", "position": {"x": 0, "y": 0}}],
+                        "connections": []})
+    html = ('<p>See the tabs.</p><div data-type="embed-tabs">'
+            '<div data-type="embed" data-src="https://www.figma.com/embed?embed_host=ren&amp;url=x" data-url="https://www.figma.com/file/abc/Home" '
+            'data-provider="figma" data-title="Home [v2]"><a href="https://www.figma.com/file/abc/Home">Home</a></div>'
+            '<div data-youtube-video=""><iframe src="https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ"></iframe></div>'
+            '<div data-type="pdf" data-src="https://example.com/spec.pdf" data-name="spec.pdf"><a href="https://example.com/spec.pdf">PDF</a></div>'
+            '<div data-type="pdf" data-src="data:application/pdf;base64,JVBERi0=" data-name="notes.pdf"><span>PDF</span></div>'
+            f'<workflow-block data-title="Release" data-graph=\'{graph}\'><ol><li>Start</li></ol></workflow-block></div>')
+    markdown = page_markdown(html)
+    assert markdown.startswith("See the tabs.\n\n````embeds\n[Figma: Home \\[v2\\]](https://www.figma.com/file/abc/Home)\n"
+                               "[YouTube](https://www.youtube.com/watch?v=dQw4w9WgXcQ)\n[PDF: spec.pdf](https://example.com/spec.pdf)\n"
+                               "PDF: notes.pdf (uploaded into this page)\n```workflow\n")
+    assert '"label": "Start"' in markdown and "position" not in markdown and markdown.endswith("```\n````")
+    plain = page_markdown('<div data-type="embed-tabs"><div data-type="media" data-kind="audio" data-src="https://e.com/a.mp3" data-title="Ep 1"></div></div>')
+    assert plain == "```embeds\n[Audio: Ep 1](https://e.com/a.mp3)\n```"
+    assert page_markdown('<div data-type="embed-tabs"></div><p>After</p>') == "After"
+
+
 def test_parse_reads_sections_drops_notes_and_unfilled_slots() -> None:
     page = parse_skill_page("Weekly brief", skill_page().replace("{doc}", "00000000-0000-4000-8000-000000000001"))
     assert page.description == "Write a weekly brief about a topic from current sources."

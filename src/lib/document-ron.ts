@@ -2,11 +2,13 @@
  * Ask Ron in project documents and issue descriptions. Ron (the server-owned panel agent, `POST /chat`)
  * writes Markdown and draws processes with its `render_workflow` tool; the editor's official Markdown
  * extension parses the text and each drawn workflow becomes a workflow block, in the order Ron produced
- * them. A ```workflow JSON fence (how existing workflows appear in the page context) is accepted too.
+ * them. A ```workflow JSON fence (how existing workflows appear in the page context) is accepted too, and an
+ * ```embeds fence becomes an Embed tabs block (`tabsFromFence`, the same reading the editor gives saved HTML).
  * Ron only proposes: the user inserts or replaces, then the page saves as usual.
  * Pure (relative imports, no React) so node:test can run it.
  */
 import { normalizeWorkflow, type WorkflowGraph } from './workflow.ts'
+import { EMBED_PROVIDERS, isHttpsUrl, nameFromUrl, normalizeEmbed, parseHttpsUrl, pdfSource, safeEmbedSrc, type EmbedProvider, type Result } from './editor-blocks.ts'
 import type { RonSegment } from './ron-run.ts'
 
 /** The page text Ron receives as context is capped so one prompt never carries a whole wiki. */
@@ -48,6 +50,7 @@ export function documentRonMessage({ target, intent, currentMarkdown }: {
       'Reply with only the content in Markdown: headings (#, ##, ###), paragraphs, bullet and numbered lists, task lists (- [ ] item), tables, block quotes, fenced code blocks, Markdown images (![Caption](https://...)), and standalone YouTube video URLs.',
       'When images are requested or add visual clarity, embed real https:// image URLs from attached reference material or brave_image_search using ![Descriptive caption](https://...) (never invent image URLs). When an embedded video is requested or helpful, place a real https://www.youtube.com/watch?v=VIDEO_ID URL (from attached context or brave_video_search) alone on its own line so the editor renders a playable YouTube embed (never invent video IDs).',
       'When a process, plan, pipeline, approval path or decision flow would help, call render_workflow at the point in the content where the diagram belongs (write the text before it first, then call the tool, then continue). Choose each step\'s shape (kind) and label the arrows out of decisions. Existing workflows appear above as ```workflow JSON fences: to keep one unchanged, repeat its fence exactly; to change it, call render_workflow with the whole new version.',
+      EMBED_TABS_RULE,
       'When the topic needs facts you are not sure of, research it first with brave_web_search, brave_news_search, brave_image_search, brave_video_search or brave_answer and cite what you used as Markdown links.',
       `Write only what the request asks for. When it adds to the ${target.kind === 'page' ? 'page' : 'description'} (a section, a list, a summary, a workflow), write just that new content and do not repeat what is already there: the user inserts it where they choose. When it asks for the whole ${target.kind === 'page' ? 'page' : 'description'} (draft it, rewrite it, restructure it), write all of it: the user overwrites the ${target.kind === 'page' ? 'page' : 'description'} with it.`,
       'Every word you write goes into the draft: do not announce or narrate your research or add a preamble. Your first words are the content itself.',
@@ -125,11 +128,169 @@ export function workflowFromFence(body: string): { title: string; graph: Workflo
   return { title, graph }
 }
 
+// ---------------------------------------------------------------- embed tabs
+
+/**
+ * Embed tabs: pages, maps, Figma, Loom, Vimeo, Google Drive, YouTube, video, audio, PDFs and workflows shown as one
+ * block with a tab each. In Markdown (what agents read and write) the block is one ```embeds fence with a
+ * `[Kind: title](https://…)` line per tab and a ```workflow fence for a workflow tab (the outer fence then takes
+ * four backticks). Saved HTML keeps every tab as its own block element inside `<div data-type="embed-tabs">`.
+ */
+export const EMBEDS_FENCE = 'embeds'
+
+/** How agents are told to write an Embed tabs block (the same sentence the server's agents get). */
+export const EMBED_TABS_RULE = 'Embed tabs (several embeds shown as tabs: web pages, Google Maps, Figma, Loom, Vimeo, Google Drive, YouTube, video and audio files, PDFs, workflows) are one ```embeds fence with a line per tab, `[Kind: title](https://…)`, where Kind is Embed, Google Maps, Figma, Loom, Vimeo, Google Drive, YouTube, Video, Audio or PDF; a workflow tab is a ```workflow JSON fence inside it, and the outer fence then takes four backticks. Use only real links.'
+
+export type TabKind = EmbedProvider | 'youtube' | 'video' | 'audio' | 'pdf' | 'workflow'
+
+/** Every kind of tab, in the order the block's Add row offers them. `label` is what Markdown writes before the colon. */
+export const TAB_KINDS: readonly { kind: TabKind; label: string; chip: string }[] = [
+  { kind: 'web', label: EMBED_PROVIDERS.web.label, chip: 'Web page' },
+  { kind: 'maps', label: EMBED_PROVIDERS.maps.label, chip: 'Maps' },
+  { kind: 'figma', label: EMBED_PROVIDERS.figma.label, chip: 'Figma' },
+  { kind: 'loom', label: EMBED_PROVIDERS.loom.label, chip: 'Loom' },
+  { kind: 'vimeo', label: EMBED_PROVIDERS.vimeo.label, chip: 'Vimeo' },
+  { kind: 'drive', label: EMBED_PROVIDERS.drive.label, chip: 'Drive' },
+  { kind: 'youtube', label: 'YouTube', chip: 'YouTube' },
+  { kind: 'video', label: 'Video', chip: 'Video' },
+  { kind: 'audio', label: 'Audio', chip: 'Audio' },
+  { kind: 'pdf', label: 'PDF', chip: 'PDF' },
+  { kind: 'workflow', label: 'Workflow', chip: 'Workflow' },
+]
+
+const KIND_NAMES = new Map<string, TabKind>([
+  ...TAB_KINDS.flatMap(({ kind, label, chip }): [string, TabKind][] => [[label.toLowerCase(), kind], [chip.toLowerCase(), kind]]),
+  ['web', 'web'], ['page', 'web'], ['website', 'web'], ['link', 'web'], ['map', 'maps'],
+  ['google docs', 'drive'], ['docs', 'drive'], ['sheets', 'drive'], ['slides', 'drive'], ['youtube video', 'youtube'],
+])
+
+const text = (value: unknown): string => (typeof value === 'string' ? value : '')
+
+/** A link tab as the block node it becomes, or why the link does not fit that kind. */
+export function tabNode(kind: Exclude<TabKind, 'workflow'>, link: string, title = ''): Result<DocNode> {
+  const name = title.trim()
+  if (kind === 'youtube') {
+    const src = youtubeEmbedUrl(link)
+    return src ? { ok: true, value: { type: 'youtube', attrs: { src } } } : { ok: false, error: 'That is not a YouTube video link.' }
+  }
+  if (kind === 'video' || kind === 'audio' || kind === 'pdf') {
+    if (!isHttpsUrl(link)) return { ok: false, error: `Use a full https:// link to the ${kind === 'pdf' ? 'PDF' : 'file'}.` }
+    const src = link.trim()
+    return { ok: true, value: kind === 'pdf'
+      ? { type: 'pdf', attrs: { src, name: name || nameFromUrl(src) } }
+      : { type: 'media', attrs: { kind, src, title: name || nameFromUrl(src) } } }
+  }
+  const embed = normalizeEmbed(link, kind)
+  return embed.ok ? { ok: true, value: { type: 'embed', attrs: { ...embed.value, title: name || embed.value.title } } } : { ok: false, error: embed.error }
+}
+
+/** A link with no kind named: YouTube, a PDF or a media file by its address, else a page (known players are routed). */
+function inferKind(link: string): Exclude<TabKind, 'workflow'> {
+  if (youtubeEmbedUrl(link)) return 'youtube'
+  const path = parseHttpsUrl(link)?.pathname.toLowerCase() ?? ''
+  if (path.endsWith('.pdf')) return 'pdf'
+  if (/\.(mp4|webm|mov|m4v|ogv)$/.test(path)) return 'video'
+  if (/\.(mp3|m4a|ogg|oga|wav|flac|aac|opus)$/.test(path)) return 'audio'
+  return 'web'
+}
+
+/** `[Kind: title](url)`, `[Kind](url)`, `[title](url)` or a bare https link, optionally as a list item. */
+const TAB_LINE = /^\s*(?:[-*+]\s+|\d+[.)]\s+)?(?:\[((?:\\.|[^\]\\])*)\]\(\s*(?:<([^>]+)>|(\S+?))(?:\s+"[^"]*")?\s*\)|<?(https:\/\/[^\s<>]+)>?)\s*$/
+
+function tabFromLine(line: string): DocNode | null {
+  const match = TAB_LINE.exec(line)
+  if (!match) return null
+  const label = (match[1] ?? '').replace(/\\(.)/g, '$1').trim()
+  const link = match[2] ?? match[3] ?? match[4] ?? ''
+  const colon = label.indexOf(':')
+  const named = KIND_NAMES.get(label.toLowerCase())
+  const prefixed = colon > 0 ? KIND_NAMES.get(label.slice(0, colon).trim().toLowerCase()) : undefined
+  const kind = named ?? prefixed ?? inferKind(link)
+  if (kind === 'workflow') return null
+  const built = tabNode(kind, link, named ? '' : prefixed ? label.slice(colon + 1) : label)
+  return built.ok ? built.value : null
+}
+
+/** The tabs of an ```embeds fence body, in order; lines that are not a usable tab are skipped. */
+export function tabsFromFence(body: string, newId: () => string | null = () => null): DocNode[] {
+  const tabs: DocNode[] = []
+  const lines = body.split(/\r?\n/)
+  for (let index = 0; index < lines.length; index += 1) {
+    const open = /^\s*(`{3,}|~{3,})\s*workflow\s*$/i.exec(lines[index])
+    if (!open) {
+      const tab = tabFromLine(lines[index])
+      if (tab) tabs.push(tab)
+      continue
+    }
+    const close = lines.findIndex((line, at) => at > index && line.trim() === open[1])
+    const end = close < 0 ? lines.length : close
+    const workflow = workflowFromFence(lines.slice(index + 1, end).join('\n'))
+    if (workflow) tabs.push({ type: 'workflow', attrs: { id: newId(), title: workflow.title, graph: workflow.graph } })
+    index = end
+  }
+  return tabs
+}
+
+const PROVIDER_LABELS = new Map<string, string>(Object.entries(EMBED_PROVIDERS).map(([provider, config]) => [provider, config.label]))
+
+function linkLine(kind: string, title: string, href: string): string {
+  const name = title.replace(/\s+/g, ' ').trim().replace(/[[\]\\]/g, '\\$&')
+  return `[${kind}${name ? `: ${name}` : ''}](${/[\s()<>]/.test(href) ? `<${href}>` : href})`
+}
+
+/** One tab as its Markdown line (a workflow as its fence); empty when it has nothing to point at. */
+export function tabMarkdown(node: DocNode): string {
+  const attrs = node.attrs ?? {}
+  if (node.type === 'embed') {
+    const href = safeEmbedSrc(attrs.url) || safeEmbedSrc(attrs.src)
+    return href ? linkLine(PROVIDER_LABELS.get(text(attrs.provider)) ?? EMBED_PROVIDERS.web.label, text(attrs.title), href) : ''
+  }
+  if (node.type === 'youtube') {
+    const href = youtubeEmbedUrl(text(attrs.src))
+    return href ? linkLine('YouTube', '', href) : ''
+  }
+  if (node.type === 'media') {
+    const src = safeEmbedSrc(attrs.src)
+    return src ? linkLine(attrs.kind === 'audio' ? 'Audio' : 'Video', text(attrs.title), src) : ''
+  }
+  if (node.type === 'pdf') {
+    const source = pdfSource(attrs.src)
+    const name = text(attrs.name) || 'Document.pdf'
+    if (!source) return ''
+    return source.kind === 'url' ? linkLine('PDF', name, source.src) : `PDF: ${name} (uploaded into this page)`
+  }
+  if (node.type === 'workflow') return workflowMarkdown(text(attrs.title) || 'Workflow', normalizeWorkflow(attrs.graph))
+  return ''
+}
+
+/** The whole block as Markdown: one ```embeds fence (four backticks when a workflow fence is inside). */
+export function embedTabsMarkdown(tabs: readonly DocNode[]): string {
+  const parts = tabs.map(tabMarkdown).filter(Boolean)
+  if (parts.length === 0) return ''
+  const fence = parts.some((part) => part.includes('```')) ? '````' : '```'
+  return `${fence}${EMBEDS_FENCE}\n${parts.join('\n')}\n${fence}`
+}
+
+/** What a tab's button shows: its kind and its own name. */
+export function tabSummary(node: DocNode): { kind: TabKind; title: string } {
+  const attrs = node.attrs ?? {}
+  if (node.type === 'embed') {
+    const kind = TAB_KINDS.find((entry) => entry.kind === attrs.provider)?.kind ?? 'web'
+    const href = safeEmbedSrc(attrs.url) || safeEmbedSrc(attrs.src)
+    return { kind, title: text(attrs.title) || parseHttpsUrl(href)?.hostname.replace(/^www\./, '') || '' }
+  }
+  if (node.type === 'youtube') return { kind: 'youtube', title: '' }
+  if (node.type === 'media') return { kind: attrs.kind === 'audio' ? 'audio' : 'video', title: text(attrs.title) }
+  if (node.type === 'pdf') return { kind: 'pdf', title: text(attrs.name) }
+  return { kind: 'workflow', title: text(attrs.title) }
+}
+
 /** Replace parsed ```workflow code blocks with workflow blocks and standalone YouTube URLs/fences with YouTube blocks. */
 export function withWorkflowBlocks(node: DocNode, newId: () => string): DocNode {
   if (node.type === 'codeBlock') {
     const lang = typeof node.attrs?.language === 'string' ? node.attrs.language.toLowerCase() : ''
     const body = (node.content ?? []).map((child) => child.text ?? '').join('')
+    if (lang === EMBEDS_FENCE) return { type: 'embedTabs', content: tabsFromFence(body, newId) }
     if (lang === WORKFLOW_FENCE) {
       const workflow = workflowFromFence(body)
       if (workflow) return { type: 'workflow', attrs: { id: newId(), title: workflow.title, graph: workflow.graph } }
