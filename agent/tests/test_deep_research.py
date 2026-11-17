@@ -129,6 +129,25 @@ def test_every_agent_has_its_skill_and_swarms_have_no_edges() -> None:
             assert formation["edges"] == []
 
 
+def test_each_agent_gets_only_the_listed_sections_of_its_skill() -> None:
+    skills = {skill.name: skill for skill in deep_research.Skill.from_directory(deep_research.DEEP_RESEARCH_SKILLS_DIR)}
+    agents = {agent["id"]: agent for agent in _agents()}
+    assert set(deep_research.SKILL_SECTIONS) <= set(agents)
+    for agent_id, headings in deep_research.SKILL_SECTIONS.items():
+        skill = skills[agents[agent_id]["skill"]]
+        text = deep_research.skill_sections(skill.instructions, headings)
+        assert len(text) < len(skill.instructions)
+        for heading in headings:
+            assert re.search(rf"^#+ {re.escape(heading)}$", text, re.MULTILINE)
+
+
+def test_skill_sections_end_at_the_next_heading_of_their_level_and_skip_code_fences() -> None:
+    body = "# Skill\n## Keep\ntext\n```sh\n# not a heading\n```\n### Inner\nmore\n## Drop\ngone\n"
+    assert deep_research.skill_sections(body, ("Keep",)) == "## Keep\ntext\n```sh\n# not a heading\n```\n### Inner\nmore"
+    with pytest.raises(ValueError):
+        deep_research.skill_sections(body, ("Missing",))
+
+
 def test_every_swarm_agent_is_told_when_to_hand_off_and_only_the_last_check_ends_it() -> None:
     for formation in deep_research.FORMATION_TOPOLOGY["nodes"]:
         ids = [agent["id"] for agent in formation["children"]]
