@@ -339,12 +339,6 @@ RON_DEEP_RESEARCH_MODEL: str | None = os.getenv("RON_DEEP_RESEARCH_MODEL", "").s
 RON_DEEP_RESEARCH_EXECUTION_TIMEOUT: float = float(os.getenv("RON_DEEP_RESEARCH_EXECUTION_TIMEOUT", "10800.0"))
 #: One agent's budget (seconds) for one turn inside a Deep Research formation, its sub-agents included.
 RON_DEEP_RESEARCH_NODE_TIMEOUT: float = float(os.getenv("RON_DEEP_RESEARCH_NODE_TIMEOUT", "3600.0"))
-#: Maximum node executions before a Deep Research Graph halts (the safety net behind the QA loops).
-RON_DEEP_RESEARCH_MAX_NODE_EXECUTIONS: int = int(os.getenv("RON_DEEP_RESEARCH_MAX_NODE_EXECUTIONS", "16"))
-#: Times a QA agent may send work back at depth "deep" ("standard" gets none, "exhaustive" one more).
-RON_DEEP_RESEARCH_MAX_REFINEMENTS: int = int(os.getenv("RON_DEEP_RESEARCH_MAX_REFINEMENTS", "1"))
-#: Characters of one leaf tool result kept in a run's transcript (the formation graph's tool rows).
-RON_DEEP_RESEARCH_TOOL_OUTPUT_CHARS: int = int(os.getenv("RON_DEEP_RESEARCH_TOOL_OUTPUT_CHARS", "8000"))
 #: Per-run Deep Research artifacts directory (`report.pdf`, `slides.md`, `slides/index.html`, `slides.pdf`).
 RON_DEEP_RESEARCH_ARTIFACTS_DIR: Path = Path(
     os.getenv("RON_DEEP_RESEARCH_ARTIFACTS_DIR", "").strip()
