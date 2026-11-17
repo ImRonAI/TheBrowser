@@ -16,7 +16,7 @@ VENDED = (*web.TAVILY_TOOL_NAMES, *web.EXA_TOOL_NAMES, *web.BRIGHT_DATA_TOOL_NAM
 
 @pytest.fixture
 def keys(monkeypatch: pytest.MonkeyPatch) -> pytest.MonkeyPatch:
-    for name in ("TAVILY_API_KEY", "EXA_API_KEY", "BRIGHTDATA_API_KEY", "OLOSTEP_API_KEY"):
+    for name in ("TAVILY_API_KEY", "EXA_API_KEY", "BRIGHTDATA_API_KEY", "OLOSTEP_API_KEY", "APIFY_TOKEN"):
         monkeypatch.setattr(app_config, name, None)
     return monkeypatch
 
@@ -32,6 +32,8 @@ def test_each_provider_joins_with_its_key(keys: pytest.MonkeyPatch) -> None:
     keys.setattr(app_config, "EXA_API_KEY", "set")
     keys.setattr(app_config, "BRIGHTDATA_API_KEY", "set")
     assert tuple(t.tool_name for t in web.web_tools()) == VENDED
+    keys.setattr(app_config, "APIFY_TOKEN", "set")
+    assert tuple(t.tool_name for t in web.web_tools()) == (*VENDED, "places_search")
 
 
 def test_every_agent_tool_set_carries_them(keys: pytest.MonkeyPatch) -> None:
@@ -51,4 +53,4 @@ def test_http_request_is_strands_vended_tool() -> None:
 
 
 def test_olostep_names() -> None:
-    assert web.is_web_tool("olostep_answers") and web.is_web_tool("tavily_search") and not web.is_web_tool("brave_answer")
+    assert web.is_web_tool("olostep_answers") and web.is_web_tool("tavily_search") and web.is_web_tool("places_search") and not web.is_web_tool("brave_answer")

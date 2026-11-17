@@ -1,6 +1,7 @@
-"""Discover homepage HTTP surface backed by Brave Search (see core/brave_search.py).
+"""Discover homepage HTTP surface: its feed from Tavily, Exa and Apify (``core/web_search.py``), or from Brave
+Search (``core/brave_search.py``) while ``RON_BRAVE_TOOLS=1``; instant answers, POIs, suggest and spellcheck from Brave.
 
-The Brave subscription token stays server-side; the renderer only ever
+The providers' keys stay server-side; the renderer only ever
 receives normalized DiscoverItem records and per-section error states.
 """
 from __future__ import annotations
@@ -14,9 +15,10 @@ from agent.api.core.brave_search import (
     BraveClient,
     BraveSearchError,
     FeedRequest,
-    build_feed,
     error_payload,
 )
+from agent.api.core import web_search
+from agent.api.core.config import brave_tools_enabled
 
 router = APIRouter()
 _default_client: BraveClient | None = None
@@ -78,9 +80,12 @@ async def discover_answer(body: AnswerRequest, request: Request):
 @router.post("/discover/feed")
 async def discover_feed(body: FeedRequest, request: Request):
     client = get_client(request)
-    if not client.configured:
+    if brave_tools_enabled() and not client.configured:
         raise HTTPException(503, {"code": "not_configured", "message": "BRAVE_SEARCH_API_KEY is not set"})
-    sections = await build_feed(client, body)
+    if not brave_tools_enabled() and not web_search.configured():
+        raise HTTPException(503, {"code": "not_configured",
+                                  "message": "None of TAVILY_API_KEY, EXA_API_KEY and APIFY_TOKEN is set"})
+    sections = await web_search.build_feed(client, body)
     return {"sections": [s.model_dump() for s in sections]}
 
 
