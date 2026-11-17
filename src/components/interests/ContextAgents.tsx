@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { Clock } from 'lucide-react'
+import { AppWindow, Clock, Smartphone } from 'lucide-react'
 import { useAgentUi } from '@/context/AgentUiContext'
 import { openSignIn } from '@/lib/sign-in'
 import { useContextAgentStore } from '@/stores/contextAgentStore'
@@ -7,7 +7,7 @@ import { usePanelAgentStore } from '@/stores/panelAgentStore'
 import { specialistChoices } from '@/lib/panel-agents'
 import {
   agoLabel, cadenceLabel, defaultCadence, runStatusLabel, WEEKDAYS, whenLabel,
-  type AgentCadence, type ScheduleEvery, type SpecialistAgent,
+  type AgentCadence, type AgentRecommendation, type ScheduleEvery, type SpecialistAgent,
 } from '@/lib/context-api'
 import { cn } from '@/utils/cn'
 import { field, ghostButton, mutedText, primaryButton, sectionLabel } from './contextUi'
@@ -20,7 +20,7 @@ export function chatWithSpecialist(agent: SpecialistAgent, task: string, send: (
   useContextAgentStore.getState().yieldToPanel()
 }
 
-/** Recommendations from the Context Agent (Build = approve → it writes the specialist and saves it), saved specialists and their runs. */
+/** Recommendations from the Context Agent (Build = approve → it writes the specialist and saves it, or OpenCode builds the app), saved specialists and their runs. */
 export function ContextAgents() {
   const recommendations = useContextAgentStore((state) => state.recommendations)
   const agents = useContextAgentStore((state) => state.agents)
@@ -36,8 +36,9 @@ export function ContextAgents() {
 
     <section aria-label="Recommended agents" className="space-y-2">
       <h3 className={sectionLabel}>Recommended</h3>
-      {!recommendations.length && <p className={mutedText}>Ren suggests agents here as it learns what you do often.</p>}
+      {!recommendations.length && <p className={mutedText}>Ren suggests agents and apps here as it learns what you do often.</p>}
       {recommendations.map((recommendation) => <article key={recommendation.id} data-testid="agent-recommendation" className="rounded-xl border border-surface-200 p-3 dark:border-surface-800">
+        <RecommendationKindLabel kind={recommendation.kind} />
         <p className="text-[13px] font-semibold text-ink dark:text-ink-inverse">{recommendation.name}</p>
         <p className={mutedText}>{recommendation.description}</p>
         <p className="mt-1 text-[11px] text-ink-muted dark:text-ink-inverse-muted">{recommendation.rationale}</p>
@@ -58,6 +59,15 @@ export function ContextAgents() {
       {agents.map((agent) => <SavedAgent key={agent.id} agent={agent} onUse={(task) => chatWithSpecialist(agent, task, sendToAgentPanel)} />)}
     </section>
   </div>
+}
+
+/** An app recommendation says which kind of app it is; an agent's needs no label (recommendations saved before apps carry no kind). */
+function RecommendationKindLabel({ kind }: { kind: AgentRecommendation['kind'] | undefined }) {
+  if (kind !== 'web' && kind !== 'android') return null
+  const Icon = kind === 'web' ? AppWindow : Smartphone
+  return <p className="mb-1 flex items-center gap-1 font-mono text-[10px] font-medium uppercase tracking-[0.08em] text-volt">
+    <Icon className="h-3 w-3" strokeWidth={2} aria-hidden />{kind === 'web' ? 'Web app' : 'Android app'}
+  </p>
 }
 
 function SavedAgent({ agent, onUse }: { agent: SpecialistAgent; onUse: (task: string) => void }) {

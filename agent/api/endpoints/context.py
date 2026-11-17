@@ -12,12 +12,13 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 from typing import Annotated, Any, Literal
 from urllib.parse import urlsplit
 from uuid import UUID
 
 from fastapi import APIRouter, File, Form, HTTPException, Path, Query, Request, UploadFile
-from fastapi.responses import Response
+from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel, ConfigDict, Field
 
 from agent.api.core import context_agent
@@ -423,6 +424,20 @@ async def list_applications(user_id: Identifier = "default") -> dict[str, Any]:
     """The apps OpenCode built for the account (the Context Agent's ``register_application``), newest first."""
     _owner(user_id)
     return {"applications": [item.model_dump() for item in await context_agent.read_applications(user_id)]}
+
+
+@router.get("/applications/{application_id}/apk")
+async def application_apk(application_id: str, user_id: Identifier = "default") -> FileResponse:
+    """An Android app's APK, for ren mobile to install. Served where the workspace computer's home is mounted (the VM)."""
+    _owner(user_id)
+    application = next((item for item in await context_agent.read_applications(user_id) if item.id == application_id), None)
+    if application is None or application.kind != "android":
+        raise HTTPException(404, "No such Android app")
+    path = os.path.realpath(application.location)
+    if not path.startswith(context_agent.APPS_DIR + "/") or not path.endswith(".apk") or not os.path.isfile(path):
+        raise HTTPException(404, f"{application.name}'s APK is not on this server")
+    safe = "".join(char if char.isalnum() or char in "-_" else "-" for char in application.name) or "app"
+    return FileResponse(path, media_type="application/vnd.android.package-archive", filename=f"{safe}.apk")
 
 
 @router.delete("/applications/{application_id}")

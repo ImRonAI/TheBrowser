@@ -136,10 +136,47 @@ def test_opencode_and_the_computer_join_only_when_the_computer_is_configured(mon
     monkeypatch.setattr(ctx.app_config, "COMPUTER_MCP_URL", "https://computer.example.com/mcp")
     monkeypatch.setattr(ctx.app_config, "COMPUTER_MCP_TOKEN", "token")
     assert "REN_USER_ID=u1 opencode run --standalone --auto" in ctx.context_agent_prompt("u1")
-    assert "register_application" in [t.tool_name for t in ctx.context_agent_tools("default")]
+    # Desktop Commander's tools come from the computer's MCP server; stand one in so no network is needed.
+    monkeypatch.setattr(ctx, "computer_tools", lambda: [ctx.update_interest_graph])
+    names = [t.tool_name for t in ctx.context_agent_tools("default")]
+    assert "register_application" in names and "recommend_app" in names
+    assert "[approve_app <id>]" in ctx.context_agent_prompt("u1")
 
 
-def test_registered_applications_list_newest_first_and_replace_by_name(client: TestClient) -> None:
+def test_recommend_app_is_a_recommendation_with_its_kind() -> None:
+    result = asyncio.run(ctx.recommend_app(name="Tide Log", kind="android", description="Logs tides.", interest="Surfing",
+                                           rationale="Checks tides daily."))
+    payload = result["content"][0]["json"]["agent_recommendation"]
+    assert payload["id"].startswith("rec-") and payload["kind"] == "android" and payload["name"] == "Tide Log"
+
+
+def test_an_android_app_s_apk_is_served_from_the_apps_dir(client: TestClient, monkeypatch: pytest.MonkeyPatch,
+                                                          tmp_path: Any) -> None:
+    user = "6f1c2d3e-4a5b-4c6d-8e7f-0123456789ab"
+    monkeypatch.setattr(ctx, "APPS_DIR", str(tmp_path))
+    apk = tmp_path / "tide" / "app-debug.apk"
+    apk.parent.mkdir()
+    apk.write_bytes(b"PK apk")
+    register = ctx.register_application_tool(user)
+    with pytest.raises(ValueError):
+        asyncio.run(register(name="Tide", kind="android", location="/elsewhere/app.apk", description="Tides."))
+    asyncio.run(register(name="Tide", kind="android", location=str(apk), description="Tides."))
+    asyncio.run(register(name="Site", kind="web", location="https://site.vercel.app", description="A site.",
+                         icon="https://site.vercel.app/icon.png"))
+    listed = client.get("/context/applications", params={"user_id": user}).json()["applications"]
+    site, tide = listed
+    assert site["icon"] == "https://site.vercel.app/icon.png"
+    response = client.get(f"/context/applications/{tide['id']}/apk", params={"user_id": user})
+    assert response.status_code == 200 and response.content == b"PK apk"
+    assert response.headers["content-type"] == "application/vnd.android.package-archive"
+    assert client.get(f"/context/applications/{site['id']}/apk", params={"user_id": user}).status_code == 404
+    apk.unlink()
+    assert client.get(f"/context/applications/{tide['id']}/apk", params={"user_id": user}).status_code == 404
+
+
+def test_registered_applications_list_newest_first_and_replace_by_name(client: TestClient,
+                                                                    monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(ctx, "APPS_DIR", "/config/workspace")
     user = "6f1c2d3e-4a5b-4c6d-8e7f-0123456789ab"
     register = ctx.register_application_tool(user)
     with pytest.raises(ValueError):

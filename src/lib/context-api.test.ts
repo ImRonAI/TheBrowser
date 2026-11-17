@@ -44,7 +44,8 @@ test('turns name the pages, the item and the current graph', () => {
   assert.match(browsingTurn([], []), /Current interest graph: \(empty\)/)
   const added = contextAddedTurn(item, graph)
   assert.match(added, /^\[context added\] link: Tokio\nSource: https:\/\/tokio\.rs\/\nExcerpt: Async runtime/)
-  assert.match(approveAgentTurn({ id: 'rec-1', name: 'Briefer', description: '', interest: 'F1', rationale: '', tools: [], skills: [] }), /^\[approve_agent rec-1\] Build "Briefer" now\./)
+  assert.match(approveAgentTurn({ id: 'rec-1', kind: 'agent', name: 'Briefer', description: '', interest: 'F1', rationale: '', tools: [], skills: [] }), /^\[approve_agent rec-1\] Build "Briefer" now\./)
+  assert.match(approveAgentTurn({ id: 'rec-2', kind: 'web', name: 'Tides', description: '', interest: 'Surf', rationale: '', tools: [], skills: [] }), /^\[approve_app rec-2\] Build the web app "Tides" now\./)
 })
 
 const tool = (name: string, output: unknown, status = 'success'): PanelMessage['parts'][number] =>
@@ -56,11 +57,12 @@ test('contextResults reads the graph, recommendations and saved agents from tool
     tool('update_interest_graph', [{ json: { interests: [{ label: ' Formula 1 ', weight: 1.4, category: 'sport', reason: 'five pages' }, { label: '', weight: 0.5 }] } }]),
     tool('recommend_agent', [{ json: { agent_recommendation: { id: 'rec-a', name: 'Briefer', tools: ['brave_news_search', 3] } } }]),
     tool('recommend_agent', [{ text: 'failed' }], 'error'),
+    tool('recommend_app', [{ json: { agent_recommendation: { id: 'rec-b', kind: 'android', name: 'Tide Log' } } }]),
     tool('create_harness', [{ text: JSON.stringify({ id: 'u-1', name: 'Briefer' }) }]),
   ] }] as unknown as PanelMessage[]
   const results = contextResults(messages)
   assert.deepEqual(results.interests, [{ label: 'Formula 1', weight: 1, category: 'other', reason: 'five pages' }])
-  assert.deepEqual(results.recommendations.map((r) => [r.id, r.tools]), [['rec-a', ['brave_news_search']]])
+  assert.deepEqual(results.recommendations.map((r) => [r.id, r.kind, r.tools]), [['rec-a', 'agent', ['brave_news_search']], ['rec-b', 'android', []]])
   assert.deepEqual(results.created, ['Briefer'])
   assert.equal(interestsFromOutput([{ text: 'x' }]), null)
   assert.equal(recommendationFromOutput([{ json: { agent_recommendation: { name: 'no id' } } }]), null)
