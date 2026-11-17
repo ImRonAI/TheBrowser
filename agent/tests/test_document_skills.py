@@ -227,7 +227,7 @@ async def test_reference_catalog_offers_assignable_tools_mcp_servers_skills_and_
         assert (await http.post(f"/projects/documents/{page['id']}/skill", json=GUEST)).status_code == 200
         catalog = (await http.get("/teaching/references", params={"user_id": "default"})).json()
     tools = {item["id"]: item for item in catalog["tools"]}
-    assert {"http_request", "brave_web_search", "render_ui", "mcp_client"} <= tools.keys()
+    assert {"http_request", "render_ui", "mcp_client"} <= tools.keys()
     assert tools["http_request"]["group"] == "Core tools" and tools["current_time"]["group"].startswith("Library · ")
     assert not {"use_skill", "think", "ask_user", "tool_catalog", "create_harness"} & tools.keys()
     assert not [name for name in tools if name.startswith("strands_")]

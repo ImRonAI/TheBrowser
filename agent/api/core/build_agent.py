@@ -29,7 +29,7 @@ journal, folder ``build``), ``session=False`` (the runtime's ``ThreadSessionMana
 modes are the panel composition's (``_context_kwargs``), so every Build thread saved before this module restores. The
 tools are the installed ``strands_tools`` ``shell`` and ``editor`` (the names the workbench reads,
 ``src/lib/build-insights.ts``), which ``BuildWorkspaceGuard`` defaults to the session's workspace, plus
-``http_request`` and the Brave search tools for documentation.
+``http_request`` and the web search tools (``core/web_tools.py``; Brave while ``RON_BRAVE_TOOLS`` is on) for documentation.
 """
 
 from __future__ import annotations
@@ -216,6 +216,7 @@ def create_build_agent(*, user_id: str, session_id: str, model: Any, side_model_
     from strands_tools import editor, shell
 
     from agent.api.core.brave_tools import brave_tools
+    from agent.api.core.web_tools import web_tools
     from agent.api.core.build_workspace import BuildWorkspaceGuard, build_agent_prompt, ensure_workspace
     from agent.api.core.deep_research_tools import deep_research_tools
     from agent.api.core.panel_storage import get_user_session_storage
@@ -243,7 +244,7 @@ def create_build_agent(*, user_id: str, session_id: str, model: Any, side_model_
         caching=False,
         instructions=build_agent_prompt(workspace).strip() + JOURNAL_DIRECTIVE,
         tools=[_installed_tool(shell, "shell"), _installed_tool(editor, "editor"), installed_http_request(),
-               *brave_tools(), *deep_research_tools(user_id=user_id)],
+               *brave_tools(), *web_tools(), *deep_research_tools(user_id=user_id)],
         plugins=consumer_plugins,
         mcp_servers=None,
         builtin_tools=[],

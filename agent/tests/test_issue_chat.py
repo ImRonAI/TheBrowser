@@ -194,7 +194,7 @@ def test_issue_chat_streams_its_own_harness_agent_with_the_callers_access(monkey
             assert {"read_issue", "update_issue", "edit_issue", "create_child", "read_issue_context", "link_issue",
                     "save_work_product", "add_workflow_to_description", "read_comments", "add_comment",
                     "http_request", "understand_media",
-                    "brave_answer", "brave_web_search", "render_ui", "render_workflow", "list_learned_skills",
+                    "render_ui", "render_workflow", "list_learned_skills",
                     "use_skill", "search_memory", "todo_write"} <= registered
             assert not registered & FORBIDDEN_TOOLS, registered & FORBIDDEN_TOOLS
             from strands_harness import HARNESS_CONTRACT

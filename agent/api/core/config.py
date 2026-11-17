@@ -55,6 +55,24 @@ BRAVE_ANSWERS_RPS = float(os.getenv("BRAVE_ANSWERS_RPS", "2"))
 BRAVE_ANSWERS_MODEL = os.getenv("BRAVE_ANSWERS_MODEL", "brave")
 BRAVE_ANSWERS_TIMEOUT = float(os.getenv("BRAVE_ANSWERS_TIMEOUT", "120"))
 
+
+def brave_tools_enabled() -> bool:
+    """The Brave tools on Ren's agents (``brave_tools()``); off unless RON_BRAVE_TOOLS is set to '1'.
+
+    Discover, the search page, suggest and spellcheck call Brave themselves and stay on either way.
+    """
+    return os.getenv("RON_BRAVE_TOOLS", "0") == "1"
+
+
+# Web search and reading tools for every agent (``core/web_tools.py``), each on when its key is set. strands_tools'
+# Tavily, Exa and Bright Data tools read their keys themselves (Bright Data also ``BRIGHTDATA_ZONE``, default
+# ``web_unlocker1``); Olostep is its hosted MCP server (github.com/olostep/olostep-mcp-server), the key as its bearer.
+TAVILY_API_KEY = os.getenv("TAVILY_API_KEY")
+EXA_API_KEY = os.getenv("EXA_API_KEY")
+BRIGHTDATA_API_KEY = os.getenv("BRIGHTDATA_API_KEY")
+OLOSTEP_API_KEY = os.getenv("OLOSTEP_API_KEY")
+OLOSTEP_MCP_URL = "https://mcp.olostep.com/mcp"
+
 # Perplexity Agent API. GET /v1/models is the model catalogue that backs the
 # picker; POST /v1/responses runs a turn (OpenAI Responses wire format).
 # Verified live 2026-08-09: /v1/models returns 39 ids. This is PINNED, not

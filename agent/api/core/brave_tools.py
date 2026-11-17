@@ -1,6 +1,6 @@
 """Native Strands ``@tool`` functions for the Brave Search API verticals.
 
-Registered as core tools across all Ron agents (panel text agent, Live ``BidiAgent``,
+While ``RON_BRAVE_TOOLS=1`` turns them on, registered as core tools across all Ron agents (panel text agent, Live ``BidiAgent``,
 specialist/harness children, issue agents) alongside ``brave_answer``. All six search
 tools share the process-wide ``BraveClient`` from ``agent.api.endpoints.discover`` so
 Discover, Browser Search, and agent tool calls draw from one ``RateLimiter(BRAVE_SEARCH_RPS)``.
@@ -239,6 +239,11 @@ BRAVE_TOOL_NAMES: tuple[str, ...] = (
 
 
 def brave_tools() -> list[Any]:
+    """The Brave tools, while ``RON_BRAVE_TOOLS=1`` turns them on (``config.brave_tools_enabled``); none otherwise."""
+    from agent.api.core.config import brave_tools_enabled
+
+    if not brave_tools_enabled():
+        return []
     return [
         brave_answer,
         brave_web_search,

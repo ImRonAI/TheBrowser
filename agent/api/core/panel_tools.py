@@ -75,6 +75,7 @@ DOCUMENT_TOOL_NAMES = (
     "http_request", "perplexity_search",
     "brave_answer", "brave_web_search", "brave_news_search",
     "brave_image_search", "brave_video_search", "brave_local_search", "brave_rich_answer",
+    "tavily_search", "tavily_extract", "tavily_crawl", "tavily_map", "exa_search", "exa_get_contents", "bright_data",
     "render_workflow",
 )
 
@@ -807,7 +808,11 @@ def scan_vendored_tools(root: Path, *, exclude: Sequence[str] = ()) -> list[dict
 def create_tool_catalog(catalog: PanelToolCatalog, project_tools_dir: Path) -> AgentTool:
     """`tool_catalog`: list/search/describe/load tools from the project library."""
     root = project_tools_dir.expanduser().resolve()
-    excluded = tuple(name for name in CORE_TOOL_NAMES if name != "tool_catalog") + ("tool_catalog", "ask_user", "think")
+    from agent.api.core.web_tools import configured_vended_names
+
+    # The configured web tools are core tools too, so the library's copies of them stay out of the catalog.
+    excluded = (tuple(name for name in CORE_TOOL_NAMES if name != "tool_catalog") + ("tool_catalog", "ask_user", "think")
+                + configured_vended_names())
 
     def entries() -> list[dict[str, Any]]:
         return scan_vendored_tools(root, exclude=excluded)
@@ -896,13 +901,10 @@ def _install_mcp_client_elicitation() -> None:
 
 
 def installed_http_request() -> AgentTool:
-    """The installed ``strands_tools.http_request`` tool alone (issue/project agents fetch links with it)."""
-    from strands_tools import http_request
+    """Strands' vended ``http_request`` (``strands.vended_tools``), the one every agent here makes HTTP requests with."""
+    from strands.vended_tools import http_request
 
-    loaded = [t for t in load_tools_from_module(http_request, "http_request") if t.tool_name == "http_request"]
-    if not loaded:
-        raise RuntimeError("strands_tools.http_request did not export a tool named 'http_request'")
-    return loaded[0]
+    return http_request
 
 
 def build_core_tools(project_tools_dir: Path, *, names: Sequence[str] | None = None) -> list[AgentTool]:
@@ -914,23 +916,25 @@ def build_core_tools(project_tools_dir: Path, *, names: Sequence[str] | None = N
     under the user-facing name with ``@tool(name=...)`` over its ``__wrapped__`` function.
     When ``names`` is given (e.g. ``DOCUMENT_TOOL_NAMES``), only matching tools are built.
     """
-    from strands_tools import editor, environment, http_request, mcp_client, shell
+    from strands_tools import editor, environment, mcp_client, shell
     from agent.api.core import config as app_config
 
     allowed = set(names) if names is not None else None
     if allowed is None or "mcp_client" in allowed:
         _install_mcp_client_elicitation()
     tools: list[AgentTool] = []
-    for module in (mcp_client, editor, shell, environment, http_request):
+    for module in (mcp_client, editor, shell, environment):
         short = module.__name__.rsplit(".", 1)[-1]
         if allowed is not None and short not in allowed:
             continue
         # load_tools_from_module handles both @tool modules and TOOL_SPEC modules
-        # (http_request/environment are TOOL_SPEC-style in strands_tools 0.8.6).
+        # (environment is TOOL_SPEC-style in strands_tools 0.8.6).
         loaded = [t for t in load_tools_from_module(module, short) if t.tool_name == short]
         if not loaded:
             raise RuntimeError(f"strands_tools.{short} did not export a tool named {short!r}")
         tools.append(loaded[0])
+    if allowed is None or "http_request" in allowed:
+        tools.append(installed_http_request())
     if app_config.perplexity_search_enabled() and (allowed is None or "perplexity_search" in allowed):
         root = project_tools_dir.expanduser().resolve()
         search_path = root / "research" / "perplexity_search_api.py"
@@ -938,10 +942,15 @@ def build_core_tools(project_tools_dir: Path, *, names: Sequence[str] | None = N
         renamed = tool(name="perplexity_search")(search.__wrapped__)
         stamp_source(renamed, search_path)
         tools.append(renamed)
-    # Brave Answers + Brave Search vertical tools for every Ron agent.
+    # Brave Answers + Brave Search vertical tools for every Ron agent, while RON_BRAVE_TOOLS turns them on.
     from agent.api.core.brave_tools import brave_tools
 
     tools.extend(t for t in brave_tools() if allowed is None or t.tool_name in allowed)
+    # Tavily, Exa, Bright Data and Olostep, each where its key is set; a tool set that names any of them gets them all.
+    from agent.api.core.web_tools import is_web_tool, web_tools
+
+    if allowed is None or any(is_web_tool(name) for name in allowed):
+        tools.extend(web_tools())
     # render_ui / render_workflow: HTML/JSX views and flowchart diagrams.
     from agent.api.core.render_ui_tool import render_ui_tools
 
@@ -1097,6 +1106,7 @@ THINK_EXCLUDED_TOOLS = frozenset({"think", "ask_user", "tool_catalog", "create_h
 RESEARCH_TOOL_NAMES = frozenset({
     "http_request", "perplexity_search", "brave_answer", "brave_web_search", "brave_news_search",
     "brave_image_search", "brave_video_search", "brave_local_search", "brave_rich_answer",
+    "tavily_search", "tavily_extract", "tavily_crawl", "tavily_map", "exa_search", "exa_get_contents", "bright_data",
     "fetch_url", "web_search", "retrieve_context", "retrieve_offloaded_content",
 })
 
@@ -1189,7 +1199,9 @@ class ThinkToolsGuard(Plugin):
             # The user restricted this request to the browser. Browser tools are parent-only, so the
             # think child must not quietly answer through research/HTTP tools instead (2026-10-15: a
             # "browser only" flight search was completed by think over fetch/search and then dropped).
-            allowed = [name for name in allowed if name not in RESEARCH_TOOL_NAMES]
+            from agent.api.core.web_tools import is_web_tool
+
+            allowed = [name for name in allowed if name not in RESEARCH_TOOL_NAMES and not is_web_tool(name)]
         inputs = dict(event.tool_use.get("input") or {})
         requested = inputs.get("tools")
         if isinstance(requested, list):

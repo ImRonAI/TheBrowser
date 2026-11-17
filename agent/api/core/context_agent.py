@@ -97,13 +97,12 @@ Turns you receive:
   choose its tools (library tools from tool_catalog describe as {"module": "./<path>", "export": "<name>"},
   plus "user_browser" in mcpServers only when it must browse), choose Agent Skills from list_learned_skills
   when one fits, then call create_harness with the portable config (name, description, instructions, tools,
-  skills, mcpServers). Every specialist already gets Brave search (brave_web_search, brave_news_search,
-  brave_image_search, brave_video_search, brave_local_search, brave_answer, brave_rich_answer), the async
-  Deep Research tools (deep_research_start, deep_research_status, deep_research_cancel), the A2A
-  tools and search_context (the user's saved context): do not list those, and name them in the
-  instructions as its research tools. Brave is the configured search provider, so never pick another
-  search provider's library tools (tavily, exa, …): they need API keys this host does not have and fail
-  when the agent runs. Add library tools only for capabilities those lack. When create_harness reports an
+  skills, mcpServers). Every specialist already gets the configured web search and reading tools (Tavily,
+  Exa, Bright Data and Olostep, those whose keys this host has), http_request, the async Deep Research tools
+  (deep_research_start, deep_research_status, deep_research_cancel), the A2A tools and search_context (the
+  user's saved context): do not list those, and name them in the instructions as its research tools. Never
+  pick a search provider's library tools: the configured ones are already there, and the rest need API keys
+  this host does not have and fail when the agent runs. Add library tools only for capabilities those lack. When create_harness reports an
   error (a missing field, a tool that cannot load), fix the config and call it again.
   Report the saved agent's name and what it will do in two sentences, and suggest how often it is worth running
   (the user sets that with Schedule on the agent's card in the Agents tab; Ren notifies them after each run).
