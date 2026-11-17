@@ -367,6 +367,25 @@ async def save_profile(body: ProfileSave) -> dict[str, Any]:
     return {"profile": body.profile.model_dump(by_alias=True, exclude_none=True)}
 
 
+@router.get("/applications")
+async def list_applications(user_id: Identifier = "default") -> dict[str, Any]:
+    """The apps OpenCode built for the account (the Context Agent's ``register_application``), newest first."""
+    _owner(user_id)
+    return {"applications": [item.model_dump() for item in await context_agent.read_applications(user_id)]}
+
+
+@router.delete("/applications/{application_id}")
+async def remove_application(application_id: str, user_id: Identifier = "default") -> dict[str, Any]:
+    """Takes an app off the list; the app itself stays where OpenCode put it."""
+    _owner(user_id)
+    applications = await context_agent.read_applications(user_id)
+    kept = [item for item in applications if item.id != application_id]
+    if len(kept) == len(applications):
+        raise HTTPException(404, "No such application")
+    await context_agent.write_applications(user_id, kept)
+    return {"applications": [item.model_dump() for item in kept]}
+
+
 @router.get("/status")
 async def status() -> dict[str, Any]:
     return {"kinds": list(context_agent.CONTEXT_KINDS), "max_file_bytes": context_agent.MAX_FILE_BYTES,

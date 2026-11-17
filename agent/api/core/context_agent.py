@@ -126,6 +126,9 @@ needs code no library tool provides, hand the build to OpenCode instead of writi
 2. computer_start_process with `cd /config/workspace/<project> && opencode run --standalone --auto "<brief>"`, then
    computer_read_process_output until it exits.
 3. Check what it reports with computer_list_directory and computer_read_file, and tell the user where it is.
+4. Put it in the user's Applications (register_application): a web app once OpenCode has deployed dist/ with
+   `vercel deploy dist --prod --yes` (the Vercel CLI is signed in on the computer), with the URL it printed; an
+   Android app with the APK's path.
 The brief says what to build and for whom, the stack, where the result goes and how OpenCode checks it works:
 - Web app: a static site or a Vite app the desktop browser opens, built to dist/, with its own index.html.
 - Android app: Kotlin and Jetpack Compose in Ren's Ink & Volt look (volt #5543FF in light and #8D98FE in dark,
@@ -242,6 +245,65 @@ def schedule_agent_tool(user_id: str) -> AgentTool:
     return schedule_agent
 
 
+APPLICATIONS_KEY: Final = "applications.json"
+
+
+class Application(BaseModel):
+    """An app OpenCode built for the user, listed under Applications in the sidebar."""
+
+    model_config = ConfigDict(extra="forbid")
+    id: str
+    name: str = Field(min_length=1, max_length=80)
+    kind: Literal["web", "android"]
+    location: str = Field(min_length=1, max_length=2048)
+    description: str = Field(max_length=400)
+    created_at: float
+
+
+class Applications(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    applications: list[Application]
+
+
+async def read_applications(user_id: str) -> list[Application]:
+    data = await get_user_session_storage(user_id).read(APPLICATIONS_KEY)
+    return Applications.model_validate_json(data).applications if data else []
+
+
+async def write_applications(user_id: str, applications: list[Application]) -> None:
+    await get_user_session_storage(user_id).write(
+        APPLICATIONS_KEY, Applications(applications=applications).model_dump_json().encode())
+
+
+def register_application_tool(user_id: str) -> AgentTool:
+    """``register_application`` bound to one signed-in user: the apps listed under Applications in the sidebar."""
+
+    @tool
+    async def register_application(name: str, kind: Literal["web", "android"], location: str,
+                                   description: str) -> dict[str, Any]:
+        """List an app OpenCode built under Applications in the user's sidebar; one with the same name is replaced.
+
+        Args:
+            name: The app's name, 1-80 characters.
+            kind: "web" for a web app the browser opens, "android" for an APK.
+            location: The web app's https URL, or the APK's path on the workspace computer.
+            description: One sentence: what the app does for the user.
+        """
+        clean = name.strip()
+        if kind == "web" and not location.startswith("https://"):
+            raise ValueError("A web app's location is its https:// URL.")
+        application = Application(id="app-" + secrets.token_hex(5), name=clean, kind=kind, location=location.strip(),
+                                  description=description.strip(), created_at=time.time())
+        others = [item for item in await read_applications(user_id) if item.name.casefold() != clean.casefold()]
+        await write_applications(user_id, [application, *others])
+        return {"status": "success", "content": [
+            {"json": {"application": application.model_dump()}},
+            {"text": f"{application.name} is under Applications in the sidebar."},
+        ]}
+
+    return register_application
+
+
 _computer = HostedMCP("computer")
 
 
@@ -253,7 +315,9 @@ def computer_tools() -> list[AgentTool]:
 
 
 def context_agent_tools(user_id: str) -> list[AgentTool]:
-    return [update_interest_graph, recommend_agent, schedule_agent_tool(user_id), *computer_tools()]
+    tools = [update_interest_graph, recommend_agent, schedule_agent_tool(user_id)]
+    computer = computer_tools()
+    return [*tools, *computer, register_application_tool(user_id)] if computer else tools
 
 
 # --------------------------------------------------------------------------- context items

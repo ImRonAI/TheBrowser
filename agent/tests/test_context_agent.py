@@ -136,6 +136,23 @@ def test_opencode_and_the_computer_join_only_when_the_computer_is_configured(mon
     monkeypatch.setattr(ctx.app_config, "COMPUTER_MCP_URL", "https://computer.example.com/mcp")
     monkeypatch.setattr(ctx.app_config, "COMPUTER_MCP_TOKEN", "token")
     assert "opencode run --standalone --auto" in ctx.context_agent_prompt()
+    assert "register_application" in [t.tool_name for t in ctx.context_agent_tools("default")]
+
+
+def test_registered_applications_list_newest_first_and_replace_by_name(client: TestClient) -> None:
+    user = "6f1c2d3e-4a5b-4c6d-8e7f-0123456789ab"
+    register = ctx.register_application_tool(user)
+    with pytest.raises(ValueError):
+        asyncio.run(register(name="Tide", kind="web", location="/config/workspace/tide/dist", description="Tides."))
+    asyncio.run(register(name="Tide", kind="web", location="https://tide-one.vercel.app", description="Tides."))
+    asyncio.run(register(name="Pager", kind="android", location="/config/workspace/pager/app.apk", description="Pages."))
+    asyncio.run(register(name="tide", kind="web", location="https://tide-two.vercel.app", description="Tides, v2."))
+    listed = client.get("/context/applications", params={"user_id": user}).json()["applications"]
+    assert [(item["name"], item["location"]) for item in listed] == [
+        ("tide", "https://tide-two.vercel.app"), ("Pager", "/config/workspace/pager/app.apk")]
+    removed = client.delete(f"/context/applications/{listed[1]['id']}", params={"user_id": user}).json()
+    assert [item["name"] for item in removed["applications"]] == ["tide"]
+    assert client.delete("/context/applications/app-missing", params={"user_id": user}).status_code == 404
 
 
 def test_schedule_agent_takes_the_scheduler_s_cadence() -> None:
