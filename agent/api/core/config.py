@@ -57,9 +57,10 @@ BRAVE_ANSWERS_TIMEOUT = float(os.getenv("BRAVE_ANSWERS_TIMEOUT", "120"))
 
 
 def brave_tools_enabled() -> bool:
-    """The Brave tools on Ren's agents (``brave_tools()``); off unless RON_BRAVE_TOOLS is set to '1'.
+    """Brave on Ren's agents (``brave_tools()``), the Search page's sections and answer and Discover's feed; off
+    unless RON_BRAVE_TOOLS is set to '1', when Tavily, Exa and Apify (``core/web_search.py``) serve the pages.
 
-    Discover, the search page, suggest and spellcheck call Brave themselves and stay on either way.
+    Suggest, spellcheck and Discover's instant answers call Brave either way.
     """
     return os.getenv("RON_BRAVE_TOOLS", "0") == "1"
 
@@ -72,6 +73,10 @@ EXA_API_KEY = os.getenv("EXA_API_KEY")
 BRIGHTDATA_API_KEY = os.getenv("BRIGHTDATA_API_KEY")
 OLOSTEP_API_KEY = os.getenv("OLOSTEP_API_KEY")
 OLOSTEP_MCP_URL = "https://mcp.olostep.com/mcp"
+# Apify: Google Maps places for the Search page, Discover and the agents' ``places_search``, from the Actor
+# RON_APIFY_PLACES_ACTOR (default Apify's Google Maps Scraper).
+APIFY_TOKEN = os.getenv("APIFY_TOKEN")
+APIFY_PLACES_ACTOR = os.getenv("RON_APIFY_PLACES_ACTOR", "compass~crawler-google-places")
 
 # Ren's workspace computer: Desktop Commander over MCP (the VM's emrys-computer, https://<vm>/computer/mcp, its token as
 # the bearer), where OpenCode runs. The Context Agent hands app and agent builds to OpenCode there (core/context_agent.py).
