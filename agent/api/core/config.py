@@ -21,7 +21,9 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY") or GOOGLE_API_KEY
 NVIDIA_NIM_API_KEY = os.getenv("NVIDIA_NIM_API_KEY")
 # NVIDIA NIM hosted endpoint (OpenAI-compatible chat completions): https://docs.api.nvidia.com/nim/reference/
 NVIDIA_NIM_BASE_URL = os.getenv("NVIDIA_NIM_BASE_URL") or "https://integrate.api.nvidia.com/v1"
-NIM_DEFAULT_MODEL = os.getenv("NIM_MODEL") or "z-ai/glm-5.3-flash"
+#: MiniMax M3.1 Flash (owner, 2026-11-17): on 2026-11-17 NIM answered it in under a second, GLM 5.3 Flash sent
+#: nothing for 60 s, and DeepSeek v4.1 Flash answered 410 (end of life 2026-11-16).
+NIM_DEFAULT_MODEL = os.getenv("NIM_MODEL") or "minimaxai/minimax-m3.1-flash"
 #: Seconds any NIM chat-completions call may go without sending a byte (first byte included) before raising
 #: APITimeoutError (`max_retries=0` on AsyncOpenAI). 0 = unbounded.
 NIM_READ_TIMEOUT = float(os.getenv("NIM_READ_TIMEOUT", "20"))
@@ -165,8 +167,6 @@ PANEL_CONTEXT_COMPRESSION_THRESHOLD = float(os.getenv("PANEL_CONTEXT_COMPRESSION
 #: Todos: native todo_write task list kept in agent.state — session-snapshotted, re-injected
 #: before every model call, and restored into the respawned instance after a stall recovery.
 PANEL_TODOS = os.getenv("PANEL_TODOS", "1") != "0"
-#: EnvironmentContext: platform/date/cwd/AGENTS.md injected before each user turn (harness builtin).
-PANEL_ENVIRONMENT_CONTEXT = os.getenv("PANEL_ENVIRONMENT_CONTEXT", "1") != "0"
 #: Build Agent workspaces (`core/build_workspace.py`): one private project directory per (user, session),
 #: ``<RON_BUILD_ROOT>/<sha256(user_id \n session_id)[:32]>``. Read per call, so tests can repoint it.
 RON_BUILD_ROOT = Path(os.getenv("RON_BUILD_ROOT", "~/.ron/build")).expanduser()
@@ -311,12 +311,12 @@ RON_TOOL_REPAIR_TIMEOUT_S = int(os.getenv("RON_TOOL_REPAIR_TIMEOUT_S", "900"))
 
 # --- Browser search (`endpoints/search.py`, `core/search_agent.py`) ---
 #: Model provider for the Strands Harness search agent (follow-up conversation) and the shopping
-#: agent (default: Gemini AI Studio). The first answer to a query is Brave Answers, not this model.
-RON_SEARCH_PROVIDER = os.getenv("RON_SEARCH_PROVIDER", "gemini").strip().lower() or "gemini"
-#: Search agent model id (default: gemini-4-hydrogen).
-RON_SEARCH_AGENT_MODEL = os.getenv("RON_SEARCH_AGENT_MODEL", "gemini-4-hydrogen")
-#: Shopping agent model id (default: gemini-4-hydrogen).
-RON_SEARCH_SHOPPING_MODEL = os.getenv("RON_SEARCH_SHOPPING_MODEL", "gemini-4-hydrogen")
+#: agent (default: Mistral, every agent's default in ``panel_agent.DEFAULT_PROVIDER``).
+RON_SEARCH_PROVIDER = os.getenv("RON_SEARCH_PROVIDER", "mistral").strip().lower() or "mistral"
+#: Search agent model id (default: Mistral's default model).
+RON_SEARCH_AGENT_MODEL = os.getenv("RON_SEARCH_AGENT_MODEL", MISTRAL_DEFAULT_MODEL)
+#: Shopping agent model id (default: Mistral's default model).
+RON_SEARCH_SHOPPING_MODEL = os.getenv("RON_SEARCH_SHOPPING_MODEL", MISTRAL_DEFAULT_MODEL)
 #: Default search level when the client omits one (see search_agent.SEARCH_LEVELS).
 RON_SEARCH_DEFAULT_LEVEL = os.getenv("RON_SEARCH_DEFAULT_LEVEL", "low")
 #: Optional domain allowlist; defaults to [] (unrestricted online + brick-and-mortar search).

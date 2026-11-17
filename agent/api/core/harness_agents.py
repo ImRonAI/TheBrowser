@@ -41,6 +41,7 @@ from strands import tool
 from strands.memory import MemoryManager
 from strands.types.tools import AgentTool
 from strands_harness import create_harness as harness_factory
+from strands_harness import defaults as harness_defaults
 from strands_harness import define_harness_agent_config, harness_agent_kwargs_from_config
 
 from agent.api.core.dreaming import JOURNAL_DIRECTIVE, agent_memory
@@ -115,6 +116,10 @@ def build_specialist(config: dict[str, Any], owner_id: str, *, connect_mcp: bool
     seen_names.update(t.tool_name for t in extra_web)
     extra_research = [t for t in deep_research_tools(user_id=owner_id) if t.tool_name not in seen_names]
     kwargs["tools"] = [*existing, *clients, *extra_web, *extra_research, *a2a_tools(), *context_search_tools(owner_id)]
+    # Never the harness's "environment" plugin: it reads `pwd` and AGENTS.md from this server's working directory,
+    # Ren's own repository (strands_harness/plugins/environment.py).
+    kwargs["builtin_plugins"] = [name for name in kwargs.get("builtin_plugins", harness_defaults.DEFAULT_BUILTIN_PLUGINS)
+                                 if name != "environment"]
     if plugins:
         kwargs["plugins"] = [*(kwargs.get("plugins") or []), *plugins]
     return harness_factory(**{"callback_handler": None, **kwargs, **agent_kwargs})
