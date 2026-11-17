@@ -371,3 +371,18 @@ class AgentScheduler:
 
 
 __all__ = ["AgentBusy", "AgentScheduler", "Cadence", "cadence_label", "next_run", "run_prompt", "run_summary"]
+
+
+_SCHEDULER: AgentScheduler | None = None
+
+
+def bind_scheduler(scheduler: AgentScheduler) -> None:
+    """The process's scheduler (``main.py``), for the Context Agent's ``schedule_agent``."""
+    global _SCHEDULER
+    _SCHEDULER = scheduler
+
+
+def bound_scheduler() -> AgentScheduler:
+    if _SCHEDULER is None:
+        raise RuntimeError("Agent schedules have not started")
+    return _SCHEDULER

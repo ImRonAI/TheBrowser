@@ -101,7 +101,7 @@ def test_update_interest_graph_returns_the_graph_as_a_json_tool_result() -> None
              {"label": "formula 1", "weight": 0.2, "category": "entertainment"},
              {"label": "Home espresso", "weight": 0.55, "category": "other"}]
     agent = Agent(model=ToolThenText("update_interest_graph", {"interests": graph}),
-                  tools=ctx.context_agent_tools(), callback_handler=None)
+                  tools=ctx.context_agent_tools("default"), callback_handler=None)
     agent("[browsing] ...")
     result = _tool_result(agent)
     assert result["status"] == "success"
@@ -113,7 +113,7 @@ def test_recommend_agent_returns_a_recommendation_with_an_id() -> None:
     agent = Agent(model=ToolThenText("recommend_agent", {
         "name": "Race Weekend Briefer", "description": "Briefs you before every F1 session.",
         "interest": "Formula 1", "rationale": "You read race previews daily.", "tools": ["brave_news_search"]}),
-        tools=ctx.context_agent_tools(), callback_handler=None)
+        tools=ctx.context_agent_tools("default"), callback_handler=None)
     agent("[browsing] ...")
     payload = _tool_result(agent)["content"][0]["json"]["agent_recommendation"]
     assert payload["id"].startswith("rec-") and payload["name"] == "Race Weekend Briefer"
@@ -125,6 +125,24 @@ def test_prompt_names_the_agent_tools_mcp_server_only_when_configured(monkeypatc
     assert "ron_tools" not in ctx.context_agent_prompt()
     monkeypatch.setenv("RON_AGENT_TOOLS_MCP_URL", "https://tools.example.com/mcp")
     assert '"ron_tools": {"url": "https://tools.example.com/mcp"' in ctx.context_agent_prompt()
+
+
+def test_opencode_and_the_computer_join_only_when_the_computer_is_configured(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(ctx.app_config, "COMPUTER_MCP_URL", "")
+    monkeypatch.setattr(ctx.app_config, "COMPUTER_MCP_TOKEN", "")
+    assert "opencode run" not in ctx.context_agent_prompt()
+    names = [t.tool_name for t in ctx.context_agent_tools("default")]
+    assert names == ["update_interest_graph", "recommend_agent", "schedule_agent"]
+    monkeypatch.setattr(ctx.app_config, "COMPUTER_MCP_URL", "https://computer.example.com/mcp")
+    monkeypatch.setattr(ctx.app_config, "COMPUTER_MCP_TOKEN", "token")
+    assert "opencode run --standalone --auto" in ctx.context_agent_prompt()
+
+
+def test_schedule_agent_takes_the_scheduler_s_cadence() -> None:
+    spec = ctx.schedule_agent_tool("default").tool_spec
+    properties = spec["inputSchema"]["json"]["properties"]
+    assert properties["every"]["enum"] == ["hours", "day", "weekdays", "week"]
+    assert set(spec["inputSchema"]["json"]["required"]) == {"agent_id", "every", "task", "timezone"}
 
 
 def test_thread_markdown_keeps_the_conversation_and_names_tools() -> None:
