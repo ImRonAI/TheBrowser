@@ -283,7 +283,8 @@ The user's phone runs ren mobile and is reachable as one MCP server. Load it whe
 tool_catalog(action="load", name="{PHONE_SERVER}")
 
 After load, `{PHONE_SERVER}_hub_peers` says whether the phone is attached. Its tools are prefixed `{PHONE_SERVER}_`:
-texts (`{PHONE_SERVER}_sms_list`, `{PHONE_SERVER}_sms_send`), calls, contacts, calendar, reminders, notifications,
-apps, and the phone's own browser (`{PHONE_SERVER}_browser_tabs`, `{PHONE_SERVER}_browser_open`,
-`{PHONE_SERVER}_browser_read`, ...). Before an action on the phone that sends, calls, buys or deletes, call
-`{PHONE_SERVER}_request_approval`; the user answers it on the phone."""
+texts (`{PHONE_SERVER}_sms_list`, `{PHONE_SERVER}_sms_send`), calls, contacts (`{PHONE_SERVER}_contacts_search`,
+`{PHONE_SERVER}_contact_save`), calendar, reminders, notifications (`{PHONE_SERVER}_notifications_list`,
+`{PHONE_SERVER}_notification_reply`), apps, and the phone's own browser (`{PHONE_SERVER}_browser_tabs`,
+`{PHONE_SERVER}_browser_open`, `{PHONE_SERVER}_browser_read`, ...). Before an action on the phone that sends, calls,
+buys or deletes, call `{PHONE_SERVER}_request_approval`; the user answers it on the phone."""

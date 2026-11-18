@@ -22,7 +22,7 @@ from strands.types.exceptions import StorageError
 from strands.vended_memory_stores.file_memory_store import FileMemoryStore
 
 from agent.api.core.dreaming import agent_memory, dream, folder, undo_dream
-from agent.api.core.memory import CATEGORIES, DESCRIPTIONS, scope_store_name, user_stores
+from agent.api.core.memory import CATEGORIES, DESCRIPTIONS, PEOPLE_STORE, scope_store_name, user_stores
 from agent.api.core.panel_storage import get_user_session_storage
 from agent.api.core.projects import ProjectIdentity, project_identity
 
@@ -45,7 +45,7 @@ def _owner(request: Request, identity: ProjectIdentity) -> str:
 
 
 def _store_name(store: str) -> str:
-    if store in CATEGORIES:
+    if store in CATEGORIES or store == PEOPLE_STORE:
         return store
     try:
         if store.startswith("brain/"):

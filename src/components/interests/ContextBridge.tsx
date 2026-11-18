@@ -28,7 +28,11 @@ export function ContextBridge() {
   }, [])
 
   useEffect(() => {
-    const timer = window.setInterval(() => { void useContextAgentStore.getState().flushBrowsing() }, FLUSH_CHECK_MS)
+    const tick = () => {
+      void useContextAgentStore.getState().flushBrowsing()
+      void useContextAgentStore.getState().flushReview()
+    }
+    const timer = window.setInterval(tick, FLUSH_CHECK_MS)
     return () => window.clearInterval(timer)
   }, [])
 
@@ -36,6 +40,7 @@ export function ContextBridge() {
     const refresh = () => {
       void useContextAgentStore.getState().refreshRuns()
       void useContextAgentStore.getState().refreshDream()
+      void useContextAgentStore.getState().flushReview()
     }
     const timer = window.setInterval(refresh, RUNS_CHECK_MS)
     window.addEventListener('focus', refresh)

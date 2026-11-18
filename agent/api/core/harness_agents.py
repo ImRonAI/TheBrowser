@@ -132,9 +132,10 @@ def context_search_tools(owner_id: str) -> list[AgentTool]:
     apart from the harness's own ``search_memory`` (its per-agent memory dir).
     """
     from agent.api.core.context_agent import context_store
+    from agent.api.core.memory import people_store
 
     manager = MemoryManager(
-        stores=[context_store(owner_id)], add_tool_config=False, injection=False,
+        stores=[context_store(owner_id), people_store(owner_id)], add_tool_config=False, injection=False,
         search_tool_config={"name": "search_context", "description": (
             "Search the context your user collected for you (pages, articles, highlights, chat threads, "
             "project documents as Markdown, screenshots and recordings by title). Returns full Markdown entries.")},

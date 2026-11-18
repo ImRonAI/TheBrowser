@@ -17,7 +17,7 @@ const EASE = [0.19, 1, 0.22, 1] as const
  */
 export function DreamNotice() {
   const dream = useContextAgentStore((state) => state.dream)
-  const runsWaiting = useContextAgentStore((state) => runNotifications(state.runs).length > 0)
+  const runsWaiting = useContextAgentStore((state) => state.replyDrafts.length > 0 || runNotifications(state.runs).length > 0)
   if (!dream || runsWaiting) return null
   return <DreamCard key={dream.version} dream={dream} />
 }

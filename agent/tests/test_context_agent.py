@@ -132,15 +132,37 @@ def test_opencode_and_the_computer_join_only_when_the_computer_is_configured(mon
     monkeypatch.setattr(ctx.app_config, "COMPUTER_MCP_TOKEN", "")
     assert "opencode run" not in ctx.context_agent_prompt("u1")
     names = [t.tool_name for t in ctx.context_agent_tools("default")]
-    assert names == ["update_interest_graph", "recommend_agent", "schedule_agent"]
+    assert names == ["update_interest_graph", "recommend_agent", "recommend_project", "draft_reply", "schedule_agent"]
     monkeypatch.setattr(ctx.app_config, "COMPUTER_MCP_URL", "https://computer.example.com/mcp")
     monkeypatch.setattr(ctx.app_config, "COMPUTER_MCP_TOKEN", "token")
     assert "REN_USER_ID=u1 opencode run --standalone --auto" in ctx.context_agent_prompt("u1")
+    assert 'Collaborating with OpenCode on "[review]"' in ctx.context_agent_prompt("u1")
     # Desktop Commander's tools come from the computer's MCP server; stand one in so no network is needed.
     monkeypatch.setattr(ctx, "computer_tools", lambda: [ctx.update_interest_graph])
     names = [t.tool_name for t in ctx.context_agent_tools("default")]
     assert "register_application" in names and "recommend_app" in names
     assert "[approve_app <id>]" in ctx.context_agent_prompt("u1")
+
+
+def test_recommend_project_and_draft_reply_return_structured_tool_results() -> None:
+    project = asyncio.run(ctx.recommend_project(
+        name="Austin Half Marathon", key="ahm", description="Track training runs and travel with Dana.",
+        interest="Running", rationale="You and Dana texted about race registration.",
+        issues=["Register for race with Dana Kim", "Book Austin hotel"],
+    ))
+    rec = project["content"][0]["json"]["agent_recommendation"]
+    assert rec["id"].startswith("rec-") and rec["kind"] == "project" and rec["key"] == "AHM"
+    assert rec["issues"] == ["Register for race with Dana Kim", "Book Austin hotel"]
+
+    reply = asyncio.run(ctx.draft_reply(
+        sender="Dana Kim", app="Messages", incoming="Saturday 7am trail run?",
+        draft="7am works! Meet at the trailhead?", notification_key="0|com.google.android.apps.messaging|42",
+    ))
+    draft = reply["content"][0]["json"]["reply_draft"]
+    assert draft["id"].startswith("rpl-") and draft["sender"] == "Dana Kim" and draft["app"] == "Messages"
+    assert draft["notification_key"] == "0|com.google.android.apps.messaging|42"
+    with pytest.raises(ValueError):
+        asyncio.run(ctx.draft_reply(sender="Dana", app="Messages", incoming="Hi", draft="Hey"))
 
 
 def test_recommend_app_is_a_recommendation_with_its_kind() -> None:
