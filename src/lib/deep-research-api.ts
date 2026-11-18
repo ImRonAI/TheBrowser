@@ -839,9 +839,19 @@ function foldAgentEvent(snapshot: DeepResearchSnapshot, path: string[], event: J
   return snapshot
 }
 
+function multiAgentResultError(result: Json): string | null {
+  for (const child of Object.values(asRecord(result.results))) {
+    const found = nodeResultError(asRecord(child))
+    if (found) return found
+  }
+  return null
+}
+
 function nodeResultError(result: Json): string | null {
   const inner = asRecord(result.result)
-  return inner.type === 'exception' ? asString(inner.message) || 'Failed.' : null
+  if (inner.type === 'exception') return asString(inner.message) || 'Failed.'
+  if (inner.type === 'multiagent_result' && result.status === 'failed') return multiAgentResultError(inner)
+  return null
 }
 
 function foldNodeStop(snapshot: DeepResearchSnapshot, path: string[], event: Json): DeepResearchSnapshot {
@@ -921,8 +931,11 @@ function foldEvent(snapshot: DeepResearchSnapshot, path: string[], event: Json, 
       if (path.length > 0) return snapshot
       const result = asRecord(event.result)
       const usage = asRecord(result.accumulated_usage)
+      const failed = result.status === 'failed'
       return {
         ...snapshot,
+        status: failed ? 'failed' : snapshot.status,
+        error: failed ? multiAgentResultError(result) ?? snapshot.error ?? 'The formation failed.' : snapshot.error,
         active_node_path: [],
         execution_time_ms: asNumber(result.execution_time),
         usage: { inputTokens: asNumber(usage.inputTokens), outputTokens: asNumber(usage.outputTokens), totalTokens: asNumber(usage.totalTokens) },

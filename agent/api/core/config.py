@@ -345,10 +345,13 @@ RON_DEEP_RESEARCH_ENABLED: bool = _INIT_DEEP_RESEARCH_ENABLED
 RON_DEEP_RESEARCH_PROVIDER: str | None = os.getenv("RON_DEEP_RESEARCH_PROVIDER", "").strip() or None
 #: Optional model id override for Deep Research formations (unset uses the provider's default model).
 RON_DEEP_RESEARCH_MODEL: str | None = os.getenv("RON_DEEP_RESEARCH_MODEL", "").strip() or None
-#: The whole Deep Research run's budget (seconds): the top-level Graph and every nested formation.
+#: Each Deep Research Swarm's budget (seconds). The top-level Graph keeps Strands' default, no limit: its four
+#: formations run once each, and every agent turn has ``RON_DEEP_RESEARCH_NODE_TIMEOUT``.
 RON_DEEP_RESEARCH_EXECUTION_TIMEOUT: float = float(os.getenv("RON_DEEP_RESEARCH_EXECUTION_TIMEOUT", "10800.0"))
 #: One agent's budget (seconds) for one turn inside a Deep Research formation, its sub-agents included.
 RON_DEEP_RESEARCH_NODE_TIMEOUT: float = float(os.getenv("RON_DEEP_RESEARCH_NODE_TIMEOUT", "3600.0"))
+#: Seconds a NIM chat-completions stream in Deep Research may go silent before failing over (`0` = unbounded).
+RON_DEEP_RESEARCH_NIM_READ_TIMEOUT: float = float(os.getenv("RON_DEEP_RESEARCH_NIM_READ_TIMEOUT", "120.0"))
 #: Per-run Deep Research artifacts directory (`report.pdf`, `slides.md`, `slides/index.html`, `slides.pdf`).
 RON_DEEP_RESEARCH_ARTIFACTS_DIR: Path = Path(
     os.getenv("RON_DEEP_RESEARCH_ARTIFACTS_DIR", "").strip()

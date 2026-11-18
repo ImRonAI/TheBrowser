@@ -42,6 +42,7 @@ import {
 } from '@/lib/chat-context'
 import {
   DEPTH_METADATA,
+  type DeepResearchSelection,
   type FormationTopology,
   type ResearchDepth,
 } from '@/lib/deep-research-api'
@@ -160,6 +161,7 @@ export interface DeepResearchHeroProps {
   depth: ResearchDepth
   depths: readonly ResearchDepth[]
   preferredModel: AgentModelSelection
+  defaultSelection?: DeepResearchSelection
   starting: boolean
   available: boolean
   error: string | null
@@ -182,6 +184,7 @@ export function DeepResearchHero({
   depth,
   depths,
   preferredModel,
+  defaultSelection,
   starting,
   available,
   error,
@@ -196,9 +199,9 @@ export function DeepResearchHero({
   const resolvedUserId = userId || authUserId
   const { refresh: refreshModels, ...modelCatalogue } = useAgentModels()
   const effectiveModel =
-    preferredModel.model || modelCatalogue.defaultModel || DEFAULT_AGENT_MODEL
+    preferredModel.model || defaultSelection?.model_id || modelCatalogue.defaultModel || DEFAULT_AGENT_MODEL
   const effectiveProvider =
-    preferredModel.provider || modelCatalogue.defaultProvider
+    preferredModel.provider || defaultSelection?.provider || modelCatalogue.defaultProvider
   const draftKey = useMemo(
     () => articleDraftKey(resolvedUserId, 'search', 'deep-research'),
     [resolvedUserId],
@@ -320,8 +323,8 @@ export function DeepResearchHero({
       query: finalQuery,
       depth,
       context: contextMarkdown,
-      provider: effectiveProvider || null,
-      modelId: effectiveModel || null,
+      provider: preferredModel.model ? preferredModel.provider || effectiveProvider || null : null,
+      modelId: preferredModel.model || null,
       reasoningEffort: preferredModel.effort || null,
     })
   }

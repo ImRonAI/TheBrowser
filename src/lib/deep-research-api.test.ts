@@ -193,17 +193,52 @@ test('reduceDeepResearchEvent folds the nested formations, handoffs and the resu
       node_id: 'fact_checker',
       node_result: { status: 'failed', execution_time: 10, result: { type: 'exception', message: 'Telnyx 403' } },
     }),
-    { type: 'multiagent_node_stop', node_id: 'research_swarm', node_result: { status: 'failed', execution_time: 4100 } },
+    {
+      type: 'multiagent_node_stop',
+      node_id: 'research_swarm',
+      node_result: {
+        status: 'failed',
+        execution_time: 4100,
+        result: {
+          type: 'multiagent_result',
+          status: 'failed',
+          results: {
+            fact_checker: { status: 'failed', execution_time: 10, result: { type: 'exception', message: 'Telnyx 403' } },
+          },
+        },
+      },
+    },
     {
       type: 'multiagent_result',
-      result: { status: 'failed', execution_time: 4200, accumulated_usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 } },
+      result: {
+        type: 'multiagent_result',
+        status: 'failed',
+        execution_time: 4200,
+        accumulated_usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+        results: {
+          research_swarm: {
+            status: 'failed',
+            execution_time: 4100,
+            result: {
+              type: 'multiagent_result',
+              status: 'failed',
+              results: {
+                fact_checker: { status: 'failed', execution_time: 10, result: { type: 'exception', message: 'Telnyx 403' } },
+              },
+            },
+          },
+        },
+      },
     },
   ])
 
   assert.equal(state.sequence, 8)
+  assert.equal(state.status, 'failed')
+  assert.equal(state.error, 'Telnyx 403')
   assert.equal(state.nodes['research_swarm/researcher'].status, 'completed')
   assert.equal(state.nodes['research_swarm/researcher'].node_type, 'agent')
   assert.equal(state.nodes.research_swarm.node_type, 'swarm')
+  assert.equal(state.nodes.research_swarm.error, 'Telnyx 403')
   assert.equal(state.nodes['research_swarm/fact_checker'].error, 'Telnyx 403')
   assert.deepEqual(state.completed_nodes, ['research_swarm/researcher'])
   assert.deepEqual(state.failed_nodes, ['research_swarm/fact_checker', 'research_swarm'])
