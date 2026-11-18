@@ -9,10 +9,15 @@ Layout, under the user's storage scope (``panel/users/<sha256(user_id)>/``):
   ``journal`` tool; turns come from native extraction with no extractor, where the SDK hands each
   invocation's messages to ``add_messages`` and no model is called.
 * ``memory/dreams/<time>.json``: one version per dream, holding every topic it changed as it was
-  before, which is what :func:`undo_dream` puts back.
+  before, which is what :func:`undo_dream` puts back. ``memory/dream-seen`` names the newest version the user
+  has reviewed or dismissed.
+* ``memory/brain/dreaming/``: the dreaming agent's own folder, what the user's reviews of its dreams taught it.
+  Every dream reads it first. A review (:func:`dream_feedback`) is a note in the dreaming agent's journal.
 
 Only :func:`dream` writes the brain. It runs once a user has journaled nothing for
-``RON_MEMORY_IDLE_SECONDS``, on :data:`DREAM_MODELS` in order, and removes the journal entries it filed.
+``RON_MEMORY_IDLE_SECONDS``, on :data:`DREAM_MODELS` in order, and removes the journal entries it filed. A user
+whose countdown is running is marked under ``panel/dreams-pending/``, so :func:`resume_dreams` restarts the
+countdown after the process restarts, whether or not the user comes back.
 The brain is searched by meaning with Mistral embeddings (:class:`_Embedded`).
 """
 
@@ -25,7 +30,7 @@ import json
 import logging
 from array import array
 from collections import defaultdict
-from collections.abc import Coroutine
+from collections.abc import Coroutine, Mapping
 from datetime import UTC, datetime
 from itertools import groupby
 from operator import mul
@@ -45,7 +50,7 @@ from strands.vended_memory_stores.file_memory_store import FileMemoryStore
 from strands.vended_memory_stores.file_memory_store.store import _slugify
 
 from agent.api.core import config
-from agent.api.core.panel_storage import _ScopedStorage, get_user_session_storage
+from agent.api.core.panel_storage import _ScopedStorage, get_panel_storage, get_user_session_storage
 
 logger = logging.getLogger(__name__)
 
@@ -63,6 +68,12 @@ EMBEDDING_BYTES: Final = 8000
 #: model whose window it does not know.
 DREAM_BATCH_CHARS: Final = 200_000
 SHARED: Final = "shared"
+#: The dreaming agent's own folder: what the user's reviews of its dreams taught it.
+DREAMING: Final = "dreaming"
+SEEN: Final = "memory/dream-seen"
+PENDING: Final = "panel/dreams-pending"
+#: What a subagent inherits from its parent: the parent's own brain search and journal, the same tools.
+INHERITED_TOOLS: Final = ("search_memory", "journal")
 
 BRAIN_DESCRIPTION: Final = (
     "Long-term memory shared by all of the user's agents: who the user is, their people, projects, preferences "
@@ -110,6 +121,14 @@ Keep only what will still be true and useful in a later, unrelated conversation.
 alone: names instead of "he", dates instead of "tomorrow". Leave out greetings, tool output, page content, the \
 agent's step-by-step progress and anything you would have to guess. Never store a password, key or card number. \
 If the journal holds nothing worth keeping, call nothing."""
+
+FEEDBACK_PROMPT: Final = """The user reviewed the dream of {version}, which changed these topics. Each line says \
+whether the user marked the topic right or wrong, with their comment:
+{items}
+
+Fix every topic marked wrong as the comment says, in the store that holds it. Then write in your own store \
+(brain/dreaming) what this review teaches you about how this user wants their memory kept, so every later \
+dream follows it."""
 
 _tasks: set[asyncio.Future[object]] = set()
 _timers: dict[str, asyncio.TimerHandle] = {}
@@ -251,6 +270,16 @@ def agent_memory(user_id: str, agent: str) -> list[MemoryStore]:
     ]
 
 
+def agent_memory_tools(user_id: str, agent: str) -> list[AgentTool]:
+    """``search_memory`` and ``journal`` over :func:`agent_memory`, for an agent that takes no plugins."""
+    return MemoryManager(stores=agent_memory(user_id, agent), injection=False).tools
+
+
+def inherited_memory(tools: Mapping[str, AgentTool]) -> list[AgentTool]:
+    """A subagent's memory: its parent's own ``search_memory`` and ``journal`` among the parent's ``tools``."""
+    return [tools[name] for name in INHERITED_TOOLS if name in tools]
+
+
 class Topics(FileMemoryStore):
     """One brain folder as the dream writes it: ``add`` replaces a whole topic and records what it replaced."""
 
@@ -291,18 +320,25 @@ def dream_model() -> ModelRouter:
                         for provider, model in DREAM_MODELS if provider_api_key(provider)])
 
 
-async def _file(agent: str, journal: str, stores: list[Topics]) -> None:
-    """One dream call: a fresh agent files ``journal`` into ``stores`` with the native memory tools.
+async def _file(user_id: str, agent: str, journal: str, stores: list[Topics]) -> None:
+    """One dream call: a fresh agent files ``journal`` into ``stores`` with the native memory tools, reading the
+    whole brain and following what the user's reviews taught it (``brain/dreaming``).
 
     Raises:
         RuntimeError: When it tried to write and no write succeeded, so the journal is kept.
     """
     listed = [f"Topics in {store.name}: " + (", ".join(
         key.removesuffix(".md") for key in await store._storage.list("")) or "none yet") for store in stores]
+    own = get_user_session_storage(user_id).namespace(f"memory/brain/{DREAMING}")
+    lessons = [text.decode("utf-8", "replace") for text in await asyncio.gather(
+        *(own.read(key) for key in sorted(await own.list("")) if key.endswith(".md"))) if text]
     dreamer = Agent(model=dream_model(), system_prompt=DREAM_PROMPT, callback_handler=None,
-                    memory_manager=MemoryManager(stores=[*stores], add_tool_config=True))
+                    memory_manager=MemoryManager(stores=[*stores, agent_memory(user_id, DREAMING)[0]],
+                                                 add_tool_config=True))
+    taught = ("How this user wants their memory kept, from their reviews of earlier dreams:\n"
+              + "\n\n".join(lessons) + "\n\n") if lessons else ""
     result = await dreamer.invoke_async(
-        f"Agent: {agent}\nIts own store: {stores[0].name}\n" + "\n".join(listed) + f"\n\nJournal:\n{journal}")
+        taught + f"Agent: {agent}\nIts own store: {stores[0].name}\n" + "\n".join(listed) + f"\n\nJournal:\n{journal}")
     writes = result.metrics.tool_metrics.get("add_memory")
     if writes and not writes.success_count:
         raise RuntimeError("none of the dream's writes succeeded")
@@ -319,8 +355,12 @@ async def dream(user_id: str) -> str | None:
         before: dict[str, str | None] = {}
         shared = Topics(user_id, SHARED, before)
         pending = sorted(key for key in await storage.list("memory/journal/") if key.endswith(".md"))
+        folders = sorted({key.split("/")[2] for key in await storage.list("memory/brain/")
+                          if key.endswith(".md") and key.count("/") == 3} - {SHARED, DREAMING})
         for agent, group in groupby(pending, key=lambda key: key.split("/")[2]):
             stores = [shared] if agent == SHARED else [Topics(user_id, agent, before), shared]
+            if agent == DREAMING:  # a review can correct any agent's topics
+                stores += [Topics(user_id, name, before) for name in folders]
             keys = list(group)
             batch: dict[str, str] = {}
             try:
@@ -329,12 +369,14 @@ async def dream(user_id: str) -> str | None:
                     batch[key] = f"[{key.rsplit('/', 1)[-1].removesuffix('.md')}]\n{text}"
                     following = keys[index + 1:index + 2]
                     if not following or sum(map(len, batch.values())) >= DREAM_BATCH_CHARS:
-                        await _file(agent, "\n\n".join(batch.values()), stores)
+                        await _file(user_id, agent, "\n\n".join(batch.values()), stores)
                         for filed in batch:
                             await storage.delete(filed)
                         batch = {}
             except Exception as error:  # noqa: BLE001 - one agent's failure must not cost the others their dream
                 logger.warning("dream failed for agent %s: %s", agent, error)
+        if not any(key.endswith(".md") for key in await storage.list("memory/journal/")):
+            await get_panel_storage().delete(_pending_key(user_id))
         if not before:
             return None
         version = datetime.now(UTC).strftime("%Y%m%dT%H%M%S%f")
@@ -360,9 +402,38 @@ async def undo_dream(user_id: str) -> str | None:
         return versions[-1].rsplit("/", 1)[-1].removesuffix(".json")
 
 
+async def dream_feedback(user_id: str, version: str, review: list[tuple[str, bool, str]]) -> None:
+    """The user's review of a dream, as ``(topic key, right, comment)``: a note in the dreaming agent's journal,
+    filed by the next dream like any other journal."""
+    items = "\n".join(f"- {key}: {'right' if right else 'wrong'}" + (f". {comment.strip()}" if comment.strip() else "")
+                      for key, right, comment in review)
+    await Journal(user_id, DREAMING).add(FEEDBACK_PROMPT.format(version=version, items=items))
+
+
+def _pending_key(user_id: str) -> str:
+    return f"{PENDING}/{hashlib.sha256(user_id.encode('utf-8')).hexdigest()}"
+
+
+async def resume_dreams() -> None:
+    """Restart the countdown of every user whose dream had not run when the process stopped."""
+    storage = get_panel_storage()
+    try:
+        for key in await storage.list(f"{PENDING}/"):
+            if (user_id := await storage.read(key)) is not None:
+                _dream_when_idle(user_id.decode("utf-8"))
+    except Exception as error:  # noqa: BLE001 - a storage hiccup at boot must not stop the API
+        logger.warning("dreams could not be resumed: %s", error)
+
+
 def _dream_when_idle(user_id: str) -> None:
     """Restart the user's countdown: the dream runs once nothing was journaled for ``RON_MEMORY_IDLE_SECONDS``."""
     if (timer := _timers.pop(user_id, None)) is not None:
         timer.cancel()
-    _timers[user_id] = asyncio.get_running_loop().call_later(
-        config.RON_MEMORY_IDLE_SECONDS, lambda: _background(dream(user_id)))
+    else:
+        _background(get_panel_storage().write(_pending_key(user_id), user_id.encode("utf-8")))
+
+    def due() -> None:
+        _timers.pop(user_id, None)
+        _background(dream(user_id))
+
+    _timers[user_id] = asyncio.get_running_loop().call_later(config.RON_MEMORY_IDLE_SECONDS, due)

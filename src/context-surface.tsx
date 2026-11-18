@@ -17,6 +17,7 @@ import { InterestDiscoveryPanel } from './components/interests/InterestDiscovery
 import { InterestsWidgetSurface } from './components/interests/InterestsWidget'
 import type { ContextSurfaceRelayedAction } from './components/interests/ContextSurfaceBridge'
 import type { ContextItem } from './lib/context-api'
+import type { PromptAttachment } from './lib/prompt-attachments'
 import { useAuthStore } from './stores/authStore'
 import { useContextAgentStore } from './stores/contextAgentStore'
 import { useInterestDiscoveryStore } from './stores/interestDiscoveryStore'
@@ -104,6 +105,9 @@ function installStoreActionForwarders() {
     flushBrowsing: async (force) => {
       await sendAction({ type: 'context:flush-browsing', force })
     },
+    flushReview: async (force) => {
+      await sendAction({ type: 'context:flush-review', force })
+    },
     refreshItems: async () => {
       await sendAction({ type: 'context:refresh-items' })
     },
@@ -112,6 +116,9 @@ function installStoreActionForwarders() {
     },
     refreshRuns: async () => {
       await sendAction({ type: 'context:refresh-runs' })
+    },
+    refreshDream: async () => {
+      await sendAction({ type: 'context:refresh-dream' })
     },
     addContext: async (item) => {
       const res = await sendAction({ type: 'context:add', item })
@@ -133,6 +140,12 @@ function installStoreActionForwarders() {
     dismiss: (id) => {
       void sendAction({ type: 'context:dismiss', id })
     },
+    sendReply: async (draft, text) => {
+      await sendAction({ type: 'context:send-reply', draft, text })
+    },
+    dismissReply: (id) => {
+      void sendAction({ type: 'context:dismiss-reply', id })
+    },
     saveSchedule: async (agent, cadence, task) => {
       await sendAction({ type: 'context:save-schedule', agent, cadence, task })
     },
@@ -141,6 +154,13 @@ function installStoreActionForwarders() {
     },
     markRunSeen: async (runId) => {
       await sendAction({ type: 'context:mark-run-seen', runId })
+    },
+    setReviewingDream: (reviewing) => {
+      useContextAgentStore.setState({ reviewingDream: reviewing })
+      void sendAction({ type: 'context:set-reviewing-dream', reviewing })
+    },
+    reviewDream: async (topics) => {
+      await sendAction({ type: 'context:review-dream', topics })
     },
     ask: async (question) => {
       await sendAction({ type: 'context:ask', question })
@@ -228,8 +248,8 @@ function ContextSurfaceApp() {
     void sendAction({ type: 'panel:open' })
   }, [])
 
-  const onSendToAgentPanel = useCallback((prompt: string) => {
-    void sendAction({ type: 'panel:send', prompt })
+  const onSendToAgentPanel = useCallback((prompt: string, attachments?: PromptAttachment[]) => {
+    void sendAction({ type: 'panel:send', prompt, attachments })
   }, [])
 
   if (!hydrated) return null

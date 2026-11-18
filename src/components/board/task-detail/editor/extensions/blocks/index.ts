@@ -2,6 +2,7 @@ import type { Extensions } from '@tiptap/core'
 import 'katex/dist/katex.min.css'
 import './blocks.css'
 import { EmbedBlock } from './EmbedBlock'
+import { EmbedTabs } from './EmbedTabs'
 import { PdfBlock } from './PdfBlock'
 import { MediaBlock } from './MediaBlock'
 import { RonColor, RonHighlight, RonImage, RonTextStyle, RonYoutube } from './NativeBlocks'
@@ -20,7 +21,7 @@ import { RonButton } from './RonButton'
  * so a block written in one place renders everywhere it is shown.
  */
 export const BLOCK_EXTENSIONS: Extensions = [
-  EmbedBlock, PdfBlock, MediaBlock, RonImage, RonYoutube,
+  EmbedBlock, EmbedTabs, PdfBlock, MediaBlock, RonImage, RonYoutube,
   ToggleDetails, DetailsSummary, DetailsContent, ToggleHeadingLevel,
   Callout, CardTitle, Card, Column, Columns, TableOfContentsBlock,
   RonBlockMath, RonInlineMath, MathEditing,

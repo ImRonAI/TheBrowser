@@ -20,6 +20,7 @@ import type { RonWritingTarget } from '@/lib/document-ron'
 import type { Project } from '@/types/projects'
 import { cn } from '@/lib/utils'
 import { DocumentToolbar } from './DocumentToolbar'
+import { PrintMenu } from './PrintMenu'
 import { DocumentIssueLinks } from './DocumentIssueLinks'
 import { useContextAgentStore } from '@/stores/contextAgentStore'
 import { useDocumentHandoffStore } from '@/stores/documentHandoffStore'
@@ -605,6 +606,8 @@ export function DocumentWorkspace({ scope, startWithDraft = false, onDraftStarte
               </nav>
               <div className="flex items-center gap-2">
                 <SaveState status={status} savedAt={savedAt} isDraft={!page.id} />
+                <PrintMenu request={request} disabled={status === 'conflict' || pageIsBlank}
+                  pageId={async () => { await flushOpenPage(); return savedRef.current.get(page.key)?.id ?? null }} />
                 {editor && (
                   <Button type="button" size="sm" variant="ghost" className="h-8 rounded-full text-ink-muted"
                     title="Add this page to Ren context as Markdown" aria-label="Add this page to Ren context"

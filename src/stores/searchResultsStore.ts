@@ -21,6 +21,8 @@ import {
   type SearchRunState,
 } from '@/lib/search-api'
 import type { PromptAttachment } from '@/lib/prompt-attachments'
+import { useAuthStore } from '@/stores/authStore'
+import { useContextAgentStore } from '@/stores/contextAgentStore'
 
 export interface SearchLocationHint {
   location?: string
@@ -119,6 +121,7 @@ export const useSearchResultsStore = create<SearchResultsState>()((set, get) => 
       {
         q,
         level,
+        user_id: useAuthStore.getState().user?.id || 'default',
         ...(opts?.country ? { country: opts.country } : {}),
         ...(opts?.location ? { location: opts.location } : {}),
         ...(opts?.attachments?.length ? { prompt_attachments: opts.attachments } : {}),
@@ -148,6 +151,8 @@ export const useSearchResultsStore = create<SearchResultsState>()((set, get) => 
               followUpLoading: false,
             })
           })
+          const finishedSlot = get().runsByKey[key]
+          useContextAgentStore.getState().observeSearch(q, finishedSlot?.run.agent.text ?? get().run.agent.text)
         }
       })
       .catch((error: unknown) => {
@@ -209,6 +214,7 @@ export const useSearchResultsStore = create<SearchResultsState>()((set, get) => 
         {
           q: trimmed,
           level,
+          user_id: useAuthStore.getState().user?.id || 'default',
           country,
           session_id: sessionId,
           follow_up: true,
@@ -238,6 +244,8 @@ export const useSearchResultsStore = create<SearchResultsState>()((set, get) => 
             followUpLoading: false,
           })
         })
+        const finishedSlot = get().runsByKey[key]
+        useContextAgentStore.getState().observeSearch(trimmed, finishedSlot?.run.agent.text ?? get().run.agent.text)
       }
     } catch (error: unknown) {
       if (next.signal.aborted) return

@@ -108,11 +108,12 @@ def test_article_reaches_native_model_and_restored_history(monkeypatch, destinat
                 if destination != 'panel':
                     assert f'You are {destination.title()} Agent.' in builds[0]['system_prompt']
                 context_tools = {tool.tool_name for tool in builds[0]['extra_tools']}
-                assert context_tools == ({'update_interest_graph', 'recommend_agent', 'schedule_agent'} if destination == 'context' else
+                assert context_tools == ({'update_interest_graph', 'recommend_agent', 'recommend_project', 'draft_reply',
+                                          'schedule_agent', *WORKSPACE_TOOLS} if destination == 'context' else
                                          WORKSPACE_TOOLS if destination == 'panel' else set())
-                # Only Ren's own panel chat is told about its document and project tools.
+                # Ren's panel chat and Context Agent are told about their document and project tools.
                 from agent.api.core.workspace_tools import workspace_prompt
-                assert (workspace_prompt() in builds[0]['system_prompt']) == (destination == 'panel')
+                assert (workspace_prompt() in builds[0]['system_prompt']) == (destination in ('panel', 'context'))
             wrong = await client.post('/chat', json={'session_id': f'article-{destination}', 'provider': 'openai',
                 'message': 'Wrong destination', 'destination': 'build' if destination != 'build' else 'search'})
             assert wrong.status_code == 409

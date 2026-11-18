@@ -1,17 +1,22 @@
-import { useEffect, useState, type FormEvent } from 'react'
-import { Clock } from 'lucide-react'
+import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from 'react'
+import { motion } from 'framer-motion'
+import { AppWindow, Clock, FolderKanban, MessageSquareReply, Smartphone, X } from 'lucide-react'
+import { RenMark } from '@/components/brand'
 import { useAgentUi } from '@/context/AgentUiContext'
 import { openSignIn } from '@/lib/sign-in'
 import { useContextAgentStore } from '@/stores/contextAgentStore'
+import { useInterestsStore } from '@/stores/interestsStore'
 import { usePanelAgentStore } from '@/stores/panelAgentStore'
 import { specialistChoices } from '@/lib/panel-agents'
 import {
   agoLabel, cadenceLabel, defaultCadence, runStatusLabel, WEEKDAYS, whenLabel,
-  type AgentCadence, type ScheduleEvery, type SpecialistAgent,
+  type AgentCadence, type AgentRecommendation, type ReplyDraft, type ScheduleEvery, type SpecialistAgent,
 } from '@/lib/context-api'
 import { cn } from '@/utils/cn'
-import { field, ghostButton, mutedText, primaryButton, sectionLabel } from './contextUi'
+import { field, ghostButton, iconButton, mutedText, primaryButton, sectionLabel } from './contextUi'
 import { RecentRuns, useReviewRun } from './AgentRuns'
+
+const EASE = [0.19, 1, 0.22, 1] as const
 
 /** Open the Agent Panel in a new chat with this specialist (on the default model) and send the task to it. */
 export function chatWithSpecialist(agent: SpecialistAgent, task: string, send: (prompt: string) => void) {
@@ -20,8 +25,9 @@ export function chatWithSpecialist(agent: SpecialistAgent, task: string, send: (
   useContextAgentStore.getState().yieldToPanel()
 }
 
-/** Recommendations from the Context Agent (Build = approve → it writes the specialist and saves it), saved specialists and their runs. */
+/** Recommendations from the Context Agent (Build/Create = approve), drafted replies (Send = approval first), saved specialists and their runs. */
 export function ContextAgents() {
+  const replyDrafts = useContextAgentStore((state) => state.replyDrafts)
   const recommendations = useContextAgentStore((state) => state.recommendations)
   const agents = useContextAgentStore((state) => state.agents)
   const signInRequired = useContextAgentStore((state) => state.agentsSignInRequired)
@@ -32,23 +38,36 @@ export function ContextAgents() {
   useEffect(() => { void refreshAgents(); void refreshRuns() }, [refreshAgents, refreshRuns])
 
   return <div className="h-full space-y-5 overflow-y-auto px-4 py-3">
+    {replyDrafts.length > 0 && <section aria-label="Drafted replies" className="space-y-2">
+      <h3 className={sectionLabel}>Drafted replies</h3>
+      {replyDrafts.map((draft) => <ReplyDraftCard key={draft.id} draft={draft} />)}
+    </section>}
+
     <RecentRuns />
 
     <section aria-label="Recommended agents" className="space-y-2">
       <h3 className={sectionLabel}>Recommended</h3>
-      {!recommendations.length && <p className={mutedText}>Ren suggests agents here as it learns what you do often.</p>}
-      {recommendations.map((recommendation) => <article key={recommendation.id} data-testid="agent-recommendation" className="rounded-xl border border-surface-200 p-3 dark:border-surface-800">
-        <p className="text-[13px] font-semibold text-ink dark:text-ink-inverse">{recommendation.name}</p>
-        <p className={mutedText}>{recommendation.description}</p>
-        <p className="mt-1 text-[11px] text-ink-muted dark:text-ink-inverse-muted">{recommendation.rationale}</p>
-        <div className="mt-2 flex justify-end gap-1">
-          <button type="button" disabled={Boolean(building)} onClick={() => dismiss(recommendation.id)} className={ghostButton}>Not now</button>
-          {signInRequired
-            ? <button type="button" onClick={() => openSignIn()} className={primaryButton}>Sign in to build</button>
-            : <button type="button" disabled={Boolean(building)} onClick={() => void approve(recommendation)} className={primaryButton}>
-              {building === recommendation.id ? 'Building…' : 'Build'}</button>}
-        </div>
-      </article>)}
+      {!recommendations.length && <p className={mutedText}>Ren suggests projects, apps and agents here as it learns what you do often.</p>}
+      {recommendations.map((recommendation) => {
+        const isProject = recommendation.kind === 'project'
+        const actionLabel = isProject ? (building === recommendation.id ? 'Creating…' : 'Create') : (building === recommendation.id ? 'Building…' : 'Build')
+        return <article key={recommendation.id} data-testid="agent-recommendation" className="rounded-xl border border-surface-200 p-3 dark:border-surface-800">
+          <RecommendationKindLabel kind={recommendation.kind} />
+          <p className="text-[13px] font-semibold text-ink dark:text-ink-inverse">{recommendation.name}</p>
+          <p className={mutedText}>{recommendation.description}</p>
+          {recommendation.issues && recommendation.issues.length > 0 && <ul className="mt-1.5 list-disc space-y-0.5 pl-4 text-[11px] text-ink-secondary dark:text-ink-inverse-secondary">
+            {recommendation.issues.slice(0, 4).map((issue) => <li key={issue}>{issue}</li>)}
+          </ul>}
+          <p className="mt-1 text-[11px] text-ink-muted dark:text-ink-inverse-muted">{recommendation.rationale}</p>
+          <div className="mt-2 flex justify-end gap-1">
+            <button type="button" disabled={Boolean(building)} onClick={() => dismiss(recommendation.id)} className={ghostButton}>Not now</button>
+            {signInRequired && !isProject
+              ? <button type="button" onClick={() => openSignIn()} className={primaryButton}>Sign in to build</button>
+              : <button type="button" disabled={Boolean(building)} onClick={() => void approve(recommendation)} className={primaryButton}>
+                {actionLabel}</button>}
+          </div>
+        </article>
+      })}
     </section>
 
     <section aria-label="Your agents" className="space-y-2">
@@ -58,6 +77,101 @@ export function ContextAgents() {
       {agents.map((agent) => <SavedAgent key={agent.id} agent={agent} onUse={(task) => chatWithSpecialist(agent, task, sendToAgentPanel)} />)}
     </section>
   </div>
+}
+
+/** Floating notice above the orb for the newest drafted reply: edit if wanted, then Send (approval first). */
+export function ReplyDraftNotice() {
+  const drafts = useContextAgentStore((state) => state.replyDrafts)
+  const sending = useContextAgentStore((state) => state.sendingReply)
+  const draft = drafts[0]
+  const cardRef = useRef<HTMLDivElement>(null)
+  const [text, setText] = useState(draft?.draft ?? '')
+  useEffect(() => { if (draft) setText(draft.draft) }, [draft])
+  useLayoutEffect(() => {
+    const el = cardRef.current
+    const report = (window as { contextSurface?: { reportMetrics?: (m: { noticeHeight?: number }) => void } }).contextSurface?.reportMetrics
+    if (!el || !report || !draft) return
+    const sync = () => report({ noticeHeight: Math.ceil(el.getBoundingClientRect().height) })
+    sync()
+    const observer = new ResizeObserver(sync)
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [draft?.id, drafts.length])
+  if (!draft) return null
+  const more = drafts.length - 1
+  const { sendReply, dismissReply, setTab } = useContextAgentStore.getState()
+  const openAll = () => { setTab('agents'); useInterestsStore.getState().setExpanded(true) }
+
+  return (
+    <motion.div
+      ref={cardRef}
+      key={draft.id}
+      role="status"
+      aria-live="polite"
+      aria-label={`Draft reply to ${draft.sender} in ${draft.app}`}
+      data-testid="reply-draft-notice"
+      initial={{ y: 8, opacity: 0 }}
+      animate={{ y: 0, opacity: 1 }}
+      exit={{ y: 8, opacity: 0 }}
+      transition={{ duration: 0.22, ease: EASE }}
+      className="fixed bottom-[84px] right-5 z-40 w-[300px]"
+    >
+      <div className="ron-glass-panel rounded-xl border border-surface-200 bg-surface-0 p-3 text-ink shadow-float dark:border-surface-800 dark:bg-surface-900 dark:text-ink-inverse">
+        <div className="flex items-start gap-2.5">
+          <RenMark className="mt-0.5 h-6 w-6 flex-shrink-0" />
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-[13px] font-semibold">{draft.sender} · {draft.app}</p>
+            {draft.incoming && <p className={cn('line-clamp-2', mutedText)}>{draft.incoming}</p>}
+          </div>
+          <button type="button" onClick={() => dismissReply(draft.id)} aria-label="Dismiss reply draft" title="Dismiss" className={cn(iconButton, '-mr-1 -mt-1')}>
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+        <textarea aria-label={`Reply to ${draft.sender}`} value={text} onChange={(event) => setText(event.target.value)}
+          rows={2} className={cn(field, 'mt-2 h-auto resize-none py-1.5')} />
+        <div className="mt-2 flex items-center justify-between gap-2">
+          {more > 0
+            ? <button type="button" onClick={openAll} className="text-[12px] font-medium text-ink-secondary underline-offset-2 hover:underline dark:text-ink-inverse-secondary">{more} more</button>
+            : <span />}
+          <div className="flex gap-1">
+            <button type="button" disabled={Boolean(sending)} onClick={() => dismissReply(draft.id)} className={ghostButton}>Not now</button>
+            <button type="button" disabled={Boolean(sending) || !text.trim()} onClick={() => void sendReply(draft, text)} className={primaryButton}>
+              {sending === draft.id ? 'Sending…' : 'Send'}</button>
+          </div>
+        </div>
+      </div>
+    </motion.div>
+  )
+}
+
+function ReplyDraftCard({ draft }: { draft: ReplyDraft }) {
+  const sending = useContextAgentStore((state) => state.sendingReply === draft.id)
+  const { sendReply, dismissReply } = useContextAgentStore.getState()
+  const [text, setText] = useState(draft.draft)
+  return <article data-testid="reply-draft" className="rounded-xl border border-surface-200 p-3 dark:border-surface-800">
+    <p className="mb-1 flex items-center gap-1 font-mono text-[10px] font-medium uppercase tracking-[0.08em] text-volt">
+      <MessageSquareReply className="h-3 w-3" strokeWidth={2} aria-hidden />{draft.app}
+    </p>
+    <p className="text-[13px] font-semibold text-ink dark:text-ink-inverse">{draft.sender}</p>
+    {draft.incoming && <p className={mutedText}>{draft.incoming}</p>}
+    <textarea aria-label={`Reply to ${draft.sender}`} value={text} onChange={(event) => setText(event.target.value)}
+      rows={2} className={cn(field, 'mt-2 h-auto resize-none py-1.5')} />
+    <div className="mt-2 flex justify-end gap-1">
+      <button type="button" disabled={sending} onClick={() => dismissReply(draft.id)} className={ghostButton}>Not now</button>
+      <button type="button" disabled={sending || !text.trim()} onClick={() => void sendReply(draft, text)} className={primaryButton}>
+        {sending ? 'Sending…' : 'Send'}</button>
+    </div>
+  </article>
+}
+
+/** An app or project recommendation says which kind it is; an agent's needs no label. */
+function RecommendationKindLabel({ kind }: { kind: AgentRecommendation['kind'] | undefined }) {
+  if (kind !== 'web' && kind !== 'android' && kind !== 'project') return null
+  const Icon = kind === 'project' ? FolderKanban : kind === 'web' ? AppWindow : Smartphone
+  const label = kind === 'project' ? 'Project' : kind === 'web' ? 'Web app' : 'Android app'
+  return <p className="mb-1 flex items-center gap-1 font-mono text-[10px] font-medium uppercase tracking-[0.08em] text-volt">
+    <Icon className="h-3 w-3" strokeWidth={2} aria-hidden />{label}
+  </p>
 }
 
 function SavedAgent({ agent, onUse }: { agent: SpecialistAgent; onUse: (task: string) => void }) {

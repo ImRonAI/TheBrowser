@@ -44,6 +44,8 @@ from strands.tools.registry import ToolRegistry
 from strands.types.tools import AgentTool, ToolContext
 from strands.vended_plugins.skills import AgentSkills
 
+from agent.api.core.dreaming import JOURNAL_DIRECTIVE, inherited_memory
+
 ModelFactory: TypeAlias = Callable[[str], Model]
 AsyncToolLoader: TypeAlias = Callable[[], Awaitable[Sequence[AgentTool]]]
 ToolAssignment: TypeAlias = AgentTool | ToolProvider
@@ -1018,9 +1020,14 @@ class ChildSpec:
 
 
 async def create_child_agent(
-    spec: ChildSpec, *, model_factory: ModelFactory, plugins: Sequence[Any] = ()
+    spec: ChildSpec, *, model_factory: ModelFactory, plugins: Sequence[Any] = (), parent: Agent | None = None
 ) -> Agent:
-    """Build an isolated child. Caller owns cleanup; no parent session/state."""
+    """Build an isolated child. Caller owns cleanup; no parent session/state. The child inherits ``parent``'s
+    second brain: its ``search_memory`` and ``journal`` (``dreaming.inherited_memory``)."""
+    assigned = {value.tool_name for value in spec.tools if isinstance(value, AgentTool)}
+    inherited = [value for value in inherited_memory(parent.tool_registry.registry if parent is not None else {})
+                 if value.tool_name not in assigned]
+
     def build() -> Agent:
         model = model_factory(spec.name)
         if not isinstance(model, Model):
@@ -1029,8 +1036,8 @@ async def create_child_agent(
             name=spec.name,
             description=spec.description,
             model=model,
-            system_prompt=spec.system_prompt,
-            tools=list(spec.tools),
+            system_prompt=spec.system_prompt + (JOURNAL_DIRECTIVE if inherited else ""),
+            tools=[*spec.tools, *inherited],
             plugins=list(plugins),
             callback_handler=None,
             session_manager=None,
@@ -1077,7 +1084,8 @@ def create_skill_tool(
             tools=assignments[skill_name],
             description=skill.description,
         )
-        child = await create_child_agent(spec, model_factory=model_factory, plugins=[AgentSkills(skills=[skill])])
+        child = await create_child_agent(spec, model_factory=model_factory, plugins=[AgentSkills(skills=[skill])],
+                                         parent=tool_context.agent)
         try:
             result = None
             async with aclosing(child.stream_async(prompt)) as stream:
@@ -1286,15 +1294,15 @@ def create_formation_tool(
     spec: GraphSpec | SwarmSpec, *, model_factory: ModelFactory, description: str
 ) -> AgentTool:
     """Build a fresh native Graph/Swarm (including nested Graphs) per tool call."""
-    async def build(node: ChildSpec | GraphSpec | SwarmSpec, owned: list[Agent]) -> Agent | Graph | Swarm:
+    async def build(node: ChildSpec | GraphSpec | SwarmSpec, owned: list[Agent], parent: Agent | None) -> Agent | Graph | Swarm:
         if isinstance(node, ChildSpec):
-            child = await create_child_agent(node, model_factory=model_factory)
+            child = await create_child_agent(node, model_factory=model_factory, parent=parent)
             owned.append(child)
             return child
         if isinstance(node, SwarmSpec):
             if not node.children or len({c.name for c in node.children}) != len(node.children):
                 raise ValueError("Swarm children must be nonempty with unique names")
-            children = [await build(child, owned) for child in node.children]
+            children = [await build(child, owned, parent) for child in node.children]
             return Swarm(
                 children,
                 id=node.name,
@@ -1315,7 +1323,7 @@ def create_formation_tool(
         if node.node_timeout is not None:
             builder.set_node_timeout(node.node_timeout)
         for name, child_spec in node.nodes.items():
-            builder.add_node(await build(child_spec, owned), name)
+            builder.add_node(await build(child_spec, owned, parent), name)
         for source, target in node.edges:
             builder.add_edge(source, target)
         for name in node.entry_points:
@@ -1323,15 +1331,16 @@ def create_formation_tool(
         return builder.build()
 
     @tool(name=spec.name, description=description)
-    async def formation(prompt: str) -> AsyncIterator[dict[str, Any]]:
+    async def formation(prompt: str, agent: Agent | None = None) -> AsyncIterator[dict[str, Any]]:
         """Execute the configured formation once and stream node envelopes.
 
         Args:
             prompt: Task for the formation.
+            agent: The calling agent, which the SDK passes in; its children inherit its second brain.
         """
         owned: list[Agent] = []
         try:
-            executor = await build(spec, owned)
+            executor = await build(spec, owned, agent)
             final: MultiAgentResult | None = None
             async with aclosing(executor.stream_async(prompt)) as stream:
                 async for event in stream:

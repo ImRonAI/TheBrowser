@@ -253,7 +253,12 @@ def test_skills_environment_native_plugin_and_explicit_child_assignments(tmp_pat
 
 
 @pytest.mark.parametrize("kind", ["graph", "swarm", "nested"])
-def test_native_formations_execute_each_stream_once_and_serialize(kind):
+def test_native_formations_execute_each_stream_once_and_serialize(kind, monkeypatch):
+    from strands.storage import InMemoryStorage
+    from agent.api.core import dreaming, panel_storage
+
+    monkeypatch.setattr(panel_storage, "_storage", InMemoryStorage())
+
     async def scenario():
         models = []
         def factory(name):
@@ -273,8 +278,13 @@ def test_native_formations_execute_each_stream_once_and_serialize(kind):
             spec = GraphSpec("team", {"one": one, "two": two}, (("one", "two"),))
             expected = 2
         value = create_formation_tool(spec, model_factory=factory, description="Offline formation")
-        events, result = await call_tool(value, {"prompt": "do work"})
+        # The children inherit the parent's second brain: its own search_memory and journal.
+        parent = Agent(model=OfflineModel(), tools=dreaming.agent_memory_tools("u1", "panel"), callback_handler=None)
+        events, result = await call_tool(value, {"prompt": "do work"}, agent=parent)
         assert result["status"] == "success", result
+        called = [call for model in models for call in model.calls]
+        assert all({"search_memory", "journal"} <= {tool["name"] for tool in call["tools"]} for call in called)
+        assert all(call["prompt"].endswith(dreaming.JOURNAL_DIRECTIVE) for call in called)
         payload = result["content"][0]["json"]["result"]
         recovered = MultiAgentResult.from_dict(payload)
         assert recovered.status is Status.COMPLETED
@@ -285,7 +295,7 @@ def test_native_formations_execute_each_stream_once_and_serialize(kind):
         if kind == "nested":
             assert isinstance(recovered.results["inner"].result, MultiAgentResult)
         # A second tool invocation constructs fresh children, with fresh histories.
-        await call_tool(value, {"prompt": "new work"})
+        await call_tool(value, {"prompt": "new work"}, agent=parent)
         assert sum(len(model.calls) for model in models) == expected * 2
         assert all(len(model.calls) <= 1 for model in models)
 

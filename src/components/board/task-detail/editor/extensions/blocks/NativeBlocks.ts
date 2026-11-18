@@ -26,8 +26,9 @@ export const RonImage = Image.extend({
 /**
  * Official YouTube node (`setYoutubeVideo`), privacy-enhanced (`youtube-nocookie.com`). Its iframe gets the
  * same sandbox, permissions and referrer policy as every other embed. Pasted YouTube links stay links.
+ * It can also be a tab of an Embed tabs block (group `embedTab`).
  */
-export const RonYoutube = Youtube.configure({
+export const RonYoutube = Youtube.extend({ group: 'block embedTab' }).configure({
   addPasteHandler: false,
   nocookie: true,
   width: 640,

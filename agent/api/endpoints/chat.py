@@ -469,10 +469,10 @@ async def _create_runtime_agent(*, user_id, session_id, selection, options, runt
         agent_prompt = project_agent_prompt(target["id"])
         agent_tools = await asyncio.to_thread(project_agent_tools, user_id, session_id, target["id"],
                                               provider=selection["provider"], model_id=selection["model_id"])
-    elif destination == "panel":
-        # Ren's own chat works with the user's documents and projects, with the access /chat bound for this session
-        # (_bind_workspace_access). The addendum is not part of system_prompt_for, which the Live agent shares
-        # (live_system_prompt), so Live's prompt and tools stay as they are.
+    elif destination in ("panel", "context"):
+        # Ren's own chat and Context Agent work with the user's documents and projects, with the access /chat bound for
+        # this session (_bind_workspace_access). The addendum is not part of system_prompt_for, which the Live agent
+        # shares (live_system_prompt), so Live's prompt and tools stay as they are.
         from agent.api.core.workspace_tools import workspace_prompt, workspace_tools
         agent_prompt, agent_tools = workspace_prompt(), workspace_tools(user_id, session_id)
     destination_prompt = (
@@ -481,7 +481,7 @@ async def _create_runtime_agent(*, user_id, session_id, selection, options, runt
         else system_prompt_for(selection["provider"], browser=browser) + {
             "panel": "",
             "search": "\nYou are Search Agent. Research the user's question, verify claims with search tools, and cite original sources.",
-            "context": context_agent_prompt(),
+            "context": context_agent_prompt(user_id),
         }[destination] + agent_prompt
     )
     return await asyncio.to_thread(
@@ -707,7 +707,7 @@ async def _authorize_agent(target: dict[str, Any], request: ChatRequest, http_re
         if not await ProjectService(identity).rows("projects", select="id", id=f"eq.{target['id']}"):
             raise HTTPException(404, "Project not found or not accessible")
         bind_identity(request.user_id, request.session_id, identity)
-    elif request.destination == "panel":
+    elif request.destination in ("panel", "context"):
         await _bind_workspace_access(request, http_request)
 
 

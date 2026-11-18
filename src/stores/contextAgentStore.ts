@@ -8,12 +8,15 @@
  */
 import { create } from 'zustand'
 import { createJSONStorage, persist } from 'zustand/middleware'
+import { getSession } from '@/api/supabase'
 import { API_BASE_URL } from '@/lib/api-base'
+import { guestWorkspace } from '@/lib/project-workspace'
 import { cancelRon, ronSessionId, runRon } from '@/lib/ron-run'
 import {
-  approveAgentTurn, browsingDue, browsingTurn, cadenceLabel, contextAddedTurn, contextResults, createContextClient, dataUrlBlob, latestReply,
-  phoneTurn, recordVisit, whenLabel, type AgentCadence, type AgentRecommendation, type AgentRun, type ContextItem, type NewContextFile, type NewContextItem,
-  type PhoneActivity, type SpecialistAgent, type Visit,
+  APPLICATIONS_CHANGED, approveAgentTurn, browsingDue, browsingTurn, cadenceLabel, contextAddedTurn, contextResults, createContextClient, dataUrlBlob, latestReply,
+  notificationTurn, phoneTurn, recordVisit, reviewDue, reviewTurn, sendReplyTurn, whenLabel,
+  type AgentCadence, type AgentRecommendation, type AgentRun, type ChatObservation, type ContextItem, type Dream, type NewContextFile, type NewContextItem,
+  type PhoneActivity, type PhoneNotification, type ReplyDraft, type SearchObservation, type SpecialistAgent, type TopicReview, type Visit,
 } from '@/lib/context-api'
 import { startScreenRecording, type ScreenRecording } from '@/lib/screen-recorder'
 import { isGuestUserId } from '@/lib/sign-in'
@@ -25,20 +28,39 @@ export interface AskTurn { id: string; question: string; answer: string; error?:
 /** `activity` while one of the user's own Ask questions is the running turn (background turns use other labels). */
 export const ASK_ACTIVITY = 'Thinking'
 
+export type PhoneReplySender = (draft: ReplyDraft, text: string) => Promise<{ ok: boolean; error?: string }>
+let phoneReplySender: PhoneReplySender | null = null
+/** ren mobile registers its RenHost bridge here so Send asks for approval on the phone and sends directly. */
+export function setPhoneReplySender(sender: PhoneReplySender | null) {
+  phoneReplySender = sender
+}
+
+async function workspaceAuthHeaders(): Promise<Record<string, string>> {
+  const session = await getSession().catch(() => null)
+  return session ? { Authorization: `Bearer ${session.access_token}` } : { 'X-Ron-Workspace': guestWorkspace().token }
+}
+
 interface ContextAgentState {
   userId: string
   ownerUserId: string
   watchBrowsing: boolean
   visits: Visit[]
+  searches: SearchObservation[]
+  chats: ChatObservation[]
   recommendations: AgentRecommendation[]
-  /** Recommendation ids the user approved or dismissed. */
+  /** Reply drafts from `draft_reply`, waiting for the user's Send (approval first) or Not now. */
+  replyDrafts: ReplyDraft[]
+  /** Recommendation and reply-draft ids the user approved, sent or dismissed. */
   handled: string[]
   /** Agent name → the interest it was built for (from the approved recommendation). */
   agentInterests: Record<string, string>
+  /** Epoch ms of the most recent twice-daily `[review]` turn, and whether new notes arrived since then. */
+  lastReviewAt: number
+  hasNewNotes: boolean
   tab: ContextTab
   pinned: boolean
   asks: AskTurn[]
-  /** Unseen recommendation (orb badge). */
+  /** Unseen recommendation or reply draft (orb badge). */
   unseen: boolean
   // not persisted
   status: 'idle' | 'running'
@@ -50,10 +72,15 @@ interface ContextAgentState {
   agents: SpecialistAgent[]
   agentsSignInRequired: boolean
   building: string | null
+  sendingReply: string | null
   recordingSince: number | null
   busy: string | null
   /** The specialists' runs, newest first (`/context/runs`); finished unseen ones are the widget's notifications. */
   runs: AgentRun[]
+  /** The newest dream the user has not reviewed (`/context/dream`): the widget's memory notification. */
+  dream: Dream | null
+  /** The dream's checklist is open (ren mobile gives the widget the whole screen for it). */
+  reviewingDream: boolean
   /** Agent id whose schedule is being saved, or whose Run now is starting. */
   scheduling: string | null
   starting: string | null
@@ -66,9 +93,16 @@ interface ContextAgentState {
   /** After handing work to the Agent Panel: collapse to the orb (unless pinned) so the panel is visible. */
   yieldToPanel: () => void
   observeVisit: (url: string, title: string) => void
+  observeSearch: (query: string, summary?: string) => void
+  observeChat: (channel: string, user: string, assistant?: string) => void
   flushBrowsing: (force?: boolean) => Promise<void>
+  flushReview: (force?: boolean) => Promise<void>
   /** ren mobile: the apps the user used on the phone and what Ren did there, as one Context Agent turn. */
   reportPhone: (activity: PhoneActivity) => Promise<void>
+  /** ren mobile: a live notification or text message posted on the phone; Context Agent reacts immediately. */
+  alertNotification: (notification: PhoneNotification) => Promise<void>
+  sendReply: (draft: ReplyDraft, text?: string) => Promise<void>
+  dismissReply: (id: string) => void
   refreshItems: () => Promise<void>
   refreshAgents: () => Promise<void>
   addContext: (item: NewContextItem) => Promise<ContextItem | null>
@@ -85,6 +119,10 @@ interface ContextAgentState {
   runNow: (agent: SpecialistAgent) => Promise<void>
   /** The user opened or dismissed this run's notification. */
   markRunSeen: (runId: string) => Promise<void>
+  refreshDream: () => Promise<void>
+  setReviewingDream: (reviewing: boolean) => void
+  /** Close the dream's notification; topics marked wrong or commented go to the dreaming agent. Empty dismisses. */
+  reviewDream: (topics: TopicReview[]) => Promise<void>
   ask: (question: string) => Promise<void>
   cancel: () => Promise<void>
 }
@@ -104,7 +142,8 @@ export const useContextAgentStore = create<ContextAgentState>()(persist((set, ge
       const userId = get().userId
       set({ status: 'running', activity, error: '' })
       try {
-        const state = await runRon({ apiBase: API_BASE_URL, destination: 'context', sessionId: sessionFor(userId), userId, message })
+        const headers = await workspaceAuthHeaders()
+        const state = await runRon({ apiBase: API_BASE_URL, destination: 'context', sessionId: sessionFor(userId), userId, message, headers })
         if (get().userId !== userId) return ''
         const results = contextResults(state.messages)
         if (results.interests) useInterestsStore.getState().applyAgentGraph(results.interests)
@@ -112,6 +151,11 @@ export const useContextAgentStore = create<ContextAgentState>()(persist((set, ge
           const known = new Set([...get().recommendations.map((item) => item.id), ...get().handled])
           const fresh = results.recommendations.filter((item) => !known.has(item.id))
           if (fresh.length) set({ recommendations: [...fresh, ...get().recommendations].slice(0, 12), unseen: true })
+        }
+        if (results.replyDrafts.length) {
+          const known = new Set([...get().replyDrafts.map((item) => item.id), ...get().handled])
+          const fresh = results.replyDrafts.filter((item) => !known.has(item.id))
+          if (fresh.length) set({ replyDrafts: [...fresh, ...get().replyDrafts].slice(0, 8), unseen: true })
         }
         if (results.created.length) void get().refreshAgents()
         if (state.error) throw new Error(state.error)
@@ -126,9 +170,48 @@ export const useContextAgentStore = create<ContextAgentState>()(persist((set, ge
 
   const collected = (item: ContextItem) => {
     useInterestsStore.getState().setExpanded(true)
-    set({ tab: 'context', items: [item, ...get().items.filter((entry) => entry.id !== item.id)], notice: `Added “${item.title || item.kind}” to your context.` })
+    set({ tab: 'context', items: [item, ...get().items.filter((entry) => entry.id !== item.id)], hasNewNotes: true, notice: `Added “${item.title || item.kind}” to your context.` })
     run(contextAddedTurn(item, graph()), 'Reading what you added').catch((error) => set({ error: messageOf(error) }))
     return item
+  }
+
+  /** An approved project: Context Agent creates it (and its starter issues and brief) in Projects. */
+  const buildProject = async (recommendation: AgentRecommendation) => {
+    set({ building: recommendation.id, error: '', notice: '' })
+    try {
+      const reply = await run(approveAgentTurn(recommendation), `Creating ${recommendation.name}`)
+      set({
+        handled: [...get().handled, recommendation.id],
+        recommendations: get().recommendations.filter((item) => item.id !== recommendation.id),
+        notice: reply || `Created project ${recommendation.name}.`,
+      })
+    } catch (error) {
+      set({ error: `${recommendation.name} was not created: ${messageOf(error)}` })
+    } finally {
+      set({ building: null })
+    }
+  }
+
+  /** An approved app: OpenCode builds it on Ren's workspace computer and the Context Agent lists it under Applications. */
+  const buildApp = async (recommendation: AgentRecommendation) => {
+    const userId = get().userId
+    if (isGuestUserId(userId)) { set({ error: 'Sign in to build apps.' }); return }
+    set({ building: recommendation.id, error: '', notice: '' })
+    const started = Date.now() / 1000
+    try {
+      const reply = await run(approveAgentTurn(recommendation), `Building ${recommendation.name}`)
+      const name = recommendation.name.trim().toLowerCase()
+      const fresh = (await client(userId).applications()).filter((app) => app.created_at >= started)
+      const built = fresh.find((app) => app.name.trim().toLowerCase() === name) ?? fresh[0]
+      if (!built) throw new Error(reply || 'Context Agent did not finish the app.')
+      window.dispatchEvent(new Event(APPLICATIONS_CHANGED))
+      set({ handled: [...get().handled, recommendation.id], recommendations: get().recommendations.filter((item) => item.id !== recommendation.id),
+        notice: reply || `${built.name} is in your Applications.` })
+    } catch (error) {
+      set({ error: `${recommendation.name} was not built: ${messageOf(error)}` })
+    } finally {
+      set({ building: null })
+    }
   }
 
   /**
@@ -141,9 +224,10 @@ export const useContextAgentStore = create<ContextAgentState>()(persist((set, ge
   }
 
   return {
-    userId: 'default', ownerUserId: '', watchBrowsing: true, visits: [], recommendations: [], handled: [], agentInterests: {}, tab: 'interests', pinned: false, asks: [], unseen: false,
+    userId: 'default', ownerUserId: '', watchBrowsing: true, visits: [], searches: [], chats: [], recommendations: [], replyDrafts: [],
+    handled: [], agentInterests: {}, lastReviewAt: 0, hasNewNotes: false, tab: 'interests', pinned: false, asks: [], unseen: false,
     status: 'idle', activity: '', error: '', notice: '', items: [], itemsLoaded: false, agents: [], agentsSignInRequired: false,
-    building: null, recordingSince: null, busy: null, runs: [], scheduling: null, starting: null,
+    building: null, sendingReply: null, recordingSince: null, busy: null, runs: [], dream: null, reviewingDream: false, scheduling: null, starting: null,
 
     setUser: (userId) => {
       const current = get()
@@ -160,14 +244,21 @@ export const useContextAgentStore = create<ContextAgentState>()(persist((set, ge
         agents: [],
         agentsSignInRequired: false,
         runs: [],
+        dream: null,
+        reviewingDream: false,
         error: '',
         notice: '',
         ...(accountChanged
           ? {
               visits: [],
+              searches: [],
+              chats: [],
               recommendations: [],
+              replyDrafts: [],
               handled: [],
               agentInterests: {},
+              lastReviewAt: 0,
+              hasNewNotes: false,
               asks: [],
               unseen: false,
             }
@@ -176,10 +267,11 @@ export const useContextAgentStore = create<ContextAgentState>()(persist((set, ge
       void get().refreshItems()
       void get().refreshAgents()
       void get().refreshRuns()
+      void get().refreshDream()
     },
     setTab: (tab) => set({ tab, ...(tab === 'agents' ? { unseen: false } : {}) }),
     setPinned: (pinned) => set({ pinned }),
-    setWatchBrowsing: (watchBrowsing) => set({ watchBrowsing, ...(watchBrowsing ? {} : { visits: [] }) }),
+    setWatchBrowsing: (watchBrowsing) => set({ watchBrowsing, ...(watchBrowsing ? {} : { visits: [], searches: [] }) }),
     clearMessages: () => set({ error: '', notice: '' }),
     yieldToPanel: () => {
       if (!get().pinned) {
@@ -194,25 +286,99 @@ export const useContextAgentStore = create<ContextAgentState>()(persist((set, ge
       if (visits !== get().visits) set({ visits })
     },
 
+    observeSearch: (query, summary) => {
+      const clean = query.trim()
+      if (!clean || !get().watchBrowsing) return
+      const current = get().searches
+      const last = current[current.length - 1]
+      if (last && last.query === clean) {
+        if (summary && summary !== last.summary) set({ searches: [...current.slice(0, -1), { ...last, summary }] })
+        return
+      }
+      set({ searches: [...current, { query: clean, ...(summary ? { summary } : {}), at: Date.now() }].slice(-30) })
+    },
+
+    observeChat: (channel, user, assistant) => {
+      const clean = user.trim()
+      if (!clean) return
+      set({ chats: [...get().chats, { channel, user: clean, ...(assistant?.trim() ? { assistant: assistant.trim() } : {}), at: Date.now() }].slice(-30) })
+    },
+
     flushBrowsing: async (force = false) => {
-      const { visits, status } = get()
-      if (!visits.length || status === 'running' || (!force && !browsingDue(visits, Date.now()))) return
-      set({ visits: [] })
+      const { visits, searches, chats, status } = get()
+      const count = visits.length + searches.length + chats.length
+      if (!count || status === 'running' || (!force && !browsingDue(visits, Date.now(), 5, 3 * 60_000, searches, chats))) return
+      set({ visits: [], searches: [], chats: [], hasNewNotes: true })
       try {
-        await run(browsingTurn(visits, graph()), `Reading ${visits.length} page${visits.length === 1 ? '' : 's'} you visited`)
+        await run(browsingTurn(visits, graph(), searches, chats), `Noting ${count} recent activit${count === 1 ? 'y' : 'ies'}`)
       } catch (error) {
-        set({ error: `Context Agent could not read your browsing: ${messageOf(error)}` })
+        set({ error: `Context Agent could not read your activity: ${messageOf(error)}` })
+      }
+    },
+
+    flushReview: async (force = false) => {
+      const { lastReviewAt, hasNewNotes, status, recommendations } = get()
+      const now = Date.now()
+      if (status === 'running' || (!force && !reviewDue(lastReviewAt, hasNewNotes, now))) return
+      set({ lastReviewAt: now, hasNewNotes: false })
+      try {
+        await run(reviewTurn(graph(), recommendations.map((item) => item.name)), 'Reviewing your journal')
+      } catch (error) {
+        set({ hasNewNotes: true, error: `Twice-daily review failed: ${messageOf(error)}` })
       }
     },
 
     reportPhone: async (activity) => {
       if (!activity.apps.length && !activity.actions.length) return
+      set({ hasNewNotes: true })
       try {
         await run(phoneTurn(activity, graph()), 'Reading what you did on your phone')
       } catch (error) {
         set({ error: `Context Agent could not read your phone activity: ${messageOf(error)}` })
       }
     },
+
+    alertNotification: async (notification) => {
+      if (!notification.title.trim() && !notification.text.trim()) return
+      set({ hasNewNotes: true })
+      try {
+        await run(notificationTurn(notification, graph()), `Reading ${notification.app} notification`)
+      } catch (error) {
+        set({ error: `Context Agent could not read notification: ${messageOf(error)}` })
+      }
+    },
+
+    sendReply: async (draft, overrideText) => {
+      const text = (overrideText ?? draft.draft).trim()
+      if (!text) return
+      set({ sendingReply: draft.id, error: '', notice: '' })
+      try {
+        if (phoneReplySender) {
+          const result = await phoneReplySender(draft, text)
+          if (!result.ok) throw new Error(result.error || 'Reply was not sent.')
+          get().observeChat(draft.app, draft.incoming, text)
+          set({
+            handled: [...get().handled, draft.id],
+            replyDrafts: get().replyDrafts.filter((item) => item.id !== draft.id),
+            notice: `Sent reply to ${draft.sender} in ${draft.app}.`,
+          })
+          return
+        }
+        const reply = await run(sendReplyTurn(draft, text), `Sending reply to ${draft.sender}`)
+        get().observeChat(draft.app, draft.incoming, text)
+        set({
+          handled: [...get().handled, draft.id],
+          replyDrafts: get().replyDrafts.filter((item) => item.id !== draft.id),
+          notice: reply || `Sent reply to ${draft.sender}.`,
+        })
+      } catch (error) {
+        set({ error: `Reply to ${draft.sender} was not sent: ${messageOf(error)}` })
+      } finally {
+        set({ sendingReply: null })
+      }
+    },
+
+    dismissReply: (id) => set({ handled: [...get().handled, id], replyDrafts: get().replyDrafts.filter((item) => item.id !== id) }),
 
     refreshItems: async () => {
       const userId = get().userId
@@ -323,6 +489,8 @@ export const useContextAgentStore = create<ContextAgentState>()(persist((set, ge
     },
 
     approve: async (recommendation) => {
+      if (recommendation.kind === 'project') return buildProject(recommendation)
+      if (recommendation.kind === 'web' || recommendation.kind === 'android') return buildApp(recommendation)
       if (isGuestUserId(get().userId)) { set({ error: 'Sign in to save agents.' }); return }
       set({ building: recommendation.id, error: '', notice: '' })
       // create_harness upserts by name: a rebuilt agent keeps its id and gets a new updated_at.
@@ -393,6 +561,29 @@ export const useContextAgentStore = create<ContextAgentState>()(persist((set, ge
       }
     },
 
+    refreshDream: async () => {
+      const userId = get().userId
+      try {
+        const dream = await client(userId).dream()
+        if (get().userId === userId && dream?.version !== get().dream?.version) set({ dream, reviewingDream: false })
+      } catch {
+        // Best effort, like the runs: the next poll tries again.
+      }
+    },
+
+    setReviewingDream: (reviewingDream) => set({ reviewingDream }),
+
+    reviewDream: async (topics) => {
+      const dream = get().dream
+      if (!dream) return
+      set({ dream: null, reviewingDream: false })
+      try {
+        await client(get().userId).reviewDream(dream.version, topics)
+      } catch (error) {
+        set({ dream, error: `Your review was not sent: ${messageOf(error)}` })
+      }
+    },
+
     ask: async (question) => {
       const text = question.trim()
       if (!text) return
@@ -417,7 +608,9 @@ export const useContextAgentStore = create<ContextAgentState>()(persist((set, ge
   version: 1,
   partialize: (state) => ({
     ownerUserId: state.ownerUserId,
-    watchBrowsing: state.watchBrowsing, visits: state.visits, recommendations: state.recommendations, handled: state.handled.slice(-200), agentInterests: state.agentInterests,
+    watchBrowsing: state.watchBrowsing, visits: state.visits, searches: state.searches, chats: state.chats,
+    recommendations: state.recommendations, replyDrafts: state.replyDrafts, handled: state.handled.slice(-200),
+    agentInterests: state.agentInterests, lastReviewAt: state.lastReviewAt, hasNewNotes: state.hasNewNotes,
     tab: state.tab, pinned: state.pinned, asks: state.asks, unseen: state.unseen,
   }),
   onRehydrateStorage: () => (state) => {

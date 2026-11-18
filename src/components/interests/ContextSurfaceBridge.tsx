@@ -12,10 +12,14 @@ import {
   type AgentCadence,
   type AgentRecommendation,
   type NewContextItem,
+  type ReplyDraft,
   type SpecialistAgent,
+  type TopicReview,
 } from '@/lib/context-api'
 import { sendContextToIssue } from '@/lib/context-to-issue'
+import { kindLabel } from '@/lib/issue-attachments'
 import type { AgentChoice } from '@/lib/panel-agents'
+import { clipWithNote, type PromptAttachment } from '@/lib/prompt-attachments'
 import { openSignIn } from '@/lib/sign-in'
 import { useAuthStore } from '@/stores/authStore'
 import { useContextAgentStore, type ContextTab } from '@/stores/contextAgentStore'
@@ -26,7 +30,7 @@ import { getProjectsState, projectsStoreApi } from '@/stores/projectsStore'
 import { useUserPreferencesStore } from '@/stores/userPreferencesStore'
 import type { IssueTypeKey } from '@/types/projects'
 
-const MAX_PROMPT_CHARS = 24_000
+const SAVED_CONTEXT_MAX = 12_000
 
 export type ContextSurfaceRelayedAction =
   | { type: 'interests:toggle-expanded' }
@@ -40,23 +44,29 @@ export type ContextSurfaceRelayedAction =
   | { type: 'context:clear-messages' }
   | { type: 'context:yield-to-panel' }
   | { type: 'context:flush-browsing'; force?: boolean }
+  | { type: 'context:flush-review'; force?: boolean }
   | { type: 'context:refresh-items' }
   | { type: 'context:refresh-agents' }
   | { type: 'context:refresh-runs' }
+  | { type: 'context:refresh-dream' }
   | { type: 'context:add'; item: NewContextItem }
   | { type: 'context:remove'; id: string }
   | { type: 'context:capture-screenshot'; source?: { url: string; title: string } }
   | { type: 'context:stop-recording' }
   | { type: 'context:approve'; recommendation: AgentRecommendation }
   | { type: 'context:dismiss'; id: string }
+  | { type: 'context:send-reply'; draft: ReplyDraft; text?: string }
+  | { type: 'context:dismiss-reply'; id: string }
   | { type: 'context:save-schedule'; agent: SpecialistAgent; cadence: AgentCadence | null; task: string }
   | { type: 'context:run-now'; agent: SpecialistAgent }
   | { type: 'context:mark-run-seen'; runId: string }
+  | { type: 'context:set-reviewing-dream'; reviewing: boolean }
+  | { type: 'context:review-dream'; topics: TopicReview[] }
   | { type: 'context:ask'; question: string }
   | { type: 'context:cancel' }
   | { type: 'projects:init' }
   | { type: 'panel:open' }
-  | { type: 'panel:send'; prompt: string }
+  | { type: 'panel:send'; prompt: string; attachments?: PromptAttachment[] }
   | { type: 'panel:request-agent'; agent: AgentChoice | null }
   | { type: 'panel:request-thread'; sessionId: string | null }
   | { type: 'ask-ron-items'; itemIds: string[] }
@@ -78,13 +88,21 @@ function buildSnapshot() {
   const auth = useAuthStore.getState()
   const prefs = useUserPreferencesStore.getState()
 
-  const hasNotice = runNotifications(contextAgent.runs).length > 0
+  const hasNotice =
+    contextAgent.replyDrafts.length > 0 ||
+    runNotifications(contextAgent.runs).length > 0 ||
+    Boolean(contextAgent.dream)
+  const noticeWide =
+    contextAgent.replyDrafts.length === 0 &&
+    runNotifications(contextAgent.runs).length === 0 &&
+    Boolean(contextAgent.dream && contextAgent.reviewingDream)
   const hasLabels = interests.nodes.length > 0
 
   return {
     layout: {
       isExpanded: interests.isExpanded,
       hasNotice,
+      noticeWide,
       hasLabels,
       discoveryOpen: Boolean(discovery.selectedInterestLabel),
     },
@@ -101,9 +119,14 @@ function buildSnapshot() {
       ownerUserId: contextAgent.ownerUserId,
       watchBrowsing: contextAgent.watchBrowsing,
       visits: contextAgent.visits,
+      searches: contextAgent.searches,
+      chats: contextAgent.chats,
       recommendations: contextAgent.recommendations,
+      replyDrafts: contextAgent.replyDrafts,
       handled: contextAgent.handled,
       agentInterests: contextAgent.agentInterests,
+      lastReviewAt: contextAgent.lastReviewAt,
+      hasNewNotes: contextAgent.hasNewNotes,
       tab: contextAgent.tab,
       pinned: contextAgent.pinned,
       asks: contextAgent.asks,
@@ -117,9 +140,12 @@ function buildSnapshot() {
       agents: contextAgent.agents,
       agentsSignInRequired: contextAgent.agentsSignInRequired,
       building: contextAgent.building,
+      sendingReply: contextAgent.sendingReply,
       recordingSince: contextAgent.recordingSince,
       busy: contextAgent.busy,
       runs: contextAgent.runs,
+      dream: contextAgent.dream,
+      reviewingDream: contextAgent.reviewingDream,
       scheduling: contextAgent.scheduling,
       starting: contextAgent.starting,
     },
@@ -259,6 +285,10 @@ export function ContextSurfaceBridge() {
               await context.flushBrowsing(action.force)
               reply(requestId, true)
               return
+            case 'context:flush-review':
+              await context.flushReview(action.force)
+              reply(requestId, true)
+              return
             case 'context:refresh-items':
               await context.refreshItems()
               reply(requestId, true)
@@ -269,6 +299,10 @@ export function ContextSurfaceBridge() {
               return
             case 'context:refresh-runs':
               await context.refreshRuns()
+              reply(requestId, true)
+              return
+            case 'context:refresh-dream':
+              await context.refreshDream()
               reply(requestId, true)
               return
             case 'context:add':
@@ -293,6 +327,14 @@ export function ContextSurfaceBridge() {
               context.dismiss(action.id)
               reply(requestId, true)
               return
+            case 'context:send-reply':
+              await context.sendReply(action.draft, action.text)
+              reply(requestId, true)
+              return
+            case 'context:dismiss-reply':
+              context.dismissReply(action.id)
+              reply(requestId, true)
+              return
             case 'context:save-schedule':
               await context.saveSchedule(action.agent, action.cadence, action.task)
               reply(requestId, true)
@@ -303,6 +345,14 @@ export function ContextSurfaceBridge() {
               return
             case 'context:mark-run-seen':
               await context.markRunSeen(action.runId)
+              reply(requestId, true)
+              return
+            case 'context:set-reviewing-dream':
+              context.setReviewingDream(action.reviewing)
+              reply(requestId, true)
+              return
+            case 'context:review-dream':
+              await context.reviewDream(action.topics)
               reply(requestId, true)
               return
             case 'context:ask':
@@ -322,7 +372,7 @@ export function ContextSurfaceBridge() {
               reply(requestId, true)
               return
             case 'panel:send':
-              actionHandlersRef.current.sendToAgentPanel(action.prompt)
+              actionHandlersRef.current.sendToAgentPanel(action.prompt, action.attachments)
               reply(requestId, true)
               return
             case 'panel:request-agent':
@@ -336,21 +386,21 @@ export function ContextSurfaceBridge() {
             case 'ask-ron-items': {
               const client = createContextClient(API_BASE_URL, context.userId)
               const targets = context.items.filter((entry) => action.itemIds.includes(entry.id))
-              const parts: string[] = []
-              let budget = MAX_PROMPT_CHARS
-              for (const item of targets) {
-                const markdown = await client.markdown(item.id).catch(() => `# ${item.id} ${item.title}`)
-                const clipped =
-                  markdown.length > budget
-                    ? `${markdown.slice(0, Math.max(0, budget))}\n\n…(truncated; the full item is in my context store as ${item.id})`
-                    : markdown
-                budget -= clipped.length
-                parts.push(clipped)
-                if (budget <= 0) break
-              }
-              actionHandlersRef.current.sendToAgentPanel(
-                `Here is context I saved (${targets.length} item${targets.length === 1 ? '' : 's'}). Read it and help me with it.\n\n${parts.join('\n\n---\n\n')}`,
+              const attachments = await Promise.all(
+                targets.map(async (item): Promise<PromptAttachment> => {
+                  const markdown = await client.markdown(item.id).catch(() => `# ${item.title || item.kind}`)
+                  const url = /^https?:/i.test(item.source) ? item.source.slice(0, 4096) : undefined
+                  return {
+                    id: `context-${item.id}`.slice(0, 200),
+                    kind: 'file',
+                    title: (item.title || item.source || kindLabel(item.kind)).slice(0, 300),
+                    text: clipWithNote(markdown, SAVED_CONTEXT_MAX),
+                    source: `Saved ${kindLabel(item.kind).toLowerCase()}`,
+                    ...(url ? { url } : {}),
+                  }
+                }),
               )
+              actionHandlersRef.current.sendToAgentPanel('', attachments)
               context.yieldToPanel()
               reply(requestId, true)
               return

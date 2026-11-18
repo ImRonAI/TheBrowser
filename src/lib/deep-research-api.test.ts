@@ -7,6 +7,7 @@ import {
   deleteDeepResearchRun,
   emptyDeepResearchSnapshot,
   fetchDeepResearchStatus,
+  fetchReportDocument,
   getDeepResearchRun,
   listDeepResearchRuns,
   normalizeDeepResearchSnapshot,
@@ -15,6 +16,7 @@ import {
   reduceDeepResearchEvent,
   researchUrl,
   resolveResearchArtifactUrl,
+  saveReportDocument,
   startDeepResearchRun,
   streamDeepResearchEvents,
   type DeepResearchEvent,
@@ -44,7 +46,7 @@ const meta = {
   query: 'Solid-state battery supply chain 2026',
   context: 'Focus on electrolyte scaling',
   title: 'Solid-state battery supply chain 2026',
-  depth: 'exhaustive',
+  depth: 'ultra',
   status: 'running',
   active: true,
   created_at: '2026-11-17T10:00:00Z',
@@ -75,7 +77,7 @@ test('the REST helpers call /deep-research/* and read the run back', async () =>
     const method = init?.method ?? 'GET'
     calls.push({ url, method, body: typeof init?.body === 'string' ? init.body : '' })
     if (url.endsWith('/deep-research/status')) {
-      return jsonResponse({ available: true, default_selection: meta.selection, depths: ['deep'], topology: DEFAULT_FORMATION_TOPOLOGY })
+      return jsonResponse({ available: true, default_selection: meta.selection, depths: ['high'], topology: DEFAULT_FORMATION_TOPOLOGY })
     }
     if (url.endsWith('/deep-research/runs') && method === 'POST') return jsonResponse(meta)
     if (url.includes('/deep-research/runs?')) return jsonResponse({ runs: [{ ...meta, status: 'completed', active: false }] })
@@ -91,6 +93,12 @@ test('the REST helpers call /deep-research/* and read the run back', async () =>
         slidev_markdown: '# Deck',
       })
     }
+    if (url.includes('/runs/dr-101/document?') && method === 'GET') {
+      return jsonResponse({ title: 'Dossier', content: '<p>Costs fell[1].</p>', document_id: null })
+    }
+    if (url.includes('/runs/dr-101/document?') && method === 'POST') {
+      return jsonResponse({ ...meta, status: 'completed', active: false, document_id: 'doc-9' })
+    }
     if (url.includes('/runs/dr-101?') && method === 'DELETE') return jsonResponse({ deleted: true })
     return jsonResponse({ detail: 'Not found' }, 404)
   }
@@ -99,18 +107,18 @@ test('the REST helpers call /deep-research/* and read the run back', async () =>
   const status = await fetchDeepResearchStatus(options)
   assert.equal(status.available, true)
   assert.equal(status.default_selection.provider, 'telnyx')
-  assert.deepEqual(status.depths, ['deep'])
+  assert.deepEqual(status.depths, ['high'])
   assert.deepEqual(status.topology, DEFAULT_FORMATION_TOPOLOGY)
 
   const started = await startDeepResearchRun(
-    { query: '  Solid-state battery supply chain 2026  ', user_id: 'user-7', depth: 'exhaustive', context: ' Focus ' },
+    { query: '  Solid-state battery supply chain 2026  ', user_id: 'user-7', depth: 'ultra', context: ' Focus ' },
     options,
   )
-  assert.deepEqual([started.session_id, started.depth, started.status, started.active], ['dr-101', 'exhaustive', 'running', true])
+  assert.deepEqual([started.session_id, started.depth, started.status, started.active], ['dr-101', 'ultra', 'running', true])
   assert.deepEqual(JSON.parse(calls[1].body), {
     query: 'Solid-state battery supply chain 2026',
     user_id: 'user-7',
-    depth: 'exhaustive',
+    depth: 'ultra',
     context: 'Focus',
     provider: null,
     model_id: null,
@@ -137,6 +145,18 @@ test('the REST helpers call /deep-research/* and read the run back', async () =>
   assert.deepEqual([cancelled.status, cancelled.active], ['cancelled', false])
   assert.equal(cancelled.nodes.research_swarm.status, 'executing')
   assert.equal(cancelled.report_markdown, '# Dossier')
+
+  // The report as a Document page, and the page it was saved as on the run.
+  assert.deepEqual(await fetchReportDocument('dr-101', 'user-7', options), {
+    title: 'Dossier',
+    content: '<p>Costs fell[1].</p>',
+    document_id: null,
+  })
+  assert.equal(opened.document_id, null)
+  const saved = await saveReportDocument('dr-101', 'doc-9', 'user-7', options, opened)
+  assert.deepEqual(JSON.parse(calls[calls.length - 1].body), { document_id: 'doc-9' })
+  assert.equal(saved.document_id, 'doc-9')
+  assert.equal(saved.report_markdown, '# Dossier')
 
   await deleteDeepResearchRun('dr-101', 'user-7', options)
   assert.equal(calls[calls.length - 1].method, 'DELETE')

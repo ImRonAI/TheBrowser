@@ -318,3 +318,88 @@ def test_the_dream_runs_once_the_user_has_been_idle(monkeypatch: pytest.MonkeyPa
         assert model.calls == 1 and await _keys("memory/journal/") == []
 
     asyncio.run(run())
+
+
+def test_a_review_corrects_any_agents_topic_and_teaches_every_later_dream(monkeypatch: pytest.MonkeyPatch) -> None:
+    model = _dreams_with(monkeypatch,
+        [("add_memory", {"entries": ["# Travel\nThe user flies from SLC."], "stores": ["brain/panel"]})],
+        "Done.",
+        [("search_memory", {"query": "travel"})],
+        [("add_memory", {"entries": ["# Travel\nThe user flies from Ogden."], "stores": ["brain/panel"]}),
+         ("add_memory", {"entries": ["# Airports\nAsk before storing an airport."], "stores": ["brain/dreaming"]})],
+    )
+
+    async def run() -> None:
+        await dreaming.agent_memory("u1", "panel")[1].add("flies from SLC")
+        version = await dreaming.dream("u1")
+        assert version is not None
+        await dreaming.dream_feedback("u1", version, [("memory/brain/panel/travel.md", False, "Ogden, not SLC")])
+        assert await dreaming.dream("u1") is not None
+        storage = panel_storage.get_user_session_storage("u1")
+        assert (await storage.read("memory/brain/panel/travel.md") or b"").decode() == "# Travel\nThe user flies from Ogden."
+        await dreaming.agent_memory("u1", "panel")[1].add("likes aisle seats")
+        await dreaming.dream("u1")
+
+    asyncio.run(run())
+    review = json.loads(model.seen[2])[0]["content"][0]["text"]
+    assert "Agent: dreaming\nIts own store: brain/dreaming\n" in review and "Topics in brain/panel: travel" in review
+    assert "- memory/brain/panel/travel.md: wrong. Ogden, not SLC" in review
+    later = json.loads(model.seen[-1])[0]["content"][0]["text"]
+    assert later.startswith("How this user wants their memory kept, from their reviews of earlier dreams:\n# Airports")
+
+
+def test_a_countdown_cut_by_a_restart_is_resumed(monkeypatch: pytest.MonkeyPatch) -> None:
+    from agent.api.core import config
+
+    model = _dreams_with(monkeypatch)
+    monkeypatch.setattr(config, "RON_MEMORY_IDLE_SECONDS", 0.05)
+
+    async def run() -> None:
+        await dreaming.agent_memory("u1", "panel")[1].add("first")
+        await asyncio.gather(*dreaming._tasks)
+        assert await panel_storage.get_panel_storage().list("panel/dreams-pending/")
+        for timer in dreaming._timers.values():  # the process stops
+            timer.cancel()
+        dreaming._timers.clear()
+        await dreaming.resume_dreams()
+        await asyncio.sleep(0.1)
+        await asyncio.gather(*dreaming._tasks)
+        assert model.calls == 1 and await _keys("memory/journal/") == []
+        assert await panel_storage.get_panel_storage().list("panel/dreams-pending/") == []
+
+    asyncio.run(run())
+
+
+def test_a_subagent_inherits_its_parents_search_and_journal() -> None:
+    tools = {tool.tool_name: tool for tool in dreaming.agent_memory_tools("u1", "panel")}
+    assert set(tools) == {"search_memory", "journal"}
+    assert dreaming.inherited_memory({**tools, "shell": tools["journal"]}) == [tools["search_memory"], tools["journal"]]
+
+
+def test_an_outside_agent_journals_in_its_own_folder_over_mcp() -> None:
+    import httpx
+    from fastmcp import Client
+    from fastmcp.client.transports import StreamableHttpTransport
+
+    from agent.api.core import memory_mcp
+
+    app = memory_mcp.server.http_app(path="/mcp")
+
+    def client(headers: dict[str, str]) -> Client[StreamableHttpTransport]:
+        def factory(headers: dict[str, str] | None = None, timeout: httpx.Timeout | None = None,
+                    auth: httpx.Auth | None = None, **_: Any) -> httpx.AsyncClient:
+            return httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://ren", headers=headers,
+                                     timeout=timeout, auth=auth)
+        return Client(StreamableHttpTransport("http://ren/mcp", headers=headers, httpx_client_factory=factory))
+
+    async def run() -> None:
+        async with app.router.lifespan_context(app):
+            async with client({"X-Ren-User": "u1", "X-Ren-Agent": "ElevenLabs Voice"}) as voice:
+                assert (await voice.call_tool("journal", {"entry": "prefers texts to calls"})).data == "Noted."
+                await asyncio.gather(*dreaming._tasks)
+                assert "prefers texts to calls" in (await voice.call_tool("journal", {})).data
+            async with client({"X-Ren-User": "u1"}) as nameless:
+                assert (await nameless.call_tool("journal", {"entry": "x"}, raise_on_error=False)).is_error
+
+    asyncio.run(run())
+    assert [key.split("/")[2] for key in asyncio.run(_keys("memory/journal/"))] == ["elevenlabs-voice"]

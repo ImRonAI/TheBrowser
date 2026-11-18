@@ -61,9 +61,48 @@ export interface AgentRun {
   status: AgentRunStatus; summary: string; error: string; started_at: string; finished_at: string | null; seen_at: string | null
 }
 
+/** A dream's notification (`GET /context/dream`): each topic it changed, as it reads now (null: the dream deleted it). */
+export interface DreamTopic { key: string; text: string | null }
+export interface Dream { version: string; topics: DreamTopic[] }
+/** The user's review of one topic: right or wrong, with an optional comment for the dreaming agent. */
+export interface TopicReview { key: string; right: boolean; comment: string }
+
 export type InterestCategory = 'technology' | 'design' | 'ai' | 'privacy' | 'productivity' | 'learning' | 'entertainment' | 'news' | 'other'
 export interface AgentInterest { label: string; weight: number; category: InterestCategory; reason: string }
-export interface AgentRecommendation { id: string; name: string; description: string; interest: string; rationale: string; tools: string[]; skills: string[] }
+/** What a recommendation builds: a specialist agent, a project, or an app OpenCode makes. */
+export type RecommendationKind = 'agent' | 'web' | 'android' | 'project'
+export interface AgentRecommendation {
+  id: string; kind: RecommendationKind; name: string; description: string; interest: string; rationale: string
+  tools: string[]; skills: string[]; key?: string; issues?: string[]
+}
+
+/** A drafted reply to an incoming text or app notification (`draft_reply`). Sent only after approval. */
+export interface ReplyDraft {
+  id: string; sender: string; app: string; incoming: string; draft: string; notification_key: string; to: string
+}
+
+/** A live notification posted by an app on the user's phone (`RenNotificationListener.onNotificationPosted`). */
+export interface PhoneNotification {
+  key: string; app: string; package: string; title: string; text: string; at: string; can_reply: boolean
+  category?: string | null; number?: string; messages?: { from: string; text: string; at: string }[]
+}
+
+export interface SearchObservation { query: string; summary?: string; at: number }
+export interface ChatObservation { channel: string; user: string; assistant?: string; at: number }
+
+/** An app OpenCode built for the account (`register_application`, `GET /context/applications`). */
+export interface Application {
+  id: string
+  name: string
+  kind: 'web' | 'android'
+  location: string
+  description: string
+  created_at: number
+  icon?: string
+}
+
+/** Sent on `window` when an app joins the account's Applications, so the sidebar lists it at once. */
+export const APPLICATIONS_CHANGED = 'ren:applications-changed'
 
 export const CONTEXT_DESTINATION = 'context' as const
 const CATEGORIES: InterestCategory[] = ['technology', 'design', 'ai', 'privacy', 'productivity', 'learning', 'entertainment', 'news', 'other']
@@ -112,6 +151,7 @@ export function createContextClient(apiBase: string, userId: string, fetcher: ty
       return await response.blob()
     },
     remove: async (id: string): Promise<void> => { await json(`/context/items/${encodeURIComponent(id)}?user_id=${user}`, { method: 'DELETE' }) },
+    applications: async (): Promise<Application[]> => (await json<{ applications: Application[] }>(`/context/applications?user_id=${user}`)).applications,
     agents: async (): Promise<{ agents: SpecialistAgent[]; signInRequired: boolean }> => {
       const body = await json<{ agents: SpecialistAgent[]; sign_in_required: boolean }>(`/context/agents?user_id=${user}`)
       return { agents: body.agents, signInRequired: body.sign_in_required }
@@ -133,7 +173,28 @@ export function createContextClient(apiBase: string, userId: string, fetcher: ty
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user_id: userId }),
       })
     },
+    /** The newest dream the user has not reviewed or dismissed, or null. */
+    dream: async (): Promise<Dream | null> => (await json<{ dream: Dream | null }>(`/context/dream?user_id=${user}`)).dream,
+    /** Close the dream's notification; a non-empty review goes to the dreaming agent. */
+    reviewDream: async (version: string, topics: TopicReview[]): Promise<void> => {
+      await json(`/context/dream/${encodeURIComponent(version)}`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user_id: userId, topics }),
+      })
+    },
   }
+}
+
+/** When the dream ran, as ISO: its version is `YYYYMMDDTHHMMSSffffff` in UTC (core/dreaming.py). */
+export function dreamTime(version: string): string {
+  const v = version
+  return `${v.slice(0, 4)}-${v.slice(4, 6)}-${v.slice(6, 8)}T${v.slice(9, 11)}:${v.slice(11, 13)}:${v.slice(13, 15)}Z`
+}
+
+/** "memory/brain/<agent>/<topic>.md" as the notice names it: the topic's heading, else its file name, and the agent. */
+export function dreamTopicLabel(topic: DreamTopic): { title: string; agent: string } {
+  const [, , agent = '', file = ''] = topic.key.split('/')
+  const heading = topic.text?.split('\n', 1)[0].replace(/^#+\s*/, '').trim()
+  return { title: heading || file.replace(/\.md$/, '').replace(/-/g, ' '), agent }
 }
 
 // ---------------------------------------------------------------- scheduled runs
@@ -241,10 +302,19 @@ export function recordVisit(queue: Visit[], visit: Visit, limit = 40): Visit[] {
   return [...queue, { ...visit, url: key }].slice(-limit)
 }
 
-/** Send once enough pages piled up, or the oldest unsent page has waited long enough. */
-export function browsingDue(queue: Visit[], now: number, minPages = 5, maxWaitMs = 3 * 60_000): boolean {
-  if (!queue.length) return false
-  return queue.length >= minPages || now - queue[0].at >= maxWaitMs
+/** Send once enough observations piled up, or the oldest unsent one has waited long enough. */
+export function browsingDue(
+  queue: Visit[], now: number, minPages = 5, maxWaitMs = 3 * 60_000,
+  searches: SearchObservation[] = [], chats: ChatObservation[] = [],
+): boolean {
+  const total = queue.length + searches.length + chats.length
+  if (!total) return false
+  const oldest = Math.min(
+    queue[0]?.at ?? Infinity,
+    searches[0]?.at ?? Infinity,
+    chats[0]?.at ?? Infinity,
+  )
+  return total >= minPages || now - oldest >= maxWaitMs
 }
 
 const clock = (at: number) => new Date(at).toISOString().slice(11, 16)
@@ -252,9 +322,26 @@ const graphLine = (graph: { label: string; weight: number }[]) => graph.length
   ? graph.map((node) => `${node.label} (${node.weight.toFixed(2)})`).join(', ')
   : '(empty)'
 
-export function browsingTurn(visits: Visit[], graph: { label: string; weight: number }[]): string {
-  const lines = visits.map((visit) => `- ${clock(visit.at)} ${visit.title.trim() || '(untitled)'} — ${visit.url}`)
-  return `[browsing]\nPages the user visited:\n${lines.join('\n')}\n\nCurrent interest graph: ${graphLine(graph)}`
+export function browsingTurn(
+  visits: Visit[], graph: { label: string; weight: number }[],
+  searches: SearchObservation[] = [], chats: ChatObservation[] = [],
+): string {
+  const sections: string[] = ['[browsing]']
+  if (visits.length) {
+    const lines = visits.map((visit) => `- ${clock(visit.at)} ${visit.title.trim() || '(untitled)'} — ${visit.url}`)
+    sections.push(`Pages the user visited:\n${lines.join('\n')}`)
+  }
+  if (searches.length) {
+    const lines = searches.map((item) => `- ${clock(item.at)} "${item.query.trim()}"${item.summary?.trim() ? ` — ${item.summary.trim().slice(0, 240)}` : ''}`)
+    sections.push(`Searches the user ran:\n${lines.join('\n')}`)
+  }
+  if (chats.length) {
+    const lines = chats.map((item) => `- ${clock(item.at)} [${item.channel}] User: ${item.user.trim().slice(0, 300)}`
+      + (item.assistant?.trim() ? ` | Ren: ${item.assistant.trim().slice(0, 240)}` : ''))
+    sections.push(`Chats and user responses:\n${lines.join('\n')}`)
+  }
+  sections.push(`Current interest graph: ${graphLine(graph)}`)
+  return sections.join('\n\n')
 }
 
 /** What the user did on their phone between two reports (ren mobile): the apps they used and what Ren did there. */
@@ -279,7 +366,46 @@ export function contextAddedTurn(item: ContextItem, graph: { label: string; weig
   return `[context added] ${item.kind}: ${item.title}${source}${preview}\n(id ${item.id}; read it in full with search_memory)\n\nCurrent interest graph: ${graphLine(graph)}`
 }
 
+export const TWICE_DAILY_MS = 12 * 60 * 60_000
+
+export function reviewDue(lastReviewAt: number, hasNewNotes: boolean, now: number, intervalMs = TWICE_DAILY_MS): boolean {
+  return hasNewNotes && now - lastReviewAt >= intervalMs
+}
+
+export function notificationTurn(notification: PhoneNotification, graph: { label: string; weight: number }[]): string {
+  const thread = notification.messages?.length
+    ? `\nRecent thread:\n${notification.messages.map((m) => `- ${m.from}: ${m.text}`).join('\n')}`
+    : ''
+  const target = [
+    notification.can_reply ? `notification_key=${notification.key}` : 'can_reply=false',
+    notification.number ? `number=${notification.number}` : '',
+  ].filter(Boolean).join(', ')
+  return `[notification] App: ${notification.app} (${notification.package})\n`
+    + `From/Title: ${notification.title || '(none)'}\n`
+    + `Text: ${notification.text || '(empty)'}\n`
+    + `Reply target: ${target}${thread}\n\nCurrent interest graph: ${graphLine(graph)}`
+}
+
+export function sendReplyTurn(draft: ReplyDraft, text: string): string {
+  return `[send_reply ${draft.id}] The user tapped Send on this reply. Ask for approval with phone_request_approval(action_type="send_messages", ...) FIRST, then send only if approved.\n`
+    + JSON.stringify({ ...draft, draft: text })
+}
+
+export function reviewTurn(graph: { label: string; weight: number }[], existingRecommendations: string[]): string {
+  const known = existingRecommendations.length ? existingRecommendations.join(', ') : '(none)'
+  return `[review]\nTwice-daily review of your journal and long-term memory.\n`
+    + `Already recommended: ${known}\n`
+    + `Current interest graph: ${graphLine(graph)}`
+}
+
 export function approveAgentTurn(recommendation: AgentRecommendation): string {
+  // Recommendations saved before apps existed carry no kind: they are agents.
+  if (recommendation.kind === 'project') {
+    return `[approve_project ${recommendation.id}] Create the project "${recommendation.name}" now.\nRecommendation: ${JSON.stringify(recommendation)}`
+  }
+  if (recommendation.kind === 'web' || recommendation.kind === 'android') {
+    return `[approve_app ${recommendation.id}] Build the ${recommendation.kind === 'web' ? 'web' : 'Android'} app "${recommendation.name}" now.\nRecommendation: ${JSON.stringify(recommendation)}`
+  }
   return `[approve_agent ${recommendation.id}] Build "${recommendation.name}" now.\nRecommendation: ${JSON.stringify(recommendation)}`
 }
 
@@ -313,9 +439,21 @@ export function recommendationFromOutput(output: unknown): AgentRecommendation |
   const entry = record(jsonBlock(output, 'agent_recommendation'))
   const strings = (value: unknown) => Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : []
   if (typeof entry.id !== 'string' || typeof entry.name !== 'string') return null
+  const kind: RecommendationKind = entry.kind === 'web' || entry.kind === 'android' || entry.kind === 'project' ? entry.kind : 'agent'
   return {
-    id: entry.id, name: entry.name, description: String(entry.description ?? ''), interest: String(entry.interest ?? ''),
+    id: entry.id, kind, name: entry.name, description: String(entry.description ?? ''), interest: String(entry.interest ?? ''),
     rationale: String(entry.rationale ?? ''), tools: strings(entry.tools), skills: strings(entry.skills),
+    ...(typeof entry.key === 'string' && entry.key ? { key: entry.key } : {}),
+    ...(Array.isArray(entry.issues) ? { issues: strings(entry.issues) } : {}),
+  }
+}
+
+export function replyDraftFromOutput(output: unknown): ReplyDraft | null {
+  const entry = record(jsonBlock(output, 'reply_draft'))
+  if (typeof entry.id !== 'string' || typeof entry.sender !== 'string' || typeof entry.app !== 'string' || typeof entry.draft !== 'string') return null
+  return {
+    id: entry.id, sender: entry.sender, app: entry.app, incoming: String(entry.incoming ?? ''),
+    draft: entry.draft, notification_key: String(entry.notification_key ?? ''), to: String(entry.to ?? ''),
   }
 }
 
@@ -326,25 +464,36 @@ export interface ContextRunResults {
   /** The newest graph the agent wrote in these messages, if any. */
   interests: AgentInterest[] | null
   recommendations: AgentRecommendation[]
+  replyDrafts: ReplyDraft[]
   /** Names of specialists saved with create_harness. */
   created: string[]
+  /** Names of projects created with create_project. */
+  createdProjects: string[]
 }
 
 export function contextResults(messages: PanelMessage[]): ContextRunResults {
   let interests: AgentInterest[] | null = null
   const recommendations: AgentRecommendation[] = []
+  const replyDrafts: ReplyDraft[] = []
   const created: string[] = []
+  const createdProjects: string[] = []
   for (const part of finishedTools(messages)) {
     if (part.name === 'update_interest_graph') interests = interestsFromOutput(part.output) ?? interests
-    else if (part.name === 'recommend_agent') {
+    else if (part.name === 'recommend_agent' || part.name === 'recommend_app' || part.name === 'recommend_project') {
       const recommendation = recommendationFromOutput(part.output)
       if (recommendation) recommendations.push(recommendation)
+    } else if (part.name === 'draft_reply') {
+      const draft = replyDraftFromOutput(part.output)
+      if (draft) replyDrafts.push(draft)
     } else if (part.name === 'create_harness') {
       const name = record(firstJson(part.output)).name // create_harness returns its listing as JSON text
       if (typeof name === 'string') created.push(name)
+    } else if (part.name === 'create_project') {
+      const name = record(firstJson(part.output)).name
+      if (typeof name === 'string') createdProjects.push(name)
     }
   }
-  return { interests, recommendations, created }
+  return { interests, recommendations, replyDrafts, created, createdProjects }
 }
 
 function firstJson(output: unknown): unknown {

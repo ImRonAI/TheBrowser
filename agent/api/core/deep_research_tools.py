@@ -28,8 +28,9 @@ def is_deep_research_tool(name: str) -> bool:
 DEEP_RESEARCH_DIRECTIVE: str = (
     "\n\n## Deep Research\n"
     "- For an investigation that needs many sources, fact checks, charts, a cited PDF report and a Slidev deck, "
-    "call `deep_research_start(query, context=\"\", depth=\"deep\")` (`depth`: `\"standard\"`, `\"deep\"` or "
-    "`\"exhaustive\"`). It runs in the background and returns `session_id` and `ron://research/<session_id>` at once.\n"
+    "call `deep_research_start(query, context=\"\", depth=\"medium\")` (`depth`, fastest to most complete: "
+    "`\"fast\"` (a 5 to 8 page report), `\"low\"`, `\"medium\"`, `\"high\"`, `\"xhigh\"` or `\"ultra\"` (30 to 40 "
+    "pages)). It runs in the background and returns `session_id` and `ron://research/<session_id>` at once.\n"
     "- `deep_research_status(session_id=...)` says how the run stands and lists its workspace files (omit "
     "`session_id` to list recent runs); `deep_research_cancel(session_id=...)` stops it."
 )
@@ -42,13 +43,14 @@ def deep_research_tools(*, user_id: str = "default") -> list[AgentTool]:
     owner = (user_id or "").strip() or "default"
 
     @tool
-    async def deep_research_start(query: str, context: str = "", depth: str = "deep") -> dict[str, object]:
+    async def deep_research_start(query: str, context: str = "", depth: str = "medium") -> dict[str, object]:
         """Start a Deep Research run in the background: research, charts, a cited PDF report and a Slidev deck.
 
         Args:
             query: The research question.
             context: Background, constraints or prior findings.
-            depth: "standard", "deep" (default) or "exhaustive".
+            depth: fastest to most complete: "fast" (a 5 to 8 page report), "low", "medium" (default), "high",
+                "xhigh" or "ultra" (30 to 40 pages).
         """
         from agent.api.core import deep_research
 

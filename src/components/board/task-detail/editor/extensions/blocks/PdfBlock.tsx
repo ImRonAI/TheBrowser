@@ -27,7 +27,7 @@ const PDF_HEIGHT = 720
  */
 export const PdfBlock = Node.create({
   name: 'pdf',
-  group: 'block',
+  group: 'block embedTab',
   atom: true,
   draggable: true,
 

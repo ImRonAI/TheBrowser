@@ -11,9 +11,10 @@ import { cn } from '@/utils/cn'
 import { NeuralCanvas } from './NeuralCanvas'
 import { InterestDiscoveryPanel } from './InterestDiscoveryPanel'
 import { ContextTray } from './ContextTray'
-import { ContextAgents } from './ContextAgents'
+import { ContextAgents, ReplyDraftNotice } from './ContextAgents'
 import { ContextAsk } from './ContextAsk'
 import { AgentRunNotice } from './AgentRuns'
+import { DreamNotice } from './DreamNotice'
 import { runNotifications } from '@/lib/context-api'
 
 interface SurfaceBridgeWindow {
@@ -94,8 +95,12 @@ export function InterestsWidgetSurface() {
           </div>
         )}
       </AnimatePresence>
+      {/* A drafted reply to a message or notification: Send asks for approval first. */}
+      {!isExpanded && <ReplyDraftNotice />}
       {/* A specialist's finished run (scheduled or Run now): Review opens its session in the Agent Panel. */}
       {!isExpanded && <AgentRunNotice />}
+      {/* A dream that filed new memories: Review is a checklist with comments for the dreaming agent. */}
+      {!isExpanded && <DreamNotice />}
       <AnimatePresence>
         {isExpanded && <ExpandedPanel key="expanded" onClose={close} />}
       </AnimatePresence>
@@ -118,17 +123,20 @@ export function InterestsWidget() {
 function CollapsedOrb({ onClick }: { onClick: () => void }) {
   const status = useContextAgentStore((state) => state.status)
   const unseen = useContextAgentStore((state) => state.unseen)
+  const draftCount = useContextAgentStore((state) => state.replyDrafts.length)
   const recordingSince = useContextAgentStore((state) => state.recordingSince)
   // An add, upload or capture in flight ("Adding to your context…") counts as work too.
   const busy = useContextAgentStore((state) => state.busy)
   const finishedRuns = useContextAgentStore((state) => runNotifications(state.runs).length)
+  const hasDream = useContextAgentStore((state) => Boolean(state.dream))
   const top = useInterestsStore((state) => [...state.nodes].sort((a, b) => b.weight - a.weight).slice(0, 2).map((node) => node.label).join('|'))
   const labels = top ? top.split('|') : []
-  const showHoverPills = labels.length > 0 && finishedRuns === 0
+  const showHoverPills = labels.length > 0 && finishedRuns === 0 && draftCount === 0 && !hasDream
   const pillRowRef = useRef<HTMLDivElement>(null)
   const working = status === 'running' || Boolean(busy)
   const state = recordingSince ? 'recording your screen'
     : busy ? busy.replace(/…$/, '')
+    : draftCount ? `${draftCount} reply draft${draftCount === 1 ? '' : 's'}`
     : finishedRuns ? `${finishedRuns} agent run${finishedRuns === 1 ? '' : 's'} to review`
     : unseen ? 'new agent recommendation'
     : working ? 'agent working'
@@ -186,7 +194,7 @@ function CollapsedOrb({ onClick }: { onClick: () => void }) {
       )}
       {recordingSince
         ? <span className="absolute -right-1 -top-1 h-3.5 w-3.5 rounded-full bg-danger ring-2 ring-surface-0 dark:ring-surface-900" title="Recording your screen" />
-        : (unseen || finishedRuns > 0) && <span className="absolute -right-1 -top-1 h-3.5 w-3.5 rounded-full bg-blurple-600 ring-2 ring-surface-0 dark:bg-blurple-400 dark:ring-surface-900" title={finishedRuns ? 'Agent runs to review' : 'New agent recommendation'} />}
+        : (unseen || draftCount > 0 || finishedRuns > 0) && <span className="absolute -right-1 -top-1 h-3.5 w-3.5 rounded-full bg-blurple-600 ring-2 ring-surface-0 dark:bg-blurple-400 dark:ring-surface-900" title={draftCount ? 'Drafted reply ready' : finishedRuns ? 'Agent runs to review' : 'New agent recommendation'} />}
     </motion.button>
   )
 }
@@ -202,7 +210,7 @@ function ExpandedPanel({ onClose }: { onClose: () => void }) {
   const pinned = useContextAgentStore((state) => state.pinned)
   const status = useContextAgentStore((state) => state.status)
   const activity = useContextAgentStore((state) => state.activity)
-  const unseen = useContextAgentStore((state) => state.unseen || runNotifications(state.runs).length > 0)
+  const unseen = useContextAgentStore((state) => state.unseen || state.replyDrafts.length > 0 || runNotifications(state.runs).length > 0)
   const itemCount = useContextAgentStore((state) => state.items.length)
   const recordingSince = useContextAgentStore((state) => state.recordingSince)
   const { setTab, setPinned } = useContextAgentStore.getState()
@@ -356,7 +364,7 @@ function ExpandedPanel({ onClose }: { onClose: () => void }) {
 function InterestsTab() {
   const nodeCount = useInterestsStore((state) => state.nodes.length)
   const watchBrowsing = useContextAgentStore((state) => state.watchBrowsing)
-  const pending = useContextAgentStore((state) => state.visits.length)
+  const pending = useContextAgentStore((state) => state.visits.length + state.searches.length + state.chats.length)
   const status = useContextAgentStore((state) => state.status)
   const { setWatchBrowsing, flushBrowsing } = useContextAgentStore.getState()
 

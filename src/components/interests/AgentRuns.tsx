@@ -44,24 +44,24 @@ function runText(run: AgentRun): string {
 /** The Context Agent's notification above the orb: the newest finished run the user has not opened. */
 export function AgentRunNotice() {
   const runs = useContextAgentStore((state) => state.runs)
+  const draftsWaiting = useContextAgentStore((state) => state.replyDrafts.length > 0)
   const notices = useMemo(() => runNotifications(runs), [runs])
   const review = useReviewRun()
   const now = useNow()
   const cardRef = useRef<HTMLDivElement>(null)
   const run = notices[0]
-
   useLayoutEffect(() => {
     const el = cardRef.current
     const report = (window as { contextSurface?: { reportMetrics?: (m: { noticeHeight?: number }) => void } }).contextSurface?.reportMetrics
-    if (!el || !report) return
+    if (!el || !report || draftsWaiting) return
     const sync = () => report({ noticeHeight: Math.ceil(el.getBoundingClientRect().height) })
     sync()
     const observer = new ResizeObserver(sync)
     observer.observe(el)
     return () => observer.disconnect()
-  }, [run?.id, notices.length])
+  }, [run?.id, notices.length, draftsWaiting])
 
-  if (!run) return null
+  if (!run || draftsWaiting) return null
   const text = runText(run)
   const more = notices.length - 1
   const openAgents = () => {

@@ -32,7 +32,7 @@ const ICONS: Record<EmbedProvider, typeof Globe> = { web: Globe, maps: MapPin, f
  */
 export const EmbedBlock = Node.create({
   name: 'embed',
-  group: 'block',
+  group: 'block embedTab',
   atom: true,
   draggable: true,
 

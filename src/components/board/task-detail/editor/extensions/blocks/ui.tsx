@@ -25,7 +25,7 @@ export function BlockFrame({ selected, className, children, ...data }: {
 }
 
 export function BlockHeader({ icon, title, subtitle, children }: { icon: ReactNode; title: ReactNode; subtitle?: ReactNode; children?: ReactNode }) {
-  return <div className="flex items-center gap-2.5 border-b border-surface-200 px-3 py-2 dark:border-surface-800">
+  return <div className="ron-block-header flex items-center gap-2.5 border-b border-surface-200 px-3 py-2 dark:border-surface-800">
     <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-surface-100 text-ink-secondary dark:bg-surface-850 dark:text-ink-inverse-secondary">{icon}</span>
     <div className="min-w-0 flex-1">
       <p className="truncate text-[13px] font-semibold text-ink dark:text-ink-inverse">{title}</p>

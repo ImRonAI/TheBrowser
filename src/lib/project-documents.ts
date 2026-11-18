@@ -57,6 +57,14 @@ export const createDocument = async (request: ProjectsRequest,
 export const moveDocument = async (request: ProjectsRequest, id: string, projectId: string) =>
   mapDocument(await request<Row>(`/documents/${encodeURIComponent(id)}/move`, 'POST', { project_id: projectId }))
 
+export type DocumentExportFormat = 'pdf' | 'html' | 'docx'
+/** A page as a file (`GET /projects/documents/{id}/export`): its name, media type and bytes in base64. */
+export interface ExportedDocument { filename: string; media_type: string; data: string }
+
+/** The saved page as a PDF, a standalone HTML page or a Word document. */
+export const exportDocument = (request: ProjectsRequest, id: string, format: DocumentExportFormat) =>
+  request<ExportedDocument>(`/documents/${encodeURIComponent(id)}/export?format=${format}`)
+
 /** The Documents library (`ron://documents`), optionally opened on one page. */
 export const documentsLibraryUrl = (documentId?: string | null) =>
   documentId ? `ron://documents/${documentId}` : 'ron://documents'

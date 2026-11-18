@@ -13,12 +13,14 @@ import {
   cancelDeepResearchRun,
   deleteDeepResearchRun,
   fetchDeepResearchStatus,
+  fetchReportDocument,
   getDeepResearchRun,
   listDeepResearchRuns,
   normalizeDeepResearchSnapshot,
   parseResearchUrl,
   reduceDeepResearchEvent,
   researchUrl,
+  saveReportDocument,
   startDeepResearchRun,
   streamDeepResearchEvents,
   type DeepResearchEvent,
@@ -27,8 +29,13 @@ import {
   type FormationTopology,
   type ResearchDepth,
 } from '@/lib/deep-research-api'
+import { createDocument, listAllDocuments } from '@/lib/project-documents'
 import { useAuthStore } from '@/stores/authStore'
+import { getProjectsState, projectsRequestFor } from '@/stores/projectsStore'
 import { useTabStore } from '@/stores/tabStore'
+
+/** The personal page every run's report is saved under, in the Documents library. */
+export const DEEP_RESEARCH_FOLDER = 'Deep Research'
 
 /** Resolve the active account's user id using the same convention as `usePanelChat` and `ThreadsList`. */
 export function resolveResearchUserId(explicit?: string | null): string {
@@ -80,10 +87,13 @@ export interface DeepResearchState {
   openRun: (sessionId: string, userId?: string, options?: { syncUrl?: boolean }) => Promise<void>
   cancelRun: (sessionId: string, userId?: string) => Promise<void>
   deleteRun: (sessionId: string, userId?: string) => Promise<void>
+  /** Save the finished run's report as a page under Deep Research in Documents; answers the page's id. */
+  saveReportAsDocument: (sessionId: string, userId?: string) => Promise<string | null>
   disconnectAllStreams: () => void
 }
 
 const activeControllers = new Map<string, AbortController>()
+const savingReports = new Map<string, Promise<string | null>>()
 
 function syncResearchTabUrl(sessionId: string | null): void {
   const target = researchUrl(sessionId)
@@ -390,6 +400,40 @@ export const useDeepResearchStore = create<DeepResearchState>()(
           }
         },
 
+        saveReportAsDocument: (sessionId, explicitUserId) => {
+          const pending = savingReports.get(sessionId)
+          if (pending) return pending
+          const save = async (): Promise<string | null> => {
+            const userId = resolveResearchUserId(explicitUserId)
+            const projectsUserId = getProjectsState().userId
+            if (!projectsUserId) return null
+            const report = await fetchReportDocument(sessionId, userId)
+            if (report.document_id) return report.document_id
+            const request = projectsRequestFor(projectsUserId)
+            const folder =
+              (await listAllDocuments(request)).find(
+                (page) => page.projectId === null && page.parentId === null && page.title === DEEP_RESEARCH_FOLDER,
+              ) ?? (await createDocument(request, { projectId: null, title: DEEP_RESEARCH_FOLDER, content: '' }))
+            const page = await createDocument(request, {
+              projectId: null,
+              parentId: folder.id,
+              title: report.title,
+              content: report.content,
+            })
+            const merged = await saveReportDocument(sessionId, page.id, userId, {}, get().snapshotsBySession[sessionId])
+            set((state) => ({
+              snapshotsBySession: state.snapshotsBySession[sessionId]
+                ? { ...state.snapshotsBySession, [sessionId]: merged }
+                : state.snapshotsBySession,
+              runs: state.runs.map((run) => (run.session_id === sessionId ? { ...run, document_id: page.id } : run)),
+            }))
+            return page.id
+          }
+          const run = save().finally(() => savingReports.delete(sessionId))
+          savingReports.set(sessionId, run)
+          return run
+        },
+
         disconnectAllStreams: () => {
           for (const controller of activeControllers.values()) {
             controller.abort()
@@ -403,6 +447,15 @@ export const useDeepResearchStore = create<DeepResearchState>()(
       name: 'ron-deep-research-prefs',
       storage: createJSONStorage(() => localStorage),
       version: 1,
+      // A depth kept from before the levels changed (standard, deep, exhaustive) becomes the default.
+      merge: (persisted, current) => {
+        if (typeof persisted !== 'object' || persisted === null) return current
+        const merged = { ...current, ...persisted }
+        return {
+          ...merged,
+          preferredDepth: RESEARCH_DEPTHS.find((depth) => depth === merged.preferredDepth) ?? DEFAULT_RESEARCH_DEPTH,
+        }
+      },
       partialize: (state) => ({
         preferredDepth: state.preferredDepth,
         preferredModel: state.preferredModel,

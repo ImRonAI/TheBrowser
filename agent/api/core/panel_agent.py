@@ -93,7 +93,7 @@ from agent.api.core.panel_browser import (
     server_name,
 )
 from agent.api.core.dreaming import JOURNAL_DIRECTIVE, agent_memory
-from agent.api.core.memory import MEMORY_DIRECTIVE, MemoryScope, live_memory_tools, memory_manager_config
+from agent.api.core.memory import MEMORY_DIRECTIVE, MemoryScope, live_memory_tools, memory_manager_config, remember_person_tool
 from agent.api.core.panel_runtime import is_model_timeout
 from agent.api.core.panel_storage import ThreadSessionManager, get_user_session_storage, thread_agent_id
 from agent.api.core.tool_observation import ToolObservation, trace_attributes
@@ -387,6 +387,23 @@ MISTRAL_REASONING_EFFORTS_EXCLUDED: tuple[str, ...] = (
     "glm-5-2",
 )
 
+#: Each Mistral model's largest ``max_tokens`` on ``POST /v1/chat/completions``, where Mistral states one; any other
+#: model takes its context window (``build_model``), the most a reply can hold. Longest prefix wins.
+#: - ``mistral-large-4`` (``mistral-large-4-0``, ``mistral-large-latest``): live 2026-11-17, a larger value is refused
+#:   with 400 "This model supports at most 262144 completion tokens" (code 3058).
+#: - Z.ai GLM 5.2, 5.3, 5.3 Flash and DeepSeek V4.1 Flash 1017: "Max output 128k" on their pages
+#:   (https://docs.mistral.ai/models/zai-glm-5-3, ``zai-glm-5-2``, ``zai-glm-5-3-flash``, ``deepseek-v4-flash-1017``).
+#:   Mistral's labels are binary: the "256k" and "1M" windows are 262144 and 1048576 in ``GET /v1/models``.
+#: Every other chat model Mistral listed on 2026-11-17 states no output limit and accepts any value live.
+MISTRAL_MAX_OUTPUT_TOKENS_BY_MODEL: dict[str, int] = {
+    "mistral-large-4": 262144,
+    "mistral-large-latest": 262144,
+    "zai-glm-5": 131072,
+    "zai-glm-latest": 131072,
+    "glm-5-2": 131072,
+    "deepseek-v4-1-flash": 131072,
+}
+
 #: Per-model Gemini ``thinking_config.thinking_level`` values on ``generateContent``.
 #: Source: the "Controlling thinking" table at
 #: https://ai.google.dev/gemini-api/docs/thinking plus the per-model pages for
@@ -582,6 +599,15 @@ def mistral_reasoning_efforts(model_id: str) -> tuple[str, ...]:
     return _efforts_by_family(MISTRAL_REASONING_EFFORTS_BY_MODEL, lowered)
 
 
+def mistral_max_output_tokens(model_id: str) -> int | None:
+    """The output limit Mistral states for a model id (``MISTRAL_MAX_OUTPUT_TOKENS_BY_MODEL``); ``None`` if none."""
+    lowered = model_id.lower()
+    for family in sorted(MISTRAL_MAX_OUTPUT_TOKENS_BY_MODEL, key=len, reverse=True):
+        if lowered == family or lowered.startswith((family + "-", family + ".")):
+            return MISTRAL_MAX_OUTPUT_TOKENS_BY_MODEL[family]
+    return None
+
+
 def gemini_thinking_levels(model_id: str) -> tuple[str, ...]:
     """Documented ``thinking_level`` values for a Gemini model id; empty if the model has no thinking control."""
     lowered = model_id.lower().removeprefix("models/")
@@ -717,6 +743,8 @@ def build_model(
     Server-side tools stay on the model object, not on ``Agent.tools``. ``context_window_limit``
     is the model's real window from its provider's own metadata (``context_windows``) when the
     provider publishes one; otherwise the SDK's own resolution applies.
+    A Mistral model's ``max_tokens`` is the largest it takes: its stated output limit
+    (``mistral_max_output_tokens``), else its context window.
 
     ``read_timeout`` (NIM and Mistral only) bounds every read of the HTTP exchange, the wait for the
     first byte included: a provider that goes silent that long fails the call with its client's
@@ -729,6 +757,10 @@ def build_model(
     window = provider_context_window(provider, model_id)
     if window:
         model.update_config(context_window_limit=window)
+    if provider == "mistral":
+        max_tokens = mistral_max_output_tokens(model_id) or window
+        if max_tokens:
+            model.update_config(max_tokens=max_tokens)
     return model
 
 
@@ -1365,6 +1397,7 @@ def create_panel_agent(
             # Native MemoryManager (core/memory.py): search_memory, add_memory, userTurn injection,
             # the second brain and this agent's journal (core/dreaming.py).
             memory = user_memory_config(user_id, agent_scope)
+            catalog.add_tools([remember_person_tool(user_id)])
             system_prompt += MEMORY_DIRECTIVE
             # Native A2A client tools over Ron's agents (panel A2A server + RON_A2A_AGENTS).
             from agent.api.core.a2a_tools import a2a_tools

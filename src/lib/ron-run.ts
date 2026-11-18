@@ -27,6 +27,8 @@ export interface RonRunRequest {
   promptAttachments?: PromptAttachment[]
   /** Live `data:image/...;base64,...` screenshot of the open Document workspace (`ChatRequest.screen_frame`). */
   screenFrame?: string
+  /** Optional request headers (e.g. Supabase bearer or guest workspace capability for workspace tools). */
+  headers?: Record<string, string>
   signal?: AbortSignal
   onState?: (state: PanelState) => void
   fetcher?: typeof fetch
@@ -40,7 +42,7 @@ export function ronSessionId(prefix: string, key: string): string {
 }
 
 export async function runRon({
-  apiBase, destination, sessionId, userId, message, goal, promptAttachments, screenFrame, signal, onState, fetcher = fetch,
+  apiBase, destination, sessionId, userId, message, goal, promptAttachments, screenFrame, headers, signal, onState, fetcher = fetch,
 }: RonRunRequest): Promise<PanelState> {
   let state = emptyPanelState(sessionId)
   const accept = (event: PanelEvent) => {
@@ -49,7 +51,7 @@ export async function runRon({
     onState?.(state)
   }
   const response = await fetcher(`${apiBase}/chat`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' }, signal,
+    method: 'POST', headers: { 'Content-Type': 'application/json', ...headers }, signal,
     body: JSON.stringify({
       session_id: sessionId,
       user_id: userId,

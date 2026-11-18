@@ -7,6 +7,7 @@ import { useAgentUi } from '@/context/AgentUiContext'
 import { API_BASE_URL } from '@/lib/api-base'
 import { createContextClient, formatBytes, type ContextItem, type ContextKind } from '@/lib/context-api'
 import { kindLabel } from '@/lib/issue-attachments'
+import { clipWithNote, type PromptAttachment } from '@/lib/prompt-attachments'
 import { useContextAgentStore } from '@/stores/contextAgentStore'
 import { cn } from '@/utils/cn'
 import { SendToIssue } from './SendToIssue'
@@ -17,7 +18,8 @@ const KIND_ICONS: Partial<Record<ContextKind, typeof LinkIcon>> = {
   selection: ChatBubbleBottomCenterTextIcon, thread: ChatBubbleLeftRightIcon, document: DocumentTextIcon,
   screenshot: CameraIcon, recording: VideoCameraIcon, file: PaperClipIcon, note: PencilSquareIcon,
 }
-const MAX_PROMPT_CHARS = 24_000
+/** What one saved item carries into the panel (the `@` menu's saved items carry the same). */
+const SAVED_CONTEXT_MAX = 12_000
 
 const hostOf = (value: string) => { try { return new URL(value).hostname } catch { return '' } }
 const elapsed = (since: number, now: number) => {
@@ -75,22 +77,22 @@ export function ContextTray() {
     if (fileInput.current) fileInput.current.value = ''
   }
 
+  /** Ask Ren: the chosen items open in the panel's composer as attachment cards, for the user's question. */
   const askRon = async (targets: ContextItem[]) => {
     const surface = (window as { contextSurface?: { dispatch?: (action: unknown) => Promise<unknown> } }).contextSurface
     if (surface?.dispatch) {
       await surface.dispatch({ type: 'ask-ron-items', itemIds: targets.map((item) => item.id) })
       return
     }
-    const parts: string[] = []
-    let budget = MAX_PROMPT_CHARS
-    for (const item of targets) {
-      const markdown = await client.markdown(item.id).catch(() => `# ${item.id} ${item.title}`)
-      const clipped = markdown.length > budget ? `${markdown.slice(0, Math.max(0, budget))}\n\n…(truncated; the full item is in my context store as ${item.id})` : markdown
-      budget -= clipped.length
-      parts.push(clipped)
-      if (budget <= 0) break
-    }
-    sendToAgentPanel(`Here is context I saved (${targets.length} item${targets.length === 1 ? '' : 's'}). Read it and help me with it.\n\n${parts.join('\n\n---\n\n')}`)
+    const attachments = await Promise.all(targets.map(async (item): Promise<PromptAttachment> => {
+      const markdown = await client.markdown(item.id).catch(() => `# ${item.title || item.kind}`)
+      const url = /^https?:/i.test(item.source) ? item.source.slice(0, 4096) : undefined
+      return {
+        id: `context-${item.id}`.slice(0, 200), kind: 'file', title: (item.title || item.source || kindLabel(item.kind)).slice(0, 300),
+        text: clipWithNote(markdown, SAVED_CONTEXT_MAX), source: `Saved ${kindLabel(item.kind).toLowerCase()}`, ...(url ? { url } : {}),
+      }
+    }))
+    sendToAgentPanel('', attachments)
     yieldToPanel()
   }
 

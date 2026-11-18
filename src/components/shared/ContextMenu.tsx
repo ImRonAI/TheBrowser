@@ -26,9 +26,18 @@ interface ContextMenuProps {
   isOpen: boolean
   onClose: () => void
   selectedText?: string
+  /** The text field that was right-clicked: Paste goes into it. */
+  pasteTarget?: HTMLElement | null
 }
 
-export function ContextMenu({ x, y, isOpen, onClose, selectedText }: ContextMenuProps) {
+/** The text field a right-click landed in (an input, a textarea or an editable element), if any. */
+export function pasteTargetOf(event: MouseEvent): HTMLElement | null {
+  return event.target instanceof Element
+    ? event.target.closest<HTMLElement>('textarea, input, [contenteditable=""], [contenteditable="true"]')
+    : null
+}
+
+export function ContextMenu({ x, y, isOpen, onClose, selectedText, pasteTarget }: ContextMenuProps) {
   const {
     startAskRon,
     askRonStep,
@@ -136,30 +145,23 @@ export function ContextMenu({ x, y, isOpen, onClose, selectedText }: ContextMenu
     }
   }
 
+  // Paste is the same paste event ⌘V fires, sent to the field that was right-clicked, so the field's own paste
+  // handling runs (Ren's composer turns it into an attachment card); a field that doesn't handle it gets the text.
   const handlePaste = async () => {
+    const target = pasteTarget
+    onClose()
     try {
       const text = await navigator.clipboard.readText()
-      // Get the active element and paste
-      const activeElement = document.activeElement as HTMLInputElement | HTMLTextAreaElement
-      if (activeElement && (activeElement.tagName === 'INPUT' || activeElement.tagName === 'TEXTAREA')) {
-        const start = activeElement.selectionStart || 0
-        const end = activeElement.selectionEnd || 0
-        const currentValue = activeElement.value
-        activeElement.value = currentValue.substring(0, start) + text + currentValue.substring(end)
-        activeElement.selectionStart = activeElement.selectionEnd = start + text.length
-        // Trigger input event for React
-        activeElement.dispatchEvent(new Event('input', { bubbles: true }))
-        showFeedback('Pasted')
-        setTimeout(onClose, 300)
-      } else {
-        // Try execCommand for contenteditable elements
-        document.execCommand('insertText', false, text)
-        showFeedback('Pasted')
-        setTimeout(onClose, 300)
-      }
+      if (!text || !target?.isConnected) return
+      // The menu lets go of focus first.
+      await new Promise((resolve) => requestAnimationFrame(resolve))
+      target.focus()
+      const clipboardData = new DataTransfer()
+      clipboardData.setData('text/plain', text)
+      const event = new ClipboardEvent('paste', { clipboardData, bubbles: true, cancelable: true })
+      if (target.dispatchEvent(event)) document.execCommand('insertText', false, text)
     } catch (err) {
       console.error('Failed to paste:', err)
-      onClose()
     }
   }
 
@@ -272,6 +274,7 @@ export function ContextMenu({ x, y, isOpen, onClose, selectedText }: ContextMenu
                 sideOffset={0}
                 align="start"
                 className="fixed z-[9999] min-w-[232px] overflow-hidden rounded-xl border-border p-1 data-[state=open]:shadow-float"
+                onCloseAutoFocus={(event) => event.preventDefault()}
               >
                 {/* Feedback toast */}
                 <AnimatePresence>

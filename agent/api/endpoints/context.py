@@ -9,13 +9,16 @@ loopback-only: never add ``/context`` to the ngrok allowlist.
 
 from __future__ import annotations
 
+import asyncio
+import json
 import logging
+import os
 from typing import Annotated, Any, Literal
 from urllib.parse import urlsplit
 from uuid import UUID
 
-from fastapi import APIRouter, File, Form, HTTPException, Query, Request, UploadFile
-from fastapi.responses import Response
+from fastapi import APIRouter, File, Form, HTTPException, Path, Query, Request, UploadFile
+from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel, ConfigDict, Field
 
 from agent.api.core import context_agent
@@ -284,6 +287,55 @@ async def mark_run_seen(run_id: UUID, body: RunSeen, request: Request) -> dict[s
     return {"seen": str(run_id)}
 
 
+class TopicReview(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    key: str = Field(pattern=r"^memory/brain/[^/]+/[^/]+\.md$", max_length=400)
+    right: bool
+    comment: str = Field(default="", max_length=2000)
+
+
+class DreamReview(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    user_id: Identifier = "default"
+    #: Empty dismisses the notice without a review.
+    topics: list[TopicReview] = Field(default_factory=list, max_length=200)
+
+
+@router.get("/dream")
+async def newest_dream(user_id: Identifier = "default") -> dict[str, Any]:
+    """The newest dream the user has not reviewed or dismissed: each topic it changed, as it reads now (null when
+    the dream deleted it). The Context widget's notification; null when there is none."""
+    from agent.api.core.dreaming import SEEN
+    from agent.api.core.panel_storage import get_user_session_storage
+
+    storage = get_user_session_storage(user_id)
+    versions = sorted(key for key in await storage.list("memory/dreams/") if key.endswith(".json"))
+    if not versions:
+        return {"dream": None}
+    version = versions[-1].rsplit("/", 1)[-1].removesuffix(".json")
+    if (await storage.read(SEEN) or b"").decode() == version:
+        return {"dream": None}
+    keys = list(json.loads(await storage.read(versions[-1]) or b"{}"))
+    texts = await asyncio.gather(*(storage.read(key) for key in keys))
+    return {"dream": {"version": version, "topics": [
+        {"key": key, "text": None if text is None else text.decode("utf-8", "replace")}
+        for key, text in zip(keys, texts, strict=True)]}}
+
+
+@router.post("/dream/{version}")
+async def review_dream(version: Annotated[str, Path(pattern=r"^\d{8}T\d{12}$")], body: DreamReview) -> dict[str, Any]:
+    """Close the notification. A review goes to the dreaming agent, which applies it in the background with its
+    next dream and keeps what it teaches for every dream after (``dreaming.dream_feedback``)."""
+    from agent.api.core.dreaming import SEEN, dream_feedback
+    from agent.api.core.panel_storage import get_user_session_storage
+
+    if body.topics:
+        await dream_feedback(body.user_id, version,
+                             [(topic.key, topic.right, topic.comment) for topic in body.topics])
+    await get_user_session_storage(body.user_id).write(SEEN, version.encode("ascii"))
+    return {"reviewed": version}
+
+
 class ProfileAnswer(BaseModel):
     model_config = ConfigDict(extra="forbid")
     question: str = Field(max_length=1000)
@@ -365,6 +417,39 @@ async def save_profile(body: ProfileSave) -> dict[str, Any]:
             return {"profile": current.model_dump(by_alias=True, exclude_none=True)}
     await storage.write(PROFILE_KEY, body.profile.model_dump_json(by_alias=True, exclude_none=True).encode())
     return {"profile": body.profile.model_dump(by_alias=True, exclude_none=True)}
+
+
+@router.get("/applications")
+async def list_applications(user_id: Identifier = "default") -> dict[str, Any]:
+    """The apps OpenCode built for the account (the Context Agent's ``register_application``), newest first."""
+    _owner(user_id)
+    return {"applications": [item.model_dump() for item in await context_agent.read_applications(user_id)]}
+
+
+@router.get("/applications/{application_id}/apk")
+async def application_apk(application_id: str, user_id: Identifier = "default") -> FileResponse:
+    """An Android app's APK, for ren mobile to install. Served where the workspace computer's home is mounted (the VM)."""
+    _owner(user_id)
+    application = next((item for item in await context_agent.read_applications(user_id) if item.id == application_id), None)
+    if application is None or application.kind != "android":
+        raise HTTPException(404, "No such Android app")
+    path = os.path.realpath(application.location)
+    if not path.startswith(context_agent.APPS_DIR + "/") or not path.endswith(".apk") or not os.path.isfile(path):
+        raise HTTPException(404, f"{application.name}'s APK is not on this server")
+    safe = "".join(char if char.isalnum() or char in "-_" else "-" for char in application.name) or "app"
+    return FileResponse(path, media_type="application/vnd.android.package-archive", filename=f"{safe}.apk")
+
+
+@router.delete("/applications/{application_id}")
+async def remove_application(application_id: str, user_id: Identifier = "default") -> dict[str, Any]:
+    """Takes an app off the list; the app itself stays where OpenCode put it."""
+    _owner(user_id)
+    applications = await context_agent.read_applications(user_id)
+    kept = [item for item in applications if item.id != application_id]
+    if len(kept) == len(applications):
+        raise HTTPException(404, "No such application")
+    await context_agent.write_applications(user_id, kept)
+    return {"applications": [item.model_dump() for item in kept]}
 
 
 @router.get("/status")

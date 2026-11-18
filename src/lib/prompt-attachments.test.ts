@@ -4,7 +4,7 @@ import {
   ATTACHMENT_TEXT_MAX, CONTEXT_NOTE, CONTEXT_TEXT_MAX, PASTED_PROMPT_CHARACTER_LIMIT, PASTED_PROMPT_INSTRUCTION,
   attachmentBlock, attachmentMeta, attachmentStats, buildAttachmentDocument, clipAttachmentText, clipWithNote,
   contextAttachment, escapeHtml, findTextMatches, tabAttachmentText,
-  isLongPaste, messageForPastedPrompt, messageTitle, parseAttachmentBlock, titleFromPastedText,
+  isAttachablePaste, isLongPaste, messageForPastedPrompt, selectionAttachment, withAttachmentBlocks, messageTitle, parseAttachmentBlock, titleFromPastedText,
   uniqueAttachmentName, wrapMatchIndex, type EditorPalette, type PromptAttachment,
 } from './prompt-attachments.ts'
 
@@ -21,10 +21,27 @@ test('posts the task instruction with a pasted prompt attachment', () => {
   assert.equal(messageForPastedPrompt('leave me alone', false), 'leave me alone')
 })
 
-test('attaches only pastes longer than 300 characters', () => {
+test('attaches every paste with text, and names only pastes longer than 300 characters with the model', () => {
+  assert.equal(isAttachablePaste('hi'), true)
+  assert.equal(isAttachablePaste(' \n '), false)
+  assert.equal(isAttachablePaste(''), false)
   assert.equal(isLongPaste('a'.repeat(PASTED_PROMPT_CHARACTER_LIMIT)), false)
   assert.equal(isLongPaste('a'.repeat(PASTED_PROMPT_CHARACTER_LIMIT + 1)), true)
   assert.equal(isLongPaste(''), false)
+})
+
+test('a selection opened with Ask Ren is a tab attachment with its page, and Live reads it as the block Chat sends', () => {
+  const selection = selectionAttachment('  The quick brown fox jumps over the lazy dog.  ', 'https://example.com/story')
+  assert.equal(selection.kind, 'tab')
+  assert.equal(selection.text, 'The quick brown fox jumps over the lazy dog.')
+  assert.equal(selection.url, 'https://example.com/story')
+  assert.equal(selection.source, 'Selected text')
+  assert.equal(selection.title, 'The quick brown fox')
+  assert.equal(attachmentMeta(selection), 'Tab · example.com')
+  assert.equal(selectionAttachment('Hello there', 'ren://home').url, undefined)
+  assert.deepEqual(parseAttachmentBlock(attachmentBlock(selection)), selection)
+  assert.equal(withAttachmentBlocks('Summarize this text', [selection]), `Summarize this text\n\n${attachmentBlock(selection)}`)
+  assert.equal(withAttachmentBlocks('Summarize this text', []), 'Summarize this text')
 })
 
 test('names a paste from its content in at most four words and avoids collisions', () => {

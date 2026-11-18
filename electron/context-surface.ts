@@ -24,6 +24,7 @@ const SURFACE_PARTITION = 'ron-context-surface'
 export interface ContextSurfaceLayoutFlags {
   isExpanded: boolean
   hasNotice: boolean
+  noticeWide?: boolean
   hasLabels: boolean
   discoveryOpen: boolean
 }
@@ -318,6 +319,7 @@ export class ContextSurface {
       zoom,
       isExpanded: this.state.layout.isExpanded,
       hasNotice: this.state.layout.hasNotice,
+      noticeWidthCss: this.state.layout.noticeWide ? 392 : undefined,
       noticeHeightCss: this.noticeHeightCss,
       orbHovered: this.orbHovered,
       pillWidthCss: this.pillWidthCss,

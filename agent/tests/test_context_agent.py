@@ -122,20 +122,96 @@ def test_recommend_agent_returns_a_recommendation_with_an_id() -> None:
 
 def test_prompt_names_the_agent_tools_mcp_server_only_when_configured(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("RON_AGENT_TOOLS_MCP_URL", raising=False)
-    assert "ron_tools" not in ctx.context_agent_prompt()
+    assert "ron_tools" not in ctx.context_agent_prompt("u1")
     monkeypatch.setenv("RON_AGENT_TOOLS_MCP_URL", "https://tools.example.com/mcp")
-    assert '"ron_tools": {"url": "https://tools.example.com/mcp"' in ctx.context_agent_prompt()
+    assert '"ron_tools": {"url": "https://tools.example.com/mcp"' in ctx.context_agent_prompt("u1")
 
 
 def test_opencode_and_the_computer_join_only_when_the_computer_is_configured(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(ctx.app_config, "COMPUTER_MCP_URL", "")
     monkeypatch.setattr(ctx.app_config, "COMPUTER_MCP_TOKEN", "")
-    assert "opencode run" not in ctx.context_agent_prompt()
+    assert "opencode run" not in ctx.context_agent_prompt("u1")
     names = [t.tool_name for t in ctx.context_agent_tools("default")]
-    assert names == ["update_interest_graph", "recommend_agent", "schedule_agent"]
+    assert names == ["update_interest_graph", "recommend_agent", "recommend_project", "draft_reply", "schedule_agent"]
     monkeypatch.setattr(ctx.app_config, "COMPUTER_MCP_URL", "https://computer.example.com/mcp")
     monkeypatch.setattr(ctx.app_config, "COMPUTER_MCP_TOKEN", "token")
-    assert "opencode run --standalone --auto" in ctx.context_agent_prompt()
+    assert "REN_USER_ID=u1 opencode run --standalone --auto" in ctx.context_agent_prompt("u1")
+    assert 'Collaborating with OpenCode on "[review]"' in ctx.context_agent_prompt("u1")
+    # Desktop Commander's tools come from the computer's MCP server; stand one in so no network is needed.
+    monkeypatch.setattr(ctx, "computer_tools", lambda: [ctx.update_interest_graph])
+    names = [t.tool_name for t in ctx.context_agent_tools("default")]
+    assert "register_application" in names and "recommend_app" in names
+    assert "[approve_app <id>]" in ctx.context_agent_prompt("u1")
+
+
+def test_recommend_project_and_draft_reply_return_structured_tool_results() -> None:
+    project = asyncio.run(ctx.recommend_project(
+        name="Austin Half Marathon", key="ahm", description="Track training runs and travel with Dana.",
+        interest="Running", rationale="You and Dana texted about race registration.",
+        issues=["Register for race with Dana Kim", "Book Austin hotel"],
+    ))
+    rec = project["content"][0]["json"]["agent_recommendation"]
+    assert rec["id"].startswith("rec-") and rec["kind"] == "project" and rec["key"] == "AHM"
+    assert rec["issues"] == ["Register for race with Dana Kim", "Book Austin hotel"]
+
+    reply = asyncio.run(ctx.draft_reply(
+        sender="Dana Kim", app="Messages", incoming="Saturday 7am trail run?",
+        draft="7am works! Meet at the trailhead?", notification_key="0|com.google.android.apps.messaging|42",
+    ))
+    draft = reply["content"][0]["json"]["reply_draft"]
+    assert draft["id"].startswith("rpl-") and draft["sender"] == "Dana Kim" and draft["app"] == "Messages"
+    assert draft["notification_key"] == "0|com.google.android.apps.messaging|42"
+    with pytest.raises(ValueError):
+        asyncio.run(ctx.draft_reply(sender="Dana", app="Messages", incoming="Hi", draft="Hey"))
+
+
+def test_recommend_app_is_a_recommendation_with_its_kind() -> None:
+    result = asyncio.run(ctx.recommend_app(name="Tide Log", kind="android", description="Logs tides.", interest="Surfing",
+                                           rationale="Checks tides daily."))
+    payload = result["content"][0]["json"]["agent_recommendation"]
+    assert payload["id"].startswith("rec-") and payload["kind"] == "android" and payload["name"] == "Tide Log"
+
+
+def test_an_android_app_s_apk_is_served_from_the_apps_dir(client: TestClient, monkeypatch: pytest.MonkeyPatch,
+                                                          tmp_path: Any) -> None:
+    user = "6f1c2d3e-4a5b-4c6d-8e7f-0123456789ab"
+    monkeypatch.setattr(ctx, "APPS_DIR", str(tmp_path))
+    apk = tmp_path / "tide" / "app-debug.apk"
+    apk.parent.mkdir()
+    apk.write_bytes(b"PK apk")
+    register = ctx.register_application_tool(user)
+    with pytest.raises(ValueError):
+        asyncio.run(register(name="Tide", kind="android", location="/elsewhere/app.apk", description="Tides."))
+    asyncio.run(register(name="Tide", kind="android", location=str(apk), description="Tides."))
+    asyncio.run(register(name="Site", kind="web", location="https://site.vercel.app", description="A site.",
+                         icon="https://site.vercel.app/icon.png"))
+    listed = client.get("/context/applications", params={"user_id": user}).json()["applications"]
+    site, tide = listed
+    assert site["icon"] == "https://site.vercel.app/icon.png"
+    response = client.get(f"/context/applications/{tide['id']}/apk", params={"user_id": user})
+    assert response.status_code == 200 and response.content == b"PK apk"
+    assert response.headers["content-type"] == "application/vnd.android.package-archive"
+    assert client.get(f"/context/applications/{site['id']}/apk", params={"user_id": user}).status_code == 404
+    apk.unlink()
+    assert client.get(f"/context/applications/{tide['id']}/apk", params={"user_id": user}).status_code == 404
+
+
+def test_registered_applications_list_newest_first_and_replace_by_name(client: TestClient,
+                                                                    monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(ctx, "APPS_DIR", "/config/workspace")
+    user = "6f1c2d3e-4a5b-4c6d-8e7f-0123456789ab"
+    register = ctx.register_application_tool(user)
+    with pytest.raises(ValueError):
+        asyncio.run(register(name="Tide", kind="web", location="/config/workspace/tide/dist", description="Tides."))
+    asyncio.run(register(name="Tide", kind="web", location="https://tide-one.vercel.app", description="Tides."))
+    asyncio.run(register(name="Pager", kind="android", location="/config/workspace/pager/app.apk", description="Pages."))
+    asyncio.run(register(name="tide", kind="web", location="https://tide-two.vercel.app", description="Tides, v2."))
+    listed = client.get("/context/applications", params={"user_id": user}).json()["applications"]
+    assert [(item["name"], item["location"]) for item in listed] == [
+        ("tide", "https://tide-two.vercel.app"), ("Pager", "/config/workspace/pager/app.apk")]
+    removed = client.delete(f"/context/applications/{listed[1]['id']}", params={"user_id": user}).json()
+    assert [item["name"] for item in removed["applications"]] == ["tide"]
+    assert client.delete("/context/applications/app-missing", params={"user_id": user}).status_code == 404
 
 
 def test_schedule_agent_takes_the_scheduler_s_cadence() -> None:
@@ -220,3 +296,28 @@ def test_profile_follows_the_account_and_keeps_the_newer_save(client: TestClient
     assert client.get("/context/profile", params={"user_id": "default"}).status_code == 401
     assert client.put("/context/profile", json={"user_id": "default", "profile": profile}).status_code == 401
     assert client.put("/context/profile", json={"user_id": user, "profile": {**profile, "extra": 1}}).status_code == 422
+
+
+def test_a_dream_notifies_once_and_its_review_reaches_the_dreaming_journal(client: TestClient,
+                                                                           monkeypatch: pytest.MonkeyPatch) -> None:
+    from agent.api.core import dreaming
+
+    monkeypatch.setattr(dreaming, "_timers", {})
+    assert client.get("/context/dream", params={"user_id": "u1"}).json() == {"dream": None}
+    storage = panel_storage.get_user_session_storage("u1")
+    version = "20261117T201500123456"
+    asyncio.run(storage.write("memory/brain/panel/travel.md", b"# Travel\nThe user flies from SLC."))
+    asyncio.run(storage.write(f"memory/dreams/{version}.json",
+                              json.dumps({"memory/brain/panel/travel.md": None, "memory/brain/panel/old.md": "# Old"}).encode()))
+    dream = client.get("/context/dream", params={"user_id": "u1"}).json()["dream"]
+    assert dream == {"version": version, "topics": [
+        {"key": "memory/brain/panel/travel.md", "text": "# Travel\nThe user flies from SLC."},
+        {"key": "memory/brain/panel/old.md", "text": None}]}
+    review = {"user_id": "u1", "topics": [{"key": "memory/brain/panel/travel.md", "right": False, "comment": "Ogden"},
+                                          {"key": "memory/brain/panel/old.md", "right": True}]}
+    assert client.post(f"/context/dream/{version}", json=review).json() == {"reviewed": version}
+    assert client.get("/context/dream", params={"user_id": "u1"}).json() == {"dream": None}
+    notes = asyncio.run(dreaming.Journal("u1", dreaming.DREAMING).notes())
+    assert "- memory/brain/panel/travel.md: wrong. Ogden\n- memory/brain/panel/old.md: right" in notes
+    assert client.post("/context/dream/latest", json=review).status_code == 422
+    assert client.post(f"/context/dream/{version}", json={"topics": [{"key": "../x", "right": True}]}).status_code == 422

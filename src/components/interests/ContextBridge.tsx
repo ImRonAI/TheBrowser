@@ -9,7 +9,7 @@ const RUNS_CHECK_MS = 30_000
 /**
  * Feeds the Context Agent: displayed tabs' page visits (title + URL, never page content,
  * deduplicated per tab so clicking between split panes never re-queues duplicate turns),
- * the page context menu's "Add to Ren context" entries, and periodic run polling.
+ * the page context menu's "Add to Ren context" entries, and periodic run, dream, and review polling.
  */
 export function ContextBridge() {
   const userId = useAuthStore((state) => state.user?.id || 'default')
@@ -45,12 +45,20 @@ export function ContextBridge() {
   }, [])
 
   useEffect(() => {
-    const timer = window.setInterval(() => { void useContextAgentStore.getState().flushBrowsing() }, FLUSH_CHECK_MS)
+    const tick = () => {
+      void useContextAgentStore.getState().flushBrowsing()
+      void useContextAgentStore.getState().flushReview()
+    }
+    const timer = window.setInterval(tick, FLUSH_CHECK_MS)
     return () => window.clearInterval(timer)
   }, [])
 
   useEffect(() => {
-    const refresh = () => { void useContextAgentStore.getState().refreshRuns() }
+    const refresh = () => {
+      void useContextAgentStore.getState().refreshRuns()
+      void useContextAgentStore.getState().refreshDream()
+      void useContextAgentStore.getState().flushReview()
+    }
     const timer = window.setInterval(refresh, RUNS_CHECK_MS)
     window.addEventListener('focus', refresh)
     return () => { window.clearInterval(timer); window.removeEventListener('focus', refresh) }

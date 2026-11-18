@@ -55,6 +55,7 @@ export interface WidgetSurfaceBoundsOptions {
   zoom?: number
   isExpanded: boolean
   hasNotice: boolean
+  noticeWidthCss?: number
   noticeHeightCss?: number
   orbHovered: boolean
   pillWidthCss?: number
@@ -100,7 +101,7 @@ export function computeWidgetSurfaceBounds(options: WidgetSurfaceBoundsOptions):
   // idle -> hover -> notice transitions.
   if (options.hasNotice) {
     const cardH = Math.max(96, Math.ceil(options.noticeHeightCss ?? 148))
-    const widthCss = NOTICE_CARD_WIDTH_CSS
+    const widthCss = Math.max(NOTICE_CARD_WIDTH_CSS, Math.ceil(options.noticeWidthCss ?? NOTICE_CARD_WIDTH_CSS))
     const heightCss = 84 + cardH + 12
     const width = Math.min(area.width, Math.round(widthCss * zoom))
     const height = Math.min(area.height, Math.round(heightCss * zoom))

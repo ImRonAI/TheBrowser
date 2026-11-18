@@ -13,6 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from agent.api.core import public_tunnel
 from agent.api.core.config import CORS_ORIGINS, SESSION_STORAGE_DIR
+from agent.api.core.dreaming import JOURNAL_DIRECTIVE, agent_memory, resume_dreams
 from agent.api.core.panel_storage import get_panel_storage
 from agent.api.core.tool_observation import setup_evals_exporter
 from agent.api.endpoints import chat
@@ -44,6 +45,8 @@ async def lifespan(app: FastAPI):
     await asyncio.to_thread(get_panel_storage)
     # RON_TOOL_OBSERVATION=1: retain spans in memory (strands_evals) for tool diagnosis.
     setup_evals_exporter()
+    # Every user whose dream had not run when the process stopped gets it, signed in or not (core/dreaming.py).
+    await resume_dreams()
     manager = chat.create_runtime_manager()
     from agent.api.core import deep_research
     from agent.api.core.deep_research_tools import deep_research_tools
@@ -106,7 +109,8 @@ async def lifespan(app: FastAPI):
                             *deep_research_tools(user_id="default"),
                         ],
                         name="Ren", description="Ren browser agent with core tools",
-                        system_prompt=chat.AGENT_SYSTEM_PROMPT,
+                        system_prompt=chat.AGENT_SYSTEM_PROMPT + JOURNAL_DIRECTIVE,
+                        memory=lambda: agent_memory("default", "ren-a2a"),
                     )
                     integration = await asyncio.to_thread(
                         create_panel_a2a_server, agent_factory=factory, http_url=panel_a2a_url(),
@@ -117,10 +121,10 @@ async def lifespan(app: FastAPI):
                 mounted_routes = [route for route in app.routes if route not in previous]
         # Opt-in (RON_NGROK=1); only allow-listed webhook paths are reachable.
         app.state.public_url = await public_tunnel.start()
-        async with skills_mcp_app.lifespan(app), ren_mcp_app.lifespan(app):
+        async with skills_mcp_app.lifespan(app), ren_mcp_app.lifespan(app), memory_mcp_app.lifespan(app):
             # Joined to Ren's hub (REN_HUB_URL), ren desktop serves its MCP server there too, so the phone and the
             # agents outside this machine can reach it.
-            hub = ren_mcp.hub_url()
+            hub = ren_mcp.hub_url() if os.getenv("REN_HUB_ATTACH", "1") != "0" else None
             link = asyncio.create_task(ren_mcp.attach_to_hub(ren_mcp_server, hub, os.getenv("REN_HUB_TOKEN", ""))) if hub else None
             try:
                 yield
@@ -194,6 +198,10 @@ app.mount("/skills/mcp", skills_mcp_app)
 ren_mcp_server = ren_mcp.create_ren_mcp(app)
 ren_mcp_app = ren_mcp_server.http_app(path="/")
 app.mount("/mcp", ren_mcp_app)
+# The second brain for agents outside this process: OpenCode and ren mobile's ElevenLabs agents (core/memory_mcp.py).
+from agent.api.core import memory_mcp  # noqa: E402
+memory_mcp_app = memory_mcp.server.http_app(path="/")
+app.mount("/memory/mcp", memory_mcp_app)
 # Stored harness specialists over native A2A (<PANEL_A2A_URL>/agents/<id>). Mounted before the
 # lifespan's /a2a mount so this prefix wins; loopback-only like /a2a (never on the ngrok allowlist).
 from agent.api.core.a2a_tools import a2a_enabled as _a2a_enabled  # noqa: E402

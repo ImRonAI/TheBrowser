@@ -14,6 +14,8 @@ import { chatScopeFields, panelSessionKey, sendsProjectCredential, type PanelCon
 import { getSession } from '@/api/supabase'
 import { guestWorkspace } from '@/lib/project-workspace'
 import { useRepairStore } from '@/stores/repairStore'
+import { useContextAgentStore } from '@/stores/contextAgentStore'
+import { latestReply } from '@/lib/context-api'
 import { repairDecisionRequest } from '@/lib/repair-api'
 
 const API = API_BASE_URL
@@ -372,6 +374,10 @@ export function usePanelChat(selection: Selection) {
         if (shouldFollowPanel(current.current)) await replay(id, token, abort.signal)
         else { setConnection('connected'); setTransportError(undefined) }
       }
+      const userSaid = action === 'message'
+        ? text.trim()
+        : responses?.map((item) => typeof item.response === 'string' ? item.response : JSON.stringify(item.response)).join('; ') ?? ''
+      if (userSaid) useContextAgentStore.getState().observeChat(destination, userSaid, latestReply(current.current))
       return true
     } catch (error) {
       if (token !== generation.current || abort.signal.aborted) return accepted

@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
-  agentServesInterest, agoLabel, approveAgentTurn, phoneTurn, browsingDue, browsingTurn, cadenceLabel, contextAddedTurn, contextResults, createContextClient, dataUrlBlob, defaultCadence, discoverTopics,
-  formatBytes, interestsFromOutput, isObservable, latestReply, plainSummary, recommendationFromOutput, recordVisit, runErrorLine, runHeadline, runNotifications, runStatusLabel, searchMarkdown,
+  agentServesInterest, agoLabel, approveAgentTurn, browsingDue, browsingTurn, cadenceLabel, contextAddedTurn, contextResults, createContextClient, dataUrlBlob, defaultCadence, discoverTopics, dreamTime, dreamTopicLabel,
+  formatBytes, interestsFromOutput, isObservable, latestReply, notificationTurn, phoneTurn, plainSummary, recommendationFromOutput, recordVisit, reviewDue, reviewTurn, runErrorLine, runHeadline, runNotifications, runStatusLabel,
+  searchMarkdown, sendReplyTurn, TWICE_DAILY_MS,
   type AgentRun, type ContextItem,
 } from './context-api.ts'
 import type { PanelMessage, PanelState } from './panel-stream.ts'
@@ -44,7 +45,52 @@ test('turns name the pages, the item and the current graph', () => {
   assert.match(browsingTurn([], []), /Current interest graph: \(empty\)/)
   const added = contextAddedTurn(item, graph)
   assert.match(added, /^\[context added\] link: Tokio\nSource: https:\/\/tokio\.rs\/\nExcerpt: Async runtime/)
-  assert.match(approveAgentTurn({ id: 'rec-1', name: 'Briefer', description: '', interest: 'F1', rationale: '', tools: [], skills: [] }), /^\[approve_agent rec-1\] Build "Briefer" now\./)
+  assert.match(approveAgentTurn({ id: 'rec-1', kind: 'agent', name: 'Briefer', description: '', interest: 'F1', rationale: '', tools: [], skills: [] }), /^\[approve_agent rec-1\] Build "Briefer" now\./)
+  assert.match(approveAgentTurn({ id: 'rec-2', kind: 'web', name: 'Tides', description: '', interest: 'Surf', rationale: '', tools: [], skills: [] }), /^\[approve_app rec-2\] Build the web app "Tides" now\./)
+  assert.match(approveAgentTurn({ id: 'rec-3', kind: 'project', key: 'AHM', name: 'Austin Half', description: '', interest: 'Running', rationale: '', tools: [], skills: [], issues: ['Sign up'] }), /^\[approve_project rec-3\] Create the project "Austin Half" now\./)
+})
+
+test('searches, chats, notifications, reply drafts and twice-daily reviews format and parse cleanly', () => {
+  const at = Date.UTC(2026, 10, 17, 14, 30)
+  assert.equal(browsingDue([], at + 60_000, 5, 3 * 60_000, [{ query: 'austin half marathon', at }], []), false)
+  assert.equal(browsingDue([], at + 3 * 60_000, 5, 3 * 60_000, [{ query: 'austin half marathon', at }], []), true)
+  const mixed = browsingTurn([], [{ label: 'Running', weight: 0.7 }],
+    [{ query: 'austin half marathon', summary: 'Feb 15 course map', at }],
+    [{ channel: 'panel', user: 'Can Dana run with me?', assistant: 'Yes, registration is open.', at }])
+  assert.match(mixed, /Searches the user ran:\n- 14:30 "austin half marathon" — Feb 15 course map/)
+  assert.match(mixed, /Chats and user responses:\n- 14:30 \[panel\] User: Can Dana run with me\? \| Ren: Yes, registration is open\./)
+
+  const notif = notificationTurn({
+    key: '0|com.whatsapp|7', app: 'WhatsApp', package: 'com.whatsapp', title: 'Dana Kim',
+    text: 'Saturday 7am trail run?', at: '2026-11-17T14:32:00Z', can_reply: true, number: '+18015550100',
+    messages: [{ from: 'Dana Kim', text: 'Saturday 7am trail run?', at: '14:32' }],
+  }, [{ label: 'Running', weight: 0.7 }])
+  assert.match(notif, /^\[notification\] App: WhatsApp \(com\.whatsapp\)/)
+  assert.match(notif, /notification_key=0\|com\.whatsapp\|7, number=\+18015550100/)
+  assert.match(notif, /Recent thread:\n- Dana Kim: Saturday 7am trail run\?/)
+
+  const send = sendReplyTurn({
+    id: 'rpl-1', sender: 'Dana Kim', app: 'WhatsApp', incoming: 'Saturday 7am?',
+    draft: '7am works!', notification_key: '0|com.whatsapp|7', to: '+18015550100',
+  }, '7am works — see you at the trailhead!')
+  assert.match(send, /^\[send_reply rpl-1\].*phone_request_approval/s)
+  assert.match(send, /7am works — see you at the trailhead!/)
+
+  assert.equal(reviewDue(0, false, TWICE_DAILY_MS * 2), false)
+  assert.equal(reviewDue(1000, true, 1000 + TWICE_DAILY_MS - 1), false)
+  assert.equal(reviewDue(1000, true, 1000 + TWICE_DAILY_MS), true)
+  assert.match(reviewTurn([{ label: 'Running', weight: 0.7 }], ['Pace Bot']), /^\[review\]\nTwice-daily review[\s\S]*Already recommended: Pace Bot/)
+
+  const messages = [{ id: 'm2', role: 'assistant', parts: [
+    tool('recommend_project', [{ json: { agent_recommendation: { id: 'rec-p', kind: 'project', key: 'AHM', name: 'Austin Half', issues: ['Register with Dana'] } } }]),
+    tool('draft_reply', [{ json: { reply_draft: { id: 'rpl-9', sender: 'Dana Kim', app: 'WhatsApp', incoming: '7am?', draft: 'In!', notification_key: 'k1', to: '' } } }]),
+    tool('create_project', [{ text: JSON.stringify({ id: 'p-1', name: 'Austin Half' }) }]),
+  ] }] as unknown as PanelMessage[]
+  const parsed = contextResults(messages)
+  assert.equal(parsed.recommendations[0].kind, 'project')
+  assert.deepEqual(parsed.recommendations[0].issues, ['Register with Dana'])
+  assert.equal(parsed.replyDrafts[0].sender, 'Dana Kim')
+  assert.deepEqual(parsed.createdProjects, ['Austin Half'])
 })
 
 const tool = (name: string, output: unknown, status = 'success'): PanelMessage['parts'][number] =>
@@ -56,11 +102,12 @@ test('contextResults reads the graph, recommendations and saved agents from tool
     tool('update_interest_graph', [{ json: { interests: [{ label: ' Formula 1 ', weight: 1.4, category: 'sport', reason: 'five pages' }, { label: '', weight: 0.5 }] } }]),
     tool('recommend_agent', [{ json: { agent_recommendation: { id: 'rec-a', name: 'Briefer', tools: ['brave_news_search', 3] } } }]),
     tool('recommend_agent', [{ text: 'failed' }], 'error'),
+    tool('recommend_app', [{ json: { agent_recommendation: { id: 'rec-b', kind: 'android', name: 'Tide Log' } } }]),
     tool('create_harness', [{ text: JSON.stringify({ id: 'u-1', name: 'Briefer' }) }]),
   ] }] as unknown as PanelMessage[]
   const results = contextResults(messages)
   assert.deepEqual(results.interests, [{ label: 'Formula 1', weight: 1, category: 'other', reason: 'five pages' }])
-  assert.deepEqual(results.recommendations.map((r) => [r.id, r.tools]), [['rec-a', ['brave_news_search']]])
+  assert.deepEqual(results.recommendations.map((r) => [r.id, r.kind, r.tools]), [['rec-a', 'agent', ['brave_news_search']], ['rec-b', 'android', []]])
   assert.deepEqual(results.created, ['Briefer'])
   assert.equal(interestsFromOutput([{ text: 'x' }]), null)
   assert.equal(recommendationFromOutput([{ json: { agent_recommendation: { name: 'no id' } } }]), null)
@@ -188,4 +235,21 @@ test('phoneTurn names the apps, what Ren did and the current graph', () => {
   assert.match(turn, /- 2026-11-15 09:05 Set a reminder: stretch/)
   assert.match(turn, /Current interest graph: Running \(0\.50\)/)
   assert.match(phoneTurn({ since: 0, until: 0, apps: [], actions: [] }, []), /\(none\)[\s\S]*\(nothing\)/)
+})
+
+test('a dream notice names each topic by its heading and the agent whose folder it is in, and sends the checklist', async () => {
+  assert.equal(dreamTime('20261117T201500123456'), '2026-11-17T20:15:00Z')
+  assert.deepEqual(dreamTopicLabel({ key: 'memory/brain/panel/travel.md', text: '# Travel plans\nFlies from SLC.' }), { title: 'Travel plans', agent: 'panel' })
+  assert.deepEqual(dreamTopicLabel({ key: 'memory/brain/search-page/old-flights.md', text: null }), { title: 'old flights', agent: 'search-page' })
+  const sent: { url: string; body: string }[] = []
+  const fetcher = (async (url: string, init?: RequestInit) => {
+    sent.push({ url, body: String(init?.body ?? '') })
+    return new Response(JSON.stringify(url.includes('?') ? { dream: null } : { reviewed: 'v' }), { status: 200 })
+  }) as typeof fetch
+  const client = createContextClient('http://api.test/', 'u 1', fetcher)
+  assert.equal(await client.dream(), null)
+  await client.reviewDream('20261117T201500123456', [{ key: 'memory/brain/panel/travel.md', right: false, comment: 'Ogden' }])
+  assert.equal(sent[0].url, 'http://api.test/context/dream?user_id=u%201')
+  assert.equal(sent[1].url, 'http://api.test/context/dream/20261117T201500123456')
+  assert.deepEqual(JSON.parse(sent[1].body), { user_id: 'u 1', topics: [{ key: 'memory/brain/panel/travel.md', right: false, comment: 'Ogden' }] })
 })
