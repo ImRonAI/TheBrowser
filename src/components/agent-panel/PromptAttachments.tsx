@@ -329,14 +329,16 @@ export function PromptAttachmentCard({ attachment, editable, onRemove, onTextCha
   </AttachmentHoverCard>
 }
 
-/** The composer's attachments: pastes first (editable, removable), then the picked context items. */
+/** The composer's attachments: pastes first, then what was opened in Ren, then the picked context items (all editable, removable). */
 export function ComposerAttachmentTray({ attachments, className }: { attachments: ComposerAttachmentsState; className?: string }) {
-  const { pasted, contexts, previews, edits, naming, notice } = attachments
-  if (!pasted.length && !contexts.length && !notice) return null
+  const { pasted, contexts, given, previews, edits, naming, notice } = attachments
+  if (!pasted.length && !contexts.length && !given.length && !notice) return null
   return <div className={className}>
-    {(pasted.length > 0 || contexts.length > 0) && <Attachments variant="inline" aria-label="Attachments" className="gap-2">
+    {(pasted.length > 0 || contexts.length > 0 || given.length > 0) && <Attachments variant="inline" aria-label="Attachments" className="gap-2">
       {pasted.map((item) => <PromptAttachmentCard key={item.id} attachment={item} editable naming={naming.has(item.id)} clippedFrom={item.clippedFrom}
         onRemove={() => attachments.removePasted(item.id)} onTextChange={(text) => attachments.editPasted(item.id, text)} />)}
+      {given.map((item) => <PromptAttachmentCard key={item.id} attachment={item} editable
+        onRemove={() => attachments.removeGiven(item.id)} onTextChange={(text) => attachments.editGiven(item.id, text)} />)}
       {contexts.map((item) => {
         const preview = previews[item.id]
         const edited = edits[item.id]
