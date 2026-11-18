@@ -2,6 +2,7 @@ import { Fragment, useCallback, useMemo, useState, useEffect, type DragEvent } f
 import { ChevronDown, ChevronRight, Plus, ArrowUp, ArrowDown, FilePlus, MessagesSquare } from 'lucide-react'
 import { useProjectsStore, projectSelectors, projectUtils } from '@/stores/projectsStore'
 import { useNavigationStore } from '@/stores/navigationStore'
+import { useTabPane } from '@/context/TabPaneContext'
 import {
   INTERNAL_PROJECT_VIEWS,
   ProjectView,
@@ -45,6 +46,7 @@ interface ProjectHomePageProps {
 }
 
 export function ProjectHomePage({ projectKey, documentId }: ProjectHomePageProps) {
+  const { isSplitPane } = useTabPane()
   const { projects, issues, updateProject, people, isInitialized, isLoading, userId } = useProjectsStore()
   const { setActiveTab } = useNavigationStore()
   const { openPanel } = useAgentUi()
@@ -57,8 +59,8 @@ export function ProjectHomePage({ projectKey, documentId }: ProjectHomePageProps
   const onDraftStarted = useCallback(() => setNewDocumentRequested(false), [])
 
   useEffect(() => {
-    setActiveTab('execute')
-  }, [setActiveTab])
+    if (!isSplitPane) setActiveTab('execute')
+  }, [isSplitPane, setActiveTab])
 
   // Following a page link (e.g. from an issue's Documents) shows that page.
   useEffect(() => {

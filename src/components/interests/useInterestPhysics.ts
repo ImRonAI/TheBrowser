@@ -1,132 +1,139 @@
-import { useEffect, useRef } from 'react'
-import { useInterestsStore } from '@/stores/interestsStore'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { useInterestsStore, type InterestNode } from '@/stores/interestsStore'
 
 // Physics constants - SPREAD but CENTERED and VISIBLE
-const REPULSION_STRENGTH = 12000    // Strong repulsion - stay apart
-const ATTRACTION_STRENGTH = 0.002   // Tiny attraction to keep connected
-const CENTER_GRAVITY = 0.002        // Very slight center pull to stay visible
-const DAMPING = 0.9                 // Velocity damping (0-1)
-const MIN_DISTANCE = 130            // Keep big nodes apart
-const MAX_VELOCITY = 4              // Smooth movement
-const BOUNDARY_PADDING = 70         // Keep nodes away from edges
+const REPULSION_STRENGTH = 12000 // Strong repulsion - stay apart
+const ATTRACTION_STRENGTH = 0.002 // Tiny attraction to keep connected
+const CENTER_GRAVITY = 0.002 // Very slight center pull to stay visible
+const DAMPING = 0.9 // Velocity damping (0-1)
+const MIN_DISTANCE = 130 // Keep big nodes apart
+const MAX_VELOCITY = 4 // Smooth movement
+const BOUNDARY_PADDING = 70 // Keep nodes away from edges
 
 interface Vector {
   x: number
   y: number
 }
 
+interface SimBody {
+  position: Vector
+  velocity: Vector
+}
+
 /**
- * Custom hook that applies force-directed physics to interest nodes
- * Creates organic, floating movement with collision avoidance
+ * Custom hook that applies force-directed physics to interest nodes locally in memory
+ * (without writing 60x/sec into persisted Zustand `localStorage` or IPC).
  */
-export function useInterestPhysics(canvasWidth: number, canvasHeight: number) {
-  const animationRef = useRef<number | null>(null)
-  const lastTimeRef = useRef<number>(0)
-  
-  const { nodes, updateNodePosition, updateNodeVelocity } = useInterestsStore()
+export function useInterestPhysics(canvasWidth: number, canvasHeight: number): InterestNode[] {
+  const nodes = useInterestsStore((state) => state.nodes)
+  const connections = useInterestsStore((state) => state.connections)
+  const bodiesRef = useRef<Map<string, SimBody>>(new Map())
+  const [, setFrame] = useState(0)
+
+  const nodeSignature = useMemo(() => nodes.map((n) => n.id).join('|'), [nodes])
+
+  useEffect(() => {
+    const bodies = bodiesRef.current
+    const activeIds = new Set(nodes.map((n) => n.id))
+    for (const id of bodies.keys()) {
+      if (!activeIds.has(id)) bodies.delete(id)
+    }
+    for (const node of nodes) {
+      if (!bodies.has(node.id)) {
+        bodies.set(node.id, {
+          position: { ...node.position },
+          velocity: { ...node.velocity },
+        })
+      }
+    }
+  }, [nodes, nodeSignature])
 
   useEffect(() => {
     if (nodes.length === 0) return
 
+    let animationId: number | null = null
+    let lastTime = performance.now()
     const centerX = canvasWidth / 2
     const centerY = canvasHeight / 2
 
-    // Physics simulation step
     const simulate = (timestamp: number) => {
-      // Calculate delta time (cap at 50ms to prevent huge jumps)
-      const deltaTime = Math.min((timestamp - lastTimeRef.current) / 1000, 0.05)
-      lastTimeRef.current = timestamp
+      const deltaTime = Math.min((timestamp - lastTime) / 1000, 0.05)
+      lastTime = timestamp
 
-      // Skip if delta is too small
       if (deltaTime < 0.001) {
-        animationRef.current = requestAnimationFrame(simulate)
+        animationId = requestAnimationFrame(simulate)
         return
       }
 
-      // Get current state
       const currentNodes = useInterestsStore.getState().nodes
       const currentConnections = useInterestsStore.getState().connections
-
-      // Calculate forces for each node
-      const forces: Map<string, Vector> = new Map()
+      const bodies = bodiesRef.current
 
       for (const node of currentNodes) {
+        if (!bodies.has(node.id)) {
+          bodies.set(node.id, { position: { ...node.position }, velocity: { ...node.velocity } })
+        }
+      }
+
+      const forces = new Map<string, Vector>()
+
+      for (const node of currentNodes) {
+        const body = bodies.get(node.id)!
         let fx = 0
         let fy = 0
 
-        // 1. Repulsion from other nodes (Coulomb's law style) - SPREAD THEM OUT
         for (const other of currentNodes) {
           if (other.id === node.id) continue
-
-          const dx = node.position.x - other.position.x
-          const dy = node.position.y - other.position.y
+          const otherBody = bodies.get(other.id) ?? other
+          const dx = body.position.x - otherBody.position.x
+          const dy = body.position.y - otherBody.position.y
           const distSq = dx * dx + dy * dy
           const dist = Math.sqrt(distSq)
 
           if (dist < MIN_DISTANCE) {
-            // Very strong repulsion when too close
             const force = REPULSION_STRENGTH / Math.max(distSq, 50)
-            const nx = dx / Math.max(dist, 1)
-            const ny = dy / Math.max(dist, 1)
-            fx += nx * force
-            fy += ny * force
+            fx += (dx / Math.max(dist, 1)) * force
+            fy += (dy / Math.max(dist, 1)) * force
           } else if (dist < 300) {
-            // Still repel at medium distance - keep spreading
             const force = REPULSION_STRENGTH / (distSq * 1.5)
-            const nx = dx / dist
-            const ny = dy / dist
-            fx += nx * force
-            fy += ny * force
+            fx += (dx / dist) * force
+            fy += (dy / dist) * force
           }
         }
 
-        // 2. Attraction to connected nodes (spring force) - VERY WEAK
-        const nodeConnections = currentConnections.filter(
-          c => c.from === node.id || c.to === node.id
-        )
-
-        for (const conn of nodeConnections) {
+        for (const conn of currentConnections) {
+          if (conn.from !== node.id && conn.to !== node.id) continue
           const otherId = conn.from === node.id ? conn.to : conn.from
-          const other = currentNodes.find(n => n.id === otherId)
-          if (!other) continue
-
-          const dx = other.position.x - node.position.x
-          const dy = other.position.y - node.position.y
+          const otherBody = bodies.get(otherId)
+          if (!otherBody) continue
+          const dx = otherBody.position.x - body.position.x
+          const dy = otherBody.position.y - body.position.y
           const dist = Math.sqrt(dx * dx + dy * dy)
-
-          // Spring force - only pull if VERY far, let them spread out
-          const targetDist = 180 + (1 - conn.strength) * 80 // Much larger target distance
+          const targetDist = 180 + (1 - conn.strength) * 80
           if (dist > targetDist) {
             const force = (dist - targetDist) * ATTRACTION_STRENGTH * conn.strength * 0.5
-            const nx = dx / Math.max(dist, 1)
-            const ny = dy / Math.max(dist, 1)
-            fx += nx * force
-            fy += ny * force
+            fx += (dx / Math.max(dist, 1)) * force
+            fy += (dy / Math.max(dist, 1)) * force
           }
         }
 
-        // 3. Center gravity - gentle pull to keep nodes visible and centered
-        const dxCenter = centerX - node.position.x
-        const dyCenter = centerY - node.position.y
-        fx += dxCenter * CENTER_GRAVITY
-        fy += dyCenter * CENTER_GRAVITY
+        fx += (centerX - body.position.x) * CENTER_GRAVITY
+        fy += (centerY - body.position.y) * CENTER_GRAVITY
 
-        // 4. Boundary repulsion - push away from edges
         const boundaryForce = 50
-        if (node.position.x < BOUNDARY_PADDING) {
-          fx += boundaryForce * (1 - node.position.x / BOUNDARY_PADDING)
+        if (body.position.x < BOUNDARY_PADDING) {
+          fx += boundaryForce * (1 - body.position.x / BOUNDARY_PADDING)
         }
-        if (node.position.x > canvasWidth - BOUNDARY_PADDING) {
-          fx -= boundaryForce * (1 - (canvasWidth - node.position.x) / BOUNDARY_PADDING)
+        if (body.position.x > canvasWidth - BOUNDARY_PADDING) {
+          fx -= boundaryForce * (1 - (canvasWidth - body.position.x) / BOUNDARY_PADDING)
         }
-        if (node.position.y < BOUNDARY_PADDING) {
-          fy += boundaryForce * (1 - node.position.y / BOUNDARY_PADDING)
+        if (body.position.y < BOUNDARY_PADDING) {
+          fy += boundaryForce * (1 - body.position.y / BOUNDARY_PADDING)
         }
-        if (node.position.y > canvasHeight - BOUNDARY_PADDING) {
-          fy -= boundaryForce * (1 - (canvasHeight - node.position.y) / BOUNDARY_PADDING)
+        if (body.position.y > canvasHeight - BOUNDARY_PADDING) {
+          fy -= boundaryForce * (1 - (canvasHeight - body.position.y) / BOUNDARY_PADDING)
         }
 
-        // 5. Add subtle random drift for organic feel
         const drift = 0.5
         fx += (Math.random() - 0.5) * drift
         fy += (Math.random() - 0.5) * drift
@@ -134,54 +141,46 @@ export function useInterestPhysics(canvasWidth: number, canvasHeight: number) {
         forces.set(node.id, { x: fx, y: fy })
       }
 
-      // Apply forces and update positions
+      let moved = false
       for (const node of currentNodes) {
         const force = forces.get(node.id)
-        if (!force) continue
+        const body = bodies.get(node.id)
+        if (!force || !body) continue
 
-        // Update velocity
-        let vx = (node.velocity.x + force.x * deltaTime) * DAMPING
-        let vy = (node.velocity.y + force.y * deltaTime) * DAMPING
-
-        // Cap velocity
+        let vx = (body.velocity.x + force.x * deltaTime) * DAMPING
+        let vy = (body.velocity.y + force.y * deltaTime) * DAMPING
         const speed = Math.sqrt(vx * vx + vy * vy)
         if (speed > MAX_VELOCITY) {
           vx = (vx / speed) * MAX_VELOCITY
           vy = (vy / speed) * MAX_VELOCITY
         }
 
-        // Update position
-        let newX = node.position.x + vx
-        let newY = node.position.y + vy
+        const newX = Math.max(BOUNDARY_PADDING, Math.min(canvasWidth - BOUNDARY_PADDING, body.position.x + vx))
+        const newY = Math.max(BOUNDARY_PADDING, Math.min(canvasHeight - BOUNDARY_PADDING, body.position.y + vy))
 
-        // Clamp to bounds
-        newX = Math.max(BOUNDARY_PADDING, Math.min(canvasWidth - BOUNDARY_PADDING, newX))
-        newY = Math.max(BOUNDARY_PADDING, Math.min(canvasHeight - BOUNDARY_PADDING, newY))
-
-        // Only update if position changed significantly
-        const dx = newX - node.position.x
-        const dy = newY - node.position.y
-        if (Math.abs(dx) > 0.1 || Math.abs(dy) > 0.1) {
-          updateNodePosition(node.id, { x: newX, y: newY })
-          updateNodeVelocity(node.id, { x: vx, y: vy })
+        if (Math.abs(newX - body.position.x) > 0.1 || Math.abs(newY - body.position.y) > 0.1) {
+          body.position = { x: newX, y: newY }
+          body.velocity = { x: vx, y: vy }
+          moved = true
         }
       }
 
-      // Continue simulation
-      animationRef.current = requestAnimationFrame(simulate)
-    }
-
-    // Start simulation
-    lastTimeRef.current = performance.now()
-    animationRef.current = requestAnimationFrame(simulate)
-
-    // Cleanup
-    return () => {
-      if (animationRef.current) {
-        cancelAnimationFrame(animationRef.current)
+      if (moved) {
+        setFrame((f) => (f + 1) & 0xffff)
       }
+      animationId = requestAnimationFrame(simulate)
     }
-  }, [nodes.length, canvasWidth, canvasHeight, updateNodePosition, updateNodeVelocity])
+
+    animationId = requestAnimationFrame(simulate)
+    return () => {
+      if (animationId !== null) cancelAnimationFrame(animationId)
+    }
+  }, [nodeSignature, connections.length, canvasWidth, canvasHeight, nodes.length])
+
+  return nodes.map((node) => {
+    const body = bodiesRef.current.get(node.id)
+    return body ? { ...node, position: body.position, velocity: body.velocity } : node
+  })
 }
 
 /**
@@ -190,13 +189,12 @@ export function useInterestPhysics(canvasWidth: number, canvasHeight: number) {
 export function initializeNodePositions(
   nodes: ReturnType<typeof useInterestsStore.getState>['nodes'],
   canvasWidth: number,
-  canvasHeight: number
+  canvasHeight: number,
 ) {
   const padding = 70
   const usableW = canvasWidth - padding * 2
   const usableH = canvasHeight - padding * 2
-  
-  // Centered positions - all visible
+
   const positions = [
     { x: 0.5, y: 0.25 },
     { x: 0.2, y: 0.35 },
@@ -209,17 +207,16 @@ export function initializeNodePositions(
     { x: 0.5, y: 0.5 },
     { x: 0.35, y: 0.15 },
   ]
-  
+
   return nodes.map((node, i) => {
     const pos = positions[i % positions.length]
     return {
       ...node,
       position: {
         x: padding + pos.x * usableW,
-        y: padding + pos.y * usableH
+        y: padding + pos.y * usableH,
       },
-      velocity: { x: 0, y: 0 }
+      velocity: { x: 0, y: 0 },
     }
   })
 }
-

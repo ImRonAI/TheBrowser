@@ -1,6 +1,6 @@
 import { motion, AnimatePresence, useDragControls } from 'framer-motion'
-import { RenIcon } from '@/components/brand'
-import { useEffect, useRef, type KeyboardEvent } from 'react'
+import { RenMark } from '@/components/brand'
+import { useEffect, useRef, type KeyboardEvent, type PointerEvent as ReactPointerEvent } from 'react'
 import { XMarkIcon, NewspaperIcon, CpuChipIcon, ArrowTopRightOnSquareIcon, ChevronRightIcon, PlusIcon } from '@heroicons/react/24/outline'
 import { useAgentUi } from '@/context/AgentUiContext'
 import { openResult } from '@/components/search/open-result'
@@ -34,13 +34,42 @@ export function InterestDiscoveryPanel() {
     clearSelection
   } = useInterestDiscoveryStore()
   
+  const inNativeSurface = typeof window !== 'undefined' && Boolean((window as { contextSurface?: unknown }).contextSurface)
   const dragControls = useDragControls()
   const constraintsRef = useRef<HTMLDivElement>(null)
   const panelRef = useRef<HTMLDivElement>(null)
+  const nativeDraggingRef = useRef(false)
   /** What had focus when the panel opened (usually the interest node), so closing can return there. */
   const openerRef = useRef<HTMLElement | null>(null)
 
   const isOpen = !!selectedInterestLabel
+
+  const onHeaderPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0) return
+    const surface = (window as {
+      contextSurface?: {
+        dragStart?: (s: 'widget' | 'discovery') => void
+      }
+    }).contextSurface
+    if (surface?.dragStart) {
+      nativeDraggingRef.current = true
+      event.currentTarget.setPointerCapture(event.pointerId)
+      surface.dragStart('discovery')
+      return
+    }
+    dragControls.start(event)
+  }
+
+  const onHeaderPointerMove = () => {
+    if (!nativeDraggingRef.current) return
+    ;(window as { contextSurface?: { dragMove?: (s: 'widget' | 'discovery') => void } }).contextSurface?.dragMove?.('discovery')
+  }
+
+  const endNativeDrag = () => {
+    if (!nativeDraggingRef.current) return
+    nativeDraggingRef.current = false
+    ;(window as { contextSurface?: { dragEnd?: (s: 'widget' | 'discovery') => void } }).contextSurface?.dragEnd?.('discovery')
+  }
 
   // Move focus into the panel when it opens or shows another interest; give it back on close.
   useEffect(() => {
@@ -68,20 +97,22 @@ export function InterestDiscoveryPanel() {
       {isOpen && (
         <>
           {/* Invisible constraint boundary for dragging */}
-          <div 
-            ref={constraintsRef} 
-            className="fixed inset-4 pointer-events-none z-[60]"
-          />
+          {!inNativeSurface && (
+            <div 
+              ref={constraintsRef} 
+              className="fixed inset-4 pointer-events-none z-[60]"
+            />
+          )}
 
           {/* Draggable Panel - no blocking backdrop */}
           <motion.div
-            drag
-            dragControls={dragControls}
+            drag={!inNativeSurface}
+            dragControls={inNativeSurface ? undefined : dragControls}
             // Only the header drags the panel; selecting text or scrolling inside it must not move it.
             dragListener={false}
             dragMomentum={false}
             dragElastic={0.1}
-            dragConstraints={constraintsRef}
+            dragConstraints={inNativeSurface ? undefined : constraintsRef}
             initial={{ opacity: 0, scale: 0.95, x: 0, y: 0 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.95 }}
@@ -92,8 +123,7 @@ export function InterestDiscoveryPanel() {
             role="dialog"
             aria-label={selectedInterestLabel || 'Interest'}
             className={cn(
-              "fixed top-20 right-6 z-[70]",
-              "w-[600px] max-h-[70vh]",
+              inNativeSurface ? "fixed inset-2 z-[70]" : "fixed top-20 right-6 z-[70] w-[600px] max-h-[70vh]",
               "glass-ultra",
               "shadow-glass dark:shadow-glass-dark",
               "rounded-xl",
@@ -109,28 +139,21 @@ export function InterestDiscoveryPanel() {
               style={{
                 borderBottom: `2px solid ${selectedInterestCategory ? getCategoryColor(selectedInterestCategory) : '#3B82F6'}30`
               }}
-              onPointerDown={(e) => dragControls.start(e)}
+              onPointerDown={onHeaderPointerDown}
+              onPointerMove={onHeaderPointerMove}
+              onPointerUp={endNativeDrag}
+              onPointerCancel={endNativeDrag}
+              onLostPointerCapture={endNativeDrag}
             >
-              <div className="flex items-center gap-3">
+              <div className="flex min-w-0 items-center gap-3">
                 {/* Drag indicator */}
-                <DragHandleIcon className="w-4 h-4 text-ron-text/30 dark:text-white/30 glass:text-zinc-500/50 flex-shrink-0" />
-                
-                <div 
-                  className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0"
-                  style={{ 
-                    backgroundColor: `${selectedInterestCategory ? getCategoryColor(selectedInterestCategory) : '#3B82F6'}20` 
-                  }}
-                >
-                  <RenIcon 
-                    className="w-4 h-4" 
-                    style={{ color: selectedInterestCategory ? getCategoryColor(selectedInterestCategory) : '#3B82F6' }}
-                  />
-                </div>
+                <DragHandleIcon className="w-4 h-4 text-ink-muted dark:text-ink-inverse-muted flex-shrink-0" />
+                <RenMark className="h-6 w-6 flex-shrink-0" />
                 <div className="min-w-0">
-                  <h2 className="text-base font-georgia text-ron-text dark:text-white glass:text-zinc-800 truncate">
+                  <h2 className="font-display text-[15px] font-bold leading-tight tracking-tight text-ink dark:text-ink-inverse truncate">
                     {selectedInterestLabel}
                   </h2>
-                  <p className="text-xs font-raleway text-ron-text/50 dark:text-white/50 glass:text-zinc-500">
+                  <p className="text-[12px] leading-tight text-ink-secondary dark:text-ink-inverse-secondary">
                     Content, agents & topics
                   </p>
                 </div>
@@ -195,7 +218,7 @@ export function InterestDiscoveryPanel() {
                   {/* Related Topics */}
                   {content.relatedTopics.length > 0 && (
                     <Section
-                      icon={<RenIcon className="w-4 h-4" />}
+                      icon={<RenMark className="h-4 w-4" />}
                       title="Related Topics"
                       description="Your other interests"
                     >
@@ -312,7 +335,6 @@ interface AgentCardProps {
 
 function AgentCard({ agent, index, interest }: AgentCardProps) {
   const { sendToAgentPanel } = useAgentUi()
-  const IconComponent = agent.saved ? CpuChipIcon : RenIcon
   const open = () => {
     const specialist = agent.saved ? useContextAgentStore.getState().agents.find((item) => item.id === agent.id) : undefined
     if (specialist) {
@@ -341,7 +363,9 @@ function AgentCard({ agent, index, interest }: AgentCardProps) {
       )}
     >
       <div className="w-10 h-10 rounded-lg bg-royal/10 dark:bg-royal-light/10 glass:bg-royal/15 flex items-center justify-center mb-3">
-        <IconComponent className="w-5 h-5 text-royal dark:text-royal-light glass:text-royal" />
+        {agent.saved
+          ? <CpuChipIcon className="w-5 h-5 text-royal dark:text-royal-light glass:text-royal" />
+          : <RenMark className="h-5 w-5" />}
       </div>
       <div className="flex-1">
         <h4 className="text-sm font-raleway font-raleway-bold text-ron-text dark:text-white glass:text-zinc-800">

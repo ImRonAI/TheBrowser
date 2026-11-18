@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- Isolated native ContextSurface: zero script network access (`connect-src 'none'`). -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https: http://127.0.0.1:* http://localhost:*; connect-src 'none'; font-src 'self' data:;"
+    />
+    <title>Ren Context</title>
+    <style>
+      html,
+      body {
+        background: transparent !important;
+        overflow: hidden;
+      }
+      /* Keep floating glass panels legible above arbitrary website copy in another WebContentsView. */
+      html.glass {
+        --ron-glass-panel: rgb(255 255 255 / 0.88) !important;
+      }
+      html.glass.dark {
+        --ron-glass-panel: rgb(12 12 12 / 0.9) !important;
+      }
+    </style>
+  </head>
+  <body class="bg-transparent">
+    <div id="root"></div>
+    <script type="module" src="/src/context-surface.tsx"></script>
+  </body>
+</html>

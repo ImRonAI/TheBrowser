@@ -12,8 +12,16 @@ export function isGuestUserId(userId: string | null | undefined): boolean {
   return !userId || userId === 'default' || userId.startsWith('guest:') || userId === 'dev-user'
 }
 
-export function openSignIn(location: { hash: string } = window.location): void {
-  location.hash = SIGN_IN_HASH
+export function openSignIn(location?: { hash: string }): void {
+  if (!location && typeof window !== 'undefined') {
+    const surface = (window as { contextSurface?: { openSignIn?: () => void } }).contextSurface
+    if (surface?.openSignIn) {
+      surface.openSignIn()
+      return
+    }
+  }
+  const target = location ?? window.location
+  target.hash = SIGN_IN_HASH
 }
 
 export function closeSignIn(location: { hash: string } = window.location): void {

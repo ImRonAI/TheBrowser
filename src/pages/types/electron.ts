@@ -4,6 +4,7 @@
  */
 
 import type { InterestAction, InterestMenuPayload } from '@/lib/interest-menu'
+import type { SplitDropZone, SplitPaneSlot, SplitState } from '@/lib/tab-split'
 
 // ============================================
 // Browser API Types
@@ -37,6 +38,8 @@ export interface BrowserAPI {
   canGoBack: () => Promise<boolean>
   canGoForward: () => Promise<boolean>
   setPanelOpen: (isOpen: boolean) => Promise<{ success: boolean }>
+  setSideInset?: (width: number) => Promise<{ success: boolean }>
+  setShellMounted?: (mounted: boolean) => Promise<{ success: boolean }>
   setAgentCursor: (point: { x: number; y: number } | null) => Promise<void>
   setTakeover: (active: boolean) => Promise<TakeoverStatePayload>
   getTakeover: () => Promise<TakeoverStatePayload>
@@ -55,6 +58,12 @@ export interface BrowserAPI {
   setRepairSurface: (state: { repair: unknown; notification?: { title: string; body: string } | null }) => Promise<{ success: boolean }>
   /** Decisions the user took on the native surface; the shell performs them against the API. */
   onRepairAction: (callback: (action: { type: 'approve' | 'decline' | 'cancel' | 'rollback' | 'open' | 'dismiss'; rev: string }) => void) => () => void
+  /** Native ContextSurface: persistent full-shell Context Widget above external websites. */
+  setContextSurface?: (state: unknown) => Promise<{ success: boolean }>
+  replyContextSurfaceAction?: (requestId: string, result: unknown) => void
+  onContextSurfaceAction?: (callback: (envelope: { requestId: string; payload: unknown }) => void) => () => void
+  onContextSurfaceSendToIssue?: (callback: (envelope: { requestId: string; payload: unknown }) => void) => () => void
+  onContextSurfaceOpenSignIn?: (callback: () => void) => () => void
   getPanelContext: () => Promise<any>
   setPanelMode: (mode: 'narrow' | 'wide' | 'fullscreen') => Promise<void>
   onPanelModeChanged: (callback: (data: { mode: 'narrow' | 'wide' | 'fullscreen'; width: number }) => void) => () => void
@@ -71,7 +80,16 @@ export interface BrowserAPI {
   // Electron Window Interface
   // ============================================
 
-export type TabSummary = { id: string; url: string; title: string; favicon?: string; isActive: boolean }
+export type TabSummary = {
+  id: string
+  url: string
+  title: string
+  favicon?: string
+  isActive: boolean
+  isDisplayed?: boolean
+  isSplitDetached?: boolean
+  splitPane?: SplitPaneSlot | null
+}
 export type TabContext = {
   id: string
   url: string
@@ -116,6 +134,12 @@ export interface ElectronWindow {
       close: (tabId: string) => Promise<{ success: boolean }>
       switch: (tabId: string) => Promise<{ success: boolean }>
       list: () => Promise<TabSummary[]>
+      split?: (tabId: string, zone: SplitDropZone, source?: 'strip' | 'pane') => Promise<{ success: boolean; split: SplitState }>
+      unsplit?: (tabId?: string, all?: boolean) => Promise<{ success: boolean; split: SplitState }>
+      getSplit?: () => Promise<SplitState>
+      onSplitUpdated?: (callback: (split: SplitState) => void) => () => void
+      navigateTab?: (tabId: string, url: string) => Promise<{ success: boolean; url?: string; isExternal?: boolean }>
+      previewSplitDrop?: (zone: SplitDropZone | null) => Promise<{ success: boolean }>
       getContext: (tabId: string) => Promise<{ success: boolean; context?: TabContext; error?: string }>
       onUpdated: (callback: (tabs: TabSummary[]) => void) => () => void
     }

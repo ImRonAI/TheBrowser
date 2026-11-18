@@ -1,38 +1,24 @@
 import { useEffect } from 'react'
 import { useAgentUi } from '@/context/AgentUiContext'
-import {
-  buildInterestMenu,
-  interestOverlayInset,
-  type InterestAction,
-} from '@/lib/interest-menu'
-import { runNotifications } from '@/lib/context-api'
+import { buildInterestMenu, type InterestAction } from '@/lib/interest-menu'
 import { useContextAgentStore } from '@/stores/contextAgentStore'
 import { agentsForInterest, useInterestDiscoveryStore } from '@/stores/interestDiscoveryStore'
 import { useInterestsStore } from '@/stores/interestsStore'
 
 export function InterestMenuSync() {
   const nodes = useInterestsStore((state) => state.nodes)
-  const isExpanded = useInterestsStore((state) => state.isExpanded)
   const setExpanded = useInterestsStore((state) => state.setExpanded)
-  const selectedInterestLabel = useInterestDiscoveryStore((state) => state.selectedInterestLabel)
   const selectInterest = useInterestDiscoveryStore((state) => state.selectInterest)
   const storiesByLabel = useInterestDiscoveryStore((state) => state.storiesByLabel)
   const recommendations = useContextAgentStore((state) => state.recommendations)
   const agents = useContextAgentStore((state) => state.agents)
-  const notice = useContextAgentStore((state) => runNotifications(state.runs).length > 0)
   const { sendToAgentPanel } = useAgentUi()
 
   useEffect(() => {
     const browser = window.electron?.browser
-    if (!browser?.setInterestMenu || !browser.setInterestInset) return
-
+    if (!browser?.setInterestMenu) return
     void browser.setInterestMenu(buildInterestMenu(nodes, { storiesByLabel, agentsFor: agentsForInterest }))
-    void browser.setInterestInset(interestOverlayInset({
-      expanded: isExpanded,
-      discoveryOpen: Boolean(selectedInterestLabel),
-      notice,
-    }))
-  }, [nodes, isExpanded, selectedInterestLabel, storiesByLabel, recommendations, agents, notice])
+  }, [nodes, storiesByLabel, recommendations, agents])
 
   useEffect(() => {
     const browser = window.electron?.browser

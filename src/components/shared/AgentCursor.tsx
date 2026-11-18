@@ -10,7 +10,7 @@ const POINTER_PATH = 'M4 4 L4 22 L10.2 16.4 L14.6 24 L18.2 22.4 L13.8 15 L22 15 
 
 /** Volt pointer with a paper outline, legible on any content. Page coordinates are viewport CSS
  *  pixels of the content area. Steady: it moves with the agent, it does not pulse. */
-export function AgentCursor() {
+export function AgentCursor({ suppressOverlay = false }: { suppressOverlay?: boolean }) {
   const points = useAgentPresenceStore((state) => state.cursorPoints)
   const seq = useAgentPresenceStore((state) => state.cursorSeq)
   const reduced = useReducedMotion()
@@ -38,7 +38,7 @@ export function AgentCursor() {
     if (point) placed.current = true
   }, [point])
 
-  if (!point) return null
+  if (!point || suppressOverlay) return null
   const jump = !placed.current || reduced === true
   return (
     <motion.div

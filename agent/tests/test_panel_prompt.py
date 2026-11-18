@@ -22,6 +22,7 @@ def test_user_browser_prompt(clean_env):
     prompt = system_prompt_for("openai", browser="user")
     assert 'tool_catalog(action="load", name="user_browser")' in prompt
     assert "user_browser_playwright_List_tabs" in prompt
+    assert "50-50" in prompt and "2x2" in prompt and "never stacked rows" in prompt
     assert "your own Ren window on the user's computer" in prompt
     assert "browser_unavailable" in prompt
     assert 'mcp_client(action="connect"' not in prompt

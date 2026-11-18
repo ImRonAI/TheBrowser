@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type ButtonHTMLAttributes, type ReactNode
 import { AnimatePresence, motion } from 'framer-motion'
 import { ChevronDown, Filter, FolderKanban, Loader2, Plus, RefreshCw, Search, X } from 'lucide-react'
 import { useNavigationStore } from '@/stores/navigationStore'
+import { useTabPane } from '@/context/TabPaneContext'
 import { useProjectsStore } from '@/stores/projectsStore'
 import { IssueCalendar } from '@/components/calendar/IssueCalendar'
 import { IssueDrawer } from '@/components/projects/IssueDrawer'
@@ -51,6 +52,7 @@ function useNow(intervalMs = 60_000) {
  * store. Kanban moves call `moveIssueStatus`; any issue opens the real issue workspace (`IssueDrawer`).
  */
 export function ExecutePage() {
+  const { isSplitPane } = useTabPane()
   const { setActiveTab } = useNavigationStore()
   const { projects, issues, people, userId, isInitialized, isLoading, pendingSaves, error, initialize, refreshFromServer } = useProjectsStore()
   const now = useNow()
@@ -62,8 +64,8 @@ export function ExecutePage() {
   const [showProjectDialog, setShowProjectDialog] = useState(false)
 
   useEffect(() => {
-    setActiveTab('execute')
-  }, [setActiveTab])
+    if (!isSplitPane) setActiveTab('execute')
+  }, [isSplitPane, setActiveTab])
 
   // Same contract as <ProjectsSyncStatus initialize />: load once the workspace identity exists.
   useEffect(() => {

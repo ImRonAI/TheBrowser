@@ -5,28 +5,19 @@ import { handleDeepLinkCallback, useAuthStore } from '@/stores/authStore'
 import { useTabStore } from '@/stores/tabStore'
 import { useOnboardingStore } from '@/stores/onboardingStore'
 import { useAccountProfileReady, useAccountProfileSync } from '@/stores/accountProfileStore'
+import { useContextAgentStore } from '@/stores/contextAgentStore'
+import { useInterestDiscoveryStore } from '@/stores/interestDiscoveryStore'
 import { useInterestsStore } from '@/stores/interestsStore'
-import { useSearchStore, selectShowFullResults, selectShowChat } from '@/stores/searchStore'
-import { useNavigationStore } from '@/stores/navigationStore'
+import { useSearchStore } from '@/stores/searchStore'
 import { getSearchContextFromRonUrl, getSearchLevelFromRonUrl, getSearchQueryFromRonUrl } from '@/components/chrome/UrlBar'
-import { DEFAULT_SEARCH_LEVEL, SEARCH_LEVELS, type SearchLevel } from '@/lib/search-api'
+import { SEARCH_LEVELS, type SearchLevel } from '@/lib/search-api'
 import { BrowserLayout } from '@/layouts/BrowserLayout'
 import { AuthPageLayout } from '@/layouts/AuthPageLayout'
-import { HomePage } from '@/pages/HomePage'
-import { ArticleReaderPage } from '@/pages/ArticleReaderPage'
-import { ExecutePage } from '@/pages/ExecutePage'
-import { ProjectsIndexPage } from '@/pages/ProjectsIndexPage'
-import { ProjectHomePage } from '@/pages/ProjectHomePage'
-import { DocumentsPage } from '@/pages/DocumentsPage'
-import { DeepResearchPage } from '@/pages/DeepResearchPage'
-import { parseDocumentsLibraryUrl } from '@/lib/project-documents'
-import { parseResearchUrl } from '@/lib/deep-research-api'
-import { BuildWorkbenchPage } from '@/components/build'
+import { TabRouteContent } from '@/components/chrome/TabRouteContent'
 import { SignInPage } from '@/pages/SignInPage'
 import { OnboardingPage } from '@/pages/OnboardingPage'
 import { AIElementsShowcase } from '@/pages/AIElementsShowcase'
-import { SearchResultsPage } from '@/pages/SearchResultsPage'
-import { SearchChat } from '@/components/search-results'
+import { TabPaneProvider, navigateTabByIdOrActive } from '@/context/TabPaneContext'
 
 // ============================================
 // DEV MODE FLAGS
@@ -40,6 +31,8 @@ function resetAppStorage() {
   useTabStore.persist.clearStorage()
   useOnboardingStore.persist.clearStorage()
   useInterestsStore.persist.clearStorage()
+  useContextAgentStore.persist.clearStorage()
+  useInterestDiscoveryStore.getState().resetDiscovery()
   console.log('All storage cleared!')
 }
 
@@ -59,21 +52,9 @@ export function App() {
   })
   // `#onboarding` lets a guest (or a returning user via "Personalize") run the interview.
   const [showOnboarding, setShowOnboarding] = useState(() => window.location.hash === '#onboarding')
-  const { activeTab } = useNavigationStore()
   const searchStore = useSearchStore()
-  const { 
-    phase: searchPhase, 
-    query: searchQuery, 
-    quickResult,
-    isStreaming,
-    level: preferredSearchLevel,
-    setPhase,
-    clearSearch,
-  } = searchStore
-  
-  const showFullResults = selectShowFullResults(searchStore)
-  const showChat = selectShowChat(searchStore)
-  
+  const { phase: searchPhase, clearSearch } = searchStore
+
   // Check URL hash for showcase mode
   const [showShowcase, setShowShowcase] = useState(() => {
     return window.location.hash === '#showcase'
@@ -86,7 +67,7 @@ export function App() {
   const [searchRouteQuery, setSearchRouteQuery] = useState<string | null>(null)
   const [searchRouteLevel, setSearchRouteLevel] = useState<SearchLevel | null>(null)
   const [searchRouteContext, setSearchRouteContext] = useState<string | null>(null)
-  
+
   useEffect(() => {
     return window.electron?.onDeepLink?.((url) => {
       handleDeepLinkCallback(url).catch(console.error)
@@ -129,21 +110,22 @@ export function App() {
   // DEV: Reset app on launch if flag is set
   useEffect(() => {
     if (RESET_APP_ON_LAUNCH) {
-      // Check if we've already reset this session (to avoid infinite reload loop)
       const hasReset = sessionStorage.getItem('app-reset-this-session')
       if (!hasReset) {
         resetAppStorage()
         sessionStorage.setItem('app-reset-this-session', 'true')
-        // Force reload to apply cleared state
         window.location.reload()
         return
       }
     }
   }, [])
 
-  // DEV: Keyboard shortcut to reset app (Cmd/Ctrl + Shift + K)
-  // DEV: Keyboard shortcut to toggle showcase (Cmd/Ctrl + Shift + S)
-  // DEV: Keyboard shortcut to toggle search results (Cmd/Ctrl + Shift + R)
+  const handleSearchBack = () => {
+    clearSearch()
+    navigateTabByIdOrActive(activeTabId, 'ron://home')
+  }
+
+  // DEV shortcuts + ESC leaves search
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 'K') {
@@ -152,25 +134,22 @@ export function App() {
         sessionStorage.removeItem('app-reset-this-session')
         window.location.reload()
       }
-      // Toggle AI Elements Showcase with Cmd/Ctrl + Shift + S
       if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 'S') {
         e.preventDefault()
         setShowShowcase(prev => !prev)
       }
-      // Toggle Search Results Page with Cmd/Ctrl + Shift + R
       if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 'R') {
         e.preventDefault()
         setShowSearchResultsDev(prev => !prev)
       }
-      // ESC leaves search: back to home (and clear any legacy phase state)
-      if (e.key === 'Escape' && (searchPhase !== 'idle' || searchRouteQuery)) {
+      if (e.key === 'Escape' && (searchPhase !== 'idle' || searchRouteQuery || activeTabUrl?.startsWith('ron://search'))) {
         e.preventDefault()
         handleSearchBack()
       }
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [searchPhase, searchRouteQuery, clearSearch])
+  }, [searchPhase, searchRouteQuery, activeTabUrl, activeTabId, clearSearch])
 
   useEffect(() => {
     const updateSearchRoute = () => {
@@ -213,8 +192,6 @@ export function App() {
     }
   }, [])
 
-  // Keep search route state synchronized when internal tab switches or `openInNewTab('ron://search?...')`
-  // change the active tab URL in `useTabStore` without firing an Electron IPC navigation event.
   useEffect(() => {
     if (!activeTabId || !activeTabUrl) return
     if (activeTabUrl.startsWith('ron://search')) {
@@ -228,14 +205,6 @@ export function App() {
       setSearchRouteContext(null)
     }
   }, [activeTabId, activeTabUrl])
-
-  // Search results page exit: return the tab to home and reset legacy search state.
-  const handleSearchBack = () => {
-    clearSearch()
-    if (typeof window !== 'undefined' && window.electron?.browser?.navigate) {
-      void window.electron.browser.navigate('ron://home')
-    }
-  }
 
   // Initialize with at least one tab
   useEffect(() => {
@@ -253,9 +222,6 @@ export function App() {
     }
   }, [isDark])
 
-  // SearchAgentDisplay handles its own fetching - no need to fetch here
-
-
   if (!hasHydrated || isLoading || !isInitialized || !profileReady) return <AppLoadingScreen />
 
   // DEV: Show AI Elements Showcase (accessible from any state via Cmd/Ctrl + Shift + S)
@@ -267,45 +233,7 @@ export function App() {
     )
   }
 
-  // Search results site: ron://search?q=…&level=… (also #search/#results hash, or
-  // the legacy full-results phase). The query/level in the tab URL win over prefs.
-  if (showSearchResultsDev || showFullResults || searchRouteQuery) {
-    return (
-      <RouteShell>
-        <BrowserLayout>
-          <div className="h-full overflow-y-auto">
-            <SearchResultsPage
-              query={searchRouteQuery || searchQuery || ''}
-              level={searchRouteLevel ?? preferredSearchLevel ?? DEFAULT_SEARCH_LEVEL}
-              contextId={searchRouteContext}
-              onBack={handleSearchBack}
-            />
-          </div>
-        </BrowserLayout>
-      </RouteShell>
-    )
-  }
-
-  if (showChat && searchQuery) {
-    return (
-      <RouteShell>
-        <BrowserLayout>
-          <SearchChat
-            searchResult={{
-              query: searchQuery,
-              answer: quickResult?.answer,
-              sources: quickResult?.sources,
-            }}
-            onBack={() => {
-              setPhase(isStreaming ? 'answering' : 'complete')
-            }}
-          />
-        </BrowserLayout>
-      </RouteShell>
-    )
-  }
-
-  // Signing in is optional. A fresh install opens the browser and guest workspace.
+  // Signing in is optional; checked BEFORE search/browser routes so `#signin` works from any tab!
   if (showSignIn && !isAuthenticated) {
     return (
       <RouteShell>
@@ -317,7 +245,6 @@ export function App() {
   }
 
   // If not onboarded (signed in), or explicitly requested via #onboarding, show the interview.
-  // Answers feed `useDiscoverProfile()` → Discover homepage + Interests orb.
   if ((isAuthenticated && !isComplete) || showOnboarding) {
     return (
       <RouteShell>
@@ -326,16 +253,26 @@ export function App() {
     )
   }
 
-  // Main browser interface
+  // Main browser interface (handles both single-tab and up-to-2x2 split-pane routing)
   return (
     <RouteShell>
       <BrowserLayout>
-        <MainContent activeTab={activeTab} />
+        <TabPaneProvider tabId={activeTabId} url={activeTabUrl ?? null} isSplitPane={false}>
+          <TabRouteContent
+            tabId={activeTabId}
+            url={activeTabUrl}
+            singleSearchOverride={{
+              forceResults: showSearchResultsDev,
+              query: searchRouteQuery,
+              level: searchRouteLevel,
+              contextId: searchRouteContext,
+            }}
+          />
+        </TabPaneProvider>
       </BrowserLayout>
     </RouteShell>
   )
 }
-
 
 function AppLoadingScreen() {
   return <div role="status" aria-label="Loading application" />
@@ -370,38 +307,3 @@ function RouteShell({ children }: { children: ReactNode }) {
     </AppErrorBoundary>
   )
 }
-
-// Route content based on navigation tab
-function MainContent({ activeTab }: { activeTab: string }) {
-  const url = useTabStore((state) => state.tabs.find((tab) => tab.id === state.activeTabId)?.url)
-  const userId = useAuthStore((state) => state.user?.id)
-  if (url === 'ron://projects' || url === 'ron://projects/') {
-    return <ProjectsIndexPage key={userId} />
-  }
-  const projectRoute = url?.match(/^ron:\/\/project\/([^/?#]+)(?:\/docs\/([^/?#]+))?\/?$/)
-  if (projectRoute) return <ProjectHomePage key={`${userId}:${projectRoute[1]}`} projectKey={projectRoute[1]} documentId={projectRoute[2]} />
-  // The Documents library (ron://documents[/<page>]); keyed by account only, so following the open page never remounts it.
-  const documentsRoute = parseDocumentsLibraryUrl(url)
-  if (documentsRoute) return <DocumentsPage key={userId} documentId={documentsRoute.documentId} />
-  const researchRoute = parseResearchUrl(url)
-  if (researchRoute) return <DeepResearchPage key={userId} sessionId={researchRoute.sessionId} />
-  if (url?.startsWith('ron://read?')) return <ArticleReaderPage key={url} href={url} />
-  if (url === 'ron://build' || url === 'ron://build/') return <BuildWorkbenchPage />
-  if (url === 'ron://execute' || url === 'ron://execute/') return <ExecutePage />
-  switch (activeTab) {
-    case 'execute':
-      return <ExecutePage />
-    case 'build':
-      return <BuildWorkbenchPage />
-    case 'research':
-      return <DeepResearchPage key={userId} sessionId={null} />
-    default:
-      return <HomePage />
-  }
-}
-
-// ============================================
-// Search Agent Stream - Real Implementation with Strands
-// ============================================
-// Removed streamSonarReasoningPro - SearchAgentDisplay handles its own fetching
-

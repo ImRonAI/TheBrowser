@@ -88,12 +88,23 @@ const activeControllers = new Map<string, AbortController>()
 function syncResearchTabUrl(sessionId: string | null): void {
   const target = researchUrl(sessionId)
   const tabState = useTabStore.getState()
-  const currentUrl = tabState.tabs.find((t) => t.id === tabState.activeTabId)?.url
-  if (currentUrl === target) return
-  // Only rewrite the active tab's URL if we are already inside Deep Research or explicitly opening it.
-  if (currentUrl && parseResearchUrl(currentUrl) === null && sessionId === null) {
-    openInternalUrl(target)
-    return
+  const activeTab = tabState.tabs.find((t) => t.id === tabState.activeTabId)
+  if (activeTab?.url === target) return
+  // If another displayed split pane already hosts Deep Research while the active pane is on another site,
+  // update that Deep Research pane's URL directly instead of clobbering the focused sibling pane.
+  if (activeTab && parseResearchUrl(activeTab.url) === null) {
+    const displayedResearchTab = tabState.tabs.find(
+      (t) => Boolean(t.isDisplayed) && parseResearchUrl(t.url) !== null,
+    )
+    if (displayedResearchTab) {
+      const navigateTab = typeof window !== 'undefined' ? window.electron?.tabs?.navigateTab : undefined
+      if (navigateTab) {
+        void navigateTab(displayedResearchTab.id, target)
+      } else {
+        tabState.updateTab(displayedResearchTab.id, { url: target })
+      }
+      return
+    }
   }
   openInternalUrl(target)
 }

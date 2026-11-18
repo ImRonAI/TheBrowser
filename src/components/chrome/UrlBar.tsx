@@ -66,10 +66,12 @@ export function UrlBar() {
   const skipAssist = useCallback((value: string) => looksLikeUrl(value.trim()) || value.trim().startsWith('ron://'), [])
   const assist = useTextAssist(url, { enabled: isFocused, skip: skipAssist, count: 6 })
 
-  // Sync URL from browser when it changes
+  // Sync URL from browser when it changes (and seed initial URL on mount)
   useEffect(() => {
     if (typeof window !== 'undefined' && window.electron?.browser) {
-      // Listen for URL changes from browser
+      void window.electron.browser.getUrl?.().then((current) => {
+        if (current) setUrl(current)
+      }).catch(() => undefined)
       const cleanup = window.electron.browser.onUrlChanged((newUrl: string) => {
         setUrl(newUrl)
       })

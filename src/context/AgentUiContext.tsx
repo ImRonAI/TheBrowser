@@ -57,12 +57,6 @@ interface AgentUiContextValue {
 
 const AgentUiContext = createContext<AgentUiContextValue | null>(null)
 
-function setElectronPanelOpen(isOpen: boolean): void {
-  if (typeof window !== 'undefined' && window.electron?.browser) {
-    window.electron.browser.setPanelOpen(isOpen)
-  }
-}
-
 export function AgentUiProvider({ children }: { children: ReactNode }) {
   const [isPanelOpen, setIsPanelOpen] = useState(false)
   const [interactionMode, setInteractionMode] = useState<'voice' | 'text'>('text')
@@ -79,20 +73,14 @@ export function AgentUiProvider({ children }: { children: ReactNode }) {
 
   const openPanel = useCallback(() => {
     setIsPanelOpen(true)
-    setElectronPanelOpen(true)
   }, [])
 
   const closePanel = useCallback(() => {
     setIsPanelOpen(false)
-    setElectronPanelOpen(false)
   }, [])
 
   const togglePanel = useCallback(() => {
-    setIsPanelOpen((prev) => {
-      const next = !prev
-      setElectronPanelOpen(next)
-      return next
-    })
+    setIsPanelOpen((prev) => !prev)
   }, [])
 
   const setAskRonStep = useCallback((step: AskRonStep) => {
@@ -226,6 +214,50 @@ export function AgentUiProvider({ children }: { children: ReactNode }) {
     sendToAgentPanel,
     consumeAgentPanelPrompt,
   ])
+
+  return (
+    <AgentUiContext.Provider value={value}>
+      {children}
+    </AgentUiContext.Provider>
+  )
+}
+
+export function SurfaceAgentUiProvider({
+  onOpenPanel,
+  onSendToAgentPanel,
+  children,
+}: {
+  onOpenPanel: () => void
+  onSendToAgentPanel: (prompt: string) => void
+  children: ReactNode
+}) {
+  const value = useMemo<AgentUiContextValue>(() => ({
+    isPanelOpen: false,
+    interactionMode: 'text',
+    isViewingScreen: false,
+    screenshotData: null,
+    askRonStep: 'closed',
+    askRonSelectedText: null,
+    askRonSourceUrl: null,
+    askRonOptions: [],
+    askRonThinkingText: '',
+    askRonPendingPrompt: null,
+    agentPanelQueuedPrompts: [],
+    togglePanel: onOpenPanel,
+    openPanel: onOpenPanel,
+    closePanel: () => {},
+    setInteractionMode: () => {},
+    startViewingScreen: () => onOpenPanel(),
+    stopViewingScreen: () => {},
+    startAskRon: async () => onOpenPanel(),
+    setAskRonStep: () => {},
+    selectAskRonOption: async () => {},
+    submitCustomAskRon: async () => {},
+    closeAskRon: () => {},
+    consumeAskRonPendingPrompt: () => null,
+    sendToAgentPanel: onSendToAgentPanel,
+    consumeAgentPanelPrompt: () => null,
+  }), [onOpenPanel, onSendToAgentPanel])
 
   return (
     <AgentUiContext.Provider value={value}>

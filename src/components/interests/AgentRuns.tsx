@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
 import { X } from 'lucide-react'
 import { RenMark } from '@/components/brand'
@@ -47,7 +47,20 @@ export function AgentRunNotice() {
   const notices = useMemo(() => runNotifications(runs), [runs])
   const review = useReviewRun()
   const now = useNow()
+  const cardRef = useRef<HTMLDivElement>(null)
   const run = notices[0]
+
+  useLayoutEffect(() => {
+    const el = cardRef.current
+    const report = (window as { contextSurface?: { reportMetrics?: (m: { noticeHeight?: number }) => void } }).contextSurface?.reportMetrics
+    if (!el || !report) return
+    const sync = () => report({ noticeHeight: Math.ceil(el.getBoundingClientRect().height) })
+    sync()
+    const observer = new ResizeObserver(sync)
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [run?.id, notices.length])
+
   if (!run) return null
   const text = runText(run)
   const more = notices.length - 1
@@ -58,6 +71,7 @@ export function AgentRunNotice() {
 
   return (
     <motion.div
+      ref={cardRef}
       key={run.id}
       role="status"
       aria-live="polite"

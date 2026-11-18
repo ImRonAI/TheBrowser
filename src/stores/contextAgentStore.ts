@@ -17,6 +17,7 @@ import {
 } from '@/lib/context-api'
 import { startScreenRecording, type ScreenRecording } from '@/lib/screen-recorder'
 import { isGuestUserId } from '@/lib/sign-in'
+import { useInterestDiscoveryStore } from './interestDiscoveryStore'
 import { useInterestsStore } from './interestsStore'
 
 export type ContextTab = 'interests' | 'context' | 'agents' | 'ask'
@@ -26,6 +27,7 @@ export const ASK_ACTIVITY = 'Thinking'
 
 interface ContextAgentState {
   userId: string
+  ownerUserId: string
   watchBrowsing: boolean
   visits: Visit[]
   recommendations: AgentRecommendation[]
@@ -139,13 +141,38 @@ export const useContextAgentStore = create<ContextAgentState>()(persist((set, ge
   }
 
   return {
-    userId: 'default', watchBrowsing: true, visits: [], recommendations: [], handled: [], agentInterests: {}, tab: 'interests', pinned: false, asks: [], unseen: false,
+    userId: 'default', ownerUserId: '', watchBrowsing: true, visits: [], recommendations: [], handled: [], agentInterests: {}, tab: 'interests', pinned: false, asks: [], unseen: false,
     status: 'idle', activity: '', error: '', notice: '', items: [], itemsLoaded: false, agents: [], agentsSignInRequired: false,
     building: null, recordingSince: null, busy: null, runs: [], scheduling: null, starting: null,
 
     setUser: (userId) => {
-      if (userId === get().userId && get().itemsLoaded) return
-      set({ userId, items: [], itemsLoaded: false, agents: [], agentsSignInRequired: false, runs: [], error: '', notice: '' })
+      const current = get()
+      if (userId === current.userId && current.itemsLoaded && current.ownerUserId === userId) return
+      const accountChanged = Boolean(current.ownerUserId && current.ownerUserId !== userId)
+      if (accountChanged) {
+        useInterestDiscoveryStore.getState().resetDiscovery()
+      }
+      set({
+        userId,
+        ownerUserId: userId,
+        items: [],
+        itemsLoaded: false,
+        agents: [],
+        agentsSignInRequired: false,
+        runs: [],
+        error: '',
+        notice: '',
+        ...(accountChanged
+          ? {
+              visits: [],
+              recommendations: [],
+              handled: [],
+              agentInterests: {},
+              asks: [],
+              unseen: false,
+            }
+          : {}),
+      })
       void get().refreshItems()
       void get().refreshAgents()
       void get().refreshRuns()
@@ -154,7 +181,12 @@ export const useContextAgentStore = create<ContextAgentState>()(persist((set, ge
     setPinned: (pinned) => set({ pinned }),
     setWatchBrowsing: (watchBrowsing) => set({ watchBrowsing, ...(watchBrowsing ? {} : { visits: [] }) }),
     clearMessages: () => set({ error: '', notice: '' }),
-    yieldToPanel: () => { if (!get().pinned) useInterestsStore.getState().setExpanded(false) },
+    yieldToPanel: () => {
+      if (!get().pinned) {
+        useInterestsStore.getState().setExpanded(false)
+        useInterestDiscoveryStore.getState().clearSelection()
+      }
+    },
 
     observeVisit: (url, title) => {
       if (!get().watchBrowsing) return
@@ -384,7 +416,13 @@ export const useContextAgentStore = create<ContextAgentState>()(persist((set, ge
   storage: createJSONStorage(() => localStorage),
   version: 1,
   partialize: (state) => ({
+    ownerUserId: state.ownerUserId,
     watchBrowsing: state.watchBrowsing, visits: state.visits, recommendations: state.recommendations, handled: state.handled.slice(-200), agentInterests: state.agentInterests,
     tab: state.tab, pinned: state.pinned, asks: state.asks, unseen: state.unseen,
   }),
+  onRehydrateStorage: () => (state) => {
+    if (state?.pinned) {
+      useInterestsStore.getState().setExpanded(true)
+    }
+  },
 }))

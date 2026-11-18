@@ -53,6 +53,7 @@ interface InterestDiscoveryState {
 
   selectInterest: (id: string, label: string, category: InterestCategory) => void
   clearSelection: () => void
+  resetDiscovery: () => void
   fetchDiscoveryContent: (interestLabel: string, category: InterestCategory) => Promise<void>
 }
 
@@ -93,6 +94,19 @@ export const useInterestDiscoveryStore = create<InterestDiscoveryState>()((set, 
   clearSelection: () => {
     requestId++
     set({ selectedInterestId: null, selectedInterestLabel: null, selectedInterestCategory: null, content: null, error: null, isLoading: false })
+  },
+
+  resetDiscovery: () => {
+    requestId++
+    set({
+      selectedInterestId: null,
+      selectedInterestLabel: null,
+      selectedInterestCategory: null,
+      content: null,
+      error: null,
+      isLoading: false,
+      storiesByLabel: {},
+    })
   },
 
   fetchDiscoveryContent: async (interestLabel, category) => {

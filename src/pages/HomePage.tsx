@@ -17,6 +17,7 @@ import { StoryCard, STORY_CARD_HEIGHT, type StoryCardSize } from '@/components/h
 import { FavoriteLinks } from '@/components/home/FavoriteLinks'
 import { SearchHome } from '@/components/home/SearchHome'
 import { API_BASE_URL } from '@/lib/api-base'
+import { useTabPane } from '@/context/TabPaneContext'
 import { useNavigationStore } from '@/stores/navigationStore'
 import { ExecutePage } from '@/pages/ExecutePage'
 import { CalendarPage } from '@/pages/CalendarPage'
@@ -40,18 +41,23 @@ import umData from '../../data/um.json'
 import localData from '../../data/local.json'
 
 export function HomePage() {
+  const { isSplitPane } = useTabPane()
   const activeTab = useNavigationStore((state) => state.activeTab)
+  const effectiveTab =
+    isSplitPane && (activeTab === 'execute' || activeTab === 'build' || activeTab === 'research' || activeTab === 'documents')
+      ? 'home'
+      : activeTab
   // Home is the search page; it has no surface of its own (the content area shows through, Glass included).
   // A leftover 'documents' destination off the library shows it too.
-  if (activeTab === 'home' || activeTab === 'documents') return <ErrorBoundary componentName="SearchHome"><SearchHome /></ErrorBoundary>
-  if (activeTab === 'research') return <ErrorBoundary componentName="DeepResearchPage"><DeepResearchPage sessionId={null} /></ErrorBoundary>
+  if (effectiveTab === 'home' || effectiveTab === 'documents') return <ErrorBoundary componentName="SearchHome"><SearchHome /></ErrorBoundary>
+  if (effectiveTab === 'research') return <ErrorBoundary componentName="DeepResearchPage"><DeepResearchPage sessionId={null} /></ErrorBoundary>
   return <div className="h-full overflow-auto bg-surface-0 text-ink dark:bg-surface-900 dark:text-ink-inverse">
-    {activeTab === 'discover' && <ErrorBoundary componentName="Discover"><DiscoverContent /></ErrorBoundary>}
+    {effectiveTab === 'discover' && <ErrorBoundary componentName="Discover"><DiscoverContent /></ErrorBoundary>}
     {/* App routes 'execute' to ExecutePage directly; if HomePage is ever shown on that tab it renders the same real view. */}
-    {activeTab === 'execute' && <ErrorBoundary componentName="ExecutePage"><ExecutePage /></ErrorBoundary>}
-    {activeTab === 'calendar' && <ErrorBoundary componentName="Calendar"><CalendarPage /></ErrorBoundary>}
-    {activeTab === 'vibe' && <ErrorBoundary componentName="SuperAgentInterface"><SuperAgentInterface /></ErrorBoundary>}
-    {activeTab === 'build' && <BuildWorkbenchPage />}
+    {effectiveTab === 'execute' && <ErrorBoundary componentName="ExecutePage"><ExecutePage /></ErrorBoundary>}
+    {effectiveTab === 'calendar' && <ErrorBoundary componentName="Calendar"><CalendarPage /></ErrorBoundary>}
+    {effectiveTab === 'vibe' && <ErrorBoundary componentName="SuperAgentInterface"><SuperAgentInterface /></ErrorBoundary>}
+    {effectiveTab === 'build' && <BuildWorkbenchPage />}
   </div>
 }
 

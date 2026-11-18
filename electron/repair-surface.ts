@@ -62,6 +62,8 @@ export class RepairSurface {
   private view: WebContentsView | null = null
   private state: RepairSurfaceState = { repair: null }
   private height = SURFACE_MIN_HEIGHT
+  private orbClearance = ORB_CLEARANCE
+  private shellMounted = true
   private notified = new Map<string, string>() // rev -> last announced "state:status"
   private disposed = false
 
@@ -92,7 +94,7 @@ export class RepairSurface {
   update(state: RepairSurfaceState): void {
     if (this.disposed) return
     this.state = state
-    if (!state.repair) {
+    if (!state.repair || !this.shellMounted) {
       this.detach()
       return
     }
@@ -103,10 +105,32 @@ export class RepairSurface {
     this.notify(state)
   }
 
+  /** Adjust bottom clearance dynamically when AgentRunNotice stacks above the Context orb. */
+  setOrbClearance(dipClearance: number): void {
+    const next = Number.isFinite(dipClearance) && dipClearance > 0 ? Math.ceil(dipClearance) : ORB_CLEARANCE
+    if (next === this.orbClearance) return
+    this.orbClearance = next
+    this.layout()
+  }
+
+  /** Hide while `#signin` / `#onboarding` / `#showcase` unmounts the browser shell. */
+  setShellMounted(mounted: boolean): void {
+    if (this.shellMounted === mounted) return
+    this.shellMounted = mounted
+    if (!mounted) {
+      this.detach()
+    } else if (this.state.repair) {
+      this.ensure()
+      this.send()
+      this.layout()
+      this.raise()
+    }
+  }
+
   /** Reapply z-order after TabsManager attached/switched a tab view (tabs are added on top). */
   raise(): void {
     const win = this.host.window()
-    if (!this.view || !win || win.isDestroyed() || !this.state.repair) return
+    if (!this.view || !win || win.isDestroyed() || !this.state.repair || !this.shellMounted) return
     const content = win.contentView
     if (content.children.includes(this.view)) content.removeChildView(this.view)
     content.addChildView(this.view)
@@ -118,10 +142,10 @@ export class RepairSurface {
     if (!this.view || !win || win.isDestroyed() || this.view.webContents.isDestroyed()) return
     const area = this.host.contentBounds()
     const width = Math.min(SURFACE_WIDTH, Math.max(0, area.width - SURFACE_MARGIN * 2))
-    const height = Math.min(this.height, Math.max(0, area.height - SURFACE_MARGIN - ORB_CLEARANCE))
+    const height = Math.min(this.height, Math.max(0, area.height - SURFACE_MARGIN - this.orbClearance))
     this.view.setBounds({
       x: Math.max(area.x, area.x + area.width - width - SURFACE_MARGIN),
-      y: Math.max(area.y, area.y + area.height - height - ORB_CLEARANCE),
+      y: Math.max(area.y, area.y + area.height - height - this.orbClearance),
       width, height,
     })
   }

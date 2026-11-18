@@ -52,6 +52,8 @@ const electronAPI = {
     canGoBack: () => ipcRenderer.invoke('browser:can-go-back'),
     canGoForward: () => ipcRenderer.invoke('browser:can-go-forward'),
     setPanelOpen: (isOpen: boolean) => ipcRenderer.invoke('browser:set-panel-open', isOpen),
+    setSideInset: (width: number) => ipcRenderer.invoke('browser:set-side-inset', width),
+    setShellMounted: (mounted: boolean) => ipcRenderer.invoke('browser:set-shell-mounted', mounted),
     setAgentCursor: (point: { x: number; y: number } | null) => ipcRenderer.invoke('browser:set-agent-cursor', point),
     setTakeover: (active: boolean): Promise<TakeoverStatePayload> =>
       ipcRenderer.invoke('browser:set-takeover', active),
@@ -90,6 +92,25 @@ const electronAPI = {
       const handler = (_: unknown, action: unknown) => callback(action)
       ipcRenderer.on('repair-surface:action', handler)
       return () => ipcRenderer.removeListener('repair-surface:action', handler)
+    },
+    // Native ContextSurface (electron/context-surface.ts): persistent full-shell Context Widget.
+    setContextSurface: (state: unknown) => ipcRenderer.invoke('context-surface:update', state),
+    replyContextSurfaceAction: (requestId: string, result: unknown) =>
+      ipcRenderer.send('context-surface:action-result', { requestId, result }),
+    onContextSurfaceAction: (callback: (envelope: { requestId: string; payload: unknown }) => void) => {
+      const handler = (_: unknown, envelope: { requestId: string; payload: unknown }) => callback(envelope)
+      ipcRenderer.on('context-surface:action', handler)
+      return () => ipcRenderer.removeListener('context-surface:action', handler)
+    },
+    onContextSurfaceSendToIssue: (callback: (envelope: { requestId: string; payload: unknown }) => void) => {
+      const handler = (_: unknown, envelope: { requestId: string; payload: unknown }) => callback(envelope)
+      ipcRenderer.on('context-surface:send-to-issue', handler)
+      return () => ipcRenderer.removeListener('context-surface:send-to-issue', handler)
+    },
+    onContextSurfaceOpenSignIn: (callback: () => void) => {
+      const handler = () => callback()
+      ipcRenderer.on('context-surface:open-sign-in', handler)
+      return () => ipcRenderer.removeListener('context-surface:open-sign-in', handler)
     },
 
     onUrlChanged: (callback: (url: string) => void) => {
@@ -151,6 +172,17 @@ const electronAPI = {
     close: (tabId: string) => ipcRenderer.invoke('close-tab', tabId),
     switch: (tabId: string) => ipcRenderer.invoke('switch-tab', tabId),
     list: () => ipcRenderer.invoke('tabs:list'),
+    split: (tabId: string, zone: string, source?: 'strip' | 'pane') =>
+      ipcRenderer.invoke('tabs:split', tabId, zone, source),
+    unsplit: (tabId?: string, all?: boolean) => ipcRenderer.invoke('tabs:unsplit', tabId, all),
+    getSplit: () => ipcRenderer.invoke('tabs:get-split'),
+    onSplitUpdated: (callback: (split: unknown) => void) => {
+      const handler = (_: unknown, split: unknown) => callback(split)
+      ipcRenderer.on('tabs:split-updated', handler)
+      return () => ipcRenderer.removeListener('tabs:split-updated', handler)
+    },
+    navigateTab: (tabId: string, url: string) => ipcRenderer.invoke('tabs:navigate', tabId, url),
+    previewSplitDrop: (zone: string | null) => ipcRenderer.invoke('tabs:preview-split-drop', zone),
     getContext: (tabId: string) => ipcRenderer.invoke('tabs:get-context', tabId) as Promise<{ success: boolean; context?: unknown; error?: string }>,
     onUpdated: (callback: (tabs: unknown[]) => void) => {
       const handler = (_: unknown, tabs: unknown[]) => callback(tabs)

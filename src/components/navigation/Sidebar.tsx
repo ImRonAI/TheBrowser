@@ -64,9 +64,39 @@ export function Sidebar() {
   const { isSidebarOpen, searchFocusRequest, activeTab } = useNavigationStore()
   // The library and Deep Research are routed by the tab's URL, so they light whenever their URL shows.
   const activeTabUrl = useTabStore((state) => state.tabs.find((tab) => tab.id === state.activeTabId)?.url)
+  const splitMode = useTabStore((state) => state.split.mode)
   const onDocuments = parseDocumentsLibraryUrl(activeTabUrl) !== null
   const onResearch = parseResearchUrl(activeTabUrl) !== null
-  const currentDestination: HomeTab = onResearch ? 'research' : onDocuments ? 'documents' : activeTab === 'documents' ? 'home' : activeTab
+  const onExecute = Boolean(
+    activeTabUrl &&
+      (activeTabUrl === 'ron://execute' ||
+        activeTabUrl === 'ron://execute/' ||
+        activeTabUrl === 'ron://projects' ||
+        activeTabUrl === 'ron://projects/' ||
+        activeTabUrl.startsWith('ron://project/')),
+  )
+  const onBuild = activeTabUrl === 'ron://build' || activeTabUrl === 'ron://build/'
+  const onExternalOrReaderSearch = Boolean(
+    activeTabUrl &&
+      (!activeTabUrl.startsWith('ron://') ||
+        activeTabUrl.startsWith('ron://search') ||
+        activeTabUrl.startsWith('ron://read')),
+  )
+  const currentDestination: HomeTab | null = onExternalOrReaderSearch
+    ? null
+    : onResearch
+      ? 'research'
+      : onDocuments
+        ? 'documents'
+        : onExecute
+          ? 'execute'
+          : onBuild
+            ? 'build'
+            : splitMode !== 'single' && (activeTab === 'execute' || activeTab === 'build' || activeTab === 'research' || activeTab === 'documents')
+              ? 'home'
+              : activeTab === 'documents'
+                ? 'home'
+                : activeTab
   const { level } = useSearchStore()
   const reduced = useReducedMotion()
   const user = useAuthStore((state) => state.user?.id || 'default')

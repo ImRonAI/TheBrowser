@@ -11,15 +11,39 @@ import {
   type AutomationTab,
 } from 'electron-playwright-mcp'
 import { CURSOR_SVG, CURSOR_TIP } from '../src/lib/agent-cursor'
+import {
+  SINGLE_SPLIT_STATE,
+  SPLIT_PANE_GAP_PX,
+  SPLIT_PANE_HEADER_HEIGHT,
+  SPLIT_SHELL_PADDING_PX,
+  SPLIT_VIEWPORT_INSET_PX,
+  SPLIT_VIEWPORT_RADIUS_PX,
+  applySplitLayout,
+  computeSplitLayoutBounds,
+  getSlotForTab,
+  getSplitTabIds,
+  isTabInSplit,
+  isTabSplitDetached,
+  positionToSplitSlot,
+  removeTabFromSplit,
+  selectTabInSplit,
+  splitTabIntoZone,
+  toSplitSummary,
+  type SplitDropZone,
+  type SplitLayoutPreset,
+  type SplitState,
+} from '../src/lib/tab-split'
+import { ContextSurface, contextSurfaceEntry, type ContextSurfaceSnapshot } from './context-surface'
 import { RepairSurface, surfaceEntry, type RepairSurfaceState } from './repair-surface'
+import { SplitDropSurface } from './split-drop-surface'
 import { applyWindowMaterial } from './window-material'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = join(__filename, '..')
 
-const ELECTRON_PORT = 3000
-const PLAYWRIGHT_PORT = 8931
-const CDP_PORT = 9222
+const ELECTRON_PORT = Number(process.env.ELECTRON_PLAYWRIGHT_MCP_ELECTRON_PORT) || 3000
+const PLAYWRIGHT_PORT = Number(process.env.ELECTRON_PLAYWRIGHT_MCP_PLAYWRIGHT_PORT) || 8931
+const CDP_PORT = Number(process.env.ELECTRON_PLAYWRIGHT_MCP_CDP_PORT) || 9222
 // Single source of truth for the automation session. The MCP cookie/storage tools resolve
 // their session via session.fromPartition(SESSION_PARTITION), so every WebContentsView tab
 // MUST be created with this same partition or those tools read the wrong store.
@@ -29,9 +53,12 @@ const CHROME_HEIGHT = 88
 // still exists for older renderers; a renderer that never reports it reserves 0.
 const COLLAPSED_DRAWER_HEIGHT = 0
 let agentPanelWidth = 420
+let currentPanelMode: 'narrow' | 'wide' | 'fullscreen' = 'narrow'
 let drawerHeight = COLLAPSED_DRAWER_HEIGHT
 let chromeHeight = CHROME_HEIGHT
-let interestInset = 0
+let rightSideInset = 0
+let hasExplicitSideInset = false
+let isShellMounted = true
 // Width (CSS px) of the persistent left sidebar; 0 when it is closed.
 let sidebarWidth = 0
 let userTakeoverActive = false
@@ -117,14 +144,20 @@ async function ensureMacMediaAccess(kind: 'microphone' | 'camera'): Promise<{ st
   return { status, granted: status === 'granted' }
 }
 
+function getShellZoomFactor(): number {
+  if (!mainWindow || mainWindow.isDestroyed() || mainWindow.webContents.isDestroyed()) return 1
+  return mainWindow.webContents.getZoomFactor() || 1
+}
+
 function calculateWebContentsViewBounds(): { x: number; y: number; width: number; height: number } {
   if (!mainWindow || mainWindow.isDestroyed()) return { x: 0, y: CHROME_HEIGHT + drawerHeight, width: 800, height: 600 }
   const [windowWidth, windowHeight] = mainWindow.getContentSize()
   // The chrome reports its layout in CSS pixels; the WebContentsView is placed in
-  // window DIPs. When the shell is zoomed (Cmd +/-) those differ, and an unscaled
-  // view would cover the navigation drawer and the agent panel.
-  const zoom = mainWindow.webContents.isDestroyed() ? 1 : mainWindow.webContents.getZoomFactor() || 1
-  const rightReserve = Math.ceil(Math.max(isAgentPanelOpen ? agentPanelWidth : 0, interestInset) * zoom)
+  // window DIPs. Websites render across 100% of the shell width (zero interestInset column);
+  // the Context Widget floats above via ContextSurface.
+  const zoom = getShellZoomFactor()
+  const effectiveRightCss = hasExplicitSideInset ? rightSideInset : (isAgentPanelOpen ? agentPanelWidth : 0)
+  const rightReserve = Math.ceil(Math.max(0, effectiveRightCss) * zoom)
   const left = Math.ceil(sidebarWidth * zoom)
   const top = Math.ceil((chromeHeight + drawerHeight) * zoom)
   return {
@@ -135,9 +168,28 @@ function calculateWebContentsViewBounds(): { x: number; y: number; width: number
   }
 }
 
+function calculateChromeBounds(): { x: number; y: number; width: number; height: number } {
+  if (!mainWindow || mainWindow.isDestroyed()) return { x: 0, y: 0, width: 800, height: CHROME_HEIGHT }
+  const [windowWidth] = mainWindow.getContentSize()
+  const zoom = getShellZoomFactor()
+  const left = Math.ceil(sidebarWidth * zoom)
+  const height = Math.ceil((chromeHeight + drawerHeight) * zoom)
+  return { x: left, y: 0, width: Math.max(0, windowWidth - left), height }
+}
+
+function raiseAllOverlays(): void {
+  repairSurface.raise()
+  contextSurface.raise()
+  splitDropSurface.raise()
+}
+
 function updateWebContentsViewBounds(): void {
   tabsManager.updateActiveViewBounds()
   repairSurface.layout()
+  contextSurface.syncZoom()
+  contextSurface.layout()
+  splitDropSurface.syncZoom()
+  splitDropSurface.layout()
 }
 
 /**
@@ -185,11 +237,15 @@ function sendChromeShortcut(shortcut: ChromeShortcut, page?: WebContentsView): v
   }).catch(() => deliver({ shortcut, sourceUrl }))
 }
 
-function attachChromeShortcuts(contents: Electron.WebContents, page?: WebContentsView): void {
+function attachChromeShortcuts(
+  contents: Electron.WebContents,
+  pageOrSupplier?: WebContentsView | (() => WebContentsView | undefined),
+): void {
   contents.on('before-input-event', (event, input) => {
     const shortcut = chromeShortcutFor(input)
     if (!shortcut) return
     event.preventDefault()
+    const page = typeof pageOrSupplier === 'function' ? pageOrSupplier() : pageOrSupplier
     sendChromeShortcut(shortcut, page)
   })
 }
@@ -214,7 +270,7 @@ function attachPageContextMenu(tab: TabRecord): void {
       })()` }]).then((selected: unknown) => {
         if (!mainWindow || view.webContents.isDestroyed() || tabsManager.activeTabId !== tab.id ||
             view.webContents.getURL() !== sourceUrl || typeof selected !== 'string' || !selected) return
-        const bounds = calculateWebContentsViewBounds()
+        const bounds = view.getBounds()
         const x = Math.round(bounds.x + mouse.x)
         const y = Math.round(bounds.y + mouse.y)
         Menu.buildFromTemplate([{
@@ -230,6 +286,9 @@ function attachPageContextMenu(tab: TabRecord): void {
   })
   view.webContents.on('context-menu', (_event, params) => {
     if (!mainWindow || view.webContents.isDestroyed()) return
+    if (tabsManager.activeTabId !== tab.id && tabsManager.isTabDisplayed(tab.id)) {
+      tabsManager.switch(tab.id)
+    }
     const selection = params.selectionText.trim()
     const template: Electron.MenuItemConstructorOptions[] = []
     if (selection && params.editFlags.canCopy) {
@@ -272,7 +331,7 @@ function attachPageContextMenu(tab: TabRecord): void {
     template.push({
       label: 'Ask Ren',
       click: () => {
-        const bounds = calculateWebContentsViewBounds()
+        const bounds = view.getBounds()
         mainWindow?.webContents.send('agent:ask-ron', {
           selectionText: selection,
           sourceUrl: tab.url || view.webContents.getURL(),
@@ -314,7 +373,7 @@ function attachPageContextMenu(tab: TabRecord): void {
         ],
       })
     }
-    const bounds = calculateWebContentsViewBounds()
+    const bounds = view.getBounds()
     Menu.buildFromTemplate(template).popup({
       window: mainWindow,
       x: Math.round(bounds.x + params.x),
@@ -332,25 +391,66 @@ interface TabRecord {
   view?: WebContentsView
 }
 
+function defaultInternalTitle(url: string): string {
+  if (url.startsWith('ron://search')) return 'Search'
+  if (url.startsWith('ron://research')) return 'Deep Research'
+  if (url.startsWith('ron://projects') || url.startsWith('ron://project/')) return 'Projects'
+  if (url.startsWith('ron://documents')) return 'Documents'
+  if (url.startsWith('ron://execute')) return 'Execute'
+  if (url.startsWith('ron://build')) return 'Build'
+  if (url.startsWith('ron://home')) return 'Home'
+  if (url.startsWith('ron://read')) {
+    try { return new URL(url).searchParams.get('title') || 'Article' }
+    catch { return 'Article' }
+  }
+  return 'Ren'
+}
+
 class TabsManager {
   private tabs = new Map<string, TabRecord>()
   private order: string[] = []
   private _activeTabId: string | null = null
+  private splitState: SplitState = SINGLE_SPLIT_STATE
+  private htmlFullscreenTabId: string | null = null
+  private programmaticFocusTargetId: string | null = null
+  private programmaticFocusTimer: NodeJS.Timeout | null = null
 
   get activeTabId() { return this._activeTabId }
   get activeTab(): TabRecord | undefined { return this._activeTabId ? this.tabs.get(this._activeTabId) : undefined }
+  get split(): SplitState { return this.splitState }
+
+  isTabDisplayed(id: string): boolean {
+    if (!isShellMounted || !this.tabs.has(id)) return false
+    if (this.htmlFullscreenTabId && this.tabs.get(this.htmlFullscreenTabId)?.isExternal) {
+      return id === this.htmlFullscreenTabId
+    }
+    if (this.splitState.mode === 'single') {
+      return id === this._activeTabId
+    }
+    return isTabInSplit(this.splitState, id)
+  }
 
   list() {
     return this.order.map(id => {
       const t = this.tabs.get(id)!
-      return { id: t.id, url: t.url, title: t.title, favicon: t.favicon, isActive: id === this._activeTabId }
+      const splitPane = getSlotForTab(this.splitState, id)
+      return {
+        id: t.id,
+        url: t.url,
+        title: t.title,
+        favicon: t.favicon,
+        isActive: id === this._activeTabId,
+        isDisplayed: this.isTabDisplayed(id),
+        isSplitDetached: isTabSplitDetached(this.splitState, id),
+        splitPane,
+      }
     })
   }
 
+  /** Rule 6: `visible` = true iff the tab's external WebContentsView is attached to `mainWindow.contentView`. */
   isVisible(id: string): boolean {
     const t = this.tabs.get(id)
-    if (!t || id !== this._activeTabId) return false
-    if (!t.isExternal) return true
+    if (!t || !t.isExternal || !this.isTabDisplayed(id)) return false
     return Boolean(t.view && mainWindow && !mainWindow.isDestroyed() && mainWindow.contentView.children.includes(t.view))
   }
 
@@ -361,11 +461,12 @@ class TabsManager {
 
   create(clientTabId?: string, url = 'ron://home'): TabRecord {
     const id = clientTabId || `tab-${Date.now()}`
+    const isExternal = !url.startsWith('ron://') && url !== 'about:blank'
     const record: TabRecord = {
       id,
       url,
-      title: url.startsWith('ron://research') ? 'Deep Research' : url.startsWith('ron://') ? 'Home' : 'New Tab',
-      isExternal: !url.startsWith('ron://') && url !== 'about:blank'
+      title: isExternal ? 'New Tab' : defaultInternalTitle(url),
+      isExternal,
     }
     this.tabs.set(id, record)
     this.order.push(id)
@@ -380,13 +481,34 @@ class TabsManager {
     return record
   }
 
-  switch(id: string): boolean {
-    const tab = this.tabs.get(id)
-    if (!mainWindow || !tab) return false
+  private clearAgentCursorFrom(tabId: string | null): void {
+    if (!tabId) return
+    const prev = this.tabs.get(tabId)
+    if (prev?.view && !prev.view.webContents.isDestroyed()) {
+      void prev.view.webContents
+        .executeJavaScript('document.getElementById("ron-agent-cursor")?.remove()')
+        .catch(() => undefined)
+    }
+  }
 
+  syncVisibleViews(options?: { focusActive?: boolean }): void {
+    if (!mainWindow || mainWindow.isDestroyed()) return
     const contentView = mainWindow.contentView
+
+    let visibleIds: Set<string>
+    if (!isShellMounted) {
+      visibleIds = new Set()
+    } else if (this.htmlFullscreenTabId && this.tabs.get(this.htmlFullscreenTabId)?.isExternal) {
+      visibleIds = new Set([this.htmlFullscreenTabId])
+    } else if (this.splitState.mode === 'single') {
+      visibleIds = this._activeTabId ? new Set([this._activeTabId]) : new Set()
+    } else {
+      visibleIds = new Set(getSplitTabIds(this.splitState))
+    }
+
     for (const existing of this.tabs.values()) {
-      if (existing.view && existing.id !== id) {
+      const shouldAttach = visibleIds.has(existing.id) && existing.isExternal
+      if (existing.view && !shouldAttach) {
         if (!existing.view.webContents.isDestroyed()) {
           existing.view.webContents.setBackgroundThrottling(true)
         }
@@ -396,35 +518,167 @@ class TabsManager {
       }
     }
 
-    this._activeTabId = id
+    const contentArea = calculateWebContentsViewBounds()
+    const zoom = getShellZoomFactor()
 
-    if (tab.isExternal) {
-      this.ensureView(tab)
-      if (!tab.view!.webContents.isDestroyed()) {
-        tab.view!.webContents.setBackgroundThrottling(false)
+    if (isShellMounted) {
+      if (this.htmlFullscreenTabId && visibleIds.has(this.htmlFullscreenTabId)) {
+        const fsTab = this.tabs.get(this.htmlFullscreenTabId)
+        if (fsTab?.isExternal) {
+          this.ensureView(fsTab)
+          const [windowWidth, windowHeight] = mainWindow.getContentSize()
+          if (!fsTab.view!.webContents.isDestroyed()) {
+            fsTab.view!.webContents.setBackgroundThrottling(false)
+            fsTab.view!.setBorderRadius(0)
+            fsTab.view!.setBounds({ x: 0, y: 0, width: windowWidth, height: windowHeight })
+          }
+          if (!contentView.children.includes(fsTab.view!)) {
+            contentView.addChildView(fsTab.view!)
+          }
+        }
+      } else if (this.splitState.mode === 'single') {
+        const tab = this.activeTab
+        if (tab?.isExternal) {
+          this.ensureView(tab)
+          if (!tab.view!.webContents.isDestroyed()) {
+            tab.view!.webContents.setBackgroundThrottling(false)
+            tab.view!.setBorderRadius(0)
+            tab.view!.setBounds(contentArea)
+          }
+          if (!contentView.children.includes(tab.view!)) {
+            contentView.addChildView(tab.view!)
+          }
+        }
+      } else {
+        const paneHeaderDip = Math.round(SPLIT_PANE_HEADER_HEIGHT * zoom)
+        const gapDip = Math.max(1, Math.round(SPLIT_PANE_GAP_PX * zoom))
+        const shellPaddingDip = Math.round(SPLIT_SHELL_PADDING_PX * zoom)
+        const viewportInsetDip = Math.round(SPLIT_VIEWPORT_INSET_PX * zoom)
+        const viewportRadiusDip = Math.max(0, Math.round(SPLIT_VIEWPORT_RADIUS_PX * zoom))
+        const panes = computeSplitLayoutBounds(contentArea, this.splitState, paneHeaderDip, gapDip, {
+          shellPaddingDip,
+          viewportInsetDip,
+        })
+        for (const pane of panes) {
+          const tab = this.tabs.get(pane.tabId)
+          if (!tab?.isExternal) continue
+          this.ensureView(tab)
+          if (!tab.view!.webContents.isDestroyed()) {
+            tab.view!.webContents.setBackgroundThrottling(false)
+            tab.view!.setBorderRadius(viewportRadiusDip)
+            tab.view!.setBounds(pane.webContentsBounds)
+          }
+          if (!contentView.children.includes(tab.view!)) {
+            contentView.addChildView(tab.view!)
+          }
+        }
       }
-      this.updateViewBounds(tab.view!)
-      if (!contentView.children.includes(tab.view!)) contentView.addChildView(tab.view!)
-      mainWindow.webContents.send('browser:external-mode', true)
-    } else {
-      if (tab.view && contentView.children.includes(tab.view)) {
-        contentView.removeChildView(tab.view)
-      }
-      mainWindow.webContents.send('browser:external-mode', false)
     }
-    // Tab views are appended on top; the repair surface must stay above them.
-    repairSurface.raise()
+
+    raiseAllOverlays()
+    syncWindowMaterial()
+
+    const externalSingleMode = this.splitState.mode === 'single' && Boolean(this.activeTab?.isExternal)
+    if (!mainWindow.webContents.isDestroyed()) {
+      mainWindow.webContents.send('browser:external-mode', externalSingleMode)
+    }
+
+    if (options?.focusActive && this.activeTab && isShellMounted) {
+      this.focusVisibleSurface(this.activeTab)
+    }
+  }
+
+  switch(id: string): boolean {
+    const tab = this.tabs.get(id)
+    if (!mainWindow || !tab) return false
+
+    if (this._activeTabId && this._activeTabId !== id) {
+      this.clearAgentCursorFrom(this._activeTabId)
+    }
+
+    this.splitState = selectTabInSplit(this.splitState, id)
+    this._activeTabId = id
+    this.syncVisibleViews({ focusActive: true })
 
     mainWindow.webContents.send('browser:url-changed', tab.url)
-    this.focusVisibleSurface(tab)
     this.emitTabsUpdated()
+    this.emitSplitUpdated()
     return true
+  }
+
+  splitTab(tabId: string, zone: SplitDropZone, source: 'strip' | 'pane' = 'strip') {
+    if (!this.tabs.has(tabId)) return { success: false, split: this.splitState }
+    const prevActive = this._activeTabId
+    const res = splitTabIntoZone(this.splitState, tabId, zone, this.order, this._activeTabId, source)
+    this.splitState = res.state
+    if (res.activeTabId && this.tabs.has(res.activeTabId)) {
+      if (prevActive && prevActive !== res.activeTabId) this.clearAgentCursorFrom(prevActive)
+      this._activeTabId = res.activeTabId
+    }
+    this.syncVisibleViews({ focusActive: true })
+    if (this.activeTab) {
+      mainWindow?.webContents.send('browser:url-changed', this.activeTab.url)
+    }
+    this.emitTabsUpdated()
+    this.emitSplitUpdated()
+    return { success: true, split: this.splitState }
+  }
+
+  applySplit(options: { layout: SplitLayoutPreset; tabIds?: string[] }): SplitState {
+    const prevActive = this._activeTabId
+    const res = applySplitLayout(this.splitState, {
+      layout: options.layout,
+      tabIds: options.tabIds,
+      activeTabId: this._activeTabId,
+      orderedTabIds: this.order,
+    })
+    this.splitState = res.state
+    if (res.activeTabId && this.tabs.has(res.activeTabId)) {
+      if (prevActive && prevActive !== res.activeTabId) this.clearAgentCursorFrom(prevActive)
+      this._activeTabId = res.activeTabId
+    }
+    this.syncVisibleViews({ focusActive: true })
+    if (this.activeTab) {
+      mainWindow?.webContents.send('browser:url-changed', this.activeTab.url)
+    }
+    this.emitTabsUpdated()
+    this.emitSplitUpdated()
+    return this.splitState
+  }
+
+  unsplitTab(tabId?: string, all = false) {
+    const prevActive = this._activeTabId
+    if (all || !tabId) {
+      this.splitState = SINGLE_SPLIT_STATE
+    } else {
+      const removed = removeTabFromSplit(this.splitState, tabId)
+      this.splitState = removed.state
+      if (
+        this._activeTabId === tabId &&
+        removed.survivingActiveTabId &&
+        this.tabs.has(removed.survivingActiveTabId)
+      ) {
+        this.clearAgentCursorFrom(prevActive)
+        this._activeTabId = removed.survivingActiveTabId
+      }
+    }
+    this.syncVisibleViews({ focusActive: true })
+    if (this.activeTab) {
+      mainWindow?.webContents.send('browser:url-changed', this.activeTab.url)
+    }
+    this.emitTabsUpdated()
+    this.emitSplitUpdated()
+    return { success: true, split: this.splitState }
   }
 
   close(id: string): boolean {
     const idx = this.order.indexOf(id)
     const tab = this.tabs.get(id)
     if (idx === -1 || !tab) return false
+
+    if (this.htmlFullscreenTabId === id) {
+      this.htmlFullscreenTabId = null
+    }
 
     if (tab.view && !tab.view.webContents.isDestroyed()) {
       try { tab.view.webContents.close() } catch {}
@@ -437,36 +691,50 @@ class TabsManager {
     this.tabs.delete(id)
     this.order.splice(idx, 1)
 
+    const removed = removeTabFromSplit(this.splitState, id)
+    this.splitState = removed.state
+
     if (this._activeTabId === id) {
-      const nextId = this.order[idx] || this.order[idx - 1] || null
+      const nextId =
+        (removed.survivingActiveTabId && this.tabs.has(removed.survivingActiveTabId)
+          ? removed.survivingActiveTabId
+          : null) ||
+        this.order[idx] ||
+        this.order[idx - 1] ||
+        null
       this._activeTabId = null
-      if (nextId) this.switch(nextId)
-      else {
-        mainWindow?.webContents.send('browser:external-mode', false)
+      if (nextId) {
+        this.switch(nextId)
+        return true
       }
+      this.syncVisibleViews()
+    } else {
+      this.syncVisibleViews()
     }
 
     this.emitTabsUpdated()
+    this.emitSplitUpdated()
     return true
   }
 
-  navigateActive(url: string) {
-    if (!this._activeTabId) {
-      const created = this.create(undefined, url)
-      return { success: true, isExternal: created.isExternal, url: created.url }
-    }
-    const tab = this.tabs.get(this._activeTabId)!
+  navigateTab(tabId: string, url: string, focusIfActive = false) {
+    const tab = this.tabs.get(tabId)
+    if (!tab) return { success: false, isExternal: false, url }
+    const isActive = this._activeTabId === tab.id
     tab.url = url
     tab.isExternal = !url.startsWith('ron://') && url !== 'about:blank'
 
     if (tab.isExternal) {
       this.ensureView(tab)
-      this.attachIfActive(tab)
+      this.syncVisibleViews({ focusActive: focusIfActive && isActive })
       tab.view!.webContents.loadURL(url)
-      this.focusVisibleSurface(tab)
       this.emitTabsUpdated()
+      if (isActive) mainWindow?.webContents.send('browser:url-changed', tab.url)
       return { success: true, isExternal: true, url }
     } else {
+      if (this.htmlFullscreenTabId === tab.id) {
+        this.htmlFullscreenTabId = null
+      }
       if (mainWindow && tab.view && mainWindow.contentView.children.includes(tab.view)) {
         mainWindow.contentView.removeChildView(tab.view)
       }
@@ -476,21 +744,20 @@ class TabsManager {
         if (!tab.view.webContents.isDestroyed()) tab.view.webContents.close()
         tab.view = undefined
       }
-      if (url.startsWith('ron://search')) tab.title = 'Search'
-      else if (url.startsWith('ron://research')) tab.title = 'Deep Research'
-      else if (url.startsWith('ron://home')) tab.title = 'Home'
-      else if (url.startsWith('ron://read')) {
-        try { tab.title = new URL(url).searchParams.get('title') || 'Article' }
-        catch { tab.title = 'Article' }
-      }
-      else tab.title = 'Ren'
-
+      tab.title = defaultInternalTitle(url)
+      this.syncVisibleViews({ focusActive: focusIfActive && isActive })
       this.emitTabsUpdated()
-      mainWindow?.webContents.send('browser:external-mode', false)
-      mainWindow?.webContents.send('browser:url-changed', tab.url)
-      this.focusVisibleSurface(tab)
+      if (isActive) mainWindow?.webContents.send('browser:url-changed', tab.url)
       return { success: true, isExternal: false, url }
     }
+  }
+
+  navigateActive(url: string) {
+    if (!this._activeTabId) {
+      const created = this.create(undefined, url)
+      return { success: true, isExternal: created.isExternal, url: created.url }
+    }
+    return this.navigateTab(this._activeTabId, url, true)
   }
 
   goBackActive() {
@@ -539,20 +806,13 @@ class TabsManager {
       }
     })
 
-    this.updateViewBounds(tab.view)
-
     const syncNavigation = (url: string) => {
       tab.url = url
-      // Automation can navigate a view that was created for an internal tab
-      // (ron://home). The moment it lands on a real URL the tab becomes
-      // external and its view is attached *below the chrome* -- the header,
-      // toolbar, and agent panel persist exactly as they do for user
-      // navigation through navigateActive().
       const external = !url.startsWith('ron://') && url !== 'about:blank'
       if (external && !tab.isExternal) {
         tab.isExternal = true
         tab.title = 'New Tab'
-        this.attachIfActive(tab)
+        this.syncVisibleViews({ focusActive: this._activeTabId === tab.id })
       }
       recordTakeoverBreadcrumb(url, tab.title)
       this.emitTabsUpdated()
@@ -586,6 +846,16 @@ class TabsManager {
         })
       }
     })
+    tab.view.webContents.on('enter-html-full-screen', () => {
+      this.htmlFullscreenTabId = tab.id
+      this.syncVisibleViews()
+    })
+    tab.view.webContents.on('leave-html-full-screen', () => {
+      if (this.htmlFullscreenTabId === tab.id) {
+        this.htmlFullscreenTabId = null
+        this.syncVisibleViews()
+      }
+    })
 
     // window.open / target=_blank from page or automation: open as a real app
     // tab (chrome-managed), never a detached BrowserWindow.
@@ -594,9 +864,23 @@ class TabsManager {
       this.switch(created.id)
       return { action: 'deny' }
     })
-    // Electron webContents `focus` fires when CDP /json/activate or in-page
-    // focus moves between WebContents in this window. Follow that tab in the bar.
+    // Electron webContents `focus` fires when user focus moves between attached split
+    // WebContentsViews in this window. Ignore late async focus ACKs from detached background
+    // views or superseded programmatic switches so they never hijack `_activeTabId`.
     tab.view.webContents.on('focus', () => {
+      if (
+        !isShellMounted ||
+        !this.isTabDisplayed(tab.id) ||
+        !mainWindow ||
+        mainWindow.isDestroyed() ||
+        !tab.view ||
+        !mainWindow.contentView.children.includes(tab.view)
+      ) {
+        return
+      }
+      if (this.programmaticFocusTargetId && this.programmaticFocusTargetId !== tab.id) {
+        return
+      }
       if (this._activeTabId !== tab.id) this.switch(tab.id)
     })
     tab.view.webContents.on('page-title-updated', (_, title) => {
@@ -610,16 +894,6 @@ class TabsManager {
     })
     attachPageContextMenu(tab)
     attachChromeShortcuts(tab.view.webContents, tab.view)
-  }
-
-  attachIfActive(tab: TabRecord) {
-    if (!mainWindow || this._activeTabId !== tab.id || !tab.view) return
-    const contentView = mainWindow.contentView
-    if (!contentView.children.includes(tab.view)) contentView.addChildView(tab.view)
-    this.updateViewBounds(tab.view)
-    repairSurface.raise()
-    mainWindow.webContents.send('browser:external-mode', true)
-    this.focusVisibleSurface(tab)
   }
 
   /** Create (if needed) and return the WebContentsView for a tab -- used by the
@@ -638,18 +912,33 @@ class TabsManager {
     return tab.view
   }
 
-  updateViewBounds(view: WebContentsView) {
-    if (!mainWindow || mainWindow.isDestroyed() || view.webContents.isDestroyed()) return
-    view.setBounds(calculateWebContentsViewBounds())
+  updateActiveViewBounds() {
+    this.syncVisibleViews()
   }
 
-  updateActiveViewBounds() {
-    const v = this.activeTab?.view
-    if (v) this.updateViewBounds(v)
+  activeInternalPaneBounds(): { x: number; y: number; width: number; height: number } | null {
+    const active = this.activeTab
+    if (!active || active.isExternal || this.splitState.mode === 'single') return null
+    const zoom = getShellZoomFactor()
+    const panes = computeSplitLayoutBounds(
+      calculateWebContentsViewBounds(),
+      this.splitState,
+      Math.round(SPLIT_PANE_HEADER_HEIGHT * zoom),
+      Math.max(1, Math.round(SPLIT_PANE_GAP_PX * zoom)),
+      {
+        shellPaddingDip: Math.round(SPLIT_SHELL_PADDING_PX * zoom),
+        viewportInsetDip: Math.round(SPLIT_VIEWPORT_INSET_PX * zoom),
+      },
+    )
+    return panes.find((p) => p.tabId === active.id)?.cellBounds ?? null
   }
 
   emitTabsUpdated() {
     mainWindow?.webContents.send('tabs:updated', this.list())
+  }
+
+  emitSplitUpdated() {
+    mainWindow?.webContents.send('tabs:split-updated', this.splitState)
   }
 
   /** Tab views belong to the main window. When it closes (macOS keeps the app
@@ -663,10 +952,25 @@ class TabsManager {
     this.tabs.clear()
     this.order = []
     this._activeTabId = null
+    this.splitState = SINGLE_SPLIT_STATE
+    this.htmlFullscreenTabId = null
+    this.programmaticFocusTargetId = null
+    if (this.programmaticFocusTimer) {
+      clearTimeout(this.programmaticFocusTimer)
+      this.programmaticFocusTimer = null
+    }
   }
 
   private focusVisibleSurface(tab: TabRecord) {
-    if (!mainWindow) return
+    if (!mainWindow || mainWindow.isDestroyed()) return
+    this.programmaticFocusTargetId = tab.id
+    if (this.programmaticFocusTimer) clearTimeout(this.programmaticFocusTimer)
+    this.programmaticFocusTimer = setTimeout(() => {
+      if (this.programmaticFocusTargetId === tab.id) {
+        this.programmaticFocusTargetId = null
+      }
+      this.programmaticFocusTimer = null
+    }, 80)
     if (tab.isExternal && tab.view && !tab.view.webContents.isDestroyed()) {
       tab.view.webContents.focus()
     } else if (!mainWindow.webContents.isDestroyed()) {
@@ -677,6 +981,36 @@ class TabsManager {
 
 const tabsManager = new TabsManager()
 
+interface PendingContextBridgeCall {
+  resolve: (value: unknown) => void
+  timer: NodeJS.Timeout
+}
+const pendingContextBridgeCalls = new Map<string, PendingContextBridgeCall>()
+let contextBridgeCallSeq = 0
+
+function invokeShellContextBridge(channel: 'context-surface:action' | 'context-surface:send-to-issue', payload: unknown): Promise<unknown> {
+  if (!mainWindow || mainWindow.isDestroyed() || mainWindow.webContents.isDestroyed()) {
+    return Promise.resolve(null)
+  }
+  const requestId = `ctx-${++contextBridgeCallSeq}`
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => {
+      pendingContextBridgeCalls.delete(requestId)
+      resolve(null)
+    }, 30_000)
+    pendingContextBridgeCalls.set(requestId, { resolve, timer })
+    mainWindow?.webContents.send(channel, { requestId, payload })
+  })
+}
+
+function clearPendingContextBridgeCalls(): void {
+  for (const [, entry] of pendingContextBridgeCalls) {
+    clearTimeout(entry.timer)
+    entry.resolve(null)
+  }
+  pendingContextBridgeCalls.clear()
+}
+
 // Native repair surface (electron/repair-surface.ts): drawn above the tab views, fed by the shell
 // renderer (`repair-surface:update`), its decisions relayed back to the shell (`repair-surface:action`).
 const repairSurface = new RepairSurface({
@@ -685,6 +1019,43 @@ const repairSurface = new RepairSurface({
   onAction: (action) => mainWindow?.webContents.send('repair-surface:action', action),
   entry: () => surfaceEntry(process.env['ELECTRON_RENDERER_URL'], __dirname),
   preload: join(__dirname, 'repair-surface-preload.js'),
+})
+
+const contextSurface = new ContextSurface({
+  window: () => mainWindow,
+  contentBounds: () => calculateWebContentsViewBounds(),
+  leftSidebarDip: () => Math.ceil(sidebarWidth * getShellZoomFactor()),
+  zoomFactor: () => getShellZoomFactor(),
+  isShellMounted: () => isShellMounted,
+  entry: () => contextSurfaceEntry(process.env['ELECTRON_RENDERER_URL'], __dirname),
+  preload: join(__dirname, 'context-surface-preload.js'),
+  attachShortcuts: (wc) => attachChromeShortcuts(wc, () => tabsManager.activeTab?.view),
+  openExternalTab: (url) => {
+    tabsManager.switch(tabsManager.create(undefined, url).id)
+  },
+  focusActiveBrowserSurface: () => tabsManager.focusActiveSurface(),
+  onOrbClearanceChanged: (clearanceDip) => repairSurface.setOrbClearance(clearanceDip),
+  onAction: (action) => invokeShellContextBridge('context-surface:action', action),
+  onSendToIssue: async (payload) => {
+    const res = await invokeShellContextBridge('context-surface:send-to-issue', payload)
+    if (res && typeof res === 'object') return res as { message?: string; error?: string }
+    return { error: 'Context bridge did not respond.' }
+  },
+  onOpenSignIn: () => {
+    mainWindow?.webContents.send('context-surface:open-sign-in')
+  },
+})
+
+const splitDropSurface = new SplitDropSurface({
+  window: () => mainWindow,
+  contentBounds: () => calculateWebContentsViewBounds(),
+  chromeBounds: () => calculateChromeBounds(),
+  leftSidebarDip: () => Math.ceil(sidebarWidth * getShellZoomFactor()),
+  zoomFactor: () => getShellZoomFactor(),
+  splitMode: () => tabsManager.split.mode,
+  isDark: () =>
+    currentTheme === 'dark' ||
+    ((currentTheme === 'system' || currentTheme === 'glass') && nativeTheme.shouldUseDarkColors),
 })
 
 // Registered after `tabsManager` is initialized. The supplier is invoked lazily on every
@@ -720,6 +1091,8 @@ function automationTabs(): AutomationTab[] {
     title: tab.title,
     active: tab.isActive,
     visible: tabsManager.isVisible(tab.id),
+    inSplit: Boolean(tab.splitPane),
+    pane: tab.splitPane ?? null,
   }))
 }
 
@@ -780,6 +1153,39 @@ setTabController({
     const active = automationTabs().find((tab) => tab.active)
     if (!active) throw new Error('No active tab after navigate')
     return active
+  },
+  getSplit: () => toSplitSummary(tabsManager.split),
+  split: ({ index, id, position, layout, tabIds }) => {
+    if (layout) {
+      tabsManager.applySplit({ layout, tabIds })
+    } else {
+      const listed = automationTabs()
+      if (listed.length < 2) {
+        throw new Error('Cannot split tabs: at least 2 open tabs are required.')
+      }
+      const target =
+        id !== undefined || index !== undefined
+          ? tabByIndexOrId(index, id)
+          : listed.find((t) => !t.active) || listed[0]
+      const slot = positionToSplitSlot(position ?? 'right')
+      tabsManager.splitTab(target.id, slot, 'strip')
+    }
+    return {
+      split: toSplitSummary(tabsManager.split),
+      tabs: automationTabs(),
+    }
+  },
+  unsplit: ({ index, id, all }) => {
+    if (all || (id === undefined && index === undefined)) {
+      tabsManager.unsplitTab(undefined, true)
+    } else {
+      const target = tabByIndexOrId(index, id)
+      tabsManager.unsplitTab(target.id, false)
+    }
+    return {
+      split: toSplitSummary(tabsManager.split),
+      tabs: automationTabs(),
+    }
   },
 })
 
@@ -955,14 +1361,17 @@ async function createWindow() {
   })
 
   win.webContents.session.setDisplayMediaRequestHandler((request, callback) => {
+    const deny = () => {
+      try { callback({}) } catch { /* Electron 39 rejects the renderer promise and may throw synchronously here. */ }
+    }
     if (!request.userGesture || !validateIpcSender(request.frame) || request.frame !== win.webContents.mainFrame) {
-      callback({})
+      deny()
       return
     }
     void (async () => {
       try {
         const sources = await desktopCapturer.getSources({ types: ['screen', 'window'], thumbnailSize: { width: 0, height: 0 } })
-        if (!sources.length || win.isDestroyed()) { callback({}); return }
+        if (!sources.length || win.isDestroyed()) { deny(); return }
         const choice = await dialog.showMessageBox(win, {
           type: 'question', title: 'Share your screen with Ren',
           message: 'Choose what to share with Ren',
@@ -971,10 +1380,11 @@ async function createWindow() {
           cancelId: 0, defaultId: 0, noLink: true,
         })
         const source = sources[choice.response - 1]
-        callback(source ? { video: source } : {})
+        if (source) callback({ video: source })
+        else deny()
       } catch (error) {
         console.error('Screen sharing could not start:', error)
-        callback({})
+        deny()
       }
     })()
   })
@@ -983,8 +1393,20 @@ async function createWindow() {
     // Never keep a handle to a destroyed window: every `mainWindow?.` call
     // would otherwise throw "Object has been destroyed".
     if (mainWindow === win) {
+      clearPendingContextBridgeCalls()
       repairSurface.update({ repair: null })
+      contextSurface.reset()
+      splitDropSurface.reset()
       mainWindow = null
+      isAgentPanelOpen = false
+      rightSideInset = 0
+      hasExplicitSideInset = false
+      sidebarWidth = 0
+      chromeHeight = CHROME_HEIGHT
+      drawerHeight = COLLAPSED_DRAWER_HEIGHT
+      currentPanelMode = 'narrow'
+      agentPanelWidth = 420
+      isShellMounted = true
       tabsManager.reset()
     }
   })
@@ -993,7 +1415,21 @@ async function createWindow() {
     mainWindow?.show()
   })
 
+  mainWindow.on('blur', () => {
+    splitDropSurface.preview(null)
+  })
+
   mainWindow.on('resize', () => {
+    if (mainWindow && !mainWindow.isDestroyed() && currentPanelMode !== 'narrow') {
+      const [windowWidth] = mainWindow.getSize()
+      const nextWidth = currentPanelMode === 'wide' ? Math.min(800, Math.floor(windowWidth * 0.5)) : windowWidth
+      if (nextWidth !== agentPanelWidth) {
+        agentPanelWidth = nextWidth
+        if (!mainWindow.webContents.isDestroyed()) {
+          mainWindow.webContents.send('browser:panel-mode-changed', { mode: currentPanelMode, width: agentPanelWidth })
+        }
+      }
+    }
     updateWebContentsViewBounds()
   })
 
@@ -1100,18 +1536,24 @@ ipcMain.handle('get-theme', (event) => {
   return currentTheme
 })
 
+function syncWindowMaterial(): void {
+  if (!mainWindow || mainWindow.isDestroyed()) return
+  const dark = currentTheme === 'dark' || (currentTheme === 'system' && nativeTheme.shouldUseDarkColors)
+  if (process.platform === 'darwin') {
+    nativeTheme.themeSource = currentTheme === 'system' ? 'system' : dark ? 'dark' : 'light'
+  }
+  const clearSplitShell = isShellMounted && tabsManager.split.mode !== 'single'
+  void applyWindowMaterial(mainWindow, currentTheme, dark, clearSplitShell).catch((error) => {
+    console.warn('[glass] could not apply window material:', error)
+  })
+}
+
 ipcMain.handle('set-theme', (event, theme: 'light' | 'dark' | 'glass' | 'system') => {
   if (!validateIpcSender(event.senderFrame)) return currentTheme
   currentTheme = theme
   if (!mainWindow) return theme
 
-  // Glass: native Liquid Glass (macOS 26+) or vibrancy behind a transparent window.
-  // Others: opaque window background matching the resolved appearance. Applied
-  // asynchronously (the glass view waits for the page to finish loading).
-  const dark = theme === 'dark' || (theme === 'system' && nativeTheme.shouldUseDarkColors)
-  void applyWindowMaterial(mainWindow, theme, dark).catch((error) => {
-    console.warn('[glass] could not apply window material:', error)
-  })
+  syncWindowMaterial()
   return theme
 })
 
@@ -1160,9 +1602,32 @@ ipcMain.handle('browser:get-url', (event) => {
 })
 
 ipcMain.handle('browser:set-panel-open', (event, isOpen: boolean) => {
-  if (!validateIpcSender(event.senderFrame)) return
-  isAgentPanelOpen = isOpen
+  if (!validateIpcSender(event.senderFrame)) return { success: false }
+  isAgentPanelOpen = Boolean(isOpen)
   updateWebContentsViewBounds()
+  return { success: true }
+})
+
+ipcMain.handle('browser:set-side-inset', (event, width: number) => {
+  if (!validateIpcSender(event.senderFrame)) return { success: false }
+  hasExplicitSideInset = true
+  rightSideInset = Number.isFinite(width) && width > 0 ? width : 0
+  isAgentPanelOpen = rightSideInset > 0
+  updateWebContentsViewBounds()
+  return { success: true }
+})
+
+ipcMain.handle('browser:set-shell-mounted', (event, mounted: boolean) => {
+  if (!validateIpcSender(event.senderFrame)) return { success: false }
+  const next = Boolean(mounted)
+  if (isShellMounted === next) return { success: true }
+  isShellMounted = next
+  if (!next) splitDropSurface.preview(null)
+  repairSurface.setShellMounted(next)
+  contextSurface.onShellMountedChanged(next)
+  tabsManager.updateActiveViewBounds()
+  tabsManager.emitTabsUpdated()
+  return { success: true }
 })
 
 ipcMain.handle('browser:set-agent-cursor', (event, point: { x?: number; y?: number } | null) => {
@@ -1271,11 +1736,33 @@ ipcMain.handle('interests:set-menu', (event, payload: InterestMenuPayload) => {
   return { success: true }
 })
 
-ipcMain.handle('interests:set-inset', (event, width: number) => {
+ipcMain.handle('interests:set-inset', (event, _width: number) => {
   if (!validateIpcSender(event.senderFrame)) return { success: false }
-  interestInset = Number.isFinite(width) && width > 0 ? width : 0
-  updateWebContentsViewBounds()
+  // Full-shell rendering: websites never reserve a blank column for the Context Widget.
   return { success: true }
+})
+
+ipcMain.handle('context-surface:update', (event, state: ContextSurfaceSnapshot) => {
+  if (!validateIpcSender(event.senderFrame) || !mainWindow || event.senderFrame !== mainWindow.webContents.mainFrame) {
+    return { success: false }
+  }
+  if (!state || typeof state !== 'object' || !('layout' in state)) return { success: false }
+  contextSurface.update(state)
+  return { success: true }
+})
+
+ipcMain.on('context-surface:action-result', (event, reply: unknown) => {
+  if (!validateIpcSender(event.senderFrame) || !mainWindow || event.senderFrame !== mainWindow.webContents.mainFrame) {
+    return
+  }
+  if (!reply || typeof reply !== 'object') return
+  const { requestId, result } = reply as { requestId?: unknown; result?: unknown }
+  if (typeof requestId !== 'string') return
+  const pending = pendingContextBridgeCalls.get(requestId)
+  if (!pending) return
+  clearTimeout(pending.timer)
+  pendingContextBridgeCalls.delete(requestId)
+  pending.resolve(result)
 })
 
 // Only the shell's main frame may drive the repair surface (never a page or an iframe).
@@ -1307,6 +1794,35 @@ ipcMain.handle('switch-tab', (event, tabId: string) => {
 ipcMain.handle('tabs:list', (event) => {
   if (!validateIpcSender(event.senderFrame)) return []
   return tabsManager.list()
+})
+
+ipcMain.handle('tabs:get-split', (event) => {
+  if (!validateIpcSender(event.senderFrame)) return SINGLE_SPLIT_STATE
+  return tabsManager.split
+})
+
+ipcMain.handle('tabs:split', (event, tabId: string, zone: SplitDropZone, source?: 'strip' | 'pane') => {
+  if (!validateIpcSender(event.senderFrame)) return { success: false, split: SINGLE_SPLIT_STATE }
+  splitDropSurface.preview(null)
+  return tabsManager.splitTab(tabId, zone, source ?? 'strip')
+})
+
+ipcMain.handle('tabs:unsplit', (event, tabId?: string, all?: boolean) => {
+  if (!validateIpcSender(event.senderFrame)) return { success: false, split: SINGLE_SPLIT_STATE }
+  splitDropSurface.preview(null)
+  return tabsManager.unsplitTab(tabId, Boolean(all))
+})
+
+ipcMain.handle('tabs:navigate', (event, tabId: string, url: string) => {
+  if (!validateIpcSender(event.senderFrame)) return { success: false }
+  return tabsManager.navigateTab(tabId, url, false)
+})
+
+ipcMain.handle('tabs:preview-split-drop', (event, zone: SplitDropZone | null) => {
+  if (!validateIpcSender(event.senderFrame)) return { success: false }
+  const validZones = new Set<string>(['regroup', 'left', 'right', 'topLeft', 'bottomLeft', 'topRight', 'bottomRight'])
+  splitDropSurface.preview(typeof zone === 'string' && validZones.has(zone) ? zone : null)
+  return { success: true }
 })
 
 ipcMain.handle('tabs:get-context', async (event, tabId: string) => {
@@ -1427,13 +1943,25 @@ ipcMain.handle('browser:screenshot', async (event) => {
       if (page) return page
     } catch {}
   }
-  // Internal tabs (ron://) have no page view. Capture the window to the left of
-  // the side panel so the frame is the browser the user is looking at.
+  // Internal tabs (ron://) have no page view. Capture the active split pane cell if split,
+  // otherwise capture the window to the left of the side panel.
   if (!mainWindow || mainWindow.isDestroyed()) return ''
   try {
+    const paneCell = tabsManager.activeInternalPaneBounds()
+    if (paneCell && paneCell.width > 0 && paneCell.height > 0) {
+      const image = await mainWindow.webContents.capturePage({
+        x: paneCell.x,
+        y: paneCell.y,
+        width: Math.max(1, paneCell.width),
+        height: Math.max(1, paneCell.height),
+      })
+      return jpegDataUrl(image)
+    }
     const [width, height] = mainWindow.getContentSize()
-    const left = Math.min(Math.ceil(sidebarWidth), Math.max(0, width - 1))
-    const panel = isAgentPanelOpen ? Math.min(agentPanelWidth, Math.max(0, width - left - 1)) : 0
+    const zoom = getShellZoomFactor()
+    const left = Math.min(Math.ceil(sidebarWidth * zoom), Math.max(0, width - 1))
+    const effectiveRightCss = hasExplicitSideInset ? rightSideInset : (isAgentPanelOpen ? agentPanelWidth : 0)
+    const panel = Math.min(Math.ceil(effectiveRightCss * zoom), Math.max(0, width - left - 1))
     const image = await mainWindow.webContents.capturePage({ x: left, y: 0, width: Math.max(1, width - left - panel), height: Math.max(1, height) })
     return jpegDataUrl(image)
   } catch {
@@ -1445,6 +1973,7 @@ ipcMain.handle('browser:set-panel-mode', (event, mode: 'narrow' | 'wide' | 'full
   if (!validateIpcSender(event.senderFrame)) return
   if (!mainWindow) return
 
+  currentPanelMode = mode
   const [windowWidth] = mainWindow.getSize()
   if (mode === 'narrow') {
     agentPanelWidth = 420

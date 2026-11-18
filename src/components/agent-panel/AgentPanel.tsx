@@ -451,7 +451,7 @@ export function AgentConversation({ destination, embedded = false, onChat, hero,
         <Transition.Child as={Fragment}
           enter="transform transition ease-smooth duration-400" enterFrom="translate-x-full" enterTo="translate-x-0"
           leave="transform transition ease-smooth duration-400" leaveFrom="translate-x-0" leaveTo="translate-x-full">
-          <section ref={sectionRef} aria-label={AGENT_LABELS[destination]} className="relative ml-auto h-full max-w-full pointer-events-auto transition-all duration-300 ease-in-out" style={{ width: embedded ? '100%' : panelWidth }}>
+          <section ref={sectionRef} data-agent-panel="true" aria-label={AGENT_LABELS[destination]} className="relative ml-auto h-full max-w-full pointer-events-auto transition-all duration-300 ease-in-out" style={{ width: embedded ? '100%' : panelWidth }}>
             <div className="ron-glass-panel h-full flex flex-col bg-surface-0 dark:bg-surface-900 text-ink dark:text-ink-inverse border-l border-surface-200 dark:border-surface-800 shadow-[-24px_0_48px_-32px_rgb(26_25_23/0.25)]">
               <header className="flex-shrink-0 border-b border-surface-200/80 bg-surface-0 px-3.5 dark:border-surface-800 dark:bg-surface-900">
                 <div className="flex h-[52px] items-center justify-between gap-2">

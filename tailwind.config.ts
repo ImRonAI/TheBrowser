@@ -56,6 +56,7 @@ const config: Config = {
   darkMode: ['variant', ['&:is(.dark *)', '&:is(:where(html.glass) .ron-field)', '&:is(:where(html.glass) .ron-field *)']],
   content: [
     './index.html',
+    './context-surface.html',
     './src/**/*.{ts,tsx,jsx}',
     './src/components/catalyst/**/*.{ts,tsx,jsx}',
     '!./src/**/node_modules/**',

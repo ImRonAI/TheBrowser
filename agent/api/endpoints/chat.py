@@ -157,7 +157,7 @@ in your registry, use them immediately. Otherwise load the browser server once:
 tool_catalog(action="load", name="{server}")
 
 After load, the chrome tab strip is the only browser:
-- {prefix}List_tabs / {prefix}Manage_tabs — same tabs as the UI (list / new / close / select).
+- {prefix}List_tabs / {prefix}Manage_tabs — same tabs as the UI (list / new / close / select, plus `split` / `unsplit` to arrange up to 4 tabs side-by-side in the clear shell via `50-50`, `2x1-left`, `2x1-right`, or `2x2` — never stacked rows — when comparing or cross-referencing pages helps the user).
 - {prefix}browser_navigate — loads the active tab and updates the strip.
 - {prefix}browser_snapshot — bounded text and interactive refs of that tab; selector scopes content, offset pages refs.
 - {prefix}Click_an_element / type / fill — on those refs, not Playwright locators.

@@ -76,6 +76,11 @@ export function ContextTray() {
   }
 
   const askRon = async (targets: ContextItem[]) => {
+    const surface = (window as { contextSurface?: { dispatch?: (action: unknown) => Promise<unknown> } }).contextSurface
+    if (surface?.dispatch) {
+      await surface.dispatch({ type: 'ask-ron-items', itemIds: targets.map((item) => item.id) })
+      return
+    }
     const parts: string[] = []
     let budget = MAX_PROMPT_CHARS
     for (const item of targets) {
@@ -89,15 +94,33 @@ export function ContextTray() {
     yieldToPanel()
   }
 
+  const handleStartRecord = () => {
+    const surface = (window as { contextSurface?: { triggerGesture?: (kind: 'upload' | 'record') => void } }).contextSurface
+    if (surface?.triggerGesture) {
+      surface.triggerGesture('record')
+      return
+    }
+    void startRecording()
+  }
+
+  const handleTriggerUpload = () => {
+    const surface = (window as { contextSurface?: { triggerGesture?: (kind: 'upload' | 'record') => void } }).contextSurface
+    if (surface?.triggerGesture) {
+      surface.triggerGesture('upload')
+      return
+    }
+    fileInput.current?.click()
+  }
+
   return <div className="flex h-full flex-col">
     <div className="flex items-center gap-0.5 px-3 py-2" role="toolbar" aria-label="Add context">
       <button type="button" className={iconButton} title="Screenshot this page" aria-label="Screenshot" onClick={() => void captureScreenshot()} disabled={Boolean(busy)}><CameraIcon className="h-4 w-4" /></button>
       {recordingSince
         ? <button type="button" className={cn(ghostButton, 'gap-1.5 text-red-600 hover:text-red-600 dark:text-red-400 dark:hover:text-red-400')} onClick={() => void stopRecording()}><StopIcon className="h-4 w-4" />Stop {elapsed(recordingSince, now)}</button>
-        : <button type="button" className={iconButton} title="Record screen" aria-label="Record screen" onClick={() => void startRecording()}><VideoCameraIcon className="h-4 w-4" /></button>}
+        : <button type="button" className={iconButton} title="Record screen" aria-label="Record screen" onClick={handleStartRecord}><VideoCameraIcon className="h-4 w-4" /></button>}
       <button type="button" className={cn(iconButton, form === 'link' && 'bg-surface-100 text-ink dark:bg-surface-850 dark:text-ink-inverse')} title="Add a link" aria-label="Link" aria-pressed={form === 'link'} onClick={() => setForm(form === 'link' ? null : 'link')}><LinkIcon className="h-4 w-4" /></button>
       <button type="button" className={cn(iconButton, form === 'note' && 'bg-surface-100 text-ink dark:bg-surface-850 dark:text-ink-inverse')} title="Add a note" aria-label="Note" aria-pressed={form === 'note'} onClick={() => setForm(form === 'note' ? null : 'note')}><PencilSquareIcon className="h-4 w-4" /></button>
-      <button type="button" className={iconButton} title="Upload files" aria-label="Upload" onClick={() => fileInput.current?.click()} disabled={Boolean(busy)}><ArrowUpTrayIcon className="h-4 w-4" /></button>
+      <button type="button" className={iconButton} title="Upload files" aria-label="Upload" onClick={handleTriggerUpload} disabled={Boolean(busy)}><ArrowUpTrayIcon className="h-4 w-4" /></button>
       <input ref={fileInput} type="file" multiple hidden aria-label="Upload files to context" accept="image/*,video/*,.pdf,.txt,.md,.csv,.json"
         onChange={(event) => void upload(event.target.files)} />
     </div>

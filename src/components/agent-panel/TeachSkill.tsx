@@ -7,7 +7,6 @@ import { usePanelAgentStore } from '@/stores/panelAgentStore'
 import { useSkillLibraryStore } from '@/stores/skillLibraryStore'
 import { acquireScreenCapture } from '@/stores/agentPresenceStore'
 import { useVoiceSettingsStore } from '@/stores/voiceSettingsStore'
-import { useAgentUi } from '@/context/AgentUiContext'
 import { micConstraints } from '@/lib/voice-settings'
 import pcmWorkletUrl from '@/lib/bidi-pcm.worklet.js?url'
 import { FRAME_JPEG_QUALITY, MIC_SAMPLE_RATE, bytesToBase64, captureSummary, classifyMediaError, drainPcmChunks, frameSize, pipRect, type CapturePlan, type MediaOutcome } from '@/lib/teaching-media'
@@ -72,7 +71,6 @@ function TeachingWorkspace({ userId, agentId, apiBaseUrl = LIVE_API_BASE_URL, ch
   const [approved, setApproved] = useState(false)
   const [elapsed, setElapsed] = useState(0)
   const [source, setSource] = useState('')
-  const { isPanelOpen } = useAgentUi()
   const panelWidth = usePanelAgentStore((state) => state.panelWidth)
   const panelMode = usePanelAgentStore((state) => state.panelMode)
   const [browserShare, setBrowserShare] = useState(false)
@@ -143,13 +141,11 @@ function TeachingWorkspace({ userId, agentId, apiBaseUrl = LIVE_API_BASE_URL, ch
     const inset = open && !minimized ? panelWidth : 0
     usePanelAgentStore.getState().setTeachingInset(inset)
     if (!open || minimized) return
-    void window.electron?.browser?.setPanelOpen(true)
     void window.electron?.browser?.setPanelMode(panelMode)
     return () => {
       usePanelAgentStore.getState().setTeachingInset(0)
-      void window.electron?.browser?.setPanelOpen(isPanelOpen)
     }
-  }, [open, minimized, isPanelOpen, panelMode, panelWidth])
+  }, [open, minimized, panelMode, panelWidth])
 
   useEffect(() => { setApproved(false) }, [session?.id, session?.review?.revision, session?.review_failure])
   const sharingScreen = capture === 'starting' || capture === 'observing'

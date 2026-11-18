@@ -34,12 +34,19 @@ const materials = new WeakMap<BrowserWindow, WindowMaterial>()
 /**
  * Apply the window-level material for a theme. `dark` decides the opaque window
  * background for Light/Dark/System (System passes the resolved OS appearance).
+ * When `clearSplitShell` is true, native vibrancy + transparent window backing is
+ * also activated so the split-view shell channels remain genuinely clear across all themes.
  */
-export async function applyWindowMaterial(win: BrowserWindow, theme: ThemeName, dark: boolean): Promise<WindowMaterial> {
+export async function applyWindowMaterial(
+  win: BrowserWindow,
+  theme: ThemeName,
+  dark: boolean,
+  clearSplitShell = false,
+): Promise<WindowMaterial> {
   if (win.isDestroyed()) return 'none'
   const isMac = process.platform === 'darwin'
 
-  if (theme !== 'glass') {
+  if (theme !== 'glass' && !clearSplitShell) {
     if (isMac && materials.get(win) === 'vibrancy') win.setVibrancy(null)
     win.setBackgroundColor(OPAQUE_BACKGROUND[dark ? 'dark' : 'light'])
     materials.set(win, 'none')
@@ -53,7 +60,9 @@ export async function applyWindowMaterial(win: BrowserWindow, theme: ThemeName, 
   }
 
   win.setWindowButtonVisibility(true)
-  win.setVibrancy('fullscreen-ui')
-  materials.set(win, 'vibrancy')
+  if (materials.get(win) !== 'vibrancy') {
+    win.setVibrancy('fullscreen-ui')
+    materials.set(win, 'vibrancy')
+  }
   return 'vibrancy'
 }

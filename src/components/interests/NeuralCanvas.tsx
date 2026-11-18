@@ -10,7 +10,7 @@ const CANVAS_WIDTH = 520
 const CANVAS_HEIGHT = 380
 
 export function NeuralCanvas() {
-  const { nodes, connections } = useInterestsStore()
+  const connections = useInterestsStore((state) => state.connections)
   const { theme } = useUserPreferencesStore()
   const [hoveredNode, setHoveredNode] = useState<string | null>(null)
   const [selectedNode, setSelectedNode] = useState<string | null>(null)
@@ -19,8 +19,8 @@ export function NeuralCanvas() {
   const isDark = theme === 'dark' || (theme === 'system' && typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches)
   const isGlass = theme === 'glass'
 
-  // Apply physics simulation
-  useInterestPhysics(CANVAS_WIDTH, CANVAS_HEIGHT)
+  // Apply local 60fps physics simulation (zero store/localStorage/IPC churn)
+  const nodes = useInterestPhysics(CANVAS_WIDTH, CANVAS_HEIGHT)
 
   // Handle node interactions
   const handleNodeHover = useCallback((nodeId: string | null) => {

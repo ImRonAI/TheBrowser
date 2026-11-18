@@ -21,6 +21,7 @@ import { TextAssist, handleAssistKey } from '@/components/shared/TextAssist'
 import { buildSearchRonUrl, looksLikeUrl } from '@/components/chrome/UrlBar'
 import { DESTINATIONS, openDestination } from '@/components/navigation/destinations'
 import { openInternalUrl } from '@/components/board/task-detail/editor/extensions/blocks/workspace'
+import { navigateTabByIdOrActive, useTabPane } from '@/context/TabPaneContext'
 import { ContextPicker } from '@/components/agent-panel/ContextPicker'
 import { ComposerAttachmentTray } from '@/components/agent-panel/PromptAttachments'
 import { useComposerAttachments } from '@/components/agent-panel/useComposerAttachments'
@@ -28,6 +29,7 @@ import { SearchDepthSelector } from '@/components/search/SearchDepthSelector'
 import { useTextAssist } from '@/hooks/useTextAssist'
 import { useSearchStore } from '@/stores/searchStore'
 import { useAuthStore } from '@/stores/authStore'
+import { useTabStore } from '@/stores/tabStore'
 import { articleDraftKey } from '@/stores/articleDraftStore'
 import { useSearchAttachmentsStore } from '@/stores/searchAttachmentsStore'
 import { cn } from '@/utils/cn'
@@ -62,9 +64,9 @@ function Spotlight() {
 }
 
 /** Ren's other environments, one click from home. */
-function EnvironmentDock() {
+function EnvironmentDock({ compact = false }: { compact?: boolean }) {
   return (
-    <nav aria-label="Environments" className="flex items-center gap-0.5 rounded-full border border-surface-200/80 bg-surface-0/60 p-1 backdrop-blur-md dark:border-surface-800 dark:bg-surface-850/50">
+    <nav aria-label="Environments" className="flex flex-wrap items-center justify-center gap-0.5 rounded-full border border-surface-200/80 bg-surface-0/60 p-1 backdrop-blur-md dark:border-surface-800 dark:bg-surface-850/50">
       {DESTINATIONS.filter((destination) => destination.id !== 'home').map(({ id, label, icon: Icon, hint }) => (
         <button
           key={id}
@@ -72,10 +74,13 @@ function EnvironmentDock() {
           onClick={() => openDestination(id)}
           aria-label={label}
           title={`${label}: ${hint}`}
-          className="group flex h-9 items-center gap-2 rounded-full px-3 text-[13px] font-medium text-ink-secondary transition-colors duration-150 ease-out hover:bg-ink/[0.06] hover:text-ink focus-visible:ring-offset-0 dark:text-ink-inverse-secondary dark:hover:bg-ink-inverse/[0.08] dark:hover:text-ink-inverse sm:px-3"
+          className={cn(
+            'group flex items-center gap-2 rounded-full text-[13px] font-medium text-ink-secondary transition-colors duration-150 ease-out hover:bg-ink/[0.06] hover:text-ink focus-visible:ring-offset-0 dark:text-ink-inverse-secondary dark:hover:bg-ink-inverse/[0.08] dark:hover:text-ink-inverse',
+            compact ? 'h-8 px-2.5' : 'h-9 px-3 sm:px-3',
+          )}
         >
           <Icon className="h-4 w-4 shrink-0 transition-colors duration-150 group-hover:text-volt" strokeWidth={1.75} aria-hidden />
-          <span className="hidden md:inline">{label}</span>
+          {!compact && <span className="hidden md:inline">{label}</span>}
         </button>
       ))}
     </nav>
@@ -83,10 +88,11 @@ function EnvironmentDock() {
 }
 
 export function SearchHome() {
+  const { isSplitPane, tabId } = useTabPane()
   const reduced = useReducedMotion()
   const level = useSearchStore((state) => state.level)
   const userId = useAuthStore((state) => state.user?.id || 'default')
-  const attachments = useComposerAttachments(articleDraftKey(userId, 'search', 'home'), userId)
+  const attachments = useComposerAttachments(articleDraftKey(userId, 'search', tabId ? `home-${tabId}` : 'home'), userId)
   const [query, setQuery] = useState('')
   const [focused, setFocused] = useState(false)
   const [sending, setSending] = useState(false)
@@ -98,13 +104,22 @@ export function SearchHome() {
   // Brave Suggest + Spellcheck for queries; an address is not a search phrase.
   const assist = useTextAssist(query, { enabled: focused, count: 8, skip: skipAddresses })
 
-  // Take focus on arrival unless something else (the address bar after ⌘T, a dialog) already has it.
+  // Take focus on arrival unless something else (the address bar after ⌘T, a dialog, or another split pane) already has it.
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
+      if (isSplitPane && useTabStore.getState().activeTabId !== tabId) return
       if (!document.activeElement || document.activeElement === document.body) inputRef.current?.focus()
     })
     return () => cancelAnimationFrame(frame)
-  }, [])
+  }, [isSplitPane, tabId])
+
+  const navigatePane = (targetUrl: string) => {
+    if (isSplitPane && tabId) {
+      navigateTabByIdOrActive(tabId, targetUrl)
+      return
+    }
+    openInternalUrl(targetUrl)
+  }
 
   const submit = async (text: string) => {
     const trimmed = text.trim()
@@ -113,7 +128,7 @@ export function SearchHome() {
     setError('')
     // An address is opened as is; attached context only goes with a search.
     if (looksLikeUrl(trimmed) && !trimmed.startsWith('ron://search') && !attachments.count) {
-      openInternalUrl(trimmed)
+      navigatePane(trimmed)
       setQuery('')
       return
     }
@@ -130,7 +145,7 @@ export function SearchHome() {
         setSending(false)
       }
     }
-    openInternalUrl(buildSearchRonUrl(trimmed, level, contextId))
+    navigatePane(buildSearchRonUrl(trimmed, level, contextId))
     setQuery('')
     if (contextId) attachments.clearContexts()
   }
@@ -147,14 +162,29 @@ export function SearchHome() {
   }
 
   return (
-    <div className="relative flex min-h-full flex-col items-center px-4 pb-6 pt-[13vh] text-ink dark:text-ink-inverse">
+    <div
+      className={cn(
+        'relative flex min-h-full flex-col items-center text-ink dark:text-ink-inverse',
+        isSplitPane ? 'px-3 pb-3.5 pt-4' : 'px-4 pb-6 pt-[13vh]',
+      )}
+    >
       <Spotlight />
 
       <motion.h1 {...rise(0)} className="relative">
-        <RenWordmark className="text-[68px] text-ink sm:text-[92px] dark:text-ink-inverse dark:drop-shadow-[0_0_34px_rgb(225_228_255/0.2)]" />
+        <RenWordmark
+          className={cn(
+            'text-ink dark:text-ink-inverse dark:drop-shadow-[0_0_34px_rgb(225_228_255/0.2)]',
+            isSplitPane ? 'text-[44px]' : 'text-[68px] sm:text-[92px]',
+          )}
+        />
       </motion.h1>
 
-      <motion.form {...rise(0.08)} role="search" onSubmit={onSubmit} className="relative mt-10 w-full max-w-[680px]">
+      <motion.form
+        {...rise(0.08)}
+        role="search"
+        onSubmit={onSubmit}
+        className={cn('relative w-full max-w-[680px]', isSplitPane ? 'mt-4' : 'mt-10')}
+      >
         <div ref={cardRef} className={cn(
           'ron-field rounded-[24px] border transition-[border-color,box-shadow,background-color] duration-150 ease-out',
           focused
@@ -162,7 +192,7 @@ export function SearchHome() {
             : 'border-surface-200 bg-surface-0 shadow-soft hover:border-surface-300 dark:border-surface-800 dark:bg-surface-850/90 dark:shadow-dark-soft dark:hover:border-surface-700',
         )}>
           <ComposerAttachmentTray attachments={attachments} className="px-5 pt-4" />
-          <label className="flex items-center gap-3.5 px-5 pb-2 pt-4">
+          <label className={cn('flex items-center gap-3 px-5 pb-2', isSplitPane ? 'pt-3' : 'pt-4')}>
             <Search className={cn('h-5 w-5 shrink-0 transition-colors duration-150', focused ? 'text-volt' : 'text-ink-muted dark:text-ink-inverse-muted')} strokeWidth={1.75} aria-hidden />
             <span className="sr-only">Search the web or ask Ren</span>
             <input
@@ -173,12 +203,15 @@ export function SearchHome() {
               onFocus={() => setFocused(true)}
               onBlur={() => setFocused(false)}
               onKeyDown={onKeyDown}
-              id="home-search-bar"
+              id={isSplitPane && tabId ? `home-search-bar-${tabId}` : 'home-search-bar'}
               data-testid="home-search-input"
               placeholder="Search the web or ask Ren"
               autoComplete="off"
               spellCheck={false}
-              className="h-10 min-w-0 flex-1 bg-transparent text-[18px] text-ink outline-none placeholder:text-ink-muted focus-visible:ring-0 focus-visible:ring-offset-0 dark:text-ink-inverse dark:placeholder:text-ink-inverse-muted"
+              className={cn(
+                'min-w-0 flex-1 bg-transparent text-ink outline-none placeholder:text-ink-muted focus-visible:ring-0 focus-visible:ring-offset-0 dark:text-ink-inverse dark:placeholder:text-ink-inverse-muted',
+                isSplitPane ? 'h-9 text-[16px]' : 'h-10 text-[18px]',
+              )}
             />
           </label>
           <div className="flex items-center gap-1.5 px-3 pb-3">
@@ -210,12 +243,12 @@ export function SearchHome() {
         {error && <p role="alert" className="mt-3 text-center text-[12.5px] text-red-600 dark:text-red-400">{error}</p>}
       </motion.form>
 
-      <motion.div {...rise(0.16)} className="mt-10 w-full max-w-[680px]">
+      <motion.div {...rise(0.16)} className={cn('w-full max-w-[680px]', isSplitPane ? 'mt-4' : 'mt-10')}>
         <FavoriteLinks variant="dial" />
       </motion.div>
 
-      <motion.div {...rise(0.24)} className="mt-auto pt-12">
-        <EnvironmentDock />
+      <motion.div {...rise(0.24)} className={cn('mt-auto', isSplitPane ? 'pt-4' : 'pt-12')}>
+        <EnvironmentDock compact={isSplitPane} />
       </motion.div>
     </div>
   )

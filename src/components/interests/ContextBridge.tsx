@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { useAuthStore } from '@/stores/authStore'
 import { useContextAgentStore } from '@/stores/contextAgentStore'
 import { useInterestsStore } from '@/stores/interestsStore'
@@ -7,23 +7,40 @@ const FLUSH_CHECK_MS = 20_000
 const RUNS_CHECK_MS = 30_000
 
 /**
- * Feeds the Context Agent: the active tab's page visits (title + URL, never page content), the page
- * context menu's "Add to Ron context" entries, and a timer that sends batched browsing turns. Also keeps the
- * specialists' runs fresh (every 30 s and when the window regains focus), so a finished scheduled run shows as a
- * notification on the orb.
+ * Feeds the Context Agent: displayed tabs' page visits (title + URL, never page content,
+ * deduplicated per tab so clicking between split panes never re-queues duplicate turns),
+ * the page context menu's "Add to Ren context" entries, and periodic run polling.
  */
 export function ContextBridge() {
   const userId = useAuthStore((state) => state.user?.id || 'default')
   const setUser = useContextAgentStore((state) => state.setUser)
+  const observedByTabRef = useRef<Map<string, string>>(new Map())
 
   useEffect(() => { setUser(userId) }, [userId, setUser])
+
+  useEffect(() => {
+    if (useContextAgentStore.getState().pinned) {
+      useInterestsStore.getState().setExpanded(true)
+    }
+  }, [])
 
   useEffect(() => {
     const tabs = window.electron?.tabs
     if (!tabs?.onUpdated) return
     return tabs.onUpdated((list) => {
-      const active = list.find((tab) => tab.isActive)
-      if (active) useContextAgentStore.getState().observeVisit(active.url, active.title)
+      const seen = observedByTabRef.current
+      const liveIds = new Set(list.map((tab) => tab.id))
+      for (const id of seen.keys()) {
+        if (!liveIds.has(id)) seen.delete(id)
+      }
+      for (const tab of list) {
+        const displayed = tab.isDisplayed ?? tab.isActive
+        if (!displayed) continue
+        const sig = `${tab.url}\n${tab.title}`
+        if (seen.get(tab.id) === sig) continue
+        seen.set(tab.id, sig)
+        useContextAgentStore.getState().observeVisit(tab.url, tab.title)
+      }
     })
   }, [])
 

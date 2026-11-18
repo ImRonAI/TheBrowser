@@ -48,6 +48,27 @@ export function SendToIssue({ items, onDone, onCancel }: { items: ContextItem[];
     if (!project) { setError('Choose a project.'); return }
     setSending(true)
     try {
+      const surface = (window as {
+        contextSurface?: {
+          sendToIssue?: (payload: unknown) => Promise<{ message?: string; error?: string }>
+        }
+      }).contextSurface
+      if (surface?.sendToIssue) {
+        if (mode === 'new' && !title.trim()) throw new Error('Give the new issue a title.')
+        if (mode === 'existing' && !issueId) throw new Error('Choose an issue.')
+        const res = await surface.sendToIssue({
+          itemIds: items.map((item) => item.id),
+          projectId: project.id,
+          mode,
+          issueId,
+          title: title.trim(),
+          type,
+        })
+        if (res?.error) throw new Error(res.error)
+        onDone(res?.message || 'Added to issue context.')
+        return
+      }
+
       let issue = issues.find((entry) => entry.id === issueId)
       if (mode === 'new') {
         if (!title.trim()) throw new Error('Give the new issue a title.')

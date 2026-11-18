@@ -13,13 +13,15 @@
  *
  * Route: ron://search?q=<query>&level=<fast|low|medium|high|xhigh>
  */
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { Plus, RotateCw, SearchX } from 'lucide-react'
+import { navigateTabByIdOrActive, useTabPane } from '@/context/TabPaneContext'
 import { useSearchResultsStore } from '@/stores/searchResultsStore'
 import { getDiscoverProfile, useDiscoverProfile, useDiscoverProfileStore } from '@/stores/discoverProfileStore'
 import {
   SEARCH_LEVELS,
+  initialRunState,
   levelLabel,
   mergedImages,
   mergedWebResults,
@@ -58,9 +60,18 @@ const PANEL_KEY: Record<SearchTab, string> = {
 }
 
 export function SearchResultsPage({ query, level, contextId = null, onBack }: SearchResultsPageProps) {
+  const { tabId } = useTabPane()
+  const pageRootRef = useRef<HTMLDivElement>(null)
+  const currentKey = useMemo(() => searchRunKey(query, level, contextId), [query, level, contextId])
   // Read once per id: the saved attachments never change, and a missing id is reported, never sent empty.
   const attachments = useMemo(() => contextId ? searchAttachments(contextId) : [], [contextId])
-  const { run, isRunning, followUpLoading, startedAt, fatal, start, sendFollowUp, refreshPlaces, cancel } = useSearchResultsStore()
+  const { start, sendFollowUp, refreshPlaces, cancel } = useSearchResultsStore()
+  const slot = useSearchResultsStore((state) => state.runsByKey[currentKey])
+  const run = slot?.run ?? initialRunState()
+  const isRunning = slot?.isRunning ?? false
+  const followUpLoading = slot?.followUpLoading ?? false
+  const startedAt = slot?.startedAt ?? null
+  const fatal = slot?.fatal ?? null
   const [activeTab, setActiveTab] = useState<SearchTab>('agent')
   const reduced = useReducedMotion()
   const addContext = useContextAgentStore((state) => state.addContext)
@@ -88,34 +99,37 @@ export function SearchResultsPage({ query, level, contextId = null, onBack }: Se
       await sendFollowUp(message, {
         country: profile.country,
         ...(profile.location ? { location: { location: profile.location } } : {}),
+        key: currentKey,
       })
     },
-    [sendFollowUp],
+    [sendFollowUp, currentKey],
   )
 
-  // The run lives in the store, not the page: coming back to this tab shows it as it is
-  // (finished, or still streaming) instead of searching again. Only a new query or level,
-  // or a run that never got going (fatal), starts one.
-  useEffect(() => {
-    const stored = useSearchResultsStore.getState()
-    if (stored.runKey !== searchRunKey(query, level, contextId) || stored.fatal) fire()
-  }, [fire, query, level, contextId])
+  const handleCancel = useCallback(() => {
+    cancel(currentKey)
+  }, [cancel, currentKey])
 
-  /** Switch tabs from inside a panel and keep keyboard focus on the tab row. */
+  // The run lives in the store, keyed by `currentKey`: coming back to this tab or viewing two
+  // search panes side-by-side keeps each run alive independently instead of searching again.
+  useEffect(() => {
+    const storedSlot = useSearchResultsStore.getState().runsByKey[currentKey]
+    if (!storedSlot || storedSlot.fatal) fire()
+  }, [fire, currentKey])
+
+  /** Switch tabs from inside a panel and keep keyboard focus on this pane's tab row. */
   const openTab = useCallback((tab: SearchTab) => {
     setActiveTab(tab)
-    document.getElementById(lensTabId(tab))?.focus()
+    pageRootRef.current?.querySelector<HTMLElement>(`#${lensTabId(tab)}`)?.focus()
   }, [])
   const openWeb = useCallback(() => openTab('web'), [openTab])
 
   const levelIndex = SEARCH_LEVELS.indexOf(level)
   const deeperLevel: SearchLevel | undefined = levelIndex >= 0 ? SEARCH_LEVELS[levelIndex + 1] : undefined
-  const searchDeeper = deeperLevel && window.electron?.browser?.navigate
+  const searchDeeper = deeperLevel
     ? {
         label: `Search deeper (${levelLabel(deeperLevel)})`,
         onClick: () => {
-          window.electron.browser.navigate(buildSearchRonUrl(query, deeperLevel, contextId))
-            .catch((error: unknown) => console.error('Search deeper failed:', error))
+          navigateTabByIdOrActive(tabId, buildSearchRonUrl(query, deeperLevel, contextId))
         },
       }
     : null
@@ -123,8 +137,8 @@ export function SearchResultsPage({ query, level, contextId = null, onBack }: Se
   const updatePlacesLocation = useCallback((location: string) => {
     useDiscoverProfileStore.getState().setOverride('location', location)
     const profile = getDiscoverProfile()
-    void refreshPlaces(query, { country: profile.country, location: profile.location })
-  }, [query, refreshPlaces])
+    void refreshPlaces(query, { country: profile.country, location: profile.location, key: currentKey })
+  }, [query, refreshPlaces, currentKey])
 
   const hue = tabHue(activeTab)
 
@@ -171,7 +185,7 @@ export function SearchResultsPage({ query, level, contextId = null, onBack }: Se
   }, [run])
 
   return (
-    <div className="relative min-h-full bg-surface-0 dark:bg-surface-900">
+    <div ref={pageRootRef} className="relative min-h-full bg-surface-0 dark:bg-surface-900">
       <SearchBackdrop hue={hue} />
 
       <SearchHeader
@@ -265,7 +279,7 @@ export function SearchResultsPage({ query, level, contextId = null, onBack }: Se
                   hue={hue}
                   onRetry={fire}
                   onFollowUp={handleFollowUp}
-                  onCancel={cancel}
+                  onCancel={handleCancel}
                   followUpLoading={followUpLoading}
                 />
               )}

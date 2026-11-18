@@ -94,6 +94,7 @@ export function ChromeToolbar() {
   }, [])
 
   const handleHome = async () => {
+    useNavigationStore.getState().setActiveTab('home')
     if (typeof window !== 'undefined' && window.electron?.browser) {
       await window.electron.browser.navigate('ron://home')
     }

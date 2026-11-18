@@ -870,8 +870,21 @@
    ============================================ */
 
 /* The browser frame: one surface shared by toolbar, tab strip and sidebar.
-   Opaque in Light/Dark/System; the Glass theme replaces it with a thin veil. */
+   Opaque in Light/Dark/System; the Glass theme replaces it with a thin veil.
+   When split view is active (`data-split-shell="true"`), the shell stage itself stays clear
+   over native vibrancy while toolbar and sidebar preserve their theme backing. */
 .ron-chrome {
+  background-color: hsl(var(--ron-chrome));
+}
+
+html[data-split-shell="true"],
+html[data-split-shell="true"] body,
+html[data-split-shell="true"] .ron-chrome {
+  background: transparent !important;
+}
+
+html:not(.glass)[data-split-shell="true"] .ron-toolbar,
+html:not(.glass)[data-split-shell="true"] .ron-sidebar {
   background-color: hsl(var(--ron-chrome));
 }
 
@@ -972,6 +985,20 @@ html.glass .ron-sidebar > * {
    deliberately not matched. */
 html.glass .ron-content {
   background-color: transparent;
+}
+
+/* Split-view clear pane frames in Glass: thin neutral veils over native vibrancy. */
+html.glass:not(.dark) .ron-split-pane {
+  background-color: rgb(255 255 255 / 0.16);
+}
+html.glass:not(.dark) .ron-split-pane[data-active="true"] {
+  background-color: rgb(255 255 255 / 0.32);
+}
+html.glass.dark .ron-split-pane {
+  background-color: rgb(255 255 255 / 0.03);
+}
+html.glass.dark .ron-split-pane[data-active="true"] {
+  background-color: rgb(255 255 255 / 0.065);
 }
 
 :where(html.glass:not(.dark) .ron-content) :is([class~="bg-surface-0"], [class~="bg-surface-50"], [class~="bg-card"]),
