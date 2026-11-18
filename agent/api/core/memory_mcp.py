@@ -16,6 +16,7 @@ from fastmcp.exceptions import ToolError
 from fastmcp.server.dependencies import get_http_headers
 
 from agent.api.core.dreaming import JOURNAL_DIRECTIVE, JOURNAL_TOOL, Journal, agent_memory, folder
+from agent.api.core.memory import people_store, save_person
 
 server = FastMCP("ren-memory", instructions=JOURNAL_DIRECTIVE.strip())
 
@@ -31,10 +32,23 @@ def _caller() -> tuple[str, str]:
 
 @server.tool
 async def search_memory(query: str) -> list[str]:
-    """Search the user's long-term memory, which all of Ren's agents share, by meaning: who the user is, their
-    preferences, projects and decisions, and what each agent has learned."""
+    """Search the user's long-term memory, which all of Ren's agents share: who the user is, the people in their
+    life, their preferences, projects and decisions, and what each agent has learned."""
     user, agent = _caller()
-    return [entry.content for entry in await agent_memory(user, agent)[0].search(query)]
+    people = [entry.content for entry in await people_store(user).search(query)]
+    brain = [entry.content for entry in await agent_memory(user, agent)[0].search(query)]
+    return [*people, *(item for item in brain if item not in people)]
+
+
+@server.tool
+async def remember_person(name: str, relationship: str = "", contact: str = "",
+                          notes: str = "", applies_to: str = "") -> str:
+    """Remember or update a person in the user's life: friendship/relationship, contact info, notes, and what
+    interests, projects or plans they connect to."""
+    user, _ = _caller()
+    clean, _ = await save_person(user, name=name, relationship=relationship, contact=contact,
+                                 notes=notes, applies_to=applies_to)
+    return f"Remembered {clean}."
 
 
 @server.tool(description=JOURNAL_TOOL)

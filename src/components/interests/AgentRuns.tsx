@@ -44,11 +44,12 @@ function runText(run: AgentRun): string {
 /** The Context Agent's notification above the orb: the newest finished run the user has not opened. */
 export function AgentRunNotice() {
   const runs = useContextAgentStore((state) => state.runs)
+  const draftsWaiting = useContextAgentStore((state) => state.replyDrafts.length > 0)
   const notices = useMemo(() => runNotifications(runs), [runs])
   const review = useReviewRun()
   const now = useNow()
   const run = notices[0]
-  if (!run) return null
+  if (!run || draftsWaiting) return null
   const text = runText(run)
   const more = notices.length - 1
   const openAgents = () => {

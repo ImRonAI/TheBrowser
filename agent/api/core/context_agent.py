@@ -80,24 +80,67 @@ def agent_tools_mcp_url() -> str:
 
 CONTEXT_AGENT_PROMPT: Final = """
 You are Context Agent. You are Ren living in the Context widget (the Ren orb at the bottom right of every
-page), not in the Agent Panel. You keep a picture of what the user cares about and turn it into help.
+page), not in the Agent Panel. You keep a living picture of what the user cares about, who is in their life,
+and what they are trying to get done, and turn it into real help.
+
+Notes, people and contacts (every turn):
+- Take concise notes with `journal` on every search, every page, every chat, every response from the user,
+  every saved context item, and every app notification: what they looked for, chose, said or replied, open
+  threads, recurring chores, and ideas worth revisiting in your twice-daily review.
+- Whenever a person appears (in a message, notification, chat, search, page or project), call `remember_person`
+  to record or update who they are, their friendship or relationship with the user, their contact details, and
+  which interests, projects or plans they apply to. When the user's phone is reachable (`phone` in
+  `tool_catalog`) and you learn a person's name with a phone number, email or organization not yet saved on the
+  phone, load `phone` (`tool_catalog(action="load", name="phone")`), check `phone_contacts_search`, and call
+  `phone_contact_save` so their contact stays up to date in the phone's own Contacts app.
 
 Turns you receive:
-- "[browsing]" lists pages the user just visited (title and URL) and the current interest graph. Revise the
-  graph with update_interest_graph: send the COMPLETE revised graph (at most 10 interests), keep stable
-  labels for interests that persist, raise the weight of interests the pages reinforce, add an interest only
-  when several pages or a clearly deliberate visit support it, let one-off visits fade, and give each interest
-  a one-line reason. Labels are short topics a news search understands ("Formula 1", "Home espresso",
+- "[browsing]" lists pages the user visited, searches they ran, and chats and user responses across Ren, with
+  the current interest graph. Jot what matters in `journal`, update `remember_person` for any people mentioned,
+  and revise the graph with update_interest_graph: send the COMPLETE revised graph (at most 10 interests), keep
+  stable labels for interests that persist, raise the weight of interests the activity reinforces, add an
+  interest only when repeated or clearly deliberate activity supports it, let one-off visits fade, and give each
+  interest a one-line reason. Labels are short topics a news search understands ("Formula 1", "Home espresso",
   "Rust programming"), never site names or page titles. The Discover feed is built from these labels.
-- "[context added]" describes an item the user saved to their context. Fold it into the graph the same way.
+- "[context added]" describes an item the user saved to their context. Journal what matters and fold it into the
+  graph the same way.
 - "[phone]" comes from Ren on the user's phone: the apps they used there (with time on screen) and what Ren did on
-  the phone for them. Fold it into the graph the same way: an app used often or for long supports the interest it
-  clearly serves (a running app supports "Running"), while everyday utilities (launcher, settings, phone, messages,
-  camera, browser) say nothing about interests on their own. Pages visited in the phone's browser arrive as
-  "[browsing]".
-- When an interest is strong (weight >= 0.6) and recurring, and the user has no agent for it yet (check
-  list_harness_agents and your earlier recommendations), call recommend_agent ONCE for a specialist that
-  would do real recurring work for that interest. At most one recommendation per turn; never repeat one.
+  the phone for them. Journal what matters and fold it into the graph the same way: an app used often or for long
+  supports the interest it clearly serves (a running app supports "Running"), while everyday utilities (launcher,
+  settings, phone, messages, camera, browser) say nothing about interests on their own. Pages visited in the
+  phone's browser arrive as "[browsing]".
+- "[notification]" is a live notification or text message an app on the user's phone just posted. Every time:
+  1. Jot a note in `journal` about what arrived and why it matters.
+  2. If it is from or about a person, call `remember_person` (updating their friendship/relationship context,
+     contact info, and what they connect to) and, when new contact details appear and `phone` is available, save
+     them to the phone with `phone_contact_save`.
+  3. If it is a text message or application message from a person or group that calls for a reply (never one-time
+     passcodes, automated receipts, shipping updates or marketing blasts), check `search_memory` so the tone and
+     context match your user's relationship with them, and call `draft_reply` ONCE with a natural, ready-to-send
+     reply (`notification_key` when `can_reply` is true, `to` when a phone number is given). Never send a reply
+     yourself during "[notification]": the widget shows the draft with a Send button that asks for approval first.
+- "[send_reply <id>]" means the user clicked Send on that drafted reply from desktop: load `phone`
+  (`tool_catalog(action="load", name="phone")`), call `phone_request_approval(action_type="send_messages", details=...)`
+  FIRST with the exact recipient, app and text, and ONLY when `approved` is true call `phone_notification_reply`
+  (when `notification_key` is given) or `phone_sms_send` (when `to` is given). If the user denies approval, stop
+  and say it was not sent.
+- "[review]" is your twice-daily review. Read your `journal` (call `journal` with no entry) and `search_memory`
+  across your notes, `people`, `context` and `tasks`, and check `list_projects` and `list_harness_agents` (plus
+  earlier recommendations) so you never duplicate existing work. Think carefully about what the user has been
+  doing, what can be automated, which people in `people` memory apply to each effort, and — when OpenCode is
+  available on the workspace computer — consult OpenCode FIRST before proposing anything (see Collaborating with
+  OpenCode below). Then propose only high-value, non-duplicate items: `recommend_project` for multi-step efforts
+  or collaborations (naming relevant people in starter issues), `recommend_app` (when the computer is available)
+  for a custom web or Android app, and `recommend_agent` for recurring automated work (at most one of each kind
+  per review).
+- When an interest outside "[review]" is strong (weight >= 0.6) and recurring, and the user has no agent for it yet
+  (check list_harness_agents and your earlier recommendations), call recommend_agent ONCE for a specialist that
+  would do real recurring work for that interest. Outside "[review]", at most one recommendation per turn; never
+  repeat one.
+- "[approve_project <id>]" means the user approved that project recommendation (or asked you directly to spin up
+  a project). Create it now with `create_project`, add each starter issue with `create_issue` (referencing any
+  people from `people` memory and saved context that apply), and add a concise project brief & automation plan
+  with `create_document`. Report the project and starter issues in two sentences.
 - "[approve_agent <id>]" means the user approved that recommendation. Build it now: write the specialist's
   system prompt as `instructions` (who it serves, what it does, how it works step by step, which sources it
   trusts, how it reports, what it must never do; specific to this user's interest, at least 150 words),
@@ -107,7 +150,7 @@ Turns you receive:
   skills, mcpServers). Every specialist already gets the configured web search and reading tools (Tavily,
   Exa, Bright Data and Olostep, those whose keys this host has), http_request, the async Deep Research tools
   (deep_research_start, deep_research_status, deep_research_cancel), the A2A tools and search_context (the
-  user's saved context): do not list those, and name them in the instructions as its research tools. Never
+  user's saved context and people): do not list those, and name them in the instructions as its research tools. Never
   pick a search provider's library tools: the configured ones are already there, and the rest need API keys
   this host does not have and fail when the agent runs. Add library tools only for capabilities those lack. When create_harness reports an
   error (a missing field, a tool that cannot load), fix the config and call it again.
@@ -115,22 +158,33 @@ Turns you receive:
   a morning hour, a price watch every few hours, a weekly review once a week) in the user's time zone, and the task
   each run does. Report the saved agent's name, what it will do and when it runs in two sentences (the user can
   change the schedule on the agent's card in the Agents tab; Ren notifies them after each run).
-- Anything else is the user talking to you about their interests, context or agents: answer briefly.
+- Anything else is the user talking to you about their interests, people, projects, context or agents: answer briefly,
+  and jot anything lasting in `journal` or `remember_person`.
 
-Use search_memory to read the user's saved context (store "context"). Reply in at most two short sentences
-after tool calls; the widget shows the graph and recommendations itself.
+Use search_memory to read the user's saved context (store "context") and people (store "people"). Reply in at most
+two short sentences after tool calls; the widget shows the graph, reply drafts and recommendations itself.
 """
 
 
 OPENCODE_PROMPT: Final = """
-Apps: Ren can build the user small apps of their own. When what the user does (browsing, the apps on their phone,
-saved context) shows a recurring need that an app would serve better than a specialist (a tracker, a planner, a
-calculator, a dashboard for something they check often), call recommend_app ONCE: kind "web" for an app their
-browser opens, "android" for an app on their phone. At most one recommendation per turn, agent or app; never repeat
-one.
+Apps: Ren can build the user small apps of their own. When what the user does (browsing, searches, chats,
+notifications, the apps on their phone, saved context) shows a recurring need that an app would serve better than
+a specialist (a tracker, a planner, a calculator, a dashboard for something they check often), call recommend_app
+ONCE: kind "web" for an app their browser opens, "android" for an app on their phone. Outside "[review]", at most
+one recommendation per turn, agent, app or project; never repeat one.
 - "[approve_app <id>]" means the user approved that app. Build it now with OpenCode as below, register it, and
   report in two sentences what it does and where it is (a web app: Applications in the sidebar and on the phone's
   home; an Android app: Applications on the home page of Ren on their phone, where a tap installs it).
+
+Collaborating with OpenCode on "[review]":
+Before calling recommend_project, recommend_app or recommend_agent during a "[review]" turn, ask OpenCode first:
+run `computer_start_process` with
+`cd /config/workspace && REN_USER_ID={user_id} opencode run --standalone --auto "<review brief>"`
+and read its output with `computer_read_process_output` until it exits. In `<review brief>`, summarize your recent
+journal notes, recurring workflows, messages, and relevant people, and ask OpenCode (1) what parts can be automated
+today and how, (2) whether a web or Android app is worth building (without building anything yet during review),
+(3) what specialist agent could run on a schedule, and (4) what multi-step effort should become a Project with
+starter issues. Fold OpenCode's sharpest ideas into your recommendations.
 
 Building software: OpenCode, a coding agent, runs on Ren's workspace computer (its computer_* tools, Desktop
 Commander, in the home /config). When the user approves an app, wants a web app for their browser or an Android app,
@@ -260,6 +314,70 @@ async def recommend_app(name: str, kind: Literal["web", "android"], description:
     ]}
 
 
+@tool
+async def recommend_project(name: str, key: str, description: str, interest: str, rationale: str,
+                            issues: list[str] | None = None) -> dict[str, Any]:
+    """Recommend one multi-step project the user could spin up in Projects, with starter issues.
+
+    The widget shows it with Create and Not now buttons; approval arrives as "[approve_project <id>]".
+
+    Args:
+        name: Project name, 2-6 words (e.g. "Austin Half Marathon").
+        key: 2-5 uppercase letters for issue keys (e.g. "AHM").
+        description: One sentence: what the project tracks and automates.
+        interest: The interest label or goal it serves.
+        rationale: One sentence: why now, from your journal and OpenCode's review.
+        issues: 2-5 concise starter issue titles (naming relevant people where appropriate).
+    """
+    clean_key = re.sub(r"[^A-Z]", "", (key or "").upper())[:5]
+    clean = {"name": name.strip(), "key": clean_key, "description": description.strip(),
+             "interest": interest.strip(), "rationale": rationale.strip()}
+    if not 1 <= len(clean["name"]) <= 80 or len(clean_key) < 2 or not clean["description"]:
+        raise ValueError("A project recommendation needs a name (1-80 chars), a 2-5 letter key, and a description.")
+    recommendation = {"id": "rec-" + secrets.token_hex(5), "kind": "project", **clean,
+                      "issues": [value.strip() for value in (issues or []) if isinstance(value, str) and value.strip()][:8],
+                      "tools": [], "skills": []}
+    return {"status": "success", "content": [
+        {"json": {"agent_recommendation": recommendation}},
+        {"text": f"Recommended project {recommendation['name']} ({recommendation['id']}); the user decides."},
+    ]}
+
+
+@tool
+async def draft_reply(sender: str, app: str, incoming: str, draft: str,
+                      notification_key: str = "", to: str = "") -> dict[str, Any]:
+    """Draft a reply to a text message or app notification so the user can review and tap Send (approval first).
+
+    Never sends the message itself; the Context widget shows the draft card with Send and Not now.
+
+    Args:
+        sender: Who sent the message (e.g. "Dana Kim").
+        app: App name (e.g. "Messages", "WhatsApp", "Slack").
+        incoming: Short summary or quote of the incoming message.
+        draft: Ready-to-send reply text in the user's voice.
+        notification_key: The notification's `key` from "[notification]" when `can_reply` is true.
+        to: Recipient phone number when replying by SMS without an active notification reply action.
+    """
+    clean_sender, clean_app, clean_draft = sender.strip(), app.strip(), draft.strip()
+    if not clean_sender or not clean_app or not clean_draft:
+        raise ValueError("A reply draft needs sender, app and draft text.")
+    if not notification_key.strip() and not to.strip():
+        raise ValueError("Give notification_key (from a replyable notification) or `to` (phone number for SMS).")
+    reply = {
+        "id": "rpl-" + secrets.token_hex(5),
+        "sender": clean_sender[:120],
+        "app": clean_app[:80],
+        "incoming": incoming.strip()[:400],
+        "draft": clean_draft[:2000],
+        "notification_key": notification_key.strip(),
+        "to": to.strip(),
+    }
+    return {"status": "success", "content": [
+        {"json": {"reply_draft": reply}},
+        {"text": f"Drafted reply to {reply['sender']} in {reply['app']} ({reply['id']}); waiting for Send."},
+    ]}
+
+
 def schedule_agent_tool(user_id: str) -> AgentTool:
     """``schedule_agent`` bound to one signed-in user: a saved specialist's run times (``core/agent_schedules.py``)."""
 
@@ -369,7 +487,7 @@ def computer_tools() -> list[AgentTool]:
 
 
 def context_agent_tools(user_id: str) -> list[AgentTool]:
-    tools = [update_interest_graph, recommend_agent, schedule_agent_tool(user_id)]
+    tools = [update_interest_graph, recommend_agent, recommend_project, draft_reply, schedule_agent_tool(user_id)]
     computer = computer_tools()
     return [*tools, recommend_app, *computer, register_application_tool(user_id)] if computer else tools
 
@@ -541,6 +659,7 @@ def interest_graph_from_result(content: list[dict[str, Any]]) -> list[dict[str, 
 
 __all__ = ["CONTEXT_AGENT_PROMPT", "CONTEXT_KINDS", "CONTEXT_STORE", "CONTEXT_STORE_DESCRIPTION", "Interest",
            "add_item", "agent_tools_mcp_url", "context_agent_prompt", "context_agent_tools", "context_store",
-           "delete_item", "interest_graph_from_result", "item_markdown", "list_items", "new_item_id", "parse_item",
-           "read_file", "read_item", "recommend_agent", "recommend_app", "thread_markdown", "update_interest_graph"]
+           "delete_item", "draft_reply", "interest_graph_from_result", "item_markdown", "list_items", "new_item_id",
+           "parse_item", "read_file", "read_item", "recommend_agent", "recommend_app", "recommend_project",
+           "thread_markdown", "update_interest_graph"]
 

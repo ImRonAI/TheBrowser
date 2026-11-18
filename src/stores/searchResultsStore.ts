@@ -23,6 +23,7 @@ import {
 } from '@/lib/search-api'
 import type { PromptAttachment } from '@/lib/prompt-attachments'
 import { useAuthStore } from '@/stores/authStore'
+import { useContextAgentStore } from '@/stores/contextAgentStore'
 
 export interface SearchLocationHint {
   location?: string
@@ -88,7 +89,10 @@ export const useSearchResultsStore = create<SearchResultsState>()((set, get) => 
       next.signal,
     )
       .then(() => {
-        if (controller === next && !next.signal.aborted) set({ isRunning: false, followUpLoading: false })
+        if (controller === next && !next.signal.aborted) {
+          set({ isRunning: false, followUpLoading: false })
+          useContextAgentStore.getState().observeSearch(q, get().run.agent.text)
+        }
       })
       .catch((error: unknown) => {
         if (next.signal.aborted) return
@@ -138,6 +142,7 @@ export const useSearchResultsStore = create<SearchResultsState>()((set, get) => 
       )
       if (controller === next && !next.signal.aborted) {
         set({ isRunning: false, followUpLoading: false })
+        useContextAgentStore.getState().observeSearch(trimmed, get().run.agent.text)
       }
     } catch (error: unknown) {
       if (next.signal.aborted) return

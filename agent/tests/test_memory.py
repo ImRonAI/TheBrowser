@@ -77,18 +77,18 @@ def _first_user_text(messages: list[dict[str, Any]]) -> str:
 def test_stores_are_native_file_stores_per_category_tasks_last() -> None:
     config = mem.memory_manager_config("u1")
     names = [store.name for store in config["stores"]]
-    assert names == ["facts", "remember", "feedback", "context", "tasks", "brain", "journal/panel"]
-    assert all(type(store) is FileMemoryStore for store in config["stores"][:6])
+    assert names == ["facts", "remember", "people", "feedback", "context", "tasks", "brain", "journal/panel"]
+    assert all(type(store) is FileMemoryStore for store in config["stores"][:7])
     # Nothing is distilled during a conversation: only the journal takes each turn, for the dream.
     assert [store.name for store in config["stores"] if store.extraction] == ["journal/panel"]
-    # The Context widget fills `context`; add_memory never writes it.
+    # The Context widget fills `context` and `remember_person` fills `people`; add_memory never writes either.
     assert config["add_tool_config"] == {"stores": ["facts", "remember", "feedback", "tasks"]}
     assert set(config["injection"]) == {"format"}  # SDK default trigger (userTurn), query and size
 
 
 def test_project_and_issue_stores_attach_only_when_scoped() -> None:
     names = [s.name for s in mem.user_stores("u1", mem.MemoryScope(project_id="p_1", issue_id="i-2"))]
-    assert names == ["facts", "remember", "feedback", "project-p_1", "issue-i-2", "context", "tasks"]
+    assert names == ["facts", "remember", "people", "feedback", "project-p_1", "issue-i-2", "context", "tasks"]
     with pytest.raises(ValueError):
         mem.user_stores("u1", mem.MemoryScope(project_id="../x"))
 
@@ -108,7 +108,53 @@ def test_users_are_isolated_and_chat_and_live_share_the_same_files() -> None:
 
 
 def test_live_tools_are_the_native_search_and_add_plus_the_journal() -> None:
-    assert [tool.tool_name for tool in mem.live_memory_tools("u1")] == ["search_memory", "add_memory", "journal"]
+    assert [tool.tool_name for tool in mem.live_memory_tools("u1")] == [
+        "search_memory", "add_memory", "journal", "remember_person"
+    ]
+
+
+def test_remember_person_merges_by_heading_and_is_injected_and_shared_over_mcp() -> None:
+    import httpx
+    from fastmcp import Client
+    from fastmcp.client.transports import StreamableHttpTransport
+
+    from agent.api.core import memory_mcp
+
+    async def run() -> None:
+        tool = mem.remember_person_tool("u1")
+        first = await tool(name="Dana Kim", relationship="Close friend", contact="+1 801-555-0100")  # type: ignore[operator]
+        assert first["content"][0]["json"]["person"] == {"name": "Dana Kim", "key": "dana-kim.md"}
+        await tool(name="Dana Kim", notes="Training for Austin half marathon", applies_to="Running, Austin trip")  # type: ignore[operator]
+        found = await mem.people_store("u1").search("Dana marathon")
+        assert len(found) == 1
+        assert "- relationship: Close friend" in found[0].content
+        assert "- contact: +1 801-555-0100" in found[0].content
+        assert "- applies to: Running, Austin trip" in found[0].content
+
+        # MemoryManager injects people entries on user turns automatically.
+        model = Scripted()
+        agent = Agent(model=model, memory_manager=mem.memory_manager_config("u1"), callback_handler=None)
+        await agent.invoke_async("Plan a Saturday run with Dana")
+        sent = _first_user_text(model.seen[0])
+        assert '<entry source="people">' in sent and "Dana Kim" in sent
+
+        # Outside agents (OpenCode, ElevenLabs) read and write the same people store over /memory/mcp.
+        app = memory_mcp.server.http_app(path="/mcp")
+        headers = {"X-Ren-User": "u1", "X-Ren-Agent": "opencode"}
+
+        def factory(headers: dict[str, str] | None = None, timeout: httpx.Timeout | None = None,
+                    auth: httpx.Auth | None = None, **_: Any) -> httpx.AsyncClient:
+            return httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://ren", headers=headers,
+                                     timeout=timeout, auth=auth)
+
+        async with app.router.lifespan_context(app):
+            async with Client(StreamableHttpTransport("http://ren/mcp", headers=headers, httpx_client_factory=factory)) as mcp:
+                saved = await mcp.call_tool("remember_person", {"name": "Sam Patel", "relationship": "Co-founder", "applies_to": "Launch"})
+                assert saved.data == "Remembered Sam Patel."
+                hits = (await mcp.call_tool("search_memory", {"query": "Sam co-founder"})).data
+                assert any("Sam Patel" in entry for entry in hits)
+
+    asyncio.run(run())
 
 
 def test_add_memory_writes_the_store_the_model_names() -> None:

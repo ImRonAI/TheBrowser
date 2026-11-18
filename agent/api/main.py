@@ -124,7 +124,7 @@ async def lifespan(app: FastAPI):
         async with skills_mcp_app.lifespan(app), ren_mcp_app.lifespan(app), memory_mcp_app.lifespan(app):
             # Joined to Ren's hub (REN_HUB_URL), ren desktop serves its MCP server there too, so the phone and the
             # agents outside this machine can reach it.
-            hub = ren_mcp.hub_url()
+            hub = ren_mcp.hub_url() if os.getenv("REN_HUB_ATTACH", "1") != "0" else None
             link = asyncio.create_task(ren_mcp.attach_to_hub(ren_mcp_server, hub, os.getenv("REN_HUB_TOKEN", ""))) if hub else None
             try:
                 yield
