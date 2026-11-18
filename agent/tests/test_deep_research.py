@@ -512,3 +512,126 @@ async def test_a_run_saved_before_the_levels_is_listed_and_opened(isolated: None
         assert [(run["depth"], run["document_id"]) for run in listed.json()["runs"]] == [("medium", None)]
         opened = await client.get("/deep-research/runs/dr-legacy", params={"user_id": "u1"})
         assert opened.status_code == 200 and opened.json()["depth"] == "medium"
+
+
+class FailingResearcherModel(Model):
+    """Fails immediately in ``Researcher`` so ``research_swarm`` ends ``FAILED``."""
+
+    def __init__(self) -> None:
+        self.roles: list[str] = []
+
+    def update_config(self, **model_config: Any) -> None:
+        del model_config
+
+    def get_config(self) -> dict[str, Any]:
+        return {"model_id": "failing"}
+
+    async def structured_output(
+        self, output_model: Any, prompt: Any, system_prompt: Any = None, **kwargs: Any
+    ) -> AsyncGenerator[dict[str, Any], None]:
+        raise NotImplementedError
+        yield {}
+
+    async def stream(
+        self, messages: Any, tool_specs: list[Any] | None = None, system_prompt: str | None = None, **kwargs: Any
+    ) -> AsyncIterator[StreamEvent]:
+        del messages, tool_specs
+        role = _ROLE_RE.search(system_prompt or "")
+        if role:
+            self.roles.append(role.group(1))
+        raise RuntimeError("NIM container stalled")
+        yield {}
+
+
+@pytest.mark.asyncio
+async def test_a_failed_swarm_stops_the_outer_graph_and_surfaces_its_node_exception(
+    isolated: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    model = FailingResearcherModel()
+    monkeypatch.setattr(deep_research, "configured_providers", lambda: ["nim"])
+    monkeypatch.setattr(deep_research, "build_model", lambda *args, **kwargs: model)
+    monkeypatch.setattr(deep_research, "resolve_selection", lambda *args: ("nim", "minimaxai/minimax-m3.1-flash"))
+
+    meta = await deep_research.start_run(user_id="u1", query="Coachella Valley population health")
+    run = await _wait_until_done("u1", meta["session_id"])
+    assert run["status"] == "failed"
+    assert run["error"] == "NIM container stalled"
+    assert model.roles == ["Researcher"]
+    started = [
+        event["node_id"]
+        for event in _inner_events(run["events"])  # type: ignore[arg-type]
+        if event.get("type") == "multiagent_node_start"
+    ]
+    assert started == ["research_swarm", "researcher"]
+
+
+class FlakyTimeoutModel(ScriptedModel):
+    """Fails ``fail_times`` calls with an ``httpx.ReadTimeout``-chained ``RuntimeError`` (matching ``RonNIMModel``)."""
+
+    def __init__(self, fail_times: int) -> None:
+        super().__init__()
+        self.remaining_failures = fail_times
+        self.attempts = 0
+
+    async def stream(
+        self, messages: Any, tool_specs: list[Any] | None = None, system_prompt: str | None = None, **kwargs: Any
+    ) -> AsyncIterator[StreamEvent]:
+        self.attempts += 1
+        if self.remaining_failures > 0:
+            self.remaining_failures -= 1
+            raise RuntimeError("NVIDIA NIM stream went silent") from httpx.ReadTimeout("timed out")
+        async for event in super().stream(messages, tool_specs=tool_specs, system_prompt=system_prompt, **kwargs):
+            yield event
+
+
+@pytest.mark.asyncio
+async def test_transient_timeout_retries_and_model_router_fails_over_across_formation_and_subagents(
+    isolated: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    real_sleep = asyncio.sleep
+
+    async def fast_sleep(_delay: float) -> None:
+        await real_sleep(0)
+
+    monkeypatch.setattr("strands.event_loop._retry.asyncio.sleep", fast_sleep)
+
+    # 1. Single-provider transient timeout recovers in place via TimeoutRetryStrategy.
+    flaky = FlakyTimeoutModel(fail_times=1)
+    monkeypatch.setattr(deep_research, "configured_providers", lambda: ["nim"])
+    monkeypatch.setattr(deep_research, "build_model", lambda *args, **kwargs: flaky)
+    monkeypatch.setattr(deep_research, "resolve_selection", lambda *args: ("nim", "minimaxai/minimax-m3.1-flash"))
+    meta_retry = await deep_research.start_run(user_id="u1", query="Retry test")
+    run_retry = await _wait_until_done("u1", meta_retry["session_id"])
+    assert run_retry["status"] == "completed", run_retry["error"]
+    assert flaky.attempts > 19
+
+    # 2. Persistent NIM failure fails over to Mistral across both formation agents and subagent children,
+    #    and NIM receives RON_DEEP_RESEARCH_NIM_READ_TIMEOUT while Mistral keeps its default (None).
+    dead_nim = FlakyTimeoutModel(fail_times=10_000)
+    healthy_mistral = ScriptedModel()
+    timeouts: dict[str, float | None] = {}
+
+    def fake_build_model(
+        provider: str, model_id: str, reasoning_effort: str | None = None, *, hosted_tools: bool = True,
+        read_timeout: float | None = None,
+    ) -> Model:
+        assert hosted_tools is False
+        timeouts[provider] = read_timeout
+        return dead_nim if provider == "nim" else healthy_mistral
+
+    monkeypatch.setattr(deep_research, "configured_providers", lambda: ["nim", "perplexity", "mistral"])
+    monkeypatch.setattr(deep_research, "build_model", fake_build_model)
+    monkeypatch.setattr(deep_research, "resolve_selection", lambda *args: ("nim", "minimaxai/minimax-m3.1-flash"))
+
+    router = deep_research.build_research_model("nim", "minimaxai/minimax-m3.1-flash")
+    assert [candidate.name for candidate in router.candidates] == [
+        "nim:minimaxai/minimax-m3.1-flash",
+        "mistral:mistral-large-latest",
+    ]
+    assert timeouts == {"nim": app_config.RON_DEEP_RESEARCH_NIM_READ_TIMEOUT, "mistral": None}
+
+    meta_failover = await deep_research.start_run(user_id="u1", query="Failover test")
+    run_failover = await _wait_until_done("u1", meta_failover["session_id"])
+    assert run_failover["status"] == "completed", run_failover["error"]
+    assert len(healthy_mistral.roles) == 19
+    assert dead_nim.attempts >= 2

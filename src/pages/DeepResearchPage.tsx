@@ -31,6 +31,7 @@ export function DeepResearchPage({ sessionId = null }: { sessionId?: string | nu
   const userId = useResearchUserId()
   const {
     available,
+    defaultSelection,
     depths,
     preferredDepth,
     preferredModel,
@@ -172,6 +173,7 @@ export function DeepResearchPage({ sessionId = null }: { sessionId?: string | nu
               depth={preferredDepth}
               depths={depths}
               preferredModel={preferredModel}
+              defaultSelection={defaultSelection}
               starting={starting}
               available={available}
               error={error}

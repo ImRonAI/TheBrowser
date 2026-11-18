@@ -350,6 +350,8 @@ RON_DEEP_RESEARCH_MODEL: str | None = os.getenv("RON_DEEP_RESEARCH_MODEL", "").s
 RON_DEEP_RESEARCH_EXECUTION_TIMEOUT: float = float(os.getenv("RON_DEEP_RESEARCH_EXECUTION_TIMEOUT", "10800.0"))
 #: One agent's budget (seconds) for one turn inside a Deep Research formation, its sub-agents included.
 RON_DEEP_RESEARCH_NODE_TIMEOUT: float = float(os.getenv("RON_DEEP_RESEARCH_NODE_TIMEOUT", "3600.0"))
+#: Seconds a NIM chat-completions stream in Deep Research may go silent before failing over (`0` = unbounded).
+RON_DEEP_RESEARCH_NIM_READ_TIMEOUT: float = float(os.getenv("RON_DEEP_RESEARCH_NIM_READ_TIMEOUT", "120.0"))
 #: Per-run Deep Research artifacts directory (`report.pdf`, `slides.md`, `slides/index.html`, `slides.pdf`).
 RON_DEEP_RESEARCH_ARTIFACTS_DIR: Path = Path(
     os.getenv("RON_DEEP_RESEARCH_ARTIFACTS_DIR", "").strip()

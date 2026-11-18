@@ -28,7 +28,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
-from collections.abc import AsyncIterator, Mapping
+from collections.abc import AsyncIterator, Callable, Mapping
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 import html
@@ -46,10 +46,11 @@ import uuid
 from PIL import Image
 from strands import Agent
 from strands.memory import MemoryManager
-from strands.models import Model
+from strands.models import Model, ModelRouter
+from strands.models.routing import FallbackStrategy, RoutingCandidate
 from strands.multiagent import GraphBuilder, Swarm
 from strands.multiagent.base import MultiAgentResult, NodeResult, Status
-from strands.multiagent.graph import Graph
+from strands.multiagent.graph import Graph, GraphState
 from strands.hooks import BeforeModelCallEvent
 from strands.injection.types import InjectionContext
 from strands.plugins import Plugin
@@ -65,9 +66,12 @@ from agent.api.core.brave_tools import brave_tools
 from agent.api.core.dreaming import JOURNAL_DIRECTIVE, agent_memory
 from agent.api.core.media_understanding import EMBED_TABS_MARKDOWN, markdown_to_html
 from agent.api.core.panel_agent import (
+    DEFAULT_PROVIDER,
     PROVIDERS,
     ProviderName,
+    TimeoutRetryStrategy,
     build_model,
+    configured_providers,
     default_selection,
     infer_provider,
     provider_default_model,
@@ -673,7 +677,43 @@ def _skills() -> dict[str, Skill]:
     return {skill.name: skill for skill in Skill.from_directory(DEEP_RESEARCH_SKILLS_DIR)}
 
 
-def build_deep_research_graph(*, session_id: str, user_id: str, model: Model, depth: ResearchDepth) -> Graph:
+def _read_timeout(provider: ProviderName) -> float | None:
+    return app_config.RON_DEEP_RESEARCH_NIM_READ_TIMEOUT if provider == "nim" else None
+
+
+def build_research_model(
+    provider: ProviderName, model_id: str, reasoning_effort: str | None = None
+) -> ModelRouter:
+    """Native ``ModelRouter(FallbackStrategy)``: the chosen model first, then configured native chat defaults."""
+    primary = build_model(
+        provider, model_id, reasoning_effort, hosted_tools=False, read_timeout=_read_timeout(provider)
+    )
+    candidates = [RoutingCandidate(primary, name=f"{provider}:{model_id}")]
+    seen_ids = {id(primary)}
+    ready: tuple[ProviderName, ...] = tuple(name for name in configured_providers() if name != "perplexity")
+    for other in sorted(ready, key=lambda name: name != DEFAULT_PROVIDER):
+        other_model = provider_default_model(other)
+        if (other, other_model) == (provider, model_id):
+            continue
+        try:
+            fallback = build_model(other, other_model, None, hosted_tools=False, read_timeout=_read_timeout(other))
+        except Exception:
+            continue
+        if id(fallback) in seen_ids:
+            continue
+        seen_ids.add(id(fallback))
+        candidates.append(RoutingCandidate(fallback, name=f"{other}:{other_model}"))
+    return ModelRouter(candidates, strategy=FallbackStrategy())
+
+
+def _node_completed(node_id: str) -> Callable[[GraphState], bool]:
+    """Graph edge condition (``strands.multiagent.graph``): advance only when the source finished ``COMPLETED``."""
+    return lambda state: (node := state.results.get(node_id)) is not None and node.status == Status.COMPLETED
+
+
+def build_deep_research_graph(
+    *, session_id: str, user_id: str, model: Model | ModelRouter, depth: ResearchDepth
+) -> Graph:
     """Build ``FORMATION_TOPOLOGY`` as a Strands Graph whose nodes are Swarms and Graphs of harness agents."""
     workspace = artifacts_dir(session_id)
     workspace.mkdir(parents=True, exist_ok=True)
@@ -720,6 +760,7 @@ def build_deep_research_graph(*, session_id: str, user_id: str, model: Model, de
             memory=MemoryManager(stores=agent_memory(user_id, "deep-research")),
             background_tasks=False,
             callback_handler=None,
+            retry_strategy=TimeoutRetryStrategy(max_attempts=2, initial_delay=2),
         )
 
     def make_formation(spec: FormationSpec) -> Swarm | Graph:
@@ -737,7 +778,7 @@ def build_deep_research_graph(*, session_id: str, user_id: str, model: Model, de
         for agent, child in zip(agents, spec["children"]):
             builder.add_node(agent, child["id"])
         for edge in spec["edges"]:
-            builder.add_edge(edge["from"], edge["to"])
+            builder.add_edge(edge["from"], edge["to"], condition=_node_completed(edge["from"]))
         builder.set_node_timeout(app_config.RON_DEEP_RESEARCH_NODE_TIMEOUT)
         builder.set_graph_id(spec["id"])
         return builder.build()
@@ -746,7 +787,7 @@ def build_deep_research_graph(*, session_id: str, user_id: str, model: Model, de
     for formation in FORMATION_TOPOLOGY["nodes"]:
         builder.add_node(make_formation(formation), formation["id"])
     for edge in FORMATION_TOPOLOGY["edges"]:
-        builder.add_edge(edge["from"], edge["to"])
+        builder.add_edge(edge["from"], edge["to"], condition=_node_completed(edge["from"]))
     builder.set_graph_id(FORMATION_TOPOLOGY["id"])
     builder.set_session_manager(
         SnapshotSessionManager(session_id=session_id, storage=get_user_session_storage(user_id))
@@ -844,6 +885,15 @@ def _finish(run: _Run, status: RunStatus, error: str | None) -> None:
     run.changed.set()
 
 
+def _failure_message(result: MultiAgentResult) -> str:
+    for node in result.results.values():
+        if isinstance(node.result, Exception):
+            return str(node.result) or type(node.result).__name__
+        if isinstance(node.result, MultiAgentResult) and node.status == Status.FAILED:
+            return _failure_message(node.result)
+    return "The formation failed."
+
+
 async def _execute(run: _Run, graph: Graph, task: str) -> None:
     saved_at = time.monotonic()
     try:
@@ -855,7 +905,11 @@ async def _execute(run: _Run, graph: Graph, task: str) -> None:
             if kept.get("type") == "multiagent_result":
                 result = event.get("result")
                 failed = isinstance(result, MultiAgentResult) and result.status == Status.FAILED
-                _finish(run, "failed" if failed else "completed", "The formation failed." if failed else None)
+                _finish(
+                    run,
+                    "failed" if failed else "completed",
+                    _failure_message(result) if isinstance(result, MultiAgentResult) and failed else None,
+                )
             if time.monotonic() - saved_at > _SAVE_INTERVAL_SECONDS:
                 await _save(run)
                 saved_at = time.monotonic()
@@ -894,7 +948,7 @@ async def start_run(
         raise ValueError("No model provider is configured for Deep Research.")
     chosen_provider, chosen_model = selection
     session_id = f"dr-{uuid.uuid4().hex[:16]}"
-    model = build_model(chosen_provider, chosen_model, reasoning_effort, hosted_tools=False)
+    model = build_research_model(chosen_provider, chosen_model, reasoning_effort)
     graph = build_deep_research_graph(session_id=session_id, user_id=user_id, model=model, depth=depth)
     created = _now()
     run = _Run(
