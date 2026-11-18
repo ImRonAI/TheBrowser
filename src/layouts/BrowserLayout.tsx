@@ -9,7 +9,7 @@ import { ContextBridge } from '@/components/interests/ContextBridge'
 import { InterestMenuSync } from '@/components/interests/InterestMenuSync'
 import { InterestsWidget } from '@/components/interests/InterestsWidget'
 import { RepairBridge } from '@/components/agent-panel/RepairBridge'
-import { ContextMenu } from '@/components/shared/ContextMenu'
+import { ContextMenu, pasteTargetOf } from '@/components/shared/ContextMenu'
 import { BrowserGlowBorder } from '@/components/shared/BrowserGlowBorder'
 import { AgentCursor } from '@/components/shared/AgentCursor'
 import { Sidebar } from '@/components/navigation/Sidebar'
@@ -50,6 +50,7 @@ function BrowserLayoutContent({ children }: BrowserLayoutProps) {
     y: number
     isOpen: boolean
     selectedText?: string
+    pasteTarget?: HTMLElement | null
   }>({
     x: 0,
     y: 0,
@@ -188,6 +189,7 @@ function BrowserLayoutContent({ children }: BrowserLayoutProps) {
         y: e.clientY,
         isOpen: true,
         selectedText,
+        pasteTarget: pasteTargetOf(e),
       })
     }
 
@@ -271,6 +273,7 @@ function BrowserLayoutContent({ children }: BrowserLayoutProps) {
         y={contextMenu.y}
         isOpen={contextMenu.isOpen}
         selectedText={contextMenu.selectedText}
+        pasteTarget={contextMenu.pasteTarget}
         onClose={() => setContextMenu(prev => ({ ...prev, isOpen: false }))}
       />
     </div>

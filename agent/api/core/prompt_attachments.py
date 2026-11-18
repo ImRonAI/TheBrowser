@@ -1,6 +1,6 @@
-"""Prompt attachments: a long paste, or an item picked in the panel's context menu, sent with a message.
+"""Prompt attachments: a paste, or an item picked in the panel's context menu, sent with a message.
 
-The panel turns a paste longer than 300 characters into an attachment card at once, and every item picked
+The panel turns every paste into an attachment card at once (what Ask Ren opens too), and every item picked
 in the context menu (or with ``@``) into a card whose text is read when the message is sent
 (``src/lib/prompt-attachments.ts``). ``POST /chat`` receives them as ``ChatRequest.prompt_attachments``;
 each becomes one native text content block of the user message, after the typed text:

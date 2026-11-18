@@ -19,7 +19,7 @@ import { UiView } from './UiView'
 import { ContextMentionList, ContextPicker, type ContextItem } from './ContextPicker'
 import { ComposerAttachmentTray, SentAttachments } from './PromptAttachments'
 import { useComposerAttachments, type ComposerAttachmentsState } from './useComposerAttachments'
-import { messageTitle, parseAttachmentBlock } from '@/lib/prompt-attachments'
+import { messageTitle, parseAttachmentBlock, withAttachmentBlocks } from '@/lib/prompt-attachments'
 import { useContextSources } from './useContextSources'
 import { mentionAt, removeMention, searchContexts, type ContextCategory } from '@/lib/chat-context'
 import { DEFAULT_AGENT_MODEL, ModelSelector, useAgentModels, type AgentModelSelection } from './ModelSelector'
@@ -90,7 +90,7 @@ export function AgentConversation({ destination, embedded = false, onChat, hero,
   heroFooter?: (pick: (prompt: string) => void) => ReactNode
 }) {
   const { isPanelOpen, closePanel, askRonPendingPrompt, consumeAskRonPendingPrompt,
-    closeAskRon, agentPanelQueuedPrompts, consumeAgentPanelPrompt,
+    closeAskRon, agentPanelQueuedPrompts, consumeAgentPanelPrompt, agentPanelQueuedAttachments, consumeAgentPanelAttachments,
     interactionMode, setInteractionMode } = useAgentUi()
   const voice = interactionMode === 'voice'
   const liveHandOff = useRef<(() => Promise<boolean>) | null>(null)
@@ -249,28 +249,49 @@ export function AgentConversation({ destination, embedded = false, onChat, hero,
   const dispatchExternal = useCallback((text: string) => {
     // Native steering applies immediately; no second /chat invocation while running.
     const id = sessionRef.current
-    void sendMessage(text).then((sent) => { if (!sent && sessionRef.current === id) setInput((current) => current || text) })
-  }, [sendMessage])
+    // The composer's cards (what Ask Ren opened there) go with it and leave the composer once the send is accepted.
+    const sentPastes = attachments.pasted.map((item) => item.id)
+    const sentItems = [...attachments.contexts, ...attachments.given].map((item) => item.id)
+    void sendMessage(text, 'message', undefined, () => {
+      for (const pasted of sentPastes) attachments.removePasted(pasted)
+      attachments.clearContexts(sentItems)
+    }).then((sent) => { if (!sent && sessionRef.current === id) setInput((current) => current || text) })
+  }, [sendMessage, attachments, setInput])
+  // What another surface opens in Ren (Ask Ren on a selection, saved context) lands in the composer as cards.
+  useEffect(() => {
+    if (destination !== 'panel' || !agentPanelQueuedAttachments.length) return
+    attachments.addGiven(consumeAgentPanelAttachments())
+    if (!voice) focusComposer(inputRef.current)
+  }, [destination, voice, agentPanelQueuedAttachments, consumeAgentPanelAttachments, attachments])
   // External prompts go to the VISIBLE mode only. While Live is shown they are
   // handed to VoiceAgent (below); the hidden Chat session never receives them.
+  // A prompt waits until the cards queued with it are in the composer, so they go with it.
   useEffect(() => {
     if (voice || destination !== 'panel' || unavailable || chat.connection !== 'connected' || !agentPanelQueuedPrompts.length) return
+    if (agentPanelQueuedAttachments.length) return
     // A requested agent starts its own new chat first; the prompt then goes to that conversation.
     if (draft.articles.length || requestedAgent) return
     const prompt = consumeAgentPanelPrompt()
     if (prompt) dispatchExternal(prompt)
-  }, [voice, destination, draft.articles.length, agentPanelQueuedPrompts, consumeAgentPanelPrompt, dispatchExternal, unavailable, chat.connection, requestedAgent])
+  }, [voice, destination, draft.articles.length, agentPanelQueuedPrompts, agentPanelQueuedAttachments.length, consumeAgentPanelPrompt, dispatchExternal, unavailable, chat.connection, requestedAgent])
   useEffect(() => {
     if (voice || destination !== 'panel' || unavailable || chat.connection !== 'connected' || !askRonPendingPrompt) return
-    if (draft.articles.length) return
+    if (draft.articles.length || agentPanelQueuedAttachments.length) return
     const prompt = consumeAskRonPendingPrompt()
     if (prompt) { dispatchExternal(prompt); closeAskRon() }
-  }, [voice, destination, draft.articles.length, askRonPendingPrompt, consumeAskRonPendingPrompt, dispatchExternal, closeAskRon, unavailable, chat.connection])
-  const liveExternalPrompt = destination === 'panel' && voice ? (askRonPendingPrompt ?? agentPanelQueuedPrompts[0] ?? null) : null
+  }, [voice, destination, draft.articles.length, agentPanelQueuedAttachments.length, askRonPendingPrompt, consumeAskRonPendingPrompt, dispatchExternal, closeAskRon, unavailable, chat.connection])
+  // Live takes text only: the opened cards go to it as the attachment blocks Chat would send, and leave the composer.
+  const liveExternalText = destination === 'panel' && voice && !agentPanelQueuedAttachments.length
+    ? (askRonPendingPrompt ?? agentPanelQueuedPrompts[0] ?? null) : null
+  const liveExternalPrompt = liveExternalText === null ? null : withAttachmentBlocks(liveExternalText, attachments.given)
+  const liveSentItems = useRef<string[]>([])
+  liveSentItems.current = attachments.given.map((item) => item.id)
+  const clearComposerItems = attachments.clearContexts
   const consumeLiveExternal = useCallback(() => {
+    clearComposerItems(liveSentItems.current)
     if (consumeAskRonPendingPrompt()) { closeAskRon(); return }
     consumeAgentPanelPrompt()
-  }, [consumeAskRonPendingPrompt, consumeAgentPanelPrompt, closeAskRon])
+  }, [consumeAskRonPendingPrompt, consumeAgentPanelPrompt, closeAskRon, clearComposerItems])
   const switchMode = async (next: 'voice' | 'text') => {
     if (next === interactionMode) return
     setModeNotice('')
@@ -406,7 +427,7 @@ export function AgentConversation({ destination, embedded = false, onChat, hero,
     composer.setCommandFeedback('')
     followOutput.current = true
     const sentIds = [...draft.articles.map((article) => article.id), ...attachments.pasted.map((item) => item.id)]
-    const sentContexts = attachments.contexts.map((item) => item.id)
+    const sentContexts = [...attachments.contexts, ...attachments.given].map((item) => item.id)
     void sendMessage(message, 'message', undefined, () => {
       useArticleDraftStore.getState().clearSent(draftKey, input, sentIds)
       attachments.clearContexts(sentContexts)

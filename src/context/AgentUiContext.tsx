@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react'
 import { useArticleDraftStore } from '@/stores/articleDraftStore'
+import { selectionAttachment, type PromptAttachment } from '@/lib/prompt-attachments'
 
 export interface AskRonOption {
   id: string
@@ -19,10 +20,6 @@ export const ASK_RON_OPTIONS: readonly AskRonOption[] = [
   { id: '3', label: 'Find related information', description: 'Search for more context' },
 ]
 
-export function askRonPrompt(selectedText: string, sourceUrl: string, intent: string): string {
-  return `The user selected this text: "${selectedText}" from ${sourceUrl}. They want you to: ${intent.trim()}`
-}
-
 interface AgentUiContextValue {
   isPanelOpen: boolean
   interactionMode: 'voice' | 'text'
@@ -36,6 +33,8 @@ interface AgentUiContextValue {
   askRonThinkingText: string
   askRonPendingPrompt: string | null
   agentPanelQueuedPrompts: string[]
+  /** Attachment cards waiting to land in the panel's composer (what Ask Ren opened). */
+  agentPanelQueuedAttachments: PromptAttachment[]
 
   togglePanel: () => void
   openPanel: () => void
@@ -51,8 +50,13 @@ interface AgentUiContextValue {
   submitCustomAskRon: (prompt: string) => Promise<void>
   closeAskRon: () => void
   consumeAskRonPendingPrompt: () => string | null
-  sendToAgentPanel: (prompt: string) => void
+  /**
+   * Opens the panel with `attachments` as cards in its composer and, when `prompt` has text, sends it with them.
+   * Context goes in `attachments`, never pasted into `prompt`.
+   */
+  sendToAgentPanel: (prompt: string, attachments?: PromptAttachment[]) => void
   consumeAgentPanelPrompt: () => string | null
+  consumeAgentPanelAttachments: () => PromptAttachment[]
 }
 
 const AgentUiContext = createContext<AgentUiContextValue | null>(null)
@@ -76,6 +80,7 @@ export function AgentUiProvider({ children }: { children: ReactNode }) {
   const [askRonThinkingText, setAskRonThinkingText] = useState('Analyzing selection...')
   const [askRonPendingPrompt, setAskRonPendingPrompt] = useState<string | null>(null)
   const [agentPanelQueuedPrompts, setAgentPanelQueuedPrompts] = useState<string[]>([])
+  const [agentPanelQueuedAttachments, setAgentPanelQueuedAttachments] = useState<PromptAttachment[]>([])
 
   const openPanel = useCallback(() => {
     setIsPanelOpen(true)
@@ -119,10 +124,11 @@ export function AgentUiProvider({ children }: { children: ReactNode }) {
     setScreenshotData(null)
   }, [])
 
-  // Opening the menu is a pure UI step: nothing is sent until the user picks
-  // an option, and the choice is then dispatched to whichever mode is visible.
+  // Opening the menu puts the selection in the panel's composer as an attachment card; nothing is sent until the
+  // user picks an option, and the choice is then dispatched to whichever mode is visible, with the card.
   const startAskRon = useCallback(async (selectedText: string, sourceUrl: string) => {
     useArticleDraftStore.getState().setDestination('panel')
+    if (selectedText.trim()) setAgentPanelQueuedAttachments((prev) => [...prev, selectionAttachment(selectedText, sourceUrl)])
     setAskRonSelectedText(selectedText)
     setAskRonSourceUrl(sourceUrl)
     setAskRonThinkingText('Choose what Ren should do')
@@ -134,22 +140,21 @@ export function AgentUiProvider({ children }: { children: ReactNode }) {
   const selectAskRonOption = useCallback(async (option: AskRonOption) => {
     if (!askRonSelectedText) return
     useArticleDraftStore.getState().setDestination('panel')
-    const prompt = askRonPrompt(askRonSelectedText, askRonSourceUrl ?? '', `${option.label}. ${option.description || ''}`)
     setAskRonStepState('executing')
     setAskRonThinkingText(`${option.label}...`)
-    setAskRonPendingPrompt(prompt)
+    setAskRonPendingPrompt(option.label)
     openPanel()
-  }, [askRonSelectedText, askRonSourceUrl, openPanel])
+  }, [askRonSelectedText, openPanel])
 
   const submitCustomAskRon = useCallback(async (prompt: string) => {
     if (!askRonSelectedText) return
     useArticleDraftStore.getState().setDestination('panel')
-    const fullPrompt = askRonPrompt(askRonSelectedText, askRonSourceUrl ?? '', prompt)
+    if (!prompt.trim()) return
     setAskRonStepState('executing')
     setAskRonThinkingText('Processing your request...')
-    setAskRonPendingPrompt(fullPrompt)
+    setAskRonPendingPrompt(prompt.trim())
     openPanel()
-  }, [askRonSelectedText, askRonSourceUrl, openPanel])
+  }, [askRonSelectedText, openPanel])
 
   const consumeAskRonPendingPrompt = useCallback(() => {
     if (!askRonPendingPrompt) return null
@@ -158,13 +163,20 @@ export function AgentUiProvider({ children }: { children: ReactNode }) {
     return nextPrompt
   }, [askRonPendingPrompt])
 
-  const sendToAgentPanel = useCallback((prompt: string) => {
+  const sendToAgentPanel = useCallback((prompt: string, attachments: PromptAttachment[] = []) => {
     const normalized = prompt.trim()
-    if (!normalized) return
+    if (!normalized && !attachments.length) return
     useArticleDraftStore.getState().setDestination('panel')
-    setAgentPanelQueuedPrompts((prev) => [...prev, normalized])
+    if (attachments.length) setAgentPanelQueuedAttachments((prev) => [...prev, ...attachments])
+    if (normalized) setAgentPanelQueuedPrompts((prev) => [...prev, normalized])
     openPanel()
   }, [openPanel])
+
+  const consumeAgentPanelAttachments = useCallback(() => {
+    const queued = agentPanelQueuedAttachments
+    if (queued.length) setAgentPanelQueuedAttachments([])
+    return queued
+  }, [agentPanelQueuedAttachments])
 
   const consumeAgentPanelPrompt = useCallback(() => {
     if (agentPanelQueuedPrompts.length === 0) return null
@@ -185,6 +197,7 @@ export function AgentUiProvider({ children }: { children: ReactNode }) {
     askRonThinkingText,
     askRonPendingPrompt,
     agentPanelQueuedPrompts,
+    agentPanelQueuedAttachments,
     togglePanel,
     openPanel,
     closePanel,
@@ -199,6 +212,7 @@ export function AgentUiProvider({ children }: { children: ReactNode }) {
     consumeAskRonPendingPrompt,
     sendToAgentPanel,
     consumeAgentPanelPrompt,
+    consumeAgentPanelAttachments,
   }), [
     isPanelOpen,
     interactionMode,
@@ -211,6 +225,7 @@ export function AgentUiProvider({ children }: { children: ReactNode }) {
     askRonThinkingText,
     askRonPendingPrompt,
     agentPanelQueuedPrompts,
+    agentPanelQueuedAttachments,
     togglePanel,
     openPanel,
     closePanel,
@@ -225,6 +240,7 @@ export function AgentUiProvider({ children }: { children: ReactNode }) {
     consumeAskRonPendingPrompt,
     sendToAgentPanel,
     consumeAgentPanelPrompt,
+    consumeAgentPanelAttachments,
   ])
 
   return (
