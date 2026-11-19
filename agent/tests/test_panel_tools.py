@@ -239,7 +239,7 @@ def test_skills_environment_native_plugin_and_explicit_child_assignments(tmp_pat
         value = create_skill_tool(skills=plugin, model_factory=factory, tool_assignments={"example": [alpha]})
         _, result = await call_tool(value, {"skill_name": "example", "prompt": "help"}, agent=parent)
         assert result["status"] == "success"
-        assert {spec["name"] for spec in models[0].calls[0]["tools"]} == {"alpha", "skills"}
+        assert {spec["name"] for spec in models[0].calls[0]["tools"]} == {"alpha", "skills", "strands_manage_background_task"}
         assert "Use alpha" in models[0].calls[0]["prompt"]
         assert parent.messages == []
         assert plugin.get_activated_skills(parent) == []

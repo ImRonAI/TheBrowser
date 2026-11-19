@@ -52,7 +52,15 @@ import {
   TaskTrigger,
   type TaskStatus,
 } from '@/components/ai-elements/task'
-import { getStatusBadge } from '@/components/ai-elements/tool'
+import {
+  Tool,
+  ToolContent,
+  ToolHeader,
+  ToolInput,
+  ToolOutput,
+  getStatusBadge,
+  type LegacyToolState,
+} from '@/components/ai-elements/tool'
 import {
   Accordion,
   AccordionContent,
@@ -161,16 +169,6 @@ function textStep(step: TextStepView, conclusion = false) {
   )
 }
 
-function toolInput(input: unknown, preview: string): string {
-  if (input === null || input === undefined) return preview
-  if (typeof input === 'string') return input
-  try {
-    return JSON.stringify(input, null, 2)
-  } catch {
-    return preview
-  }
-}
-
 /** One `subagent` run: a Task whose content is that sub-agent's Chain of Thought. */
 function SkillTask({ view }: { view: SkillView }) {
   const { skill } = view
@@ -190,30 +188,34 @@ function SkillTask({ view }: { view: SkillView }) {
             <ChainOfThoughtHeader>{view.active ? 'Working…' : 'Chain of Thought'}</ChainOfThoughtHeader>
             <ChainOfThoughtContent>
               {view.steps.length === 0 && <p className={MUTED}>{view.active ? 'Starting…' : 'No steps were recorded.'}</p>}
-              {view.steps.map((step: SkillStepView) =>
-                step.kind === 'tool' ? (
-                  <ChainOfThoughtStep
-                    key={step.id}
-                    label={`Using ${step.tool.tool_name}`}
-                    description={step.active ? 'running…' : step.tool.status === 'failed' ? 'failed' : 'done'}
-                    status={step.active ? 'active' : 'complete'}
-                  >
-                    <details className="text-xs">
-                      <summary className={cn('cursor-pointer', MUTED)}>input / output</summary>
-                      <pre className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap break-words">
-                        {toolInput(step.tool.input, step.tool.input_preview)}
-                      </pre>
-                      {!step.active && (
-                        <pre className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap break-words opacity-80">
-                          {step.tool.output || step.tool.output_preview}
-                        </pre>
-                      )}
-                    </details>
-                  </ChainOfThoughtStep>
-                ) : (
-                  textStep(step, !view.active && step === last && step.kind === 'text')
-                ),
-              )}
+              {view.steps.map((step: SkillStepView) => {
+                if (step.kind === 'tool') {
+                  const failed = step.tool.status === 'failed'
+                  const toolState: LegacyToolState = step.active ? 'input-available' : failed ? 'output-error' : 'output-available'
+                  const body = step.tool.output || step.tool.output_preview
+                  return (
+                    <ChainOfThoughtStep
+                      key={step.id}
+                      label={`Tool: ${step.tool.tool_name}`}
+                      status={step.active ? 'active' : 'complete'}
+                    >
+                      <Tool>
+                        <ToolHeader type="dynamic-tool" toolName={step.tool.tool_name} state={toolState} />
+                        <ToolContent>
+                          <ToolInput input={step.tool.input} />
+                          {!step.active && (
+                            <ToolOutput
+                              output={failed ? null : (body || '(empty result)')}
+                              errorText={failed ? (body || 'Tool failed') : undefined}
+                            />
+                          )}
+                        </ToolContent>
+                      </Tool>
+                    </ChainOfThoughtStep>
+                  )
+                }
+                return textStep(step, !view.active && step === last && step.kind === 'text')
+              })}
             </ChainOfThoughtContent>
           </ChainOfThought>
         </TaskItem>

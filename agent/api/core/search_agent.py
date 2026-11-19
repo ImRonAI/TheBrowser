@@ -24,9 +24,11 @@ Built exclusively on the native ``strands_harness`` configuration system:
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import re
+import threading
 import time
 from collections import OrderedDict
 from collections.abc import AsyncIterator, Callable, Mapping, Sequence
@@ -808,11 +810,52 @@ async def stream_search_session(
     from agent.api.core.prompt_attachments import message_content
 
     prompt = message_content(q, list(attachments))
+    loop = asyncio.get_running_loop()
+    loop_thread = threading.get_ident()
+    event_queue: asyncio.Queue[Mapping[str, Any] | BaseException | None] = asyncio.Queue()
+    has_callback = hasattr(agent, "callback_handler")
+    previous_callback = getattr(agent, "callback_handler", None)
 
+    def _on_background_callback(**cb_event: Any) -> None:
+        if callable(previous_callback):
+            previous_callback(**cb_event)
+        stream = cb_event.get("tool_stream_event")
+        if not isinstance(stream, Mapping):
+            return
+        tool_use = stream.get("tool_use")
+        tool_use_id = tool_use.get("toolUseId") if isinstance(tool_use, Mapping) else None
+        state = getattr(agent, "state", None)
+        tasks = state.get("strands.background_tasks") if state is not None and hasattr(state, "get") else None
+        if not tool_use_id or not isinstance(tasks, list) or not any(
+            isinstance(t, Mapping) and t.get("tool_use_id") == tool_use_id for t in tasks
+        ):
+            return
+        if threading.get_ident() == loop_thread:
+            event_queue.put_nowait(cb_event)
+        else:
+            loop.call_soon_threadsafe(event_queue.put_nowait, cb_event)
+
+    async def _drive_stream() -> None:
+        try:
+            async for item in agent.stream_async(prompt):
+                if isinstance(item, Mapping):
+                    await event_queue.put(item)
+        except BaseException as exc:
+            await event_queue.put(exc)
+        finally:
+            await event_queue.put(None)
+
+    if has_callback:
+        agent.callback_handler = _on_background_callback
+    driver = asyncio.create_task(_drive_stream())
     try:
-        async for raw_event in agent.stream_async(prompt):
-            if not isinstance(raw_event, Mapping):
-                continue
+        while True:
+            queued = await event_queue.get()
+            if queued is None:
+                break
+            if isinstance(queued, BaseException):
+                raise queued
+            raw_event = queued
 
             # Tap intermediate events from the `subagent` tool (`ToolStreamEvent`) into the `shopping.*` lane!
             tool_stream = raw_event.get("tool_stream_event")
@@ -853,6 +896,12 @@ async def stream_search_session(
     except Exception as exc:
         logger.warning("level=<%s>, error=<%s> | search agent stream failed", level, exc)
         raise SearchAgentError("upstream", str(exc) or type(exc).__name__, status=502) from exc
+    finally:
+        if has_callback and previous_callback is not None:
+            agent.callback_handler = previous_callback
+        if not driver.done():
+            driver.cancel()
+            await asyncio.gather(driver, return_exceptions=True)
 
     # If `subagent` streamed during the parent run, finalize the shopping lane with extracted markdown links & done.
     if entry.shopping_invoked or shopping_streamed_any:

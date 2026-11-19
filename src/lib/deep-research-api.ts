@@ -749,6 +749,37 @@ function messageTools(message: Json): { uses: Json[]; results: Json[] } {
   }
 }
 
+const BACKGROUND_MANAGE_TOOL = 'strands_manage_background_task'
+const BACKGROUND_TERMINAL = new Set(['completed', 'failed', 'cancelled'])
+
+function isBackgroundDispatch(content: unknown): boolean {
+  const text = blocksText(content)
+  return text.startsWith('Background task dispatched.') && /^Task ID:\s*\S+/m.test(text)
+}
+
+function parseBackgroundSettlement(content: unknown): {
+  taskId: string
+  toolUseId: string
+  status: string
+  output: string
+} | null {
+  const arr = asArray(content)
+  if (arr.length === 0) return null
+  const meta = asRecord(asRecord(arr[0]).json)
+  const taskId = asString(meta.task_id)
+  const toolUseId = asString(meta.tool_use_id)
+  const status = asString(meta.status)
+  if (!taskId || !toolUseId || !status) return null
+  const body = blocksText(arr.slice(1))
+  const errorMsg = asString(asRecord(meta.error).message)
+  return { taskId, toolUseId, status, output: body || errorMsg }
+}
+
+function isSyntheticBackgroundGet(use: Json): boolean {
+  const input = asRecord(use.input)
+  return asString(use.name) === BACKGROUND_MANAGE_TOOL && input.mode === 'get' && asString(input.task_id) === asString(use.toolUseId)
+}
+
 function foldSubagentEvent(snapshot: DeepResearchSnapshot, path: string[], id: string, event: Json, seq: number) {
   const stepId = `${id}:${seq}`
   if (typeof event.data === 'string') {
@@ -765,10 +796,12 @@ function foldSubagentEvent(snapshot: DeepResearchSnapshot, path: string[], id: s
   const message = asRecord(event.message)
   const { uses, results } = messageTools(message)
   if (message.role === 'assistant' && uses.length > 0) {
+    const visibleUses = uses.filter((use) => !isSyntheticBackgroundGet(use))
+    if (visibleUses.length === 0) return snapshot
     return withSkill(snapshot, path, id, (skill) => ({
       tools: [
         ...skill.tools,
-        ...uses.map((use) => ({
+        ...visibleUses.map((use) => ({
           id: asString(use.toolUseId),
           tool_name: asString(use.name),
           input: use.input,
@@ -778,15 +811,31 @@ function foldSubagentEvent(snapshot: DeepResearchSnapshot, path: string[], id: s
           output_preview: '',
         })),
       ],
-      steps: [...skill.steps, ...uses.map((use) => ({ id: `${stepId}:${asString(use.toolUseId)}`, kind: 'tool' as const, tool_id: asString(use.toolUseId) }))],
+      steps: [...skill.steps, ...visibleUses.map((use) => ({ id: `${stepId}:${asString(use.toolUseId)}`, kind: 'tool' as const, tool_id: asString(use.toolUseId) }))],
     }))
   }
   if (message.role === 'user' && results.length > 0) {
     const byId = new Map(results.map((result) => [asString(result.toolUseId), result]))
+    const settlements = new Map<string, NonNullable<ReturnType<typeof parseBackgroundSettlement>>>()
+    for (const result of results) {
+      const settled = parseBackgroundSettlement(result.content)
+      if (settled && BACKGROUND_TERMINAL.has(settled.status)) {
+        settlements.set(settled.toolUseId, settled)
+      }
+    }
     return withSkill(snapshot, path, id, (skill) => ({
       tools: skill.tools.map((tool) => {
+        const settled = settlements.get(tool.id)
+        if (settled) {
+          return {
+            ...tool,
+            status: settled.status === 'completed' ? 'completed' : 'failed',
+            output: settled.output,
+            output_preview: settled.output.slice(0, 300),
+          }
+        }
         const result = byId.get(tool.id)
-        if (!result) return tool
+        if (!result || isBackgroundDispatch(result.content)) return tool
         const output = blocksText(result.content)
         return { ...tool, status: result.status === 'error' ? 'failed' : 'completed', output, output_preview: output.slice(0, 300) }
       }),
@@ -812,6 +861,16 @@ function foldAgentMessage(snapshot: DeepResearchSnapshot, path: string[], messag
   }
   if (message.role === 'user') {
     for (const result of results) {
+      const settled = parseBackgroundSettlement(result.content)
+      if (settled && BACKGROUND_TERMINAL.has(settled.status) && next.skill_invocations.some((skill) => skill.id === settled.toolUseId)) {
+        next = withSkill(next, path, settled.toolUseId, (skill) => ({
+          status: settled.status === 'completed' ? 'completed' : 'failed',
+          summary: settled.output.slice(0, 600),
+          output_text: skill.output_text || settled.output,
+        }))
+        continue
+      }
+      if (isBackgroundDispatch(result.content)) continue
       const id = asString(result.toolUseId)
       if (!next.skill_invocations.some((skill) => skill.id === id)) continue
       const summary = blocksText(result.content)

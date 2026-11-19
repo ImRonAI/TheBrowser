@@ -1069,6 +1069,7 @@ def create_learned_skill_tools(user_id: str, agent_id: str, model_factory: Calla
                 "Validate the requested outcome using actual results. If you cannot complete it, explicitly report the missing requirements."
                 + (JOURNAL_DIRECTIVE if inherited else ""),
                 tools=[*[assigned[name] for name in names], _configured_file_reader(skill), *a2a_tools(), *inherited],
+                background_tasks={"agentic": ["*"], "wait_for_completion": True},
                 callback_handler=None)
             async with asyncio.timeout(300):
                 outcome = cast(StepOutcome, (await child.invoke_async([{"text": request}, {"text":
@@ -1118,6 +1119,7 @@ def create_learned_skill_tools(user_id: str, agent_id: str, model_factory: Calla
         # A skill run is the parent's subagent: it inherits the parent's second brain and journal.
         inherited = [value for value in inherited_memory(assigned) if value.tool_name not in tool_names]
         child = Agent(model=model_factory(skill_name), callback_handler=None, tools=[*tools, *a2a_tools(), *inherited],
+            background_tasks={"agentic": ["*"], "wait_for_completion": True},
             system_prompt=instructions + "\nFollow the native Agent SOP's ordered steps and MUST constraints. "
             "Use actual tool results to verify each expected outcome before advancing. "
             "Stop and report blocked when input, authorization or a required capability is missing."

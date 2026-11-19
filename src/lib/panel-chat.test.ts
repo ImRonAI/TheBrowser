@@ -57,7 +57,7 @@ test('the status line follows the connection first, then the run', () => {
 })
 
 test('new conversations start from the native defaults', () => {
-  assert.deepEqual(DEFAULT_RUNTIME_OPTIONS, { checkpointing: false, tool_execution: 'concurrent', context: 'auto', goal: '', background: false })
+  assert.deepEqual(DEFAULT_RUNTIME_OPTIONS, { checkpointing: false, tool_execution: 'concurrent', context: 'auto', goal: '', background: true })
 })
 
 test('an issue snapshot hydrates like any other session (destination and issue_id are pinned server-side)', () => {

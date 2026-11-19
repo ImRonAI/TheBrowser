@@ -378,7 +378,11 @@ class SessionRun:
             await self._tool_result({"toolUseId": tool_id, "status": "error",
                                      "content": [{"text": "Tool was interrupted."}]}, ())
         self._tools_in_flight.clear()
-        old, self.agent, pre_run = self.agent, None, self.messages
+        old = self.agent
+        if old is not None:
+            with suppress(Exception):
+                await self._cancel_background()
+        self.agent, pre_run = None, self.messages
         if old is not None:
             try:
                 old.state.set(STEERING_STATE_KEY, self.steering)
@@ -1169,7 +1173,11 @@ class PanelRuntimeManager:
         if session.status not in ("starting", "running") or session._closed:
             return None
         idle = time.monotonic() - session._last_event_at
-        limit = self.tool_stall_seconds if session._tools_in_flight else self.stall_seconds
+        background_busy = session.agent is not None and any(
+            isinstance(task, Mapping) and task.get("status") in ("queued", "working")
+            for task in (session.agent.state.get(_BACKGROUND_STATE) or [])
+        )
+        limit = self.tool_stall_seconds if (session._tools_in_flight or background_busy) else self.stall_seconds
         return idle if idle > limit else None
 
     async def _watchdog(self, tick: float) -> None:

@@ -1068,7 +1068,7 @@ def build_fixer(run: RepairRun, *, models: Sequence[str], effort: str | None = D
         model=router, instructions=FIXER_PROMPT + JOURNAL_DIRECTIVE, tools=tools,
         builtin_tools=["shell", "read", "write", "edit"], builtin_plugins=["todos", "environment"],
         sandbox=environment, memory=MemoryManager(stores=agent_memory(run.user_id, "tool-fixer")), session=False, skills=False, caching=None,
-        background_tasks=False, interventions=None, callback_handler=None, load_tools_from_directory=False,
+        background_tasks=True, interventions=None, callback_handler=None, load_tools_from_directory=False,
         name="Ren Tool Fixer",
         description="Reproduces a failed Ren tool, repairs it in its workspace and submits a revision for the user's approval.",
     )

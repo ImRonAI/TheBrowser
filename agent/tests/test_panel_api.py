@@ -183,7 +183,7 @@ def test_native_chat_snapshot_replay_context_and_configuration(monkeypatch):
             assert "Browser context" not in json.dumps(agents[0].messages)
             assert len(builds) == len(agents) == 1
             assert builds[0]["options"] == {"context": "auto", "tool_execution": "concurrent",
-                                            "checkpointing": False, "background": False, "goal": ""}
+                                            "checkpointing": False, "background": True, "goal": ""}
             assert builds[0]["runtime_options"]["session_manager"] is (await manager.get("alice", "chat")).session_manager
             assert threads == [threads[0]] and threads[0] != threading.get_ident()
             replay = events(await client.get("/sessions/chat/events?user_id=alice&after=0"))

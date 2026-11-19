@@ -39,6 +39,7 @@ from pathlib import Path
 import re
 import shutil
 import sys
+import threading
 import time
 from typing import Final, Literal, TypedDict
 import uuid
@@ -561,6 +562,11 @@ def level_prompt(depth: ResearchDepth, today: str) -> str:
         f"- In every turn but your last {WRAP_UP_TURNS}, work through `subagent`: several calls in one turn for the "
         "independent parts (a question, a source, a chart, a section each), each told the exact files to read and the "
         "result to bring back.\n"
+        "- `subagent` always runs asynchronously in the background, and any slow or external tool call can pass "
+        "`_background_execution: true` to run asynchronously while you continue other work. Check or cancel in-flight "
+        "background tasks with `strands_manage_background_task` (`mode`: `\"list\"`, `\"get\"`, `\"cancel\"`); if a "
+        "tool fails or hangs, cancel or move past it and persist with alternative tools or sources. Never call "
+        "`handoff_to_agent` while background tasks are still running — wait for their settled results first.\n"
         f"- Your last {WRAP_UP_TURNS} turns are for bringing it together: gather what your subagents returned, write "
         "it into your file, check it against your role, then hand off or finish. A reminder says when they start.\n"
     )
@@ -712,7 +718,12 @@ def _node_completed(node_id: str) -> Callable[[GraphState], bool]:
 
 
 def build_deep_research_graph(
-    *, session_id: str, user_id: str, model: Model | ModelRouter, depth: ResearchDepth
+    *,
+    session_id: str,
+    user_id: str,
+    model: Model | ModelRouter,
+    depth: ResearchDepth,
+    on_node_event: Callable[[JsonDict], None] | None = None,
 ) -> Graph:
     """Build ``FORMATION_TOPOLOGY`` as a Strands Graph whose nodes are Swarms and Graphs of harness agents."""
     workspace = artifacts_dir(session_id)
@@ -727,13 +738,38 @@ def build_deep_research_graph(
     )
     node_ids = frozenset(child["id"] for formation in FORMATION_TOPOLOGY["nodes"] for child in formation["children"])
 
-    def make_agent(spec: AgentSpec) -> Agent:
+    def make_agent(spec: AgentSpec, formation_id: str) -> Agent:
         skill = skills[spec["skill"]]
         handoff = SWARM_HANDOFFS.get(spec["id"])
         sections = SKILL_SECTIONS.get(spec["id"])
         note = ROLE_NOTES.get(spec["id"])
         budget = TurnBudget(LEVELS[depth]["turns"], node_ids)
-        return create_harness(
+
+        agent_holder: list[Agent] = []
+
+        def node_callback(**event: object) -> None:
+            if on_node_event is None or "tool_stream_event" not in event or not agent_holder:
+                return
+            stream = event.get("tool_stream_event")
+            tool_use = stream.get("tool_use") if isinstance(stream, dict) else None
+            tool_use_id = tool_use.get("toolUseId") if isinstance(tool_use, dict) else None
+            if not tool_use_id:
+                return
+            tasks = agent_holder[0].state.get("strands.background_tasks") or []
+            if not any(isinstance(t, dict) and t.get("tool_use_id") == tool_use_id for t in tasks):
+                return
+            kept = filter_event(event)
+            if kept is None:
+                return
+            on_node_event(
+                {
+                    "type": "multiagent_node_stream",
+                    "node_id": formation_id,
+                    "event": {"type": "multiagent_node_stream", "node_id": spec["id"], "event": kept},
+                }
+            )
+
+        built = create_harness(
             name=spec["id"],
             description=spec["description"],
             model=model,
@@ -758,19 +794,21 @@ def build_deep_research_graph(
             caching=False,
             session=False,
             memory=MemoryManager(stores=agent_memory(user_id, "deep-research")),
-            background_tasks=False,
-            callback_handler=None,
+            background_tasks={"agentic": ["*"], "never": ["handoff_to_agent"], "wait_for_completion": True},
+            callback_handler=node_callback if on_node_event is not None else None,
             retry_strategy=TimeoutRetryStrategy(max_attempts=2, initial_delay=2),
         )
+        agent_holder.append(built)
+        return built
 
     def make_formation(spec: FormationSpec) -> Swarm | Graph:
-        agents = [make_agent(child) for child in spec["children"]]
+        agents = [make_agent(child, spec["id"]) for child in spec["children"]]
         if spec["kind"] == "swarm":
             return Swarm(
                 agents,
                 id=spec["id"],
                 execution_timeout=app_config.RON_DEEP_RESEARCH_EXECUTION_TIMEOUT,
-                node_timeout=app_config.RON_DEEP_RESEARCH_NODE_TIMEOUT,
+                node_timeout=app_config.RON_DEEP_RESEARCH_NODE_TIMEOUT,  # type: ignore[arg-type]
                 repetitive_handoff_detection_window=8,
                 repetitive_handoff_min_unique_agents=3,
             )
@@ -779,7 +817,8 @@ def build_deep_research_graph(
             builder.add_node(agent, child["id"])
         for edge in spec["edges"]:
             builder.add_edge(edge["from"], edge["to"], condition=_node_completed(edge["from"]))
-        builder.set_node_timeout(app_config.RON_DEEP_RESEARCH_NODE_TIMEOUT)
+        if app_config.RON_DEEP_RESEARCH_NODE_TIMEOUT is not None:
+            builder.set_node_timeout(app_config.RON_DEEP_RESEARCH_NODE_TIMEOUT)
         builder.set_graph_id(spec["id"])
         return builder.build()
 
@@ -949,7 +988,6 @@ async def start_run(
     chosen_provider, chosen_model = selection
     session_id = f"dr-{uuid.uuid4().hex[:16]}"
     model = build_research_model(chosen_provider, chosen_model, reasoning_effort)
-    graph = build_deep_research_graph(session_id=session_id, user_id=user_id, model=model, depth=depth)
     created = _now()
     run = _Run(
         meta={
@@ -968,6 +1006,20 @@ async def start_run(
             "error": None,
             "document_id": None,
         }
+    )
+    loop = asyncio.get_running_loop()
+    loop_thread = threading.get_ident()
+
+    def on_node_event(wrapped: JsonDict) -> None:
+        if not run.meta["active"]:
+            return
+        if threading.get_ident() == loop_thread:
+            _append(run, wrapped)
+        else:
+            loop.call_soon_threadsafe(_append, run, wrapped)
+
+    graph = build_deep_research_graph(
+        session_id=session_id, user_id=user_id, model=model, depth=depth, on_node_event=on_node_event
     )
     _RUNS[(user_id, session_id)] = run
     await _save(run)

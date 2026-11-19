@@ -145,7 +145,7 @@ def test_native_strands_harness_configs_and_progressive_efforts(monkeypatch, tmp
         assert cfg["effort"] == config_effort
         assert cfg["instructions"] and len(cfg["instructions"]) > 80
         assert "xAI" not in cfg["instructions"] and "x_search" not in cfg["instructions"]
-        assert cfg["agentConfig"] == {"background_tasks": False}
+        assert cfg["agentConfig"] == {}
 
         agent = sa.create_search_agent(
             level,  # type: ignore[arg-type]
@@ -156,7 +156,7 @@ def test_native_strands_harness_configs_and_progressive_efforts(monkeypatch, tmp
         assert agent.model.config["model_id"] == "mistral-large-latest"
         assert agent.model.reasoning_effort is None
         assert not any(name.startswith("x_") or name == "web_search" for name in agent.tool_names)
-        assert "subagent" in agent.tool_names
+        assert {"subagent", "strands_manage_background_task"} <= set(agent.tool_names)
         assert {"tavily_search", "exa_search", "places_search", "http_request", "web_fetch"} <= set(agent.tool_names)
         assert not any(name.startswith("brave_") for name in agent.tool_names)
         assert "brave_" not in cfg["instructions"]

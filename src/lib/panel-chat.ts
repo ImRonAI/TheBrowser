@@ -18,7 +18,7 @@ export type PanelConnection = 'loading' | 'connected' | 'reconnecting' | 'detach
 
 /** Native runtime options a new conversation starts with (changed only by slash commands before the first turn). */
 export const DEFAULT_RUNTIME_OPTIONS: RuntimeOptions = {
-  checkpointing: false, tool_execution: 'concurrent', context: 'auto', goal: '', background: false,
+  checkpointing: false, tool_execution: 'concurrent', context: 'auto', goal: '', background: true,
 }
 
 function requireIssue(destination: AgentDestination, issueId: string | undefined): string {

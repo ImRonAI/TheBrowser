@@ -1514,18 +1514,38 @@ def create_panel_agent(
             raise ValueError("Each formation spec requires a nonempty name")
         formation_names = [raw["name"] for raw in raw_formations] \
             if raw_formations is not None else [spec.name for spec in _default_formations()]
-        if options.get("background") or kwargs["background_tasks"]:
-            # All delegated children remain foreground-only. The native scheduler
-            # still owns scheduling and always joins its background tools.
+        if options.get("background", True) or kwargs["background_tasks"]:
+            # Delegated subagent/skill/formation tools always run asynchronously in the
+            # background; every other compatible tool supports agentic _background_execution
+            # and polling/cancellation via strands_manage_background_task.
             background = kwargs["background_tasks"]
             background = dict(background) if isinstance(background, dict) else {}
             background.setdefault("agentic", ["*"])
             background["wait_for_completion"] = True
-            # Meta/interactive/delegating tools stay foreground: they mutate the
-            # registry, pause for the user, or run child agents.
-            background["never"] = [*background.get("never", []), "tool_catalog", "mcp_client", "editor",
-                "ask_user", "think", "run_skill", "programmatic_tool_caller", *DEEP_RESEARCH_TOOL_NAMES, *formation_names]
+            # Registry-mutating, interactive, and instant handle tools stay foreground.
+            never = list(dict.fromkeys([
+                *background.get("never", []),
+                "tool_catalog", "mcp_client", "editor", "ask_user", "programmatic_tool_caller",
+                *sorted(DEEP_RESEARCH_TOOL_NAMES),
+            ]))
+            always_candidates = ["think", "run_skill", "use_skill", *formation_names]
+            always = list(dict.fromkeys([
+                *background.get("always", []),
+                *(name for name in always_candidates if name not in never),
+            ]))
+            background["never"] = never
+            background["always"] = always
             kwargs["background_tasks"] = background
+            if not is_document:
+                kwargs["system_prompt"] += (
+                    "\n\n## Async tools and background tasks\n"
+                    "Delegated skills, formations, and subagents run asynchronously in the background by default, and "
+                    "any compatible tool accepts `_background_execution: true` to run asynchronously while you continue "
+                    "other work. Inspect or control in-flight background tasks with `strands_manage_background_task` "
+                    "(`mode`: `\"list\"`, `\"get\"`, or `\"cancel\"` with `task_id`). If a tool call fails, times out, "
+                    "or stalls, cancel it if still running, pivot to an alternative tool or source, and persist until "
+                    "the user's goal is completed."
+                )
         agent = config_to_agent(str(path), **kwargs)
         agent.add_hook(pause_gate, AfterInvocationEvent, order=200)
         catalog.bind(agent)
