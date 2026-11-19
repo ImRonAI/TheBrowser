@@ -1,0 +1,3773 @@
+diff --git a/harness-py/src/strands_harness/agent.py b/harness-py/src/strands_harness/agent.py
+index 1efc0de89..e939e127f 100644
+--- a/harness-py/src/strands_harness/agent.py
++++ b/harness-py/src/strands_harness/agent.py
+@@ -450,6 +450,8 @@ def create_harness(
+         "tools": consumer,
+         "sandbox": agent_kwargs.get("sandbox"),
+     }
++    if agent_kwargs.get("load_tools_from_directory"):
++        parent_config["load_tools_from_directory"] = True
+ 
+     builtin = _select_builtin_tools({**enabled_tools, "web_search": web_search == "exa"}, _builtin_tools(parent_config))
+     context_enabled = context_manager is not None and context_manager is not False
+@@ -509,14 +511,29 @@ def create_harness(
+     # namespaced by server (prefix_with_server_name) so cross-server names don't clash, but a server keyed
+     # to a built-in name (e.g. ``web`` exposing ``fetch`` -> ``web_fetch``) still can.
+     agent_tools = [*builtin, *consumer]
++    self_background_names = [
++        candidate.tool_name
++        for candidate in agent_tools
++        if isinstance(candidate, AgentTool) and getattr(candidate, "background", False)
++    ]
+     resolved_background_tasks = _resolve_background_tasks(
+         background_tasks,
+         [
+             candidate
+             for candidate in agent_tools
+-            if isinstance(candidate, AgentTool) and candidate.tool_name in _ALWAYS_BACKGROUND_TOOL_NAMES
++            if isinstance(candidate, AgentTool)
++            and candidate.tool_name in _ALWAYS_BACKGROUND_TOOL_NAMES
++            and not getattr(candidate, "background", False)
+         ],
+     )
++    if resolved_background_tasks is not False and self_background_names:
++        resolved_background_tasks = {
++            **resolved_background_tasks,
++            "never": [
++                *(resolved_background_tasks.get("never") or []),
++                *[n for n in self_background_names if n not in (resolved_background_tasks.get("never") or [])],
++            ],
++        }
+ 
+     agent = Agent(
+         model=resolved_model,
+diff --git a/harness-py/src/strands_harness/config.py b/harness-py/src/strands_harness/config.py
+index 187cb1ac5..79f8a914a 100644
+--- a/harness-py/src/strands_harness/config.py
++++ b/harness-py/src/strands_harness/config.py
+@@ -333,10 +333,14 @@ class _WebFetchConfig(_Model):
+ class _ProgrammaticToolCallerConfig(_Model):
+     allowed_tools: list[NonBlankStr] | None = None
+     timeout: Annotated[int | float | None, BeforeValidator(_positive_number)] = None
++    hot_reload: bool = _UNSET
+ 
+ 
+ class _SubagentConfig(_Model):
+     max_depth: Annotated[int, Field(ge=0)] = _UNSET
++    background: bool = _UNSET
++    stall_timeout: Annotated[int | float, Field(gt=0)] = _UNSET
++    max_consecutive_errors: Annotated[int, Field(ge=1)] = _UNSET
+ 
+ 
+ _BUILTIN_TOOL_CONFIGS: dict[str, type[_Model]] = {
+diff --git a/harness-py/src/strands_harness/options.py b/harness-py/src/strands_harness/options.py
+index 0bba543b4..76b8e5e68 100644
+--- a/harness-py/src/strands_harness/options.py
++++ b/harness-py/src/strands_harness/options.py
+@@ -64,8 +64,15 @@ def _check_builtin_tool_config_value(tool: str, key: str, value: object) -> None
+             isinstance(value, list) and all(isinstance(item, str) and item.strip() for item in value),
+         ),
+         "timeout": ("a positive number of seconds", number and math.isfinite(value) and value > 0),
++        "hot_reload": ("a bool", isinstance(value, bool)),
+         "media": ("a bool", isinstance(value, bool)),
+         "max_depth": ("a non-negative int", isinstance(value, int) and not isinstance(value, bool) and value >= 0),
++        "background": ("a bool", isinstance(value, bool)),
++        "stall_timeout": ("a positive number of seconds", number and math.isfinite(value) and value > 0),
++        "max_consecutive_errors": (
++            "a positive int",
++            isinstance(value, int) and not isinstance(value, bool) and value >= 1,
++        ),
+     }[key]
+     if not accepted:
+         raise ValueError(f"builtin_tools[{tool!r}][{key!r}] must be {expected}, got {value!r}.")
+diff --git a/harness-py/src/strands_harness/tools/programmatic_tool_caller.py b/harness-py/src/strands_harness/tools/programmatic_tool_caller.py
+index e05ab3d97..243bc0adf 100644
+--- a/harness-py/src/strands_harness/tools/programmatic_tool_caller.py
++++ b/harness-py/src/strands_harness/tools/programmatic_tool_caller.py
+@@ -169,8 +169,9 @@ async def _execute_tool(tool_context: ToolContext, tool_name: str, tool_input: d
+         "input": tool_input,
+     }
+     tool_results: list[ToolResult] = []
+-    # A copy, so an inner call cannot change the parent's invocation state.
+-    invocation_state = {**tool_context.invocation_state}
++    # A copy without the model turn's cycle id so inner calls run inline (even under always=["*"])
++    # and cannot mutate the parent's invocation state.
++    invocation_state = {k: v for k, v in tool_context.invocation_state.items() if k != "event_loop_cycle_id"}
+     try:
+         async for event in ToolExecutor._stream(agent, tool_use, tool_results, invocation_state):
+             if isinstance(event, ToolInterruptEvent):
+@@ -189,7 +190,10 @@ async def _execute_tool(tool_context: ToolContext, tool_name: str, tool_input: d
+ 
+ 
+ def _make_async_tool_function(
+-    tool_context: ToolContext, tool_name: str, semaphore: asyncio.Semaphore
++    tool_context: ToolContext,
++    tool_name: str,
++    semaphore: asyncio.Semaphore,
++    on_after_call: Callable[[], None] | None = None,
+ ) -> Callable[..., Awaitable[Any]]:
+     """Wrap a tool as an ``async`` host function taking keyword arguments only."""
+ 
+@@ -197,11 +201,35 @@ def _make_async_tool_function(
+         if args:
+             raise TypeError(f"{tool_name}() takes keyword arguments only, e.g. {tool_name}(key=value)")
+         async with semaphore:
+-            return await _execute_tool(tool_context, tool_name, kwargs)
++            result = await _execute_tool(tool_context, tool_name, kwargs)
++        if on_after_call is not None:
++            on_after_call()
++        return result
+ 
+     return tool_function
+ 
+ 
++def _sync_hot_reload_directory(agent: Any, seen_mtimes: dict[str, int]) -> None:
++    """Synchronously reload new or modified ``./tools/*.py`` modules when directory hot-reload is active."""
++    if not getattr(agent, "load_tools_from_directory", False):
++        return
++    registry = getattr(agent, "tool_registry", None)
++    if registry is None or not hasattr(registry, "discover_tool_modules") or not hasattr(registry, "reload_tool"):
++        return
++    for module_name, path in registry.discover_tool_modules().items():
++        try:
++            mtime_ns = path.stat().st_mtime_ns
++        except OSError:
++            continue
++        key = str(path.resolve())
++        if seen_mtimes.get(key) != mtime_ns or module_name not in registry.registry:
++            try:
++                registry.reload_tool(module_name)
++                seen_mtimes[key] = mtime_ns
++            except Exception as error:
++                logger.debug("module_name=<%s>, error=<%s> | hot_reload sync skipped", module_name, error)
++
++
+ def _resolve_available_tools(agent: Any, allowed_tools: list[str] | None) -> set[str]:
+     """Determine which tools to expose to the code. No programmatic tool caller is ever exposed -- not
+     this one, not another instance (two callers exposing each other would recurse). With
+@@ -219,15 +247,19 @@ def _resolve_available_tools(agent: Any, allowed_tools: list[str] | None) -> set
+     return available
+ 
+ 
+-def _build_external_lookup(available_tools: set[str], tool_context: ToolContext) -> dict[str, Any]:
+-    """The host functions handed to the sandbox: one per tool, plus an alias for each tool whose name
+-    is not a valid identifier (MCP servers commonly use ``-`` or ``.``): every non-word character
+-    becomes ``_``, matching how ``agent.tool.<name>`` resolves underscores to hyphens. An alias is
+-    skipped when it would shadow a real tool name or another tool's alias. The functions share one
+-    pool of concurrency slots per run."""
+-    semaphore = asyncio.Semaphore(_MAX_CONCURRENT_TOOL_CALLS)
+-    lookup: dict[str, Any] = {
+-        name: _make_async_tool_function(tool_context, name, semaphore) for name in available_tools
++def _populate_external_lookup(
++    lookup: dict[str, Any],
++    available_tools: set[str],
++    tool_context: ToolContext,
++    semaphore: asyncio.Semaphore,
++    on_after_call: Callable[[], None] | None = None,
++) -> dict[str, Any]:
++    """Populate ``lookup`` in place with one host function per tool plus identifier aliases."""
++    fresh: dict[str, Any] = {
++        name: lookup[name]
++        if name in lookup
++        else _make_async_tool_function(tool_context, name, semaphore, on_after_call)
++        for name in available_tools
+     }
+ 
+     aliases: dict[str, str] = {}
+@@ -253,10 +285,23 @@ def _build_external_lookup(available_tools: set[str], tool_context: ToolContext)
+         logger.warning("alias=<%s> | multiple tools normalize to this name, no alias injected", alias)
+ 
+     for alias, tool_name in aliases.items():
+-        lookup[alias] = lookup[tool_name]
++        fresh[alias] = fresh[tool_name]
++
++    lookup.clear()
++    lookup.update(fresh)
+     return lookup
+ 
+ 
++def _build_external_lookup(available_tools: set[str], tool_context: ToolContext) -> dict[str, Any]:
++    """The host functions handed to the sandbox: one per tool, plus an alias for each tool whose name
++    is not a valid identifier (MCP servers commonly use ``-`` or ``.``): every non-word character
++    becomes ``_``, matching how ``agent.tool.<name>`` resolves underscores to hyphens. An alias is
++    skipped when it would shadow a real tool name or another tool's alias. The functions share one
++    pool of concurrency slots per run."""
++    semaphore = asyncio.Semaphore(_MAX_CONCURRENT_TOOL_CALLS)
++    return _populate_external_lookup({}, available_tools, tool_context, semaphore)
++
++
+ class _Output:
+     """Collects the code's ``print()`` output, capped at ``_MAX_OUTPUT_CHARS``."""
+ 
+@@ -302,6 +347,7 @@ def make_programmatic_tool_caller(
+     name: str = "programmatic_tool_caller",
+     description: str = DEFAULT_PROGRAMMATIC_TOOL_CALLER_DESCRIPTION,
+     timeout: float | None = _DEFAULT_TIMEOUT,
++    hot_reload: bool = True,
+ ) -> Any:
+     """Create a programmatic-tool-caller tool.
+ 
+@@ -317,11 +363,14 @@ def make_programmatic_tool_caller(
+         description: Tool description shown to the model.
+         timeout: Wall-clock ceiling in seconds for a run, tool calls included, or ``None`` to
+             disable it. Guest compute time is bounded separately by the sandbox (``_LIMITS``).
++        hot_reload: Sync ``./tools/*.py`` and runtime-loaded ``@tool`` registrations dynamically
++            before and during sandbox execution. Defaults to ``True``.
+ 
+     Returns:
+         A decorated tool that runs code with access to the agent's other tools.
+     """
+     resolved_allowed_tools = list(allowed_tools) if allowed_tools is not None else None
++    seen_mtimes_by_registry: weakref.WeakKeyDictionary[Any, dict[str, int]] = weakref.WeakKeyDictionary()
+ 
+     @tool(name=name, description=description, context="tool_context")
+     async def programmatic_tool_caller_tool(code: str, tool_context: ToolContext) -> dict[str, Any]:
+@@ -339,8 +388,28 @@ def make_programmatic_tool_caller(
+         if agent is None:
+             return _error_result("No agent available. The programmatic tool caller requires an agent context.")
+ 
+-        available_tools = _resolve_available_tools(agent, resolved_allowed_tools)
+-        external_lookup = _build_external_lookup(available_tools, tool_context)
++        semaphore = asyncio.Semaphore(_MAX_CONCURRENT_TOOL_CALLS)
++        external_lookup: dict[str, Any] = {}
++        seen_mtimes: dict[str, int] = {}
++        if hot_reload and getattr(agent, "tool_registry", None) is not None:
++            try:
++                seen_mtimes = seen_mtimes_by_registry.setdefault(agent.tool_registry, {})
++            except TypeError:
++                seen_mtimes = {}
++
++        def refresh_lookup() -> None:
++            if hot_reload:
++                _sync_hot_reload_directory(agent, seen_mtimes)
++            available_tools = _resolve_available_tools(agent, resolved_allowed_tools)
++            _populate_external_lookup(
++                external_lookup,
++                available_tools,
++                tool_context,
++                semaphore,
++                refresh_lookup if hot_reload else None,
++            )
++
++        refresh_lookup()
+         output = _Output()
+ 
+         try:
+diff --git a/harness-py/src/strands_harness/tools/subagent.py b/harness-py/src/strands_harness/tools/subagent.py
+index e13174e62..b6f8ae5eb 100644
+--- a/harness-py/src/strands_harness/tools/subagent.py
++++ b/harness-py/src/strands_harness/tools/subagent.py
+@@ -16,20 +16,31 @@ Named ``presets`` add an ``agent_type`` enum. Children are built through an inje
+ 
+ from __future__ import annotations
+ 
++import asyncio
+ import copy
++import json
+ import logging
++import math
+ import re
+-from collections.abc import Callable, Mapping, Sequence
+-from dataclasses import dataclass
+-from typing import TYPE_CHECKING, Any
++import threading
++import time
++import uuid
++import weakref
++from collections import deque
++from collections.abc import AsyncIterator, Callable, Mapping, Sequence
++from dataclasses import dataclass, field
++from typing import TYPE_CHECKING, Any, Literal
+ 
+ from strands.experimental.context_manager import ContextManager
++from strands.hooks import AfterInvocationEvent, AfterToolCallEvent, BeforeToolCallEvent
++from strands.interrupt import InterruptException
+ from strands.models import Model, ModelRouter
+ from strands.tools.mcp import MCPClient
+ from strands.tools.tools import AgentTool
+ from strands.types._events import ToolInterruptEvent, ToolResultEvent, ToolStreamEvent
+ from strands.types.content import ContentBlock, Message
+-from strands.types.tools import ToolGenerator, ToolUse
++from strands.types.tools import ToolGenerator, ToolResult, ToolUse
++from strands.vended_plugins.context_injector import ContextInjector, InjectionContext
+ 
+ from strands_harness import defaults
+ from strands_harness.memory import resolve_memory
+@@ -38,6 +49,7 @@ logger = logging.getLogger(__name__)
+ 
+ if TYPE_CHECKING:
+     from strands import Agent
++    from strands.agent import AgentResult
+ 
+ 
+ @dataclass(frozen=True)
+@@ -186,6 +198,12 @@ def _choice_prop(choice: Choice, base: str = "") -> dict[str, Any]:
+     return prop
+ 
+ 
++_BACKGROUND_ACTIONS = ("spawn", "status", "steer", "recover", "cancel")
++_DEFAULT_BACKGROUND_STALL_TIMEOUT = 60.0
++_DEFAULT_BACKGROUND_MAX_CONSECUTIVE_ERRORS = 3
++_DEFAULT_BACKGROUND_POLL_INTERVAL = 0.05
++
++
+ def _build_schema(
+     *,
+     presets: Mapping[str, Preset],
+@@ -194,16 +212,37 @@ def _build_schema(
+     mcp_servers: Any,
+     model: Any,
+     context: Any,
++    background: bool = False,
+ ) -> dict[str, Any]:
+     """Derive the input schema from the axis modes: each axis adds zero or one parameter."""
+-    props: dict[str, Any] = {
+-        "task": {
++    props: dict[str, Any] = {}
++    if background:
++        props["action"] = {
++            "type": "string",
++            "enum": list(_BACKGROUND_ACTIONS),
++            "description": (
++                "Background subagent operation. Omit or use 'spawn' to start a background subagent and continue "
++                "working immediately; 'status' to inspect live progress; 'steer' to send mid-flight guidance (`task`) "
++                "to a running subagent without restarting it; 'recover' to cancel a hung/stalled subagent, salvage "
++                "its completed history, and continue with adjusted `task`/axis settings; 'cancel' to stop and return "
++                "salvaged progress."
++            ),
++        }
++        props["subagent_id"] = {
+             "type": "string",
+-            "description": "The self-contained task, including all context the subagent needs. It "
+-            "starts from a blank conversation and cannot ask follow-up questions.",
++            "description": "Target background subagent ID (required for 'status', 'steer', 'recover', and 'cancel').",
+         }
++    props["task"] = {
++        "type": "string",
++        "description": (
++            "The self-contained task (for 'spawn'), mid-flight guidance (for 'steer'), or adjusted instructions "
++            "(for 'recover')."
++            if background
++            else "The self-contained task, including all context the subagent needs. It "
++            "starts from a blank conversation and cannot ask follow-up questions."
++        ),
+     }
+-    required = ["task"]
++    required = [] if background else ["task"]
+ 
+     if presets:
+         props["agent_type"] = {
+@@ -358,6 +397,10 @@ def _is_valid_trim_point(messages: list[Message], index: int) -> bool:
+     return True
+ 
+ 
++# Reasoning is the parent model's signed state, and injected text is context for the parent's own turn.
++_PARENT_ONLY_BLOCKS = ("reasoningContent", "injected")
++
++
+ def _fork_messages(parent: Agent | None, last_n: int | None) -> list[Message]:
+     """The parent's messages for ``"all"`` mode — real content blocks (tool calls, results, images),
+     not a text rendering. Tool calls still in flight — the delegating call itself and any parallel
+@@ -377,7 +420,8 @@ def _fork_messages(parent: Agent | None, last_n: int | None) -> list[Message]:
+         content = [
+             b
+             for b in message["content"]
+-            if "reasoningContent" not in b and ("toolUse" not in b or b["toolUse"]["toolUseId"] in answered)
++            if not any(key in b for key in _PARENT_ONLY_BLOCKS)
++            and ("toolUse" not in b or b["toolUse"]["toolUseId"] in answered)
+         ]
+         if content:
+             # Deep copy: the SDK's guardrail redaction rewrites toolResult dicts on the child's last message in place.
+@@ -461,9 +505,151 @@ def _with_context(task: str, block: str) -> str:
+ # Depth travels on each child's own state, not a build-time parameter.
+ _DEPTH_STATE_KEY = "subagent_depth"
+ 
++# Stop reasons that mean the child never produced an answer; the parent must see a failure, not its partial text.
++# "refusal" comes from the Anthropic providers and is absent from the Python SDK's StopReason literal.
++_FAILED_STOP_REASONS = frozenset({"cancelled", "content_filtered", "refusal"})
++
++
++def _final_tool_result(tool_use_id: str, result: AgentResult) -> ToolResult:
++    """Map the child's stop reason onto the parent's tool result."""
++    if result.stop_reason not in _FAILED_STOP_REASONS:
++        return {"toolUseId": tool_use_id, "status": "success", "content": [{"text": str(result)}]}
++    message = f"Subagent stopped before finishing (stop_reason={result.stop_reason})."
++    partial = str(result).rstrip("\n")
++    if partial:
++        message += f"\n\nPartial output:\n{partial}"
++    return {"toolUseId": tool_use_id, "status": "error", "content": [{"text": message}]}
++
++
++_RECOVER_PREAMBLE = (
++    "The conversation so far is your prior subagent progress before a hangup occurred. Continue from "
++    "what is already completed without redoing finished work; the parent agent's updated instructions follow."
++)
++
++
++def _with_recovered_history(task: str, messages: list[Message]) -> str | list[Message]:
++    if not messages:
++        return task
++    framed: ContentBlock = {"text": f"{_RECOVER_PREAMBLE}\n\n{task}"}
++    if messages[-1]["role"] == "user":
++        return [*messages[:-1], {"role": "user", "content": [*messages[-1]["content"], framed]}]
++    return [*messages, {"role": "user", "content": [framed]}]
++
++
++async def _cleanup_child_agent(child: Agent) -> None:
++    """Cancel any in-flight background tool tasks owned by ``child`` and release its watchers/consumers."""
++    plugins = getattr(getattr(child, "_plugin_registry", None), "_plugins", None)
++    bg = plugins.get("strands:background-tasks") if isinstance(plugins, dict) else None
++    manager = getattr(bg, "_manager", None)
++    if manager is not None:
++        try:
++            active_ids = [
++                item["task_id"]
++                for item in await manager.list()
++                if item.get("status") in ("queued", "working", "cancelling")
++            ]
++            for tid in active_ids:
++                await manager.cancel(tid)
++            for tid in active_ids:
++                await manager.wait(tid)
++        except Exception:
++            pass
++    try:
++        await asyncio.to_thread(child.cleanup)
++    except Exception:
++        pass
++
++
++@dataclass
++class _BackgroundChildRun:
++    """Live state tracked for one async background child execution owned by ``_SubagentTool``."""
++
++    subagent_id: str
++    tool_use: ToolUse
++    raw_input: Mapping[str, Any]
++    child: Agent
++    cancel_event: threading.Event
++    steering: deque[str] = field(default_factory=deque)
++    status: Literal["running", "completed", "failed", "interrupted", "cancelled"] = "running"
++    started_at: float = field(default_factory=time.monotonic)
++    last_event_at: float = field(default_factory=time.monotonic)
++    turn_count: int = 0
++    current_tool: str | None = None
++    current_tool_started_at: float | None = None
++    consecutive_tool_errors: int = 0
++    recent_errors: list[str] = field(default_factory=list)
++    final_output: str | None = None
++    error_message: str | None = None
++    interrupts: list[dict[str, Any]] | None = None
++    delivered: bool = False
++    hangup_notified: bool = False
++    task: asyncio.Task[None] | None = None
++
++    def salvaged_findings(self, limit: int = 6) -> list[str]:
++        items: list[str] = []
++        for msg in self.child.messages:
++            role = msg.get("role")
++            for block in msg.get("content", []):
++                if "toolResult" in block and block["toolResult"].get("status") == "success":
++                    for inner in block["toolResult"].get("content", []):
++                        if "text" in inner and inner["text"].strip():
++                            items.append(inner["text"].strip()[:300])
++                elif role == "assistant" and "text" in block and block["text"].strip():
++                    items.append(block["text"].strip()[:300])
++        return items[-limit:]
++
++    def snapshot(self) -> dict[str, Any]:
++        now = time.monotonic()
++        snap: dict[str, Any] = {
++            "subagent_id": self.subagent_id,
++            "status": self.status,
++            "elapsed_s": round(now - self.started_at, 2),
++            "idle_s": round(now - self.last_event_at, 2),
++            "turn_count": self.turn_count,
++            "current_tool": self.current_tool,
++            "current_tool_elapsed_s": (
++                round(now - self.current_tool_started_at, 2) if self.current_tool_started_at is not None else None
++            ),
++            "consecutive_tool_errors": self.consecutive_tool_errors,
++            "recent_errors": self.recent_errors[-3:],
++            "salvaged_progress": self.salvaged_findings(),
++        }
++        todos = self.child.state.get("todos")
++        if todos:
++            snap["todos"] = todos
++        if self.final_output is not None:
++            snap["result"] = self.final_output
++        if self.error_message is not None:
++            snap["error"] = self.error_message
++        if self.interrupts is not None:
++            snap["interrupts"] = self.interrupts
++        return snap
++
++
++async def _iter_with_stall_timeout(
++    events: AsyncIterator[dict[str, Any]],
++    *,
++    stall_timeout: float | None,
++    on_stall: Callable[[], None],
++) -> AsyncIterator[dict[str, Any]]:
++    if stall_timeout is None:
++        async for event in events:
++            yield event
++        return
++    iterator = events.__aiter__()
++    while True:
++        try:
++            event = await asyncio.wait_for(iterator.__anext__(), timeout=stall_timeout)
++        except StopAsyncIteration:
++            return
++        except asyncio.TimeoutError:
++            on_stall()
++            return
++        yield event
++
+ 
+ class _SubagentTool(AgentTool):
+-    """Streams a fresh per-call child and propagates its interrupts to the parent for resume."""
++    """Streams a fresh per-call child (foreground) or supervises non-blocking async children (background)."""
+ 
+     def __init__(
+         self,
+@@ -472,6 +658,11 @@ class _SubagentTool(AgentTool):
+         resolve: Callable[[Mapping[str, Any]], AgentSpec],
+         builder: AgentBuilder,
+         max_depth: int,
++        *,
++        background: bool = False,
++        stall_timeout: float | None = None,
++        max_consecutive_errors: int | None = None,
++        poll_interval: float = _DEFAULT_BACKGROUND_POLL_INTERVAL,
+     ) -> None:
+         super().__init__()
+         self._name = name
+@@ -479,8 +670,26 @@ class _SubagentTool(AgentTool):
+         self._resolve = resolve
+         self._builder = builder
+         self._max_depth = max_depth
++        self._background = background
++        self._stall_timeout = (
++            _DEFAULT_BACKGROUND_STALL_TIMEOUT if (background and stall_timeout is None) else stall_timeout
++        )
++        self._max_consecutive_errors = (
++            _DEFAULT_BACKGROUND_MAX_CONSECUTIVE_ERRORS
++            if (background and max_consecutive_errors is None)
++            else max_consecutive_errors
++        )
++        self._poll_interval = poll_interval
+         # Children awaiting a resume, keyed by the tool-use id that interrupted.
+         self._pending: dict[str, Agent] = {}
++        self._runs_by_parent: weakref.WeakKeyDictionary[Any, dict[str, _BackgroundChildRun]] = (
++            weakref.WeakKeyDictionary()
++        )
++        self._attached_parents: weakref.WeakSet[Any] = weakref.WeakSet()
++
++    @property
++    def background(self) -> bool:
++        return self._background
+ 
+     @property
+     def tool_name(self) -> str:
+@@ -494,11 +703,382 @@ class _SubagentTool(AgentTool):
+     def tool_type(self) -> str:
+         return "agent"
+ 
++    def _error_result(self, tool_use_id: str, text: str) -> ToolResultEvent:
++        return ToolResultEvent({"toolUseId": tool_use_id, "status": "error", "content": [{"text": text}]})
++
++    def _runs_for(self, parent: Agent) -> dict[str, _BackgroundChildRun]:
++        runs = self._runs_by_parent.get(parent)
++        if runs is None:
++            runs = {}
++            self._runs_by_parent[parent] = runs
++        return runs
++
++    def _detect_hangup(self, run: _BackgroundChildRun) -> str | None:
++        if run.status != "running":
++            return None
++        now = time.monotonic()
++        if (
++            self._stall_timeout is not None
++            and run.current_tool_started_at is not None
++            and (now - run.current_tool_started_at) >= self._stall_timeout
++        ):
++            return f"Tool {run.current_tool!r} hung for {now - run.current_tool_started_at:.2f}s"
++        if self._stall_timeout is not None and (now - run.last_event_at) >= self._stall_timeout:
++            return f"Subagent stream stalled with no progress for {now - run.last_event_at:.2f}s"
++        if (
++            self._max_consecutive_errors is not None
++            and run.consecutive_tool_errors >= self._max_consecutive_errors
++        ):
++            last_err = run.recent_errors[-1] if run.recent_errors else "unknown error"
++            return f"Subagent hit {run.consecutive_tool_errors} consecutive tool errors ({last_err})"
++        return None
++
++    def _ensure_parent_hooks(self, parent: Agent) -> None:
++        if parent in self._attached_parents:
++            return
++        self._attached_parents.add(parent)
++
++        def render_telemetry(_ctx: InjectionContext) -> str | None:
++            runs = self._runs_by_parent.get(parent)
++            if not runs:
++                return None
++            undelivered = [r for r in runs.values() if not r.delivered]
++            if not undelivered:
++                return None
++            lines = [f"<system-reminder>\nBackground {self._name} runs:"]
++            for r in undelivered:
++                snap = r.snapshot()
++                hangup = self._detect_hangup(r)
++                flag = f" [HANGUP: {hangup}]" if hangup else ""
++                lines.append(
++                    f"- {r.subagent_id}: status={snap['status']}{flag}, turns={snap['turn_count']}, "
++                    f"tool={snap['current_tool']} ({snap['current_tool_elapsed_s']}s), "
++                    f"errors={snap['consecutive_tool_errors']}"
++                )
++            lines.append("</system-reminder>")
++            return "\n".join(lines)
++
++        ContextInjector(
++            render_telemetry,
++            name=f"harness:subagent-telemetry:{self._name}:{id(self)}",
++            trigger="everyTurn",
++        ).init_agent(parent)
++
++        async def on_after_invocation(event: AfterInvocationEvent) -> None:
++            runs = self._runs_by_parent.get(parent)
++            if not runs:
++                return
++            if event.result is not None and event.result.stop_reason not in ("end_turn", "stop_sequence"):
++                return
++
++            while True:
++                if parent.cancel_signal.is_set():
++                    for r in runs.values():
++                        if r.status == "running":
++                            r.cancel_event.set()
++                            if r.task is not None and not r.task.done():
++                                r.task.cancel()
++                    return
++
++                settled = [r for r in runs.values() if r.status != "running" and not r.delivered]
++                if settled:
++                    for r in settled:
++                        r.delivered = True
++                    payload = json.dumps([r.snapshot() for r in settled], indent=2)
++                    event.resume = f"[{self._name}-completed] Background subagent(s) finished:\n{payload}"
++                    return
++
++                running = [r for r in runs.values() if r.status == "running"]
++                if not running:
++                    return
++
++                hung: list[tuple[_BackgroundChildRun, str]] = []
++                for r in running:
++                    reason = self._detect_hangup(r)
++                    if reason and not r.hangup_notified:
++                        hung.append((r, reason))
++
++                if hung:
++                    alerts = []
++                    for r, reason in hung:
++                        r.hangup_notified = True
++                        alerts.append({"hangup_reason": reason, **r.snapshot()})
++                    event.resume = (
++                        f"[{self._name}-hangup] Background subagent hangup detected. Call `{self._name}` with "
++                        f"action='steer' (send mid-flight guidance), action='recover' (cancel hung step, salvage "
++                        f"completed history, and continue with adjusted `task`/tools/model), or action='cancel':\n"
++                        + json.dumps(alerts, indent=2)
++                    )
++                    return
++
++                tasks = [r.task for r in running if r.task is not None]
++                if not tasks:
++                    return
++                await asyncio.wait(tasks, timeout=self._poll_interval, return_when=asyncio.FIRST_COMPLETED)
++
++        parent.add_hook(on_after_invocation, AfterInvocationEvent)
++
++    async def _spawn_background_run(
++        self,
++        tool_use: ToolUse,
++        raw: Mapping[str, Any],
++        parent: Agent,
++        invocation_state: dict[str, Any],
++        *,
++        salvaged_messages: list[Message] | None = None,
++    ) -> _BackgroundChildRun | ToolResultEvent:
++        tool_use_id = tool_use["toolUseId"]
++        stored_depth = parent.state.get(_DEPTH_STATE_KEY)
++        depth = self._max_depth if stored_depth is None else stored_depth
++        if depth <= 0:
++            return self._error_result(
++                tool_use_id,
++                f"Delegation depth limit reached ({self._max_depth} levels); you cannot delegate further. "
++                "Complete this task yourself instead of calling subagent again.",
++            )
++        task = raw.get("task")
++        if not isinstance(task, str) or not task.strip():
++            return self._error_result(tool_use_id, "Missing required parameter 'task': describe the task to delegate.")
++
++        spec = self._resolve(raw)
++        child = self._builder(spec)
++        child.state.set(_DEPTH_STATE_KEY, depth - 1)
++
++        if salvaged_messages is not None:
++            prompt: Any = _with_recovered_history(spec.task, salvaged_messages)
++        elif spec.context == "all":
++            prompt = _with_history(spec.task, _fork_messages(parent, spec.last_messages))
++        elif spec.context == "no_tools":
++            prompt = _with_context(spec.task, _render_context(parent, spec.last_messages))
++        else:
++            prompt = spec.task
++
++        sub_id = f"{self._name}-{uuid.uuid4().hex[:8]}"
++        cancel_ev = threading.Event()
++        steering_q: deque[str] = deque()
++
++        def render_child_steering(_ctx: InjectionContext) -> str | None:
++            if not steering_q:
++                return None
++            items: list[str] = []
++            while steering_q:
++                items.append(steering_q.popleft())
++            return "<parent-steering>\n" + "\n".join(items) + "\n</parent-steering>"
++
++        ContextInjector(
++            render_child_steering,
++            name=f"harness:subagent-steering:{sub_id}",
++            trigger="everyTurn",
++        ).init_agent(child)
++
++        synthetic_tool_use: ToolUse = {
++            "toolUseId": sub_id,
++            "name": self._name,
++            "input": {"task": spec.task, "subagent_id": sub_id},
++        }
++        run = _BackgroundChildRun(
++            subagent_id=sub_id,
++            tool_use=synthetic_tool_use,
++            raw_input=dict(raw),
++            child=child,
++            cancel_event=cancel_ev,
++            steering=steering_q,
++        )
++
++        def on_before_tool(ev: BeforeToolCallEvent) -> None:
++            run.current_tool = ev.tool_use["name"]
++            run.current_tool_started_at = time.monotonic()
++            run.last_event_at = time.monotonic()
++
++        def on_after_tool(ev: AfterToolCallEvent) -> None:
++            run.current_tool = None
++            run.current_tool_started_at = None
++            run.last_event_at = time.monotonic()
++            if ev.result.get("status") == "error":
++                run.consecutive_tool_errors += 1
++                err_txt = next((b["text"] for b in ev.result.get("content", []) if "text" in b), "tool error")
++                run.recent_errors.append(f"{ev.tool_use['name']}: {err_txt[:200]}")
++            else:
++                run.consecutive_tool_errors = 0
++
++        child.add_hook(on_before_tool, BeforeToolCallEvent)
++        child.add_hook(on_after_tool, AfterToolCallEvent)
++
++        child_state = {**invocation_state} if isinstance(invocation_state, dict) else invocation_state
++
++        async def drive() -> None:
++            try:
++                result = None
++                async for ev in child.stream_async(prompt, invocation_state=child_state, cancel_signal=cancel_ev):
++                    run.last_event_at = time.monotonic()
++                    if ev.get("start_event_loop"):
++                        run.turn_count += 1
++                    if "result" in ev:
++                        result = ev["result"]
++                    else:
++                        stream_ev = ToolStreamEvent(synthetic_tool_use, ev)
++                        stream_ev.prepare(invocation_state=child_state)
++                        parent.callback_handler(**stream_ev.as_dict())
++
++                if cancel_ev.is_set():
++                    run.status = "cancelled"
++                elif result is None:
++                    run.status = "failed"
++                    run.error_message = "Subagent produced no result."
++                elif result.stop_reason == "interrupt" and result.interrupts:
++                    run.status = "interrupted"
++                    run.interrupts = [i.to_dict() for i in result.interrupts]
++                elif result.stop_reason in _FAILED_STOP_REASONS:
++                    run.status = "failed"
++                    run.error_message = f"Subagent stopped before finishing (stop_reason={result.stop_reason})."
++                else:
++                    run.status = "completed"
++                    run.final_output = str(result)
++            except asyncio.CancelledError:
++                run.status = "cancelled"
++            except Exception as exc:
++                run.status = "failed"
++                run.error_message = str(exc)
++                run.recent_errors.append(str(exc))
++            finally:
++                run.current_tool = None
++                run.current_tool_started_at = None
++                run.last_event_at = time.monotonic()
++                if run.status != "interrupted":
++                    await _cleanup_child_agent(child)
++
++        self._ensure_parent_hooks(parent)
++        runs = self._runs_for(parent)
++        run.task = asyncio.create_task(drive())
++        runs[sub_id] = run
++        return run
++
++    async def _handle_background_call(
++        self, tool_use: ToolUse, raw: Mapping[str, Any], parent: Agent | None, invocation_state: dict[str, Any]
++    ) -> ToolResultEvent:
++        tool_use_id = tool_use["toolUseId"]
++        if parent is None:
++            return self._error_result(tool_use_id, "Background subagent requires a parent Agent in invocation_state.")
++
++        action = str(raw.get("action") or "spawn")
++        if action not in _BACKGROUND_ACTIONS:
++            return self._error_result(
++                tool_use_id, f"Unknown action {action!r}; valid values: {list(_BACKGROUND_ACTIONS)}."
++            )
++
++        try:
++            if action == "spawn":
++                spawned = await self._spawn_background_run(tool_use, raw, parent, invocation_state)
++                if not isinstance(spawned, _BackgroundChildRun):
++                    return spawned
++                return ToolResultEvent(
++                    {
++                        "toolUseId": tool_use_id,
++                        "status": "success",
++                        "content": [
++                            {
++                                "json": {
++                                    "subagent_id": spawned.subagent_id,
++                                    "status": "running",
++                                    "message": (
++                                        "Subagent dispatched asynchronously in the background. Continue your own work; "
++                                        "results (or hangup alerts) will be delivered automatically, or inspect/adjust "
++                                        f"anytime with `{self._name}` action='status'|'steer'|'recover'|'cancel'."
++                                    ),
++                                }
++                            }
++                        ],
++                    }
++                )
++
++            subagent_id = raw.get("subagent_id")
++            runs = self._runs_for(parent)
++            if not isinstance(subagent_id, str) or subagent_id not in runs:
++                return self._error_result(
++                    tool_use_id,
++                    f"Unknown or missing subagent_id {subagent_id!r}. Active IDs: {sorted(runs)}.",
++                )
++            target = runs[subagent_id]
++
++            if action == "status":
++                return ToolResultEvent(
++                    {"toolUseId": tool_use_id, "status": "success", "content": [{"json": target.snapshot()}]}
++                )
++
++            if action == "steer":
++                guidance = raw.get("task")
++                if not isinstance(guidance, str) or not guidance.strip():
++                    return self._error_result(tool_use_id, "Parameter 'task' is required for action='steer'.")
++                if target.status != "running":
++                    return self._error_result(
++                        tool_use_id,
++                        f"Cannot steer subagent {subagent_id!r} with status={target.status!r}; use action='recover'.",
++                    )
++                target.steering.append(guidance)
++                target.hangup_notified = False
++                return ToolResultEvent(
++                    {
++                        "toolUseId": tool_use_id,
++                        "status": "success",
++                        "content": [
++                            {"json": {"steered": subagent_id, "queued_guidance": guidance, **target.snapshot()}}
++                        ],
++                    }
++                )
++
++            target.cancel_event.set()
++            if target.task is not None and not target.task.done():
++                target.task.cancel()
++                await asyncio.gather(target.task, return_exceptions=True)
++            await _cleanup_child_agent(target.child)
++            target.status = "cancelled"
++            target.delivered = True
++            salvaged_snap = target.snapshot()
++
++            if action == "cancel":
++                return ToolResultEvent(
++                    {"toolUseId": tool_use_id, "status": "success", "content": [{"json": {"cancelled": salvaged_snap}}]}
++                )
++
++            salvaged_messages = _fork_messages(target.child, last_n=None)
++            merged_raw: dict[str, Any] = {**target.raw_input, **raw, "action": "spawn"}
++            replacement = await self._spawn_background_run(
++                tool_use, merged_raw, parent, invocation_state, salvaged_messages=salvaged_messages
++            )
++            if not isinstance(replacement, _BackgroundChildRun):
++                return replacement
++            return ToolResultEvent(
++                {
++                    "toolUseId": tool_use_id,
++                    "status": "success",
++                    "content": [
++                        {
++                            "json": {
++                                "recovered_from": subagent_id,
++                                "salvaged_message_count": len(salvaged_messages),
++                                "salvaged_progress": salvaged_snap["salvaged_progress"],
++                                "subagent_id": replacement.subagent_id,
++                                "status": "running",
++                            }
++                        }
++                    ],
++                }
++            )
++        except Exception as exc:
++            return self._error_result(tool_use_id, f"Subagent error: {exc}")
++
+     async def stream(self, tool_use: ToolUse, invocation_state: dict[str, Any], **kwargs: Any) -> ToolGenerator:
+         tool_use_id = tool_use["toolUseId"]
+         raw = tool_use.get("input", {}) or {}
+         parent = invocation_state.get("agent")
+ 
++        if self._background:
++            yield await self._handle_background_call(tool_use, raw, parent, invocation_state)
++            return
++
++        tool_context = kwargs.get("_tool_context")
++        in_sdk_background_task = hasattr(tool_context, "_task_interrupt_state")
++
+         # resolve/build/render can raise; surface it as an error tool result, not an uncaught exception.
+         try:
+             child = self._pending.get(tool_use_id)
+@@ -537,16 +1117,72 @@ class _SubagentTool(AgentTool):
+                 else:
+                     prompt = spec.task
+ 
+-            # Cancelling the parent's tool call cancels the delegation too (mirrors the SDK's _AgentAsTool).
+-            cancel_signal = getattr(parent, "cancel_signal", None)
++            # Cancelling the task-scoped background call OR the parent cancels the delegation too.
++            external_cancel = (
++                tool_context.cancel_signal if tool_context is not None else getattr(parent, "cancel_signal", None)
++            )
++            local_cancel = threading.Event()
++            stalled = False
++
++            def trigger_stall() -> None:
++                nonlocal stalled
++                stalled = True
++                local_cancel.set()
++
++            cancel_signal: threading.Event | None
++            watcher: asyncio.Task[None] | None = None
++            if self._stall_timeout is not None:
++                cancel_signal = local_cancel
++                if external_cancel is not None:
++                    if external_cancel.is_set():
++                        local_cancel.set()
++                    else:
++
++                        async def _mirror_cancel() -> None:
++                            while not external_cancel.is_set() and not local_cancel.is_set():
++                                await asyncio.sleep(0.02)
++                            if external_cancel.is_set():
++                                local_cancel.set()
++
++                        watcher = asyncio.create_task(_mirror_cancel())
++            else:
++                cancel_signal = external_cancel
++
+             # Shallow copy: the SDK rewrites invocation_state["agent"] per cycle; a shared dict would bleed agent=child.
+             child_state = {**invocation_state} if isinstance(invocation_state, dict) else invocation_state
+             result = None
+-            async for event in child.stream_async(prompt, invocation_state=child_state, cancel_signal=cancel_signal):
+-                if "result" in event:
+-                    result = event["result"]
+-                else:
+-                    yield ToolStreamEvent(tool_use, event)
++            source = child.stream_async(prompt, invocation_state=child_state, cancel_signal=cancel_signal)
++            try:
++                guarded = _iter_with_stall_timeout(
++                    source,
++                    stall_timeout=self._stall_timeout,
++                    on_stall=trigger_stall,
++                )
++                async for event in guarded:
++                    if "result" in event:
++                        result = event["result"]
++                    else:
++                        yield ToolStreamEvent(tool_use, event)
++            finally:
++                local_cancel.set()
++                if watcher is not None:
++                    watcher.cancel()
++
++            if stalled:
++                self._pending.pop(tool_use_id, None)
++                partial = "\n".join(
++                    b["text"]
++                    for m in _fork_messages(child, last_n=None)
++                    if m["role"] == "assistant"
++                    for b in m["content"]
++                    if "text" in b and b["text"].strip()
++                )
++                msg = f"Subagent stalled after {self._stall_timeout}s."
++                if partial:
++                    msg += f"\n\nSalvaged partial output:\n{partial}"
++                yield self._error_result(tool_use_id, msg)
++                return
++
+             if result is None:
+                 self._pending.pop(tool_use_id, None)
+                 yield ToolResultEvent(
+@@ -555,17 +1191,16 @@ class _SubagentTool(AgentTool):
+                 return
+             if result.stop_reason == "interrupt" and result.interrupts:
+                 self._pending[tool_use_id] = child
++                if in_sdk_background_task and tool_context is not None:
++                    first = result.interrupts[0]
++                    tool_context.interrupt(first.name, reason=first.reason)
++                    return
+                 yield ToolInterruptEvent(tool_use, list(result.interrupts))
+                 return
+-            if result.stop_reason == "cancelled":
+-                # Cancellation is data, not an exception: surface it as an error result, not a success.
+-                self._pending.pop(tool_use_id, None)
+-                yield ToolResultEvent(
+-                    {"toolUseId": tool_use_id, "status": "error", "content": [{"text": "Subagent was cancelled."}]}
+-                )
+-                return
+             self._pending.pop(tool_use_id, None)
+-            yield ToolResultEvent({"toolUseId": tool_use_id, "status": "success", "content": [{"text": str(result)}]})
++            yield ToolResultEvent(_final_tool_result(tool_use_id, result))
++        except InterruptException:
++            raise
+         except Exception as exc:
+             self._pending.pop(tool_use_id, None)
+             yield ToolResultEvent(
+@@ -587,15 +1222,11 @@ def make_subagent(
+     inherited_mcp_servers: Sequence[str] = (),
+     max_depth: int = defaults.DEFAULT_SUBAGENT_MAX_DEPTH,
+     name: str = "subagent",
++    background: bool = False,
++    stall_timeout: float | None = None,
++    max_consecutive_errors: int | None = None,
+ ) -> AgentTool:
+-    """Build a ``subagent`` tool whose schema follows the axis modes and preset map.
+-
+-    ``max_depth`` bounds delegation depth: each child's remaining budget is stored on its own
+-    ``agent.state`` right after it's built (not passed to ``builder``), read back the next time this
+-    tool is called on that child, and decremented again. At 0 the tool refuses with an error result
+-    rather than building another child, so recursion is bounded without threading depth through the
+-    builder's construction path.
+-    """
++    """Build a ``subagent`` tool whose schema follows the axis modes, preset map, and ``background`` mode."""
+     presets = dict(presets or {})
+     instructions = instructions if instructions is not None else Open()
+     model = model if model is not None else Inherit()
+@@ -631,9 +1262,13 @@ def make_subagent(
+         mcp_servers=mcp_servers,
+         model=model,
+         context=context,
++        background=background,
+     )
+     base_description = (
+-        "Delegate a self-contained task to a subagent that runs in its own context and returns a "
++        "Delegate a self-contained task to a subagent that runs asynchronously in the background so you can "
++        "continue working; inspect, steer, recover from hangups, or cancel via `action`."
++        if background
++        else "Delegate a self-contained task to a subagent that runs in its own context and returns a "
+         "final report. Reach for this when a subtask would otherwise flood your context with "
+         "intermediate work and you only need its conclusion. Do not poll for progress or redo its work."
+     )
+@@ -657,7 +1292,16 @@ def make_subagent(
+             allowed_mcp=allowed_mcp,
+         )
+ 
+-    return _SubagentTool(name, tool_spec, resolve, builder, max_depth)
++    return _SubagentTool(
++        name,
++        tool_spec,
++        resolve,
++        builder,
++        max_depth,
++        background=background,
++        stall_timeout=stall_timeout,
++        max_consecutive_errors=max_consecutive_errors,
++    )
+ 
+ 
+ def _mcp_clients_by_name(tools: Sequence[Any]) -> dict[str, MCPClient]:
+@@ -690,6 +1334,9 @@ def build_default_subagent(
+     *,
+     memory: bool = True,
+     max_depth: int = defaults.DEFAULT_SUBAGENT_MAX_DEPTH,
++    background: bool = False,
++    stall_timeout: float | None = None,
++    max_consecutive_errors: int | None = None,
+ ) -> AgentTool:
+     """The ``subagent`` tool the harness wires by default: the ``generalist`` preset and a builder that
+     rebuilds the child through ``build_agent`` (the ``create_harness`` factory, injected to avoid
+@@ -763,4 +1410,7 @@ def build_default_subagent(
+         max_depth=max_depth,
+         # Offer context sharing; the generalist preset defaults to "none" (isolated).
+         context=Choice(list(_CONTEXT_MODES)),
++        background=background,
++        stall_timeout=stall_timeout,
++        max_consecutive_errors=max_consecutive_errors,
+     )
+diff --git a/harness-py/src/strands_harness/types/agent.py b/harness-py/src/strands_harness/types/agent.py
+index fccfa3f8d..1d072d30b 100644
+--- a/harness-py/src/strands_harness/types/agent.py
++++ b/harness-py/src/strands_harness/types/agent.py
+@@ -86,10 +86,12 @@ class ProgrammaticToolCallerConfig(TypedDict, total=False):
+     Attributes:
+         allowed_tools: Names of the agent's other tools the code may call; omit for all of them.
+         timeout: Wall-clock bound in seconds for one run, tool calls included; ``None`` for no bound.
++        hot_reload: Sync hot-reloaded directory/loaded tools into the sandbox dynamically during and across runs.
+     """
+ 
+     allowed_tools: list[str] | None
+     timeout: float | None
++    hot_reload: bool
+ 
+ 
+ class SubagentConfig(TypedDict, total=False):
+@@ -97,9 +99,16 @@ class SubagentConfig(TypedDict, total=False):
+ 
+     Attributes:
+         max_depth: How many levels of delegation a child may itself open (default 2).
++        background: Supervise subagents asynchronously in the background with ``status``, ``steer``,
++            hangup alerts, and history-salvaging ``recover``/``cancel`` actions.
++        stall_timeout: Seconds without progress (or on one hung child tool) before flagging a hangup.
++        max_consecutive_errors: Consecutive child tool failures before flagging a hangup.
+     """
+ 
+     max_depth: int
++    background: bool
++    stall_timeout: float
++    max_consecutive_errors: int
+ 
+ 
+ BuiltinToolsConfig = TypedDict(
+diff --git a/harness-py/tests/test_agent.py b/harness-py/tests/test_agent.py
+index 572b52def..9ec41ce60 100644
+--- a/harness-py/tests/test_agent.py
++++ b/harness-py/tests/test_agent.py
+@@ -364,8 +364,8 @@ class TestBuiltinToolsUnion:
+             ("read", "media"),
+             ("shell", "description"),
+             ("web_fetch", "model"),
+-            ("programmatic_tool_caller", "allowed_tools, timeout"),
+-            ("subagent", "max_depth"),
++            ("programmatic_tool_caller", "allowed_tools, hot_reload, timeout"),
++            ("subagent", "background, max_consecutive_errors, max_depth, stall_timeout"),
+         ],
+     )
+     def test_unknown_tool_config_keys_raise(self, name, allowed):
+diff --git a/harness-py/tests/tools/test_programmatic_tool_caller_async_hot_reload.py b/harness-py/tests/tools/test_programmatic_tool_caller_async_hot_reload.py
+new file mode 100644
+index 000000000..946ad68ac
+--- /dev/null
++++ b/harness-py/tests/tools/test_programmatic_tool_caller_async_hot_reload.py
+@@ -0,0 +1,194 @@
++"""Tests for programmatic_tool_caller under always=['*'] background_tasks and native hot_reload."""
++
++from __future__ import annotations
++
++import asyncio
++from pathlib import Path
++from typing import Any
++
++from strands import Agent, tool
++from strands.models import Model
++from strands_harness.tools.programmatic_tool_caller import make_programmatic_tool_caller
++
++
++def _assistant_tool(name: str, tool_use_id: str, tool_input: dict[str, Any]) -> list[dict[str, Any]]:
++    return [{"toolUse": {"name": name, "toolUseId": tool_use_id, "input": tool_input}}]
++
++
++def _assistant_text(text: str) -> list[dict[str, Any]]:
++    return [{"text": text}]
++
++
++class _ScriptedModel(Model):
++    """Minimal offline Strands Model returning scripted assistant turns."""
++
++    def __init__(self, turns: list[list[dict[str, Any]]]) -> None:
++        self._turns = list(turns)
++        self.calls = 0
++
++    def update_config(self, **model_config: Any) -> None:
++        pass
++
++    def get_config(self) -> dict[str, Any]:
++        return {}
++
++    async def structured_output(self, output_model: Any, prompt: Any, system_prompt: Any = None, **kwargs: Any):
++        if False:
++            yield
++
++    async def stream(
++        self,
++        messages: Any,
++        tool_specs: Any = None,
++        system_prompt: Any = None,
++        *,
++        tool_choice: Any = None,
++        **kwargs: Any,
++    ):
++        idx = min(self.calls, len(self._turns) - 1)
++        self.calls += 1
++        blocks = self._turns[idx]
++        yield {"messageStart": {"role": "assistant"}}
++        for i, block in enumerate(blocks):
++            if "text" in block:
++                yield {"contentBlockStart": {"contentBlockIndex": i, "start": {}}}
++                yield {"contentBlockDelta": {"contentBlockIndex": i, "delta": {"text": block["text"]}}}
++                yield {"contentBlockStop": {"contentBlockIndex": i}}
++            elif "toolUse" in block:
++                tu = block["toolUse"]
++                import json
++
++                yield {
++                    "contentBlockStart": {
++                        "contentBlockIndex": i,
++                        "start": {"toolUse": {"name": tu["name"], "toolUseId": tu["toolUseId"]}},
++                    }
++                }
++                yield {
++                    "contentBlockDelta": {
++                        "contentBlockIndex": i,
++                        "delta": {"toolUse": {"input": json.dumps(tu["input"])}},
++                    }
++                }
++                yield {"contentBlockStop": {"contentBlockIndex": i}}
++        stop_reason = "tool_use" if any("toolUse" in b for b in blocks) else "end_turn"
++        yield {"messageStop": {"stopReason": stop_reason}}
++
++
++async def test_programmatic_tool_caller_runs_async_while_inner_calls_run_inline_under_always_wildcard() -> None:
++    """Under background_tasks={'always': ['*']}, programmatic_tool_caller itself dispatches asynchronously
++    in the background while inner `await tool(...)` calls inside Monty execute inline and return real data."""
++
++    @tool
++    def compute_double(x: int) -> dict[str, Any]:
++        """Double x."""
++        return {"doubled": x * 2}
++
++    ptc = make_programmatic_tool_caller(hot_reload=True)
++    model = _ScriptedModel(
++        [
++            # Turn 1: model calls programmatic_tool_caller -> dispatched asynchronously (Task ID returned)
++            _assistant_tool(
++                "programmatic_tool_caller",
++                "ptc-1",
++                {"code": 'res = await compute_double(x=21)\nprint(res["doubled"])'},
++            ),
++            # Turn 2: model responds while background task runs -> wait_for_completion delivers result
++            _assistant_text("Dispatched orchestration."),
++            # Turn 3: model sees settled result '42'
++            _assistant_text("Final answer: 42"),
++        ]
++    )
++    agent = Agent(
++        model=model,
++        tools=[compute_double, ptc],
++        background_tasks={"always": ["*"], "wait_for_completion": True},
++        load_tools_from_directory=False,
++        callback_handler=None,
++    )
++
++    result = await agent.invoke_async("Double 21 via programmatic_tool_caller")
++    assert "42" in str(result)
++    all_tool_texts = [
++        c.get("text", "")
++        for m in agent.messages
++        for b in m.get("content", [])
++        if "toolResult" in b
++        for c in b["toolResult"].get("content", [])
++    ]
++    assert any("Background task dispatched" in t for t in all_tool_texts)
++    assert any(t.strip() == "42" for t in all_tool_texts)
++
++
++async def test_hot_reload_creates_and_calls_new_decorated_tool_in_same_monty_run(
++    tmp_path: Path, monkeypatch: Any
++) -> None:
++    """Writing a brand-new @tool Python file into ./tools/ hot-reloads via ToolWatcher / hot_reload sync
++    and is callable immediately via `await custom_tool(...)` inside the SAME programmatic_tool_caller run."""
++    monkeypatch.chdir(tmp_path)
++    tools_dir = tmp_path / "tools"
++    tools_dir.mkdir()
++
++    @tool
++    def write_tool_file(filename: str, source: str) -> str:
++        """Write a Python file inside ./tools/."""
++        target = tools_dir / filename
++        target.write_text(source, encoding="utf-8")
++        return str(target)
++
++    ptc = make_programmatic_tool_caller(hot_reload=True)
++    tool_source = (
++        "from strands import tool\n\n"
++        "@tool\n"
++        "def custom_rescuer(query: str) -> dict:\n"
++        '    """Fallback tool authored at runtime."""\n'
++        '    return {"rescued": query.upper()}\n'
++    )
++    code = (
++        f"await write_tool_file(filename='custom_rescuer.py', source={tool_source!r})\n"
++        "data = await custom_rescuer(query='olostep_recovered')\n"
++        "print(data['rescued'])\n"
++    )
++    model = _ScriptedModel(
++        [
++            _assistant_tool("programmatic_tool_caller", "ptc-hot", {"code": code}),
++            _assistant_text("Running hot-reload script."),
++            _assistant_text("Done: OLOSTEP_RECOVERED"),
++        ]
++    )
++    agent = Agent(
++        model=model,
++        tools=[write_tool_file, ptc],
++        background_tasks={"always": ["*"], "wait_for_completion": True},
++        load_tools_from_directory=True,
++        callback_handler=None,
++    )
++
++    result = await agent.invoke_async("Build custom_rescuer and run it")
++    assert "OLOSTEP_RECOVERED" in str(result)
++    assert "custom_rescuer" in agent.tool_registry.registry
++    all_tool_texts = [
++        c.get("text", "")
++        for m in agent.messages
++        for b in m.get("content", [])
++        if "toolResult" in b
++        for c in b["toolResult"].get("content", [])
++    ]
++    assert any(t.strip() == "OLOSTEP_RECOVERED" for t in all_tool_texts)
++
++    # Also verify ToolWatcher reloads an atomic file replacement on disk without programmatic_tool_caller
++    updated_source = (
++        "from strands import tool\n\n"
++        "@tool\n"
++        "def watcher_created(val: str) -> str:\n"
++        '    """Created for ToolWatcher on_moved test."""\n'
++        "    return f'watched:{val}'\n"
++    )
++    staging = tools_dir / ".watcher_created.tmp"
++    staging.write_text(updated_source, encoding="utf-8")
++    staging.replace(tools_dir / "watcher_created.py")
++    for _ in range(40):
++        if "watcher_created" in agent.tool_registry.registry:
++            break
++        await asyncio.sleep(0.05)
++    assert "watcher_created" in agent.tool_registry.registry
+diff --git a/strands-py/src/strands/multiagent/__init__.py b/strands-py/src/strands/multiagent/__init__.py
+index 8dd78c38c..1592ceb51 100644
+--- a/strands-py/src/strands/multiagent/__init__.py
++++ b/strands-py/src/strands/multiagent/__init__.py
+@@ -10,15 +10,23 @@ Submodules:
+ 
+ from .base import MultiAgentBase, MultiAgentResult, Status
+ from .graph import EdgeCondition, EdgeConditionWithContext, GraphBuilder, GraphResult
++from .spec import AgentSpec, Choice, Fixed, Inherit, Open, Option, Preset
+ from .swarm import Swarm, SwarmResult
+ 
+ __all__ = [
++    "AgentSpec",
++    "Choice",
+     "EdgeCondition",
+     "EdgeConditionWithContext",
++    "Fixed",
+     "GraphBuilder",
+     "GraphResult",
++    "Inherit",
+     "MultiAgentBase",
+     "MultiAgentResult",
++    "Open",
++    "Option",
++    "Preset",
+     "Status",
+     "Swarm",
+     "SwarmResult",
+diff --git a/strands-py/src/strands/multiagent/_agent_tool_streamer.py b/strands-py/src/strands/multiagent/_agent_tool_streamer.py
+new file mode 100644
+index 000000000..fc6c23d66
+--- /dev/null
++++ b/strands-py/src/strands/multiagent/_agent_tool_streamer.py
+@@ -0,0 +1,310 @@
++"""Wrapper for streaming agents inside tool calls.
++
++Provides common functionality for streaming child agents inside a parent agent's tool calls. This includes
++session persistence (via the parent agent's interrupt context), interrupt response forwarding, event conversion,
++and cancellation support. These features are implemented around stream calls and not within them
++because they require knowledge of the parent agent.
++"""
++
++from __future__ import annotations
++
++import copy
++import logging
++from collections.abc import AsyncIterator, Callable
++from typing import TYPE_CHECKING, Any, Protocol, cast
++from urllib.parse import quote
++
++from ..interrupt import Interrupt, InterruptException, _InterruptState
++from ..types._events import ToolInterruptEvent, ToolResultEvent
++from ..types._snapshot import Snapshot
++from ..types.event_loop import _LIMIT_STOP_REASONS, _limit_stop_message
++from ..types.tools import ToolResultContent, ToolUse
++from ._snapshot import load_snapshot, take_snapshot
++from .base import MultiAgentBase, Status
++
++if TYPE_CHECKING:
++    from ..agent.agent import Agent
++    from ..types.interrupt import InterruptResponseContent
++
++logger = logging.getLogger(__name__)
++
++_RESPONSES_KEY = "responses"
++_INTERRUPTED_TURNS_KEY = "sub_agent_interrupted_turns"
++# The child produced no answer; "refusal" comes from the Anthropic providers and is absent from StopReason.
++# "guardrail_intervened" stays a success: Bedrock also reports it for masked output, which is a complete answer.
++_NO_ANSWER_STOP_REASONS = frozenset({"content_filtered", "refusal"})
++
++
++class _ChildAdapter(Protocol):
++    """Provides persistence, interrupt, and result handling that differs between child agent types."""
++
++    label: str
++    """Model-facing name of the child, used in terminal error messages."""
++
++    def take_snapshot(self, child: Any) -> Snapshot:
++        """Capture snapshot needed to resume the child invocation."""
++        ...
++
++    def restore(self, child: Any, snapshot: Snapshot | None) -> bool:
++        """Restore snapshot and report whether it awaits interrupt responses."""
++        ...
++
++    def classify(self, child: Any, result: Any) -> list[Interrupt] | str | None:
++        """Return interrupts, a failure message, or None for a successful result."""
++        ...
++
++    def pending_interrupt_ids(self, turn: Any) -> set[str]:
++        """Return the interrupt ids a stored turn awaits, without restoring a child."""
++        ...
++
++
++class _ChildAgentAdapter:
++    """Adapts an agent child to the tool streamer interface."""
++
++    def __init__(self, *, label: str, agent_name: str) -> None:
++        self.label = label
++        self.agent_name = agent_name
++
++    def take_snapshot(self, child: Agent) -> Snapshot:
++        return child.take_snapshot(preset="session")
++
++    def restore(self, child: Agent, snapshot: Snapshot | None) -> bool:
++        if snapshot is not None:
++            child.load_snapshot(snapshot)
++        return child._interrupt_state.activated
++
++    def classify(self, child: Agent, result: Any) -> list[Interrupt] | str | None:
++        if result.stop_reason == "interrupt" and result.interrupts:
++            return list(result.interrupts)
++        if result.stop_reason == "cancelled" and child.cancel_signal.is_set():
++            return f"{self.label} cancelled"
++        if result.stop_reason in _LIMIT_STOP_REASONS:
++            return _limit_stop_message(self.agent_name, result.stop_reason)
++        if result.stop_reason in _NO_ANSWER_STOP_REASONS:
++            message = f"{self.label} stopped before finishing (stop_reason={result.stop_reason})."
++            partial = str(result).rstrip("\n")
++            return f"{message}\n\nPartial output:\n{partial}" if partial else message
++        return None
++
++    def pending_interrupt_ids(self, turn: Any) -> set[str]:
++        return set(_InterruptState.from_dict(turn["data"]["interrupt_state"]).interrupts)
++
++
++class _ChildMultiAgentAdapter:
++    """Adapts a multi-agent child to the tool streamer interface."""
++
++    def __init__(self, *, label: str) -> None:
++        self.label = label
++
++    def take_snapshot(self, child: MultiAgentBase) -> Snapshot:
++        return take_snapshot(child)
++
++    def restore(self, child: MultiAgentBase, snapshot: Snapshot | None) -> bool:
++        if snapshot is not None:
++            load_snapshot(child, snapshot)
++        interrupt_state = cast(_InterruptState, cast(Any, child)._interrupt_state)
++        return interrupt_state.activated
++
++    def classify(self, child: MultiAgentBase, result: Any) -> list[Interrupt] | str | None:
++        """Classify a MultiAgentResult."""
++        if result.status is Status.INTERRUPTED and result.interrupts:
++            return list(result.interrupts)
++        if result.status is not Status.COMPLETED:
++            return (
++                f"{self.label} stopped before completing (status={result.status.value}, "
++                f"{result.execution_count} iterations). Partial output:\n{result}"
++            )
++        return None
++
++    def pending_interrupt_ids(self, turn: Any) -> set[str]:
++        interrupt_state = turn["data"]["state"]["_internal_state"]["interrupt_state"]
++        return set(_InterruptState.from_dict(interrupt_state).interrupts)
++
++
++class _AgentToolStreamer:
++    """Stream a child invocation through the parent tool lifecycle."""
++
++    def __init__(
++        self,
++        *,
++        interrupt_state: _InterruptState | None,
++        tool_use_id: str,
++        namespace: str,
++        persist_interrupted_turn: bool = True,
++        raise_unfinished: bool = False,
++    ) -> None:
++        """Initialize tool-stream state for one child invocation.
++
++        ``raise_unfinished`` makes ``stream`` and ``resume`` raise interrupts and errors, for ``@tool`` callers that
++        cannot yield a terminal event.
++        """
++        self._interrupt_state = interrupt_state
++        self._tool_use_id = tool_use_id
++        self._prefix = f"{namespace}:{quote(tool_use_id, safe='')}:"
++        self._persist_interrupted_turn = persist_interrupted_turn
++        self._raise_unfinished = raise_unfinished
++        self.result: Any | None = None
++        self.interrupts: list[Interrupt] | None = None
++        self.error: str | None = None
++        self._outcome: list[Interrupt] | str | None = None
++
++    async def stream(
++        self,
++        adapter: _ChildAdapter,
++        child: Any,
++        events: AsyncIterator[dict[str, Any]],
++    ) -> AsyncIterator[dict[str, Any]]:
++        """Yield child progress events and retain terminal state for the tool."""
++        async for event in events:
++            if "result" in event:
++                self.result = event["result"]
++                self._outcome = adapter.classify(child, self.result)
++                continue
++            yield event
++
++        outcome = self._outcome
++        if self.result is None:
++            self.error = f"{adapter.label} did not produce a result."
++        elif isinstance(outcome, list):
++            # Without a parent interrupt state there is nothing to resume against, so ids pass through raw.
++            if self._interrupt_state is not None:
++                if self._persist_interrupted_turn:
++                    turns = self._interrupt_state.context.setdefault(_INTERRUPTED_TURNS_KEY, {})
++                    turns[self._tool_use_id] = copy.deepcopy(adapter.take_snapshot(child).to_dict())
++                    self._interrupt_state._version += 1
++                outcome = [
++                    Interrupt(f"{self._prefix}{interrupt.id}", interrupt.name, interrupt.reason)
++                    for interrupt in outcome
++                ]
++            self.interrupts = outcome
++        else:
++            self._clear_interrupted_turn()
++            self.error = outcome
++        self._raise_if_unfinished()
++
++    def terminal_event(
++        self,
++        tool_use: ToolUse,
++        render_success: Callable[[Any], list[ToolResultContent]] | None = None,
++    ) -> ToolInterruptEvent | ToolResultEvent:
++        """Return the terminal tool event for the child invocation."""
++        if self.interrupts is not None:
++            return ToolInterruptEvent(tool_use, self.interrupts)
++        if self.error is not None:
++            return ToolResultEvent(
++                {
++                    "toolUseId": tool_use["toolUseId"],
++                    "status": "error",
++                    "content": [{"text": self.error}],
++                }
++            )
++        return ToolResultEvent(
++            {
++                "toolUseId": tool_use["toolUseId"],
++                "status": "success",
++                "content": [{"text": str(self.result)}] if render_success is None else render_success(self.result),
++            }
++        )
++
++    def is_resuming(self) -> bool:
++        """Return whether this tool call has a child turn to resume."""
++        return (
++            self._interrupt_state is not None
++            and self._interrupt_state.activated
++            and any(interrupt_id.startswith(self._prefix) for interrupt_id in self._interrupt_state.interrupts)
++        )
++
++    def resume(
++        self,
++        adapter: _ChildAdapter,
++        child: Any | None,
++        unavailable_message: str,
++    ) -> list[InterruptResponseContent] | None:
++        """Restore the child invocation and return its scoped interrupt responses.
++
++        A ``None`` child (it could not be rebuilt) is handled like a failed restore.
++        """
++        if not self.is_resuming():
++            return None
++        assert self._interrupt_state is not None
++
++        turns = self._interrupt_state.context.get(_INTERRUPTED_TURNS_KEY) or {}
++        turn = turns.get(self._tool_use_id)
++        awaiting_responses = False
++        if child is None:
++            self._handle_failed_restore(adapter, unavailable_message)
++        else:
++            try:
++                snapshot = Snapshot.from_dict(turn) if turn is not None else None
++                awaiting_responses = adapter.restore(child, snapshot)
++            except Exception as error:
++                logger.error(
++                    "tool_use_id=<%s>, error=<%s> | failed to restore interrupted sub-agent turn",
++                    self._tool_use_id,
++                    error,
++                )
++                self._handle_failed_restore(adapter, unavailable_message)
++            else:
++                self._clear_interrupted_turn()
++                if not awaiting_responses:
++                    logger.error(
++                        "tool_use_id=<%s> | cannot resume: the sub-agent turn is not available", self._tool_use_id
++                    )
++                    self.error = unavailable_message
++        self._raise_if_unfinished()
++        if not awaiting_responses:
++            return None
++        return [
++            {
++                "interruptResponse": {
++                    "interruptId": response["interruptResponse"]["interruptId"][len(self._prefix) :],
++                    "response": response["interruptResponse"]["response"],
++                }
++            }
++            for response in self._interrupt_state.context.get(_RESPONSES_KEY) or []
++            if response["interruptResponse"]["interruptId"].startswith(self._prefix)
++        ]
++
++    def _raise_if_unfinished(self) -> None:
++        """Raise the recorded interrupt or error when configured to."""
++        if not self._raise_unfinished:
++            return
++        if self.interrupts:
++            # The decorator surfaces a single interrupt, so the rest are raised on later resumes.
++            raise InterruptException(self.interrupts[0])
++        if self.error is not None:
++            raise RuntimeError(self.error)
++
++    def _handle_failed_restore(self, adapter: _ChildAdapter, unavailable_message: str) -> None:
++        """Re-raise pending interrupts when the child state cannot be restored."""
++        assert self._interrupt_state is not None
++        # Get all pending interrupt ids for this agent
++        turn = (self._interrupt_state.context.get(_INTERRUPTED_TURNS_KEY) or {}).get(self._tool_use_id)
++        try:
++            pending = adapter.pending_interrupt_ids(turn)
++        except Exception:
++            logger.error("tool_use_id=<%s> | stored turn has no readable interrupt state", self._tool_use_id)
++            self.error = unavailable_message
++            return
++        # Map interrupt ids to parent interrupts
++        self.interrupts = [
++            interrupt
++            for interrupt_id, interrupt in self._interrupt_state.interrupts.items()
++            if interrupt_id.startswith(self._prefix) and interrupt_id[len(self._prefix) :] in pending
++        ]
++        if not self.interrupts:
++            self.interrupts = None
++            self.error = unavailable_message
++            return
++        # Empty responses so that this agent's interrupts remain on parent's interrupt state
++        for interrupt in self.interrupts:
++            interrupt.response = None
++
++    def _clear_interrupted_turn(self) -> None:
++        """Discard stored child state after a non-interrupt terminal result."""
++        if self._interrupt_state is None:
++            return
++        turns = self._interrupt_state.context.get(_INTERRUPTED_TURNS_KEY)
++        if not isinstance(turns, dict) or turns.pop(self._tool_use_id, None) is None:
++            return
++        self._interrupt_state._version += 1
+diff --git a/strands-py/src/strands/multiagent/spec.py b/strands-py/src/strands/multiagent/spec.py
+new file mode 100644
+index 000000000..b2cd8321d
+--- /dev/null
++++ b/strands-py/src/strands/multiagent/spec.py
+@@ -0,0 +1,377 @@
++"""Multi-Agent Specification and Resolution.
++
++Provides the authority-mode system for model-driven multi-agent patterns, where the
++model configures child agents at runtime. The developer sets axis policies that shape
++the parameters the model sees and govern what values it can supply:
++
++- ``Fixed``  — developer-pinned value; hidden from the model.
++- ``Inherit`` — value taken from the parent agent; hidden from the model.
++- ``Open``   — model supplies a free-form value.
++- ``Choice`` — model picks from a developer-supplied set.
++"""
++
++from __future__ import annotations
++
++import inspect
++import logging
++from collections.abc import Awaitable, Callable, Mapping, Sequence
++from dataclasses import dataclass
++from typing import Any
++
++from ..agent import Agent
++from ..models import Model, ModelRouter
++
++logger = logging.getLogger(__name__)
++
++# The builder turns a resolved spec into a child agent, built the way the parent was; it may be async.
++AgentBuilder = Callable[["AgentSpec"], "Agent | Awaitable[Agent]"]
++
++_UNSET: Any = object()
++"""Sentinel for :attr:`Option.value` so ``None`` can be a legitimate value."""
++
++_AXIS_DESCRIPTIONS = {
++    "agent_type": "Role to assign this agent.",
++    "instructions": "A system prompt defining this agent's role.",
++    "tools": (
++        "Subset of tools to grant this agent. Fewer is safer; it cannot exceed your own. "
++        "Omit to grant all inherited tools."
++    ),
++    "model": "Which model this agent runs on. Omit to inherit the parent's model.",
++}
++"""Model-facing description of each axis property."""
++
++
++@dataclass(frozen=True)
++class Fixed:
++    """The developer pins the value; the axis contributes no model-facing parameter."""
++
++    value: Any = None
++
++
++@dataclass(frozen=True)
++class Inherit:
++    """The child takes the parent's value; the axis contributes no model-facing parameter."""
++
++
++@dataclass(frozen=True)
++class Open:
++    """The model writes the value freely; the axis contributes a string parameter."""
++
++
++@dataclass(frozen=True)
++class Option:
++    """A selectable entry in a ``Choice``."""
++
++    name: str
++    value: Any = _UNSET
++    description: str = ""
++
++
++@dataclass(frozen=True)
++class Choice:
++    """The model picks from a developer-supplied set.
++
++    Each entry is a bare name or an ``Option``. Set ``multiple=True`` to let the model
++    pick more than one.
++    """
++
++    options: Sequence[str | Option]
++    multiple: bool = False
++
++    def normalized(self) -> list[Option]:
++        """The options as ``Option``s with ``value`` resolved, wrapping any bare name."""
++        result = []
++        for entry in self.options:
++            if isinstance(entry, Option):
++                # Fill in value from name when it was left unset.
++                result.append(entry if entry.value is not _UNSET else Option(entry.name, entry.name, entry.description))
++            else:
++                name = str(entry)
++                result.append(Option(name, name))
++        return result
++
++    def value_for(self, name: str) -> Any:
++        """The resolved value behind ``name``, or ``name`` itself if unknown."""
++        for option in self.normalized():
++            if option.name == name:
++                return option.value
++        return name
++
++
++Axis = Fixed | Inherit | Open | Choice
++"""Any authority mode an axis can take."""
++
++
++@dataclass(frozen=True)
++class Preset:
++    """A named role: a partially applied child configuration selected via ``agent_type``."""
++
++    instructions: str | None = None
++    tools: Sequence[str] | None = None
++    model: Model | ModelRouter | str | None = None
++    description: str = ""
++
++
++@dataclass
++class AgentSpec:
++    """The resolved child configuration handed to the builder."""
++
++    name: str | None = None
++    agent_type: str | None = None
++    instructions: str | None = None
++    tools: list[str] | None = None
++    model: Model | ModelRouter | str | None = None
++
++
++def _describe_preset(preset: Preset) -> str:
++    """The preset's description plus which fields it sets, omitting instruction text to keep the schema small."""
++    parts = []
++    if preset.instructions is not None:
++        parts.append("instructions")
++    if preset.tools is not None:
++        parts.append(f"tools: {', '.join(preset.tools) or 'none'}")
++    if preset.model is not None:
++        parts.append(f"model: {preset.model}" if isinstance(preset.model, str) else "model")
++    if not parts:
++        return preset.description
++    sets = f"sets {'; '.join(parts)}"
++    return f"{preset.description} ({sets})" if preset.description else sets
++
++
++def _to_schema_properties(
++    *,
++    presets: Mapping[str, Preset],
++    default_preset: str | None,
++    instructions: Axis | None,
++    tools: Axis | None,
++    model: Axis | None,
++) -> dict[str, Any]:
++    """Render each model-visible axis, plus an ``agent_type`` choice over ``presets``, as JSON Schema properties.
++
++    Raises:
++        ValueError: If a ``Choice`` axis has no options, or a ``tools`` ``Choice`` is not ``multiple``.
++    """
++    agent_type = Choice([Option(n, description=_describe_preset(p)) for n, p in presets.items()]) if presets else None
++    axes: dict[str, Axis | None] = {
++        "agent_type": agent_type,
++        "instructions": instructions,
++        "tools": tools,
++        "model": model,
++    }
++    props: dict[str, Any] = {}
++    for key, axis in axes.items():
++        description = _AXIS_DESCRIPTIONS[key]
++        if key == "agent_type" and default_preset is not None:
++            description = f"{description} Omit to use the default ({default_preset!r})."
++        if isinstance(axis, Open):
++            prop: dict[str, Any] = {"type": "string"}
++        elif isinstance(axis, Choice):
++            options = axis.normalized()
++            if not options:
++                raise ValueError(
++                    f"{key}=Choice([]) offers no options; use Fixed(...), or omit {key} to use its default."
++                )
++            if key == "tools" and not axis.multiple:
++                raise ValueError(f"{key}=Choice(...) must be multiple=True; a child agent selects a subset of {key}.")
++            values = [option.name for option in options]
++            lines = [f"- {option.name}: {option.description}" for option in options if option.description]
++            if lines:
++                description = f"{description}\nOptions:\n" + "\n".join(lines)
++            prop = (
++                {"type": "array", "items": {"type": "string", "enum": values}}
++                if axis.multiple
++                else {"type": "string", "enum": values}
++            )
++        else:
++            continue
++        prop["description"] = description
++        props[key] = prop
++    return props
++
++
++def _resolve_scalar(
++    model_value: Any,
++    axis: Open | Choice | Fixed | Inherit,
++    preset_value: Any = None,
++) -> Any:
++    """Resolve a scalar axis: model-supplied value, then preset, then axis default."""
++    if model_value is not _UNSET:
++        if isinstance(axis, Open):
++            return model_value
++        if isinstance(axis, Choice) and any(option.name == model_value for option in axis.normalized()):
++            return axis.value_for(model_value)
++    if preset_value is not None:
++        return preset_value
++    if isinstance(axis, Fixed):
++        return axis.value
++    return None
++
++
++def _resolve_list(
++    model_value: Any,
++    axis: Choice | Fixed | Inherit,
++    preset_values: Sequence[str] | None = None,
++) -> list[str] | None:
++    """Resolve a list axis: model-supplied value, then preset, then axis default, then ``None``.
++
++    When the axis is a Choice, ignores values that are not valid options.
++    """
++    allowed = [option.name for option in axis.normalized()] if isinstance(axis, Choice) else None
++
++    # Model-supplied value
++    if model_value is not _UNSET and allowed is not None:
++        assert isinstance(axis, Choice)
++        if isinstance(model_value, str):
++            requested = [model_value]
++        elif isinstance(model_value, list):
++            requested = model_value
++        else:
++            requested = []
++        return [axis.value_for(tool_name) for tool_name in requested if tool_name in allowed]
++    # Preset value
++    if preset_values is not None:
++        if allowed is not None:
++            assert isinstance(axis, Choice)
++            allowed_values = {axis.value_for(name) for name in allowed}
++            return [tool_name for tool_name in preset_values if tool_name in allowed_values]
++        return list(preset_values)
++    # All choices
++    if isinstance(axis, Choice) and axis.multiple and allowed is not None:
++        return [axis.value_for(name) for name in allowed]
++    if isinstance(axis, Fixed):
++        return list(axis.value) if axis.value is not None else None
++    return None
++
++
++def _resolve_specs(
++    model_inputs: list[Mapping[str, Any]],
++    *,
++    presets: Mapping[str, Preset],
++    default_preset: str | None,
++    instructions: Open | Choice | Fixed,
++    tools: Choice | Fixed | Inherit | None = None,
++    model: Inherit | Choice | Fixed | None = None,
++    label: str = "agent",
++) -> list[AgentSpec]:
++    """Combine each model-supplied agent input with the axis policies into a spec.
++
++    Precedence per axis: a model-supplied argument wins, then the preset's value, then the axis
++    default (``Fixed``/``Inherit``). An omitted ``agent_type`` falls back to the default preset, so
++    a bare model input behaves like the default role.
++
++    Args:
++        model_inputs: The model-supplied arguments, one mapping per agent.
++        presets: Named presets mapping ``agent_type`` strings to ``Preset`` instances.
++        default_preset: The preset to apply when the model omits ``agent_type``.
++        instructions: Axis policy for the ``instructions`` field.
++        tools: Axis policy for tool selection. Defaults to ``Inherit()`` when not supplied.
++        model: Axis policy for model selection. Defaults to ``Inherit()`` when not supplied.
++        label: Model-facing noun for one input in error messages, matching the tool's parameter name.
++
++    Returns:
++        The resolved ``AgentSpec`` for each input, in order.
++
++    Raises:
++        ValueError: If ``model_inputs`` is not a list, an input is not a mapping, a name is missing,
++            empty, or duplicated, or an ``agent_type`` is not found in ``presets``.
++    """
++    if tools is None:
++        tools = Inherit()
++    if model is None:
++        model = Inherit()
++
++    if not isinstance(model_inputs, list):
++        raise ValueError(f"{label}s must be a list, got {type(model_inputs).__name__}")
++
++    seen_names: set[str] = set()
++    specs: list[AgentSpec] = []
++    for index, model_input in enumerate(model_inputs):
++        if not isinstance(model_input, Mapping):
++            raise ValueError(f"{label.capitalize()} at index {index} must be a dict, got {type(model_input).__name__}")
++
++        name = model_input.get("name")
++        if not isinstance(name, str) or not name.strip():
++            raise ValueError(f"{label.capitalize()} at index {index} must have a non-empty 'name' string")
++        name = name.strip()
++        if name in seen_names:
++            raise ValueError(f"Duplicate {label} name {name!r} at index {index}")
++        seen_names.add(name)
++
++        # agent_type is a closed enum: a provided value must be an exact preset name (absent = no role).
++        model_agent_type = model_input.get("agent_type")
++        is_known_preset = isinstance(model_agent_type, str) and model_agent_type in presets
++        if model_agent_type is not None and not is_known_preset:
++            raise ValueError(f"Unknown agent_type {model_agent_type!r}; valid values: {sorted(presets)}.")
++        # Ad-hoc instructions (only possible when the axis exposes one) override the default preset.
++        overriding_instructions = isinstance(instructions, (Open, Choice)) and "instructions" in model_input
++
++        if is_known_preset:
++            agent_type = model_agent_type
++        elif not overriding_instructions:
++            agent_type = default_preset
++        else:
++            agent_type = None
++        preset = presets.get(agent_type) if agent_type else None
++
++        spec = AgentSpec(name=name, agent_type=agent_type)
++        spec.instructions = _resolve_scalar(
++            model_input.get("instructions", _UNSET), instructions, preset.instructions if preset else None
++        )
++        spec.tools = _resolve_list(model_input.get("tools", _UNSET), tools, preset.tools if preset else None)
++        spec.model = _resolve_scalar(model_input.get("model", _UNSET), model, preset.model if preset else None)
++        specs.append(spec)
++
++    return specs
++
++
++async def _build_agent(build: AgentBuilder, spec: AgentSpec) -> Agent:
++    """Call ``build`` and await its result when the builder is async."""
++    child = build(spec)
++    return await child if inspect.isawaitable(child) else child
++
++
++def _default_builder(parent: Agent) -> AgentBuilder:
++    """A builder that creates an Agent inheriting the parent's model, tools, and interventions.
++
++    Used by the vended multi-agent tools when no custom builder is supplied.
++    Resolves ``spec.tools`` against the parent's tool registry, including MCP tools, which
++    keep calling through the parent's MCP client. Memory tools are also inherited through
++    the tools axis. The child shares the parent's intervention handler instances, so tool
++    calls made by the child are subject to the same approval and authorization checks as
++    the parent's.
++
++    The parent's hooks and plugins are not passed to the child; a child that needs them
++    requires a custom builder.
++    """
++
++    def build(spec: AgentSpec) -> Agent:
++        parent_tools: dict[str, Any] = {}
++        # The child's own context manager registers its tools; skip the parent's.
++        managed_tools = {id(t) for t in parent.context_manager.tools} if parent and parent.context_manager else set()
++        for tool in parent.tool_registry.registry.values() if parent else []:
++            if id(tool) not in managed_tools and tool.tool_name != "strands_manage_background_task":
++                parent_tools[tool.tool_name] = tool
++
++        # tools=None means inherit all; a list means only those.
++        child_tools: list[Any] = list(parent_tools.values()) if spec.tools is None else []
++        if spec.tools is not None:
++            for tool_name in spec.tools:
++                if tool_name in parent_tools:
++                    child_tools.append(parent_tools[tool_name])
++                else:
++                    logger.warning("subagent requested tool %r but parent does not own it; skipping", tool_name)
++
++        child_model = spec.model or (parent.model if parent else None)
++        return Agent(
++            system_prompt=spec.instructions or "",
++            tools=child_tools,
++            model=child_model,
++            name=spec.name,
++            context_manager=None if getattr(child_model, "stateful", False) else "auto",
++            sandbox=parent.sandbox if parent else None,
++            callback_handler=parent.callback_handler if parent else None,
++            trace_attributes=parent.trace_attributes if parent else None,
++            interventions=parent._intervention_registry.handlers if parent else None,
++        )
++
++    return build
+diff --git a/strands-py/src/strands/tools/watcher.py b/strands-py/src/strands/tools/watcher.py
+index c7f50fccd..63a3e8571 100644
+--- a/strands-py/src/strands/tools/watcher.py
++++ b/strands-py/src/strands/tools/watcher.py
+@@ -49,14 +49,9 @@ class ToolWatcher:
+             """
+             self.tool_registry = tool_registry
+ 
+-        def on_modified(self, event: Any) -> None:
+-            """Reload tool if file modification detected.
+-
+-            Args:
+-                event: The file system event that triggered this handler.
+-            """
+-            if event.src_path.endswith(".py"):
+-                tool_path = Path(event.src_path)
++        def _reload_path(self, path_str: str) -> None:
++            if path_str.endswith(".py"):
++                tool_path = Path(path_str)
+                 tool_name = tool_path.stem
+ 
+                 if tool_name not in ["__init__"]:
+@@ -66,6 +61,25 @@ class ToolWatcher:
+                     except Exception as e:
+                         logger.error("tool_name=<%s>, exception=<%s> | failed to reload tool", tool_name, str(e))
+ 
++        def on_modified(self, event: Any) -> None:
++            """Reload tool if file modification detected.
++
++            Args:
++                event: The file system event that triggered this handler.
++            """
++            if not getattr(event, "is_directory", False):
++                self._reload_path(str(event.src_path))
++
++        def on_created(self, event: Any) -> None:
++            """Reload tool if a new tool file is created."""
++            if not getattr(event, "is_directory", False):
++                self._reload_path(str(event.src_path))
++
++        def on_moved(self, event: Any) -> None:
++            """Reload tool if a tool file is atomically replaced via rename/move."""
++            if not getattr(event, "is_directory", False):
++                self._reload_path(str(getattr(event, "dest_path", "")))
++
+     class MasterChangeHandler(FileSystemEventHandler):
+         """Master handler that delegates to all registered handlers."""
+ 
+@@ -77,23 +91,31 @@ class ToolWatcher:
+             """
+             self.dir_path = dir_path
+ 
++        def _dispatch(self, event: Any, method: str, path_str: str) -> None:
++            if not getattr(event, "is_directory", False) and path_str.endswith(".py"):
++                tool_name = Path(path_str).stem
++                if tool_name not in ["__init__"]:
++                    for handler in list(ToolWatcher._registry_handlers.get(self.dir_path, {}).values()):
++                        try:
++                            getattr(handler, method)(event)
++                        except Exception as e:
++                            logger.error("exception=<%s> | handler error", str(e))
++
+         def on_modified(self, event: Any) -> None:
+             """Delegate file modification events to all registered handlers.
+ 
+             Args:
+                 event: The file system event that triggered this handler.
+             """
+-            if event.src_path.endswith(".py"):
+-                tool_path = Path(event.src_path)
+-                tool_name = tool_path.stem
++            self._dispatch(event, "on_modified", str(event.src_path))
+ 
+-                if tool_name not in ["__init__"]:
+-                    # Delegate to all registered handlers for this directory
+-                    for handler in ToolWatcher._registry_handlers.get(self.dir_path, {}).values():
+-                        try:
+-                            handler.on_modified(event)
+-                        except Exception as e:
+-                            logger.error("exception=<%s> | handler error", str(e))
++        def on_created(self, event: Any) -> None:
++            """Delegate file creation events to all registered handlers."""
++            self._dispatch(event, "on_created", str(event.src_path))
++
++        def on_moved(self, event: Any) -> None:
++            """Delegate atomic file move/replace events to all registered handlers."""
++            self._dispatch(event, "on_moved", str(getattr(event, "dest_path", "")))
+ 
+     def start(self) -> None:
+         """Start watching all tools directories for changes."""
+diff --git a/strands-py/src/strands/types/event_loop.py b/strands-py/src/strands/types/event_loop.py
+index 5f8db40ec..f06094268 100644
+--- a/strands-py/src/strands/types/event_loop.py
++++ b/strands-py/src/strands/types/event_loop.py
+@@ -8,12 +8,23 @@ from typing_extensions import Required, TypedDict
+ class Usage(TypedDict, total=False):
+     """Token usage information for model interactions.
+ 
++    Providers differ on whether ``inputTokens`` includes cached tokens. Some count cache reads and
++    writes inside ``inputTokens``; others count them only in ``cacheReadInputTokens`` and
++    ``cacheWriteInputTokens``. ``totalTokens`` always includes cached tokens, so for a single model call:
++    if ``inputTokens + outputTokens == totalTokens``, ``inputTokens`` already includes the cache fields;
++    otherwise, total input is ``inputTokens + cacheReadInputTokens + cacheWriteInputTokens``. Adding the
++    cache fields to an ``inputTokens`` that already includes them counts cached tokens twice.
++
++    Custom model providers should include cached tokens in ``inputTokens`` (matching the OpenTelemetry
++    GenAI conventions), so that ``totalTokens == inputTokens + outputTokens``.
++
+     Attributes:
+-        inputTokens: Number of tokens sent in the request to the model.
++        inputTokens: Number of input tokens, as the model provider counts them. May or may not include
++            cached tokens, depending on the provider.
+         outputTokens: Number of tokens that the model generated for the request.
+-        totalTokens: Total number of tokens (input + output).
+-        cacheReadInputTokens: Number of tokens read from cache (optional).
+-        cacheWriteInputTokens: Number of tokens written to cache (optional).
++        totalTokens: Total number of tokens processed, including any cached input tokens.
++        cacheReadInputTokens: Number of input tokens read from cache (optional).
++        cacheWriteInputTokens: Number of input tokens written to cache (optional).
+     """
+ 
+     inputTokens: Required[int]
+@@ -44,6 +55,7 @@ StopReason = Literal[
+     "guardrail_intervened",
+     "interrupt",
+     "limit_output_tokens",
++    "limit_structured_output_attempts",
+     "limit_total_tokens",
+     "limit_turns",
+     "max_tokens",
+@@ -59,9 +71,33 @@ StopReason = Literal[
+ - "guardrail_intervened": Guardrail system intervened
+ - "interrupt": Agent was interrupted for human input
+ - "limit_output_tokens": Agent loop stopped because the ``limits["output_tokens"]`` cap was reached
++- "limit_structured_output_attempts": Agent loop stopped because the ``limits["structured_output_attempts"]`` cap
++  was reached
+ - "limit_total_tokens": Agent loop stopped because the ``limits["total_tokens"]`` cap was reached
+ - "limit_turns": Agent loop stopped because the ``limits["turns"]`` cap was reached
+ - "max_tokens": The model provider's per-call output cap was reached
+ - "stop_sequence": Stop sequence encountered
+ - "tool_use": Model requested to use a tool
+ """
++
++
++_LIMIT_STOP_REASONS: frozenset[StopReason] = frozenset(
++    {"limit_turns", "limit_total_tokens", "limit_output_tokens", "limit_structured_output_attempts"}
++)
++"""Stop reasons for a call that stopped because a limit (``limits``) was reached."""
++
++
++def _limit_stop_message(agent_name: str, stop_reason: StopReason) -> str:
++    """Explain that a nested call stopped because a limit (its own or the request's) was reached.
++
++    Args:
++        agent_name: Name of the agent that stopped.
++        stop_reason: The limit stop reason it returned.
++
++    Returns:
++        The message to surface in place of the agent's answer.
++    """
++    return (
++        f"Agent '{agent_name}' stopped early ({stop_reason}): "
++        "a limit on this call was reached, so its answer is incomplete"
++    )
+diff --git a/strands-py/src/strands/vended_tools/__init__.py b/strands-py/src/strands/vended_tools/__init__.py
+index 2d814f9e9..b8ad84ee6 100644
+--- a/strands-py/src/strands/vended_tools/__init__.py
++++ b/strands-py/src/strands/vended_tools/__init__.py
+@@ -52,6 +52,7 @@ from .mcp_router import make_mcp_router
+ from .notebook import make_notebook, notebook
+ from .shell import make_shell, shell
+ from .sleep import make_sleep, sleep
++from .subagent import make_subagent, subagent
+ 
+ 
+ def __getattr__(name: str) -> Any:
+@@ -95,7 +96,9 @@ __all__ = [
+     "make_mcp_router",
+     "make_shell",
+     "make_sleep",
++    "make_subagent",
+     "notebook",
+     "shell",
+     "sleep",
++    "subagent",
+ ]
+diff --git a/strands-py/src/strands/vended_tools/subagent/__init__.py b/strands-py/src/strands/vended_tools/subagent/__init__.py
+new file mode 100644
+index 000000000..8bfce1411
+--- /dev/null
++++ b/strands-py/src/strands/vended_tools/subagent/__init__.py
+@@ -0,0 +1,17 @@
++"""Subagent delegation tool.
++
++Example Usage:
++    ```python
++    from strands import Agent
++    from strands.vended_tools.subagent import subagent
++
++    agent = Agent(tools=[subagent])
++    ```
++"""
++
++from .subagent import make_subagent, subagent
++
++__all__ = [
++    "make_subagent",
++    "subagent",
++]
+diff --git a/strands-py/src/strands/vended_tools/subagent/subagent.py b/strands-py/src/strands/vended_tools/subagent/subagent.py
+new file mode 100644
+index 000000000..167effebf
+--- /dev/null
++++ b/strands-py/src/strands/vended_tools/subagent/subagent.py
+@@ -0,0 +1,1061 @@
++"""Subagent tool for delegating a task to a child agent at runtime.
++
++Provides :func:`make_subagent` (a factory that lets the developer pin safety
++limits, authority modes, and optional async background execution with hangup
++recovery). Each call resolves the model's arguments through the authority-mode
++system (see :mod:`~strands.multiagent.spec`), builds a child agent via an
++:data:`AgentBuilder`, runs it (inline or in the background), and streams or
++delivers the result back.
++"""
++
++from __future__ import annotations
++
++import asyncio
++import copy
++import json
++import logging
++import math
++import re
++import threading
++import time
++import uuid
++import weakref
++from collections import deque
++from collections.abc import AsyncIterator, Callable, Mapping
++from dataclasses import dataclass, field
++from typing import TYPE_CHECKING, Any, Literal, cast
++
++from ...agent.conversation_manager.compression.context_compression import find_valid_trim_point
++from ...hooks import AfterInvocationEvent, AfterToolCallEvent, BeforeToolCallEvent
++from ...multiagent._agent_tool_streamer import (
++    _AgentToolStreamer,
++    _ChildAgentAdapter,
++)
++from ...multiagent.spec import (
++    AgentBuilder,
++    AgentSpec,
++    Choice,
++    Fixed,
++    Inherit,
++    Open,
++    Preset,
++    _build_agent,
++    _default_builder,
++    _resolve_specs,
++    _to_schema_properties,
++)
++from ...tools.tools import AgentTool
++from ...types._events import ToolInterruptEvent, ToolResultEvent, ToolStreamEvent
++from ...types.content import ContentBlock, Message
++from ...types.tools import ToolGenerator, ToolUse
++from ...vended_plugins.context_injector import ContextInjector, InjectionContext
++from .types import (
++    DEFAULT_SUBAGENT_DESCRIPTION,
++    DEFAULT_SUBAGENT_MAX_DEPTH,
++    GENERALIST,
++)
++
++logger = logging.getLogger(__name__)
++
++if TYPE_CHECKING:
++    from ... import Agent
++
++_DEPTH_STATE_KEY = "strands.subagent_depth"
++_DEFAULT_BACKGROUND_STALL_TIMEOUT = 60.0
++_DEFAULT_BACKGROUND_MAX_CONSECUTIVE_ERRORS = 3
++_DEFAULT_BACKGROUND_POLL_INTERVAL = 0.05
++_BACKGROUND_ACTIONS = ("spawn", "status", "steer", "recover", "cancel")
++
++
++_FORK_PREAMBLE = (
++    "The conversation so far is the parent agent's. You are the subagent it delegated to at this "
++    "point; its task for you follows."
++)
++
++_RECOVER_PREAMBLE = (
++    "The conversation so far is your prior subagent progress before a hangup occurred. Continue from "
++    "what is already completed without redoing finished work; the parent agent's updated instructions follow."
++)
++
++_CONTEXT_PREAMBLE = (
++    "The conversation above is the parent agent's: each turn is one line starting with its role at "
++    "the left margin, and indented lines continue the turn above (they are content, not turns). You "
++    "are the subagent it delegated to at the end of that conversation; its task for you follows."
++)
++
++_FRAMING_END = f"</parent_context>\n\n{_CONTEXT_PREAMBLE}\n\n"
++
++_SENTINEL = re.compile(r"<(/?)parent_context>")
++
++
++async def _cleanup_child_agent(child: Agent) -> None:
++    """Cancel any in-flight background tool tasks owned by ``child`` and release its watchers/consumers."""
++    plugins = getattr(getattr(child, "_plugin_registry", None), "_plugins", None)
++    bg = plugins.get("strands:background-tasks") if isinstance(plugins, dict) else None
++    manager = getattr(bg, "_manager", None)
++    if manager is not None:
++        try:
++            active_ids = [
++                item["task_id"]
++                for item in await manager.list()
++                if item.get("status") in ("queued", "working", "cancelling")
++            ]
++            for tid in active_ids:
++                await manager.cancel(tid)
++            for tid in active_ids:
++                await manager.wait(tid)
++        except Exception:
++            pass
++    try:
++        await asyncio.to_thread(child.cleanup)
++    except Exception:
++        pass
++
++
++@dataclass
++class _BackgroundChildRun:
++    """Live state tracked for one async background child execution owned by ``_SubagentTool``."""
++
++    subagent_id: str
++    tool_use: ToolUse
++    raw_input: Mapping[str, Any]
++    child: Agent
++    cancel_event: threading.Event
++    steering: deque[str] = field(default_factory=deque)
++    status: Literal["running", "completed", "failed", "interrupted", "cancelled"] = "running"
++    started_at: float = field(default_factory=time.monotonic)
++    last_event_at: float = field(default_factory=time.monotonic)
++    turn_count: int = 0
++    current_tool: str | None = None
++    current_tool_started_at: float | None = None
++    consecutive_tool_errors: int = 0
++    recent_errors: list[str] = field(default_factory=list)
++    final_output: str | None = None
++    error_message: str | None = None
++    interrupts: list[dict[str, Any]] | None = None
++    delivered: bool = False
++    hangup_notified: bool = False
++    task: asyncio.Task[None] | None = None
++
++    def salvaged_findings(self, limit: int = 6) -> list[str]:
++        """Extract compact text summaries of completed tool results and assistant messages."""
++        items: list[str] = []
++        for msg in self.child.messages:
++            role = msg.get("role")
++            for block in msg.get("content", []):
++                if "toolResult" in block and block["toolResult"].get("status") == "success":
++                    for inner in block["toolResult"].get("content", []):
++                        if "text" in inner and inner["text"].strip():
++                            items.append(inner["text"].strip()[:300])
++                elif role == "assistant" and "text" in block and block["text"].strip():
++                    items.append(block["text"].strip()[:300])
++        return items[-limit:]
++
++    def snapshot(self) -> dict[str, Any]:
++        """Serializable live status and progress view for the parent agent."""
++        now = time.monotonic()
++        snap: dict[str, Any] = {
++            "subagent_id": self.subagent_id,
++            "status": self.status,
++            "elapsed_s": round(now - self.started_at, 2),
++            "idle_s": round(now - self.last_event_at, 2),
++            "turn_count": self.turn_count,
++            "current_tool": self.current_tool,
++            "current_tool_elapsed_s": (
++                round(now - self.current_tool_started_at, 2) if self.current_tool_started_at is not None else None
++            ),
++            "consecutive_tool_errors": self.consecutive_tool_errors,
++            "recent_errors": self.recent_errors[-3:],
++            "salvaged_progress": self.salvaged_findings(),
++        }
++        todos = self.child.state.get("todos")
++        if todos:
++            snap["todos"] = todos
++        if self.final_output is not None:
++            snap["result"] = self.final_output
++        if self.error_message is not None:
++            snap["error"] = self.error_message
++        if self.interrupts is not None:
++            snap["interrupts"] = self.interrupts
++        return snap
++
++
++def _build_schema(
++    *,
++    presets: Mapping[str, Preset],
++    default_preset: str | None,
++    instructions: Open | Choice | Fixed,
++    tools: Choice | Fixed | Inherit | None,
++    model: Inherit | Choice | Fixed,
++    context: Fixed | Choice,
++    background: bool = False,
++) -> dict[str, Any]:
++    """Derive the tool's input schema from the axis modes and background setting."""
++    properties: dict[str, Any] = {}
++    if background:
++        properties["action"] = {
++            "type": "string",
++            "enum": list(_BACKGROUND_ACTIONS),
++            "description": (
++                "Background subagent operation. Omit or use 'spawn' to start a background subagent and continue "
++                "working immediately; 'status' to inspect live progress; 'steer' to send mid-flight guidance (`task`) "
++                "to a running subagent without restarting it; 'recover' to cancel a hung/stalled subagent, salvage "
++                "its completed history, and continue with adjusted `task`/axis settings; 'cancel' to stop and return "
++                "salvaged progress."
++            ),
++        }
++        properties["subagent_id"] = {
++            "type": "string",
++            "description": "Target background subagent ID (required for 'status', 'steer', 'recover', and 'cancel').",
++        }
++    properties["task"] = {
++        "type": "string",
++        "description": (
++            "The self-contained task (for 'spawn'), mid-flight guidance (for 'steer'), or adjusted instructions "
++            "(for 'recover')."
++            if background
++            else "The self-contained task, including all context the subagent needs. It cannot ask follow-up questions."
++        ),
++    }
++    properties.update(
++        _to_schema_properties(
++            presets=presets,
++            default_preset=default_preset,
++            instructions=instructions,
++            tools=tools,
++            model=model,
++        )
++    )
++    if isinstance(context, Choice):
++        options = context.normalized()
++        lines = [f"- {option.name}: {option.description}" for option in options if option.description]
++        options_text = "\nOptions:\n" + "\n".join(lines) if lines else ""
++        properties["context"] = {
++            "type": "string",
++            "enum": [option.name for option in options],
++            "description": "How much of this conversation the subagent sees: 'none' (fresh start), 'all' (full "
++            "history including tool calls and their results — can be large), 'no_tools' (text turns "
++            "only — tool calls and their results removed). More context costs more tokens." + options_text,
++        }
++    if isinstance(context, Choice) and any(str(o.value) != "none" for o in context.normalized()):
++        properties["last_messages"] = {
++            "type": "integer",
++            "description": "Optional: limit the shared context to the last N messages. Omit to "
++            "share all of the selected context.",
++        }
++    required = [] if background else ["task"]
++    return {"type": "object", "properties": properties, "required": required}
++
++
++async def _iter_with_stall_timeout(
++    events: AsyncIterator[dict[str, Any]],
++    *,
++    stall_timeout: float | None,
++    on_stall: Callable[[], None],
++) -> AsyncIterator[dict[str, Any]]:
++    """Consume an async event iterator with an optional per-event stall timeout."""
++    if stall_timeout is None:
++        async for event in events:
++            yield event
++        return
++    iterator = events.__aiter__()
++    while True:
++        try:
++            event = await asyncio.wait_for(iterator.__anext__(), timeout=stall_timeout)
++        except StopAsyncIteration:
++            return
++        except asyncio.TimeoutError:
++            on_stall()
++            return
++        yield event
++
++
++class _SubagentTool(AgentTool):
++    """Streams a fresh per-call child (foreground) or supervises non-blocking async children (background)."""
++
++    def __init__(
++        self,
++        name: str,
++        tool_spec: dict[str, Any],
++        resolve: Callable[[Mapping[str, Any]], AgentSpec],
++        context: Fixed | Choice,
++        builder: AgentBuilder | None,
++        max_depth: int,
++        *,
++        background: bool = False,
++        stall_timeout: float | None = None,
++        max_consecutive_errors: int | None = None,
++        poll_interval: float = _DEFAULT_BACKGROUND_POLL_INTERVAL,
++    ) -> None:
++        super().__init__()
++        self._name = name
++        self._adapter = _ChildAgentAdapter(label="Subagent", agent_name=name)
++        self._spec = tool_spec
++        self._resolve = resolve
++        self._context = context
++        self._builder = builder
++        self._max_depth = max_depth
++        self._background = background
++        self._stall_timeout = (
++            _DEFAULT_BACKGROUND_STALL_TIMEOUT if (background and stall_timeout is None) else stall_timeout
++        )
++        self._max_consecutive_errors = (
++            _DEFAULT_BACKGROUND_MAX_CONSECUTIVE_ERRORS
++            if (background and max_consecutive_errors is None)
++            else max_consecutive_errors
++        )
++        self._poll_interval = poll_interval
++        # Per-parent background run registry & one-time hook attachment tracking.
++        self._runs_by_parent: weakref.WeakKeyDictionary[Any, dict[str, _BackgroundChildRun]] = (
++            weakref.WeakKeyDictionary()
++        )
++        self._attached_parents: weakref.WeakSet[Any] = weakref.WeakSet()
++
++    @property
++    def background(self) -> bool:
++        """Whether this subagent tool dispatches and supervises children asynchronously in the background."""
++        return self._background
++
++    @property
++    def tool_name(self) -> str:
++        return self._name
++
++    @property
++    def tool_spec(self) -> Any:
++        return self._spec
++
++    @property
++    def tool_type(self) -> str:
++        return "agent"
++
++    def _fork_messages(self, source_agent: Agent | None, last_n: int | None) -> list[Message]:
++        """Deep-copy an agent's messages, dropping in-flight tool calls, reasoning, and injected blocks.
++
++        After filtering, consecutive messages of the same role are merged so the
++        result always alternates user/assistant.
++        """
++        if source_agent is None:
++            return []
++        answered = {b["toolResult"]["toolUseId"] for m in source_agent.messages for b in m["content"] if "toolResult" in b}
++        filtered: list[Message] = []
++        for message in source_agent.messages:
++            content = [
++                b
++                for b in message["content"]
++                if "reasoningContent" not in b
++                # Context for the parent's own turn.
++                and "injected" not in b
++                and ("toolUse" not in b or b["toolUse"]["toolUseId"] in answered)
++            ]
++            if content:
++                filtered.append({"role": message["role"], "content": copy.deepcopy(content)})
++
++        # Merge consecutive messages of the same role.
++        forked: list[Message] = []
++        for msg in filtered:
++            if forked and forked[-1]["role"] == msg["role"]:
++                forked[-1]["content"].extend(msg["content"])
++            else:
++                forked.append(msg)
++
++        if last_n is not None and last_n > 0:
++            # Search backwards for a valid trim point using a 2-element window.
++            start = max(len(forked) - last_n, 0)
++            while start > 0 and find_valid_trim_point(forked[start : start + 2], 0) != 0:
++                start -= 1
++            forked = forked[start:]
++        return forked
++
++    def _render_context(self, parent: Agent | None, last_n: int | None) -> str:
++        """Render the parent's text turns as a plain-text block for ``"no_tools"`` context mode."""
++        if parent is None:
++            return ""
++        messages = parent.messages
++        if last_n is not None and last_n > 0:
++            messages = messages[-last_n:]
++        lines = []
++        for message in messages:
++            text = " ".join(b["text"] for b in message["content"] if "text" in b).strip()
++            if text.startswith("<parent_context>\n"):
++                _, found, stripped = text.partition(_FRAMING_END)
++                if found:
++                    text = stripped
++            if text:
++                lines.append(f"{message['role']}: {text}".replace("\n", "\n  "))
++        return _SENTINEL.sub(r"<\\\1parent_context>", "\n".join(lines))
++
++    def _resolve_context(self, raw: Mapping[str, Any]) -> tuple[str, int | None]:
++        """Resolve context mode and last_messages from the model's raw input and the context axis."""
++        ctx_mode = "none"
++        if isinstance(self._context, Choice):
++            raw_ctx = raw.get("context")
++            if raw_ctx is not None and any(o.name == str(raw_ctx) for o in self._context.normalized()):
++                ctx_mode = str(self._context.value_for(str(raw_ctx)))
++        elif isinstance(self._context, Fixed) and self._context.value is not None:
++            ctx_mode = str(self._context.value)
++
++        last_n = None
++        raw_last = raw.get("last_messages")
++        if raw_last is not None:
++            try:
++                last_n = int(raw_last)
++                if last_n < 1:
++                    last_n = None
++            except (TypeError, ValueError):
++                pass
++
++        return ctx_mode, last_n
++
++    def _error_result(self, tool_use_id: str, text: str) -> ToolResultEvent:
++        return ToolResultEvent({"toolUseId": tool_use_id, "status": "error", "content": [{"text": text}]})
++
++    async def _prepare_child(
++        self,
++        tool_use: ToolUse,
++        raw: Mapping[str, Any],
++        parent: Agent | None,
++        tool_streamer: _AgentToolStreamer | None = None,
++        *,
++        salvaged_messages: list[Message] | None = None,
++    ) -> tuple[Agent, Any] | str | ToolInterruptEvent | ToolResultEvent:
++        """Resolve or resume the child agent and its prompt.
++
++        Returns ``(child, prompt)`` on success, a ``str`` error message on validation failure, or the
++        event to yield if the child's stored turn could not be resumed.
++        """
++        if tool_streamer is not None and tool_streamer.is_resuming():
++            return await self._prepare_resume(tool_use, raw, parent, tool_streamer)
++
++        stored_depth = None if parent is None else parent.state.get(_DEPTH_STATE_KEY)
++        depth = self._max_depth if stored_depth is None else stored_depth
++        if depth <= 0:
++            return (
++                f"Delegation depth limit reached ({self._max_depth} levels); you cannot delegate "
++                "further. Complete this task yourself instead of calling subagent again."
++            )
++        task = raw.get("task")
++        if not isinstance(task, str) or not task.strip():
++            return "Missing required parameter 'task': describe the task to delegate."
++
++        spec = self._resolve(raw)
++        build = self._builder or _default_builder(parent)  # type: ignore[arg-type]
++        child = await _build_agent(build, spec)
++        child.state.set(_DEPTH_STATE_KEY, depth - 1)
++
++        if salvaged_messages:
++            framed_recover: ContentBlock = {"text": f"{_RECOVER_PREAMBLE}\n\n{task}"}
++            if salvaged_messages[-1]["role"] == "user":
++                prompt: Any = [
++                    *salvaged_messages[:-1],
++                    {"role": "user", "content": [*salvaged_messages[-1]["content"], framed_recover]},
++                ]
++            else:
++                prompt = [*salvaged_messages, {"role": "user", "content": [framed_recover]}]
++            return child, prompt
++
++        ctx_mode, last_messages = self._resolve_context(raw)
++
++        prompt = task
++        if ctx_mode == "all":
++            messages = self._fork_messages(parent, last_messages)
++            if messages:
++                framed: ContentBlock = {"text": f"{_FORK_PREAMBLE}\n\n{task}"}
++                if messages[-1]["role"] == "user":
++                    prompt = [
++                        *messages[:-1],
++                        {"role": "user", "content": [*messages[-1]["content"], framed]},
++                    ]
++                else:
++                    prompt = [*messages, {"role": "user", "content": [framed]}]
++        elif ctx_mode == "no_tools":
++            block = self._render_context(parent, last_messages)
++            if block:
++                prompt = f"<parent_context>\n{block}\n</parent_context>\n\n{_CONTEXT_PREAMBLE}\n\n{task}"
++
++        return child, prompt
++
++    async def _prepare_resume(
++        self, tool_use: ToolUse, raw: Mapping[str, Any], parent: Agent | None, tool_streamer: _AgentToolStreamer
++    ) -> tuple[Agent, Any] | ToolInterruptEvent | ToolResultEvent:
++        """Rebuild the interrupted child from the same tool input and restore its stored turn."""
++        spec = self._resolve(raw)
++        build = self._builder or _default_builder(parent)  # type: ignore[arg-type]
++        child: Agent | None = None
++        try:
++            child = await _build_agent(build, spec)
++        except Exception as error:
++            logger.warning(
++                "tool_name=<%s>, tool_use_id=<%s> | failed to rebuild interrupted subagent: %s",
++                self._name,
++                tool_use["toolUseId"],
++                error,
++            )
++        resumed = tool_streamer.resume(
++            self._adapter,
++            child,
++            "Subagent did NOT run and the response was NOT applied: its interrupted turn is not available. "
++            "Do not report the delegated task as completed; if it is still needed, delegate it again.",
++        )
++        if resumed is None:
++            return tool_streamer.terminal_event(tool_use)
++        # resume() returns an event when there is no child to resume.
++        return cast("Agent", child), resumed
++
++    # ------------------------------------------------------------------
++    # Native Async Background Supervision (when `background=True`)
++    # ------------------------------------------------------------------
++    def _runs_for(self, parent: Agent) -> dict[str, _BackgroundChildRun]:
++        runs = self._runs_by_parent.get(parent)
++        if runs is None:
++            runs = {}
++            self._runs_by_parent[parent] = runs
++        return runs
++
++    def _detect_hangup(self, run: _BackgroundChildRun) -> str | None:
++        if run.status != "running":
++            return None
++        now = time.monotonic()
++        if (
++            self._stall_timeout is not None
++            and run.current_tool_started_at is not None
++            and (now - run.current_tool_started_at) >= self._stall_timeout
++        ):
++            return f"Tool {run.current_tool!r} hung for {now - run.current_tool_started_at:.2f}s"
++        if self._stall_timeout is not None and (now - run.last_event_at) >= self._stall_timeout:
++            return f"Subagent stream stalled with no progress for {now - run.last_event_at:.2f}s"
++        if (
++            self._max_consecutive_errors is not None
++            and run.consecutive_tool_errors >= self._max_consecutive_errors
++        ):
++            last_err = run.recent_errors[-1] if run.recent_errors else "unknown error"
++            return f"Subagent hit {run.consecutive_tool_errors} consecutive tool errors ({last_err})"
++        return None
++
++    def _ensure_parent_hooks(self, parent: Agent) -> None:
++        """Lazily attach ephemeral telemetry injection and end-of-turn hangup/settlement wakeup to ``parent``."""
++        if parent in self._attached_parents:
++            return
++        self._attached_parents.add(parent)
++
++        def render_telemetry(_ctx: InjectionContext) -> str | None:
++            runs = self._runs_by_parent.get(parent)
++            if not runs:
++                return None
++            undelivered = [r for r in runs.values() if not r.delivered]
++            if not undelivered:
++                return None
++            lines = [f"<system-reminder>\nBackground {self._name} runs:"]
++            for r in undelivered:
++                snap = r.snapshot()
++                hangup = self._detect_hangup(r)
++                flag = f" [HANGUP: {hangup}]" if hangup else ""
++                lines.append(
++                    f"- {r.subagent_id}: status={snap['status']}{flag}, turns={snap['turn_count']}, "
++                    f"tool={snap['current_tool']} ({snap['current_tool_elapsed_s']}s), "
++                    f"errors={snap['consecutive_tool_errors']}"
++                )
++            lines.append("</system-reminder>")
++            return "\n".join(lines)
++
++        ContextInjector(
++            render_telemetry,
++            name=f"strands:subagent-telemetry:{self._name}:{id(self)}",
++            trigger="everyTurn",
++        ).init_agent(parent)
++
++        async def on_after_invocation(event: AfterInvocationEvent) -> None:
++            runs = self._runs_by_parent.get(parent)
++            if not runs:
++                return
++            if event.result is not None and event.result.stop_reason not in ("end_turn", "stop_sequence"):
++                return
++
++            while True:
++                if parent.cancel_signal.is_set():
++                    for r in runs.values():
++                        if r.status == "running":
++                            r.cancel_event.set()
++                            if r.task is not None and not r.task.done():
++                                r.task.cancel()
++                    return
++
++                settled = [r for r in runs.values() if r.status != "running" and not r.delivered]
++                if settled:
++                    for r in settled:
++                        r.delivered = True
++                    payload = json.dumps([r.snapshot() for r in settled], indent=2)
++                    event.resume = f"[{self._name}-completed] Background subagent(s) finished:\n{payload}"
++                    return
++
++                running = [r for r in runs.values() if r.status == "running"]
++                if not running:
++                    return
++
++                hung: list[tuple[_BackgroundChildRun, str]] = []
++                for r in running:
++                    reason = self._detect_hangup(r)
++                    if reason and not r.hangup_notified:
++                        hung.append((r, reason))
++
++                if hung:
++                    alerts = []
++                    for r, reason in hung:
++                        r.hangup_notified = True
++                        alerts.append({"hangup_reason": reason, **r.snapshot()})
++                    event.resume = (
++                        f"[{self._name}-hangup] Background subagent hangup detected. Call `{self._name}` with "
++                        f"action='steer' (send mid-flight guidance), action='recover' (cancel hung step, salvage "
++                        f"completed history, and continue with adjusted `task`/tools/model), or action='cancel':\n"
++                        + json.dumps(alerts, indent=2)
++                    )
++                    return
++
++                tasks = [r.task for r in running if r.task is not None]
++                if not tasks:
++                    return
++                await asyncio.wait(tasks, timeout=self._poll_interval, return_when=asyncio.FIRST_COMPLETED)
++
++        parent.add_hook(on_after_invocation, AfterInvocationEvent)
++
++    async def _spawn_background_run(
++        self,
++        tool_use: ToolUse,
++        raw: Mapping[str, Any],
++        parent: Agent,
++        invocation_state: dict[str, Any],
++        *,
++        salvaged_messages: list[Message] | None = None,
++    ) -> _BackgroundChildRun | ToolResultEvent | ToolInterruptEvent:
++        prepared = await self._prepare_child(
++            tool_use, raw, parent, tool_streamer=None, salvaged_messages=salvaged_messages
++        )
++        if not isinstance(prepared, tuple):
++            return self._error_result(tool_use["toolUseId"], prepared) if isinstance(prepared, str) else prepared
++        child, prompt = prepared
++
++        sub_id = f"{self._name}-{uuid.uuid4().hex[:8]}"
++        cancel_ev = threading.Event()
++        steering_q: deque[str] = deque()
++
++        def render_child_steering(_ctx: InjectionContext) -> str | None:
++            if not steering_q:
++                return None
++            items: list[str] = []
++            while steering_q:
++                items.append(steering_q.popleft())
++            return "<parent-steering>\n" + "\n".join(items) + "\n</parent-steering>"
++
++        ContextInjector(
++            render_child_steering,
++            name=f"strands:subagent-steering:{sub_id}",
++            trigger="everyTurn",
++        ).init_agent(child)
++
++        synthetic_tool_use: ToolUse = {
++            "toolUseId": sub_id,
++            "name": self._name,
++            "input": {"task": raw.get("task", ""), "subagent_id": sub_id},
++        }
++        run = _BackgroundChildRun(
++            subagent_id=sub_id,
++            tool_use=synthetic_tool_use,
++            raw_input=dict(raw),
++            child=child,
++            cancel_event=cancel_ev,
++            steering=steering_q,
++        )
++
++        def on_before_tool(ev: BeforeToolCallEvent) -> None:
++            run.current_tool = ev.tool_use["name"]
++            run.current_tool_started_at = time.monotonic()
++            run.last_event_at = time.monotonic()
++
++        def on_after_tool(ev: AfterToolCallEvent) -> None:
++            run.current_tool = None
++            run.current_tool_started_at = None
++            run.last_event_at = time.monotonic()
++            if ev.result.get("status") == "error":
++                run.consecutive_tool_errors += 1
++                err_txt = next((b["text"] for b in ev.result.get("content", []) if "text" in b), "tool error")
++                run.recent_errors.append(f"{ev.tool_use['name']}: {err_txt[:200]}")
++            else:
++                run.consecutive_tool_errors = 0
++
++        child.add_hook(on_before_tool, BeforeToolCallEvent)
++        child.add_hook(on_after_tool, AfterToolCallEvent)
++
++        child_state = {**invocation_state} if isinstance(invocation_state, dict) else invocation_state
++        streamer = _AgentToolStreamer(
++            interrupt_state=None,
++            tool_use_id=sub_id,
++            namespace="v1:subagent",
++            persist_interrupted_turn=False,
++        )
++
++        async def drive() -> None:
++            try:
++                source = child.stream_async(prompt, invocation_state=child_state, cancel_signal=cancel_ev)
++                async for ev in streamer.stream(self._adapter, child, source):
++                    run.last_event_at = time.monotonic()
++                    if ev.get("start_event_loop"):
++                        run.turn_count += 1
++                    stream_ev = ToolStreamEvent(synthetic_tool_use, ev)
++                    stream_ev.prepare(invocation_state=child_state)
++                    parent.callback_handler(**stream_ev.as_dict())
++
++                if cancel_ev.is_set():
++                    run.status = "cancelled"
++                elif streamer.interrupts is not None:
++                    run.status = "interrupted"
++                    run.interrupts = [i.to_dict() for i in streamer.interrupts]
++                elif streamer.error is not None:
++                    run.status = "failed"
++                    run.error_message = streamer.error
++                else:
++                    run.status = "completed"
++                    run.final_output = str(streamer.result)
++            except asyncio.CancelledError:
++                run.status = "cancelled"
++            except Exception as exc:
++                run.status = "failed"
++                run.error_message = str(exc)
++                run.recent_errors.append(str(exc))
++            finally:
++                run.current_tool = None
++                run.current_tool_started_at = None
++                run.last_event_at = time.monotonic()
++                if run.status != "interrupted":
++                    await _cleanup_child_agent(child)
++
++        self._ensure_parent_hooks(parent)
++        runs = self._runs_for(parent)
++        run.task = asyncio.create_task(drive())
++        runs[sub_id] = run
++        return run
++
++    async def _handle_background_call(
++        self, tool_use: ToolUse, raw: Mapping[str, Any], parent: Agent | None, invocation_state: dict[str, Any]
++    ) -> ToolResultEvent | ToolInterruptEvent:
++        tool_use_id = tool_use["toolUseId"]
++        if parent is None:
++            return self._error_result(tool_use_id, "Background subagent requires a parent Agent in invocation_state.")
++
++        action = str(raw.get("action") or "spawn")
++        if action not in _BACKGROUND_ACTIONS:
++            return self._error_result(
++                tool_use_id, f"Unknown action {action!r}; valid values: {list(_BACKGROUND_ACTIONS)}."
++            )
++
++        if action == "spawn":
++            spawned = await self._spawn_background_run(tool_use, raw, parent, invocation_state)
++            if not isinstance(spawned, _BackgroundChildRun):
++                return spawned
++            return ToolResultEvent(
++                {
++                    "toolUseId": tool_use_id,
++                    "status": "success",
++                    "content": [
++                        {
++                            "json": {
++                                "subagent_id": spawned.subagent_id,
++                                "status": "running",
++                                "message": (
++                                    "Subagent dispatched asynchronously in the background. Continue your own work; "
++                                    "results (or hangup alerts) will be delivered automatically, or inspect/adjust "
++                                    f"anytime with `{self._name}` action='status'|'steer'|'recover'|'cancel'."
++                                ),
++                            }
++                        }
++                    ],
++                }
++            )
++
++        subagent_id = raw.get("subagent_id")
++        runs = self._runs_for(parent)
++        if not isinstance(subagent_id, str) or subagent_id not in runs:
++            return self._error_result(
++                tool_use_id,
++                f"Unknown or missing subagent_id {subagent_id!r}. Active IDs: {sorted(runs)}.",
++            )
++        target = runs[subagent_id]
++
++        if action == "status":
++            return ToolResultEvent(
++                {"toolUseId": tool_use_id, "status": "success", "content": [{"json": target.snapshot()}]}
++            )
++
++        if action == "steer":
++            guidance = raw.get("task")
++            if not isinstance(guidance, str) or not guidance.strip():
++                return self._error_result(tool_use_id, "Parameter 'task' is required for action='steer'.")
++            if target.status != "running":
++                return self._error_result(
++                    tool_use_id,
++                    f"Cannot steer subagent {subagent_id!r} with status={target.status!r}; use action='recover' instead.",
++                )
++            target.steering.append(guidance)
++            target.hangup_notified = False
++            return ToolResultEvent(
++                {
++                    "toolUseId": tool_use_id,
++                    "status": "success",
++                    "content": [{"json": {"steered": subagent_id, "queued_guidance": guidance, **target.snapshot()}}],
++                }
++            )
++
++        # `cancel` or `recover`: stop the target run cleanly and salvage completed turns.
++        target.cancel_event.set()
++        if target.task is not None and not target.task.done():
++            target.task.cancel()
++            await asyncio.gather(target.task, return_exceptions=True)
++        await _cleanup_child_agent(target.child)
++        target.status = "cancelled"
++        target.delivered = True
++        salvaged_snap = target.snapshot()
++
++        if action == "cancel":
++            return ToolResultEvent(
++                {"toolUseId": tool_use_id, "status": "success", "content": [{"json": {"cancelled": salvaged_snap}}]}
++            )
++
++        # `recover`: fork valid completed messages from `target.child` (automatically dropping the unanswered
++        # hung `toolUse`!) and spawn a continuation child with the adjusted `raw` parameters.
++        salvaged_messages = self._fork_messages(target.child, last_n=None)
++        merged_raw: dict[str, Any] = {**target.raw_input, **raw, "action": "spawn"}
++        replacement = await self._spawn_background_run(
++            tool_use, merged_raw, parent, invocation_state, salvaged_messages=salvaged_messages
++        )
++        if not isinstance(replacement, _BackgroundChildRun):
++            return replacement
++        return ToolResultEvent(
++            {
++                "toolUseId": tool_use_id,
++                "status": "success",
++                "content": [
++                    {
++                        "json": {
++                            "recovered_from": subagent_id,
++                            "salvaged_message_count": len(salvaged_messages),
++                            "salvaged_progress": salvaged_snap["salvaged_progress"],
++                            "subagent_id": replacement.subagent_id,
++                            "status": "running",
++                        }
++                    }
++                ],
++            }
++        )
++
++    # ------------------------------------------------------------------
++    # Standard AgentTool Streaming Entry Point
++    # ------------------------------------------------------------------
++    async def stream(self, tool_use: ToolUse, invocation_state: dict[str, Any], **kwargs: Any) -> ToolGenerator:
++        tool_use_id = tool_use["toolUseId"]
++        raw = tool_use.get("input", {}) or {}
++        parent = invocation_state.get("agent")
++
++        if self._background:
++            yield await self._handle_background_call(tool_use, raw, parent, invocation_state)
++            return
++
++        tool_context = kwargs.get("_tool_context")
++        # When running inside `_BackgroundTasks`, `_BackgroundToolContext` owns its own `_task_interrupt_state`;
++        # yielding a `v1:subagent:` interrupt unregistered in `_task_interrupt_state` raises `RuntimeError` in
++        # `InProcessTaskManager._execute_tool_task`.
++        in_sdk_background_task = hasattr(tool_context, "_task_interrupt_state")
++        tool_streamer = _AgentToolStreamer(
++            interrupt_state=None if in_sdk_background_task else getattr(parent, "_interrupt_state", None),
++            tool_use_id=tool_use_id,
++            namespace="v1:subagent",
++            persist_interrupted_turn=not in_sdk_background_task,
++        )
++
++        try:
++            prepared = await self._prepare_child(tool_use, raw, parent, tool_streamer)
++            if not isinstance(prepared, tuple):
++                yield self._error_result(tool_use_id, prepared) if isinstance(prepared, str) else prepared
++                return
++            child, prompt = prepared
++
++            external_cancel = (
++                tool_context.cancel_signal if tool_context is not None else getattr(parent, "cancel_signal", None)
++            )
++            local_cancel = threading.Event()
++            stalled = False
++
++            def trigger_stall() -> None:
++                nonlocal stalled
++                stalled = True
++                local_cancel.set()
++
++            cancel_signal: threading.Event | None
++            watcher: asyncio.Task[None] | None = None
++            if self._stall_timeout is not None:
++                cancel_signal = local_cancel
++                if external_cancel is not None:
++                    if external_cancel.is_set():
++                        local_cancel.set()
++                    else:
++
++                        async def _mirror_cancel() -> None:
++                            while not external_cancel.is_set() and not local_cancel.is_set():
++                                await asyncio.sleep(0.02)
++                            if external_cancel.is_set():
++                                local_cancel.set()
++
++                        watcher = asyncio.create_task(_mirror_cancel())
++            else:
++                cancel_signal = external_cancel
++
++            child_state = {**invocation_state} if isinstance(invocation_state, dict) else invocation_state
++            stream_kwargs: dict[str, Any] = {
++                "invocation_state": child_state,
++                "cancel_signal": cancel_signal,
++            }
++            invocation_context = getattr(tool_context, "invocation_context", None) if tool_context is not None else None
++            if invocation_context is not None:
++                stream_kwargs["invocation_context"] = invocation_context
++            source = child.stream_async(prompt, **stream_kwargs)
++            try:
++                guarded = _iter_with_stall_timeout(
++                    tool_streamer.stream(self._adapter, child, source),
++                    stall_timeout=self._stall_timeout,
++                    on_stall=trigger_stall,
++                )
++                async for event in guarded:
++                    yield ToolStreamEvent(tool_use, event)
++            finally:
++                local_cancel.set()
++                if watcher is not None:
++                    watcher.cancel()
++
++            if stalled:
++                partial = "\n".join(
++                    b["text"]
++                    for m in self._fork_messages(child, last_n=None)
++                    if m["role"] == "assistant"
++                    for b in m["content"]
++                    if "text" in b and b["text"].strip()
++                )
++                msg = f"Subagent stalled after {self._stall_timeout}s."
++                if partial:
++                    msg += f"\n\nSalvaged partial output:\n{partial}"
++                yield self._error_result(tool_use_id, msg)
++                return
++
++            if in_sdk_background_task and tool_streamer.interrupts is not None and tool_context is not None:
++                first = tool_streamer.interrupts[0]
++                tool_context.interrupt(first.name, reason=first.reason)
++                return
++
++            yield tool_streamer.terminal_event(tool_use)
++        except Exception as exc:
++            # Let task-scoped `InterruptException` from `tool_context.interrupt(...)` unwind to `_execute_background`.
++            from ...interrupt import InterruptException
++
++            if isinstance(exc, InterruptException):
++                raise
++            logger.warning(
++                "tool_name=<%s>, tool_use_id=<%s> | subagent failed: %s",
++                self._name,
++                tool_use_id,
++                exc,
++            )
++            yield self._error_result(tool_use_id, f"Subagent error: {exc}")
++
++
++def make_subagent(
++    *,
++    builder: AgentBuilder | None = None,
++    presets: Mapping[str, Preset] | None = None,
++    default_preset: str | None = None,
++    instructions: Open | Choice | Fixed | None = None,
++    tools: Choice | Fixed | Inherit | None = None,
++    model: Inherit | Choice | Fixed | None = None,
++    context: Fixed | Choice | None = None,
++    max_depth: int = DEFAULT_SUBAGENT_MAX_DEPTH,
++    name: str = "subagent",
++    description: str = DEFAULT_SUBAGENT_DESCRIPTION,
++    background: bool = False,
++    stall_timeout: float | None = None,
++    max_consecutive_errors: int | None = None,
++) -> AgentTool:
++    """Build a ``subagent`` tool whose schema is derived from the axis modes, presets, and ``background`` mode.
++
++    Each axis accepts a policy from :mod:`~strands.multiagent.spec` that controls what
++    the model sees and can supply. Set ``background=True`` to run children non-blockingly
++    in the background with live telemetry, mid-flight ``steer``, hangup alerts, and
++    history-salvaging ``recover``/``cancel`` actions.
++
++    Raises:
++        ValueError: If *max_depth* < 1, *name* or *description* is empty, *stall_timeout* /
++            *max_consecutive_errors* are non-positive, or a ``Choice`` axis violates its constraints.
++    """
++    if not name:
++        raise ValueError("name must be a non-empty string.")
++    if not description:
++        raise ValueError("description must be a non-empty string.")
++    if not isinstance(max_depth, int) or isinstance(max_depth, bool) or max_depth < 1:
++        raise ValueError("max_depth must be a positive integer (>= 1).")
++    if stall_timeout is not None and (
++        isinstance(stall_timeout, bool)
++        or not isinstance(stall_timeout, (int, float))
++        or not math.isfinite(stall_timeout)
++        or stall_timeout <= 0
++    ):
++        raise ValueError("stall_timeout must be a positive finite number.")
++    if max_consecutive_errors is not None and (
++        isinstance(max_consecutive_errors, bool)
++        or not isinstance(max_consecutive_errors, int)
++        or max_consecutive_errors < 1
++    ):
++        raise ValueError("max_consecutive_errors must be a positive integer (>= 1).")
++
++    presets = dict(presets) if presets is not None else {"generalist": GENERALIST}
++    instructions = instructions if instructions is not None else Open()
++    model = model if model is not None else Inherit()
++    context = context if context is not None else Fixed("none")
++    if default_preset is None and presets:
++        default_preset = next(iter(presets))
++
++    schema = _build_schema(
++        presets=presets,
++        default_preset=default_preset,
++        instructions=instructions,
++        tools=tools,
++        model=model,
++        context=context,
++        background=background,
++    )
++    tool_spec = {
++        "name": name,
++        "description": description,
++        "inputSchema": {"json": schema},
++    }
++
++    def resolve(raw: Mapping[str, Any]) -> AgentSpec:
++        # The schema has no name field; the child takes the tool's name.
++        model_input: list[Mapping[str, Any]] = [{**raw, "name": name}]
++        return _resolve_specs(
++            model_input,
++            presets=presets,
++            default_preset=default_preset,
++            instructions=instructions,
++            tools=tools,
++            model=model,
++        )[0]
++
++    return _SubagentTool(
++        name,
++        tool_spec,
++        resolve,
++        context,
++        builder,
++        max_depth,
++        background=background,
++        stall_timeout=stall_timeout,
++        max_consecutive_errors=max_consecutive_errors,
++    )
++
++
++subagent = make_subagent()
++"""Pre-built subagent tool with default settings (generalist preset, all axes using defaults)."""
+diff --git a/strands-py/src/strands/vended_tools/subagent/types.py b/strands-py/src/strands/vended_tools/subagent/types.py
+new file mode 100644
+index 000000000..064f976ac
+--- /dev/null
++++ b/strands-py/src/strands/vended_tools/subagent/types.py
+@@ -0,0 +1,28 @@
++"""Subagent-specific constants."""
++
++from __future__ import annotations
++
++from ...multiagent.spec import Preset
++
++DEFAULT_SUBAGENT_DESCRIPTION = (
++    "Delegate a self-contained task to a subagent that runs in its own context and returns a "
++    "final report. Reach for this when a subtask would otherwise flood your context with "
++    "intermediate work and you only need its conclusion."
++)
++"""Description for the default subagent tool."""
++
++DEFAULT_SUBAGENT_MAX_DEPTH = 2
++"""Upper bound on the number of nested delegation levels."""
++
++GENERALIST = Preset(
++    instructions=(
++        "You are a general-purpose subagent handling a focused subtask on behalf of a parent "
++        "agent. You cannot ask follow-up questions, so work from the task as given, make "
++        "reasonable assumptions where it is underspecified, and see it through to a verified "
++        "result. Return a self-contained answer: state what you did, what you found, and "
++        "anything the parent needs to act on. Your final message is the only thing that returns "
++        "to the parent, so put the substance there rather than in intermediate steps."
++    ),
++    description="a general-purpose agent for a focused subtask that runs in its own context",
++)
++"""Built-in generalist preset."""
+diff --git a/strands-py/tests/strands/vended_tools/test_subagent_async_background.py b/strands-py/tests/strands/vended_tools/test_subagent_async_background.py
+new file mode 100644
+index 000000000..187141674
+--- /dev/null
++++ b/strands-py/tests/strands/vended_tools/test_subagent_async_background.py
+@@ -0,0 +1,349 @@
++"""Tests for native async background execution and hangup recovery on the Strands Harness SDK `subagent` tool."""
++
++from __future__ import annotations
++
++import asyncio
++import json
++import threading
++import time
++from typing import Any
++
++import pytest
++
++from strands import Agent, ToolContext, tool
++from strands.multiagent.spec import Choice, Fixed, Preset
++from strands.vended_tools.subagent import make_subagent
++from strands_harness import create_harness
++from tests.fixtures.mocked_model_provider import MockedModelProvider
++
++
++def _assistant_text(text: str) -> dict[str, Any]:
++    return {"role": "assistant", "content": [{"text": text}]}
++
++
++def _assistant_tool(name: str, tool_use_id: str, tool_input: dict[str, Any]) -> dict[str, Any]:
++    return {"role": "assistant", "content": [{"toolUse": {"name": name, "toolUseId": tool_use_id, "input": tool_input}}]}
++
++
++class CallbackDrivenModel(MockedModelProvider):
++    """Deterministic MockedModelProvider subclass that computes each assistant reply dynamically from `messages`."""
++
++    def __init__(self, fn):
++        super().__init__([])
++        self._fn = fn
++
++    async def stream(self, messages, tool_specs=None, system_prompt=None, tool_choice=None, **kwargs):
++        reply = self._fn(messages, tool_specs, system_prompt)
++        if asyncio.iscoroutine(reply):
++            reply = await reply
++        for ev in self.map_agent_message_to_events(reply):
++            yield ev
++
++
++@pytest.mark.asyncio
++async def test_vended_subagent_background_spawn_and_midflight_steer() -> None:
++    """Native `strands.vended_tools.subagent.make_subagent(background=True)` runs async in the background
++    while the parent keeps working and steers the running child mid-flight without restarting it."""
++    timeline: list[str] = []
++    release_child = asyncio.Event()
++
++    @tool(name="child_step")
++    async def child_step() -> str:
++        """Child step 1."""
++        timeline.append("child:step1_started")
++        await release_child.wait()
++        return "RAW_REPO_INDEX_OK"
++
++    @tool(name="parent_step")
++    async def parent_step() -> str:
++        """Parent work while child runs."""
++        timeline.append("parent:parallel_work")
++        return "PARENT_LOCAL_DONE"
++
++    def child_logic(messages, _specs, _sys):
++        dump = json.dumps(messages)
++        if "RAW_REPO_INDEX_OK" not in dump:
++            return _assistant_tool("child_step", "cs-1", {})
++        assert "<parent-steering>" in dump and "Focus strictly on auth.py" in dump
++        timeline.append("child:applied_midflight_steering")
++        return _assistant_text("Child finished: focused strictly on auth.py")
++
++    sub_tool = make_subagent(
++        builder=lambda spec: Agent(
++            model=CallbackDrivenModel(child_logic),
++            system_prompt=spec.instructions or "",
++            tools=[child_step],
++            callback_handler=None,
++        ),
++        background=True,
++        stall_timeout=5.0,
++    )
++
++    sub_id: str | None = None
++    turn = 0
++
++    async def parent_logic(messages, _specs, _sys):
++        nonlocal turn, sub_id
++        turn += 1
++        if turn == 1:
++            return _assistant_tool("subagent", "p-1", {"task": "Index and audit repo"})
++        if turn == 2:
++            sub_id = messages[-1]["content"][0]["toolResult"]["content"][0]["json"]["subagent_id"]
++            return _assistant_tool("parent_step", "p-2", {})
++        if turn == 3:
++            # Inspect live status, then steer while child is still running!
++            return _assistant_tool("subagent", "p-3", {"action": "status", "subagent_id": sub_id})
++        if turn == 4:
++            status_json = messages[-1]["content"][0]["toolResult"]["content"][0]["json"]
++            assert status_json["status"] == "running"
++            return _assistant_tool(
++                "subagent",
++                "p-4",
++                {"action": "steer", "subagent_id": sub_id, "task": "Focus strictly on auth.py"},
++            )
++        if turn == 5:
++            release_child.set()
++            return _assistant_text("Done with foreground work; awaiting steered child.")
++        assert "focused strictly on auth.py" in json.dumps(messages)
++        return _assistant_text("Combined: PARENT_LOCAL_DONE + auth.py audit!")
++
++    parent = Agent(
++        model=CallbackDrivenModel(parent_logic),
++        tools=[sub_tool, parent_step],
++        callback_handler=None,
++    )
++
++    res = await parent.invoke_async("Run audit.")
++    assert "Combined: PARENT_LOCAL_DONE + auth.py audit!" in str(res)
++    assert "parent:parallel_work" in timeline
++    assert "child:applied_midflight_steering" in timeline
++
++
++@pytest.mark.asyncio
++async def test_vended_subagent_hangup_wakeup_and_history_salvaging_recover() -> None:
++    """When a background native `subagent` stalls on a hung tool after completing Step 1:
++    1. The parent wakes up automatically via `[subagent-hangup]` instead of freezing.
++    2. `action='recover'` cancels the hung child, salvages Step 1 via native `_fork_messages`
++       (dropping the unanswered hung `toolUse`), switches tools/task, and completes without redoing Step 1."""
++    step1_count = 0
++
++    @tool(name="fetch_manifest")
++    async def fetch_manifest() -> str:
++        """Step 1 succeeds."""
++        nonlocal step1_count
++        step1_count += 1
++        return "MANIFEST_DATA(v4.2)"
++
++    @tool(name="hung_service")
++    async def hung_service() -> str:
++        """Hangs indefinitely."""
++        await asyncio.sleep(60.0)
++        return "never"
++
++    @tool(name="backup_service")
++    async def backup_service(manifest: str) -> str:
++        """Fast fallback."""
++        return f"VERIFIED_BY_BACKUP({manifest})"
++
++    def child_logic(messages, _specs, _sys):
++        dump = json.dumps(messages)
++        if "MANIFEST_DATA(v4.2)" not in dump:
++            return _assistant_tool("fetch_manifest", "c-1", {})
++        if "VERIFIED_BY_BACKUP" in dump:
++            return _assistant_text("Recovered report: MANIFEST_DATA(v4.2) + VERIFIED_BY_BACKUP")
++        if "Use backup_service instead of hung_service" in dump:
++            return _assistant_tool("backup_service", "c-3", {"manifest": "MANIFEST_DATA(v4.2)"})
++        return _assistant_tool("hung_service", "c-2", {})
++
++    sub_tool = make_subagent(
++        builder=lambda spec: Agent(
++            model=CallbackDrivenModel(child_logic),
++            system_prompt=spec.instructions or "",
++            tools=[
++                t
++                for t in (fetch_manifest, hung_service, backup_service)
++                if spec.tools is None or t.tool_name in spec.tools
++            ],
++            callback_handler=None,
++        ),
++        presets={
++            "primary": Preset(instructions="Use primary service.", tools=["fetch_manifest", "hung_service"]),
++            "fallback": Preset(instructions="Use backup service.", tools=["fetch_manifest", "backup_service"]),
++        },
++        tools=Choice(["fetch_manifest", "hung_service", "backup_service"], multiple=True),
++        instructions=Fixed(None),
++        background=True,
++        stall_timeout=0.18,
++    )
++
++    first_id: str | None = None
++    turn = 0
++
++    def parent_logic(messages, _specs, _sys):
++        nonlocal turn, first_id
++        turn += 1
++        if turn == 1:
++            return _assistant_tool("subagent", "p-1", {"agent_type": "primary", "task": "Verify manifest"})
++        if turn == 2:
++            first_id = messages[-1]["content"][0]["toolResult"]["content"][0]["json"]["subagent_id"]
++            return _assistant_text("Waiting on background verification.")
++        if turn == 3:
++            # Woken by `[subagent-hangup]`!
++            alert = messages[-1]["content"][0]["text"]
++            assert "[subagent-hangup]" in alert
++            assert "hung_service" in alert
++            assert "MANIFEST_DATA(v4.2)" in alert
++            return _assistant_tool(
++                "subagent",
++                "p-2",
++                {
++                    "action": "recover",
++                    "subagent_id": first_id,
++                    "agent_type": "fallback",
++                    "tools": ["fetch_manifest", "backup_service"],
++                    "task": "Use backup_service instead of hung_service with the salvaged manifest.",
++                },
++            )
++        if turn == 4:
++            rec = messages[-1]["content"][0]["toolResult"]["content"][0]["json"]
++            assert rec["salvaged_message_count"] >= 2
++            return _assistant_text("Recovered subagent running on fallback preset.")
++        assert "VERIFIED_BY_BACKUP(MANIFEST_DATA(v4.2))" in json.dumps(messages)
++        return _assistant_text("Completed after automatic hangup recovery!")
++
++    parent = Agent(model=CallbackDrivenModel(parent_logic), tools=[sub_tool], callback_handler=None)
++
++    t0 = time.monotonic()
++    result = await parent.invoke_async("Verify manifest.")
++    elapsed = time.monotonic() - t0
++
++    assert elapsed < 2.5
++    assert step1_count == 1  # Salvaged! Never re-executed!
++    assert "Completed after automatic hangup recovery!" in str(result)
++
++
++@pytest.mark.asyncio
++async def test_create_harness_native_subagent_background_config_and_recovery() -> None:
++    """`create_harness(builtin_tools={'subagent': {'background': True, ...}})` wires the native
++    `strands_harness` subagent with async background execution, consecutive-error hangup wakeup, and recovery."""
++
++    @tool(name="flaky_tool")
++    def flaky_tool() -> dict[str, Any]:
++        """Always errors."""
++        return {"status": "error", "content": [{"text": "503 upstream unavailable"}]}
++
++    @tool(name="healthy_tool")
++    def healthy_tool() -> str:
++        """Succeeds."""
++        return "HEALTHY_RESULT_42"
++
++    def sub_or_parent_logic(messages, tool_specs, system_prompt):
++        spec_names = {s["name"] for s in (tool_specs or [])}
++        dump = json.dumps(messages)
++        # Child subagent (depth decremented -> still has tools, check prompt)
++        if "You are a general-purpose subagent" in (system_prompt or ""):
++            if "Switch to healthy_tool" in dump:
++                if "HEALTHY_RESULT_42" in dump:
++                    return _assistant_text("Child recovered with HEALTHY_RESULT_42")
++                return _assistant_tool("healthy_tool", "ht-1", {})
++            # Otherwise loop failing `flaky_tool` to trigger `max_consecutive_errors=2`!
++            idx = dump.count("503 upstream unavailable")
++            if idx < 2:
++                return _assistant_tool("flaky_tool", f"ft-{idx}", {})
++            # Stall slightly so parent catches consecutive_errors while running
++            return _assistant_tool("flaky_tool", f"ft-{idx}", {})
++
++        # Parent harness agent
++        assert "subagent" in spec_names
++        if "[subagent-completed]" in dump and "HEALTHY_RESULT_42" in dump:
++            return _assistant_text("Harness parent done: HEALTHY_RESULT_42")
++        if "[subagent-hangup]" in dump:
++            if '"recovered_from"' not in dump:
++                # Extract subagent_id from alert
++                last_txt = messages[-1]["content"][0]["text"]
++                json_part = json.loads(last_txt.split(":\n", 1)[1])
++                hung_id = json_part[0]["subagent_id"]
++                return _assistant_tool(
++                    "subagent",
++                    "p-rec",
++                    {"action": "recover", "subagent_id": hung_id, "task": "Switch to healthy_tool"},
++                )
++            return _assistant_text("Waiting for recovered harness subagent.")
++        if '"subagent_id"' not in dump:
++            return _assistant_tool("subagent", "p-spawn", {"task": "Fetch result"})
++        return _assistant_text("Waiting on initial harness subagent.")
++
++    slow_flaky_gate = asyncio.Event()
++
++    @tool(name="slow_after_errors")
++    async def slow_after_errors() -> str:
++        """Holds child running after consecutive errors."""
++        await slow_after_errors_wait()
++        return "done"
++
++    async def slow_after_errors_wait() -> None:
++        await slow_flaky_gate.wait()
++
++    def combined_logic(messages, tool_specs, system_prompt):
++        dump = json.dumps(messages)
++        if "You are a general-purpose subagent" in (system_prompt or ""):
++            if "Switch to healthy_tool" in dump:
++                if "HEALTHY_RESULT_42" in dump:
++                    return _assistant_text("Child recovered with HEALTHY_RESULT_42")
++                return _assistant_tool("healthy_tool", "ht-1", {})
++            err_count = dump.count("503 upstream unavailable")
++            if err_count < 2:
++                return _assistant_tool("flaky_tool", f"ft-{err_count}", {})
++            return _assistant_tool("slow_after_errors", "sae-1", {})
++        return sub_or_parent_logic(messages, tool_specs, system_prompt)
++
++    agent = create_harness(
++        model=CallbackDrivenModel(combined_logic),
++        tools=[flaky_tool, healthy_tool, slow_after_errors],
++        builtin_tools={"*": False, "subagent": {"background": True, "stall_timeout": 5.0, "max_consecutive_errors": 2}},
++        builtin_plugins=[],
++        caching=False,
++        session=False,
++        skills=False,
++        memory=False,
++        callback_handler=None,
++    )
++
++    out = await agent.invoke_async("Get healthy result.")
++    assert "Harness parent done: HEALTHY_RESULT_42" in str(out)
++
++
++@pytest.mark.asyncio
++async def test_sdk_background_tasks_with_vended_subagent_interrupt_does_not_crash() -> None:
++    """When native `subagent` (`background=False`) runs inside `Agent(background_tasks={'always': [subagent]})`,
++    a child tool interrupt transitions cleanly to `stop_reason == 'interrupt'` instead of crashing with
++    `RuntimeError('Interrupt raised: ...')`."""
++
++    @tool(name="child_gate", context=True)
++    def child_gate(tool_context: ToolContext) -> str:
++        """Interrupts inside child."""
++        return f"approved:{tool_context.interrupt('gate', reason='Proceed?')}"
++
++    sub_tool = make_subagent(
++        builder=lambda spec: Agent(
++            model=MockedModelProvider([_assistant_tool("child_gate", "cg-1", {}), _assistant_text("Child done")]),
++            tools=[child_gate],
++            callback_handler=None,
++        ),
++    )
++
++    parent = Agent(
++        model=MockedModelProvider(
++            [
++                _assistant_tool("subagent", "s-1", {"task": "Run gated work"}),
++                _assistant_text("Waiting."),
++            ]
++        ),
++        tools=[sub_tool],
++        background_tasks={"always": [sub_tool]},
++        callback_handler=None,
++    )
++
++    res = await parent.invoke_async("Go")
++    assert res.stop_reason == "interrupt"
++    assert res.interrupts[0].name == "gate"

@@ -3,9 +3,10 @@
 ## Setup
 
 Use the project `venv/` and `agent/api/requirements.txt`. The native integration
-uses the complete Python Strands package from GitHub commit
-`563f57d7a387931760a2c3106014cd7c0db4c9bc`, plus the recorded native Bidi patch,
-and **`huggingface_hub==1.20.1`**.
+uses the complete Python Strands (`strands-py`) and Strands Harness (`harness-py`)
+packages from GitHub commit `563f57d7a387931760a2c3106014cd7c0db4c9bc`, plus the
+recorded native patches (`deploy/strands-bidi.patch` and
+`deploy/strands-subagent-async.patch`), and **`huggingface_hub==1.20.1`**.
 `requirements-full.txt` is not the authoritative dependency list.
 
 ```bash
@@ -335,9 +336,20 @@ vendored Strands `@tool`:
 | `shell` | `strands_tools.shell` | run shell commands on the host |
 | `environment` | `strands_tools.environment` | read/manage environment variables |
 | `http_request` | `strands_tools.http_request` | HTTP requests |
+| `load_tool` | `strands_tools.load_tool` | load a Python `@tool` module into `agent.tool_registry` at runtime |
+| `programmatic_tool_caller` | `strands_harness.tools.programmatic_tool_caller` (`hot_reload=True`) | Monty sandboxed Python orchestrating registered + hot-reloaded tools |
+| `subagent` | `strands.vended_tools.subagent.make_subagent` (`background=True`) | non-blocking background subagent (`spawn` / `status` / `steer` / `recover` / `cancel`) |
 | `perplexity_search` | `agent/tools/strands_tools/research/perplexity_search_api.py` (async `@tool`, official `perplexityai` SDK, exposed under this name) | live web search |
 | `tool_catalog` | `panel_tools.create_tool_catalog` | `list` / `search` / `describe` / `load` over the project library, and `load` of a configured MCP server by name (`user_browser` / `cloud_browser`) |
 | `ask_user` | native `ToolContext.interrupt` | pause for user input |
+
+### Native async execution, subagent supervision and tool hot-reload
+
+Every agent runs execution tools asynchronously by default (`background_tasks={"always": ["*"], "never": ["tool_catalog", "load_tool", "mcp_client", "ask_user", "subagent", "todo_write", ...], "wait_for_completion": True}`), so callers continue working while tools execute, poll or cancel hung tasks via `strands_manage_background_task(mode="list" | "get" | "cancel")`, and automatically settle completions at `AfterInvocationEvent`.
+
+`subagent` runs with `background=True, stall_timeout=60.0, max_consecutive_errors=3`: `action="spawn"` returns `{subagent_id, status: "running"}` immediately, streams child `ToolStreamEvent`s via `SessionRun._callback`, injects live telemetry via `ContextInjector(trigger="everyTurn")`, wakes the parent via `AfterInvocationEvent.resume` on `[subagent-completed]` or `[subagent-hangup]` (emitted live over SSE via `MessageAddedEvent`), and supports mid-flight `steer`, `cancel`, and history-salvaging `recover` (`_SubagentTool._fork_messages`).
+
+Agents also enable `load_tools_from_directory=True` (`ToolWatcher` watching `./tools/*.py` across `on_created`, `on_moved`, and `on_modified`), `load_tool`, and `make_programmatic_tool_caller(hot_reload=True)` (syncing newly loaded `@tool` functions into Monty's `external_lookup` and stripping `"event_loop_cycle_id"` so inner Monty `await` calls execute inline even under `always: ["*"]`).
 
 ### Agent per chat
 

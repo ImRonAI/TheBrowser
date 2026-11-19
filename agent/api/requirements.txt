@@ -33,7 +33,7 @@ google-genai==2.24.0
 # Strands Agent Framework
 # Run bash deploy/prepare-strands.sh first; install requirements from the repo root.
 -e ./agent/api/core/harness-sdk/strands-py[a2a,mistral,openai,anthropic,gemini,bidi-google]
-strands-harness==0.1.2
+-e ./agent/api/core/harness-sdk/harness-py
 strands-agents-evals==1.4.0
 huggingface_hub==1.20.1
 # 0.9.0 removed strands_tools.editor (and other tools the panel loads); stay on 0.8.x.

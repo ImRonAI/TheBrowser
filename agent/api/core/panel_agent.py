@@ -1377,11 +1377,85 @@ def create_panel_agent(
             plugins: list[Any] = []
         else:
             core = build_core_tools(tools_dir)
-            catalog.add_tools([*core, *research_tools, create_tool_catalog(catalog, tools_dir), ask_user])
+            from strands.multiagent.spec import AgentSpec, Choice
+            from strands.vended_tools.subagent import make_subagent
+            from strands.vended_tools.subagent.types import GENERALIST
+
+            subagent_excluded = {
+                "ask_user", "tool_catalog", "mcp_client", "create_harness", "strands_manage_background_task",
+            }
+
+            def subagent_tools_map() -> dict[str, AgentTool]:
+                available = (
+                    list(agent.tool_registry.registry.values())
+                    if agent is not None
+                    else [*core, *local_tools]
+                )
+                return {
+                    value.tool_name: value
+                    for value in available
+                    if isinstance(value, AgentTool)
+                    and value.tool_name not in subagent_excluded
+                    and not value.tool_name.startswith("strands_")
+                    and not is_browser_tool(value.tool_name)
+                    and not is_deep_research_tool(value.tool_name)
+                }
+
+            def build_panel_subagent_child(spec: AgentSpec) -> Agent:
+                from strands.models.model import Model
+                from agent.api.core.dreaming import inherited_memory
+
+                pool = subagent_tools_map()
+                if spec.tools is None:
+                    selected = list(pool.values())
+                else:
+                    selected = [pool[name] for name in spec.tools if name in pool]
+                selected_names = {t.tool_name for t in selected}
+                inherited = [
+                    value
+                    for value in inherited_memory(agent.tool_registry.registry if agent is not None else {})
+                    if value.tool_name not in selected_names
+                ]
+                (Path.cwd() / "tools").mkdir(exist_ok=True)
+                return Agent(
+                    name=spec.name,
+                    model=spec.model if isinstance(spec.model, Model) else model_factory(spec.name),
+                    system_prompt=(spec.instructions or GENERALIST.instructions or "")
+                    + (JOURNAL_DIRECTIVE if inherited else ""),
+                    tools=[*selected, *inherited],
+                    background_tasks={
+                        "always": ["*"],
+                        "never": ["load_tool", "subagent", "todo_write"],
+                        "wait_for_completion": True,
+                    },
+                    callback_handler=None,
+                    session_manager=None,
+                    checkpointing=False,
+                    load_tools_from_directory=True,
+                )
+
+            panel_subagent = make_subagent(
+                builder=build_panel_subagent_child,
+                presets={"generalist": GENERALIST},
+                context=Choice(["none", "all", "no_tools"]),
+                background=True,
+                stall_timeout=60.0,
+                max_consecutive_errors=3,
+            )
+            catalog.add_tools([
+                *core,
+                *research_tools,
+                create_tool_catalog(catalog, tools_dir),
+                ask_user,
+                panel_subagent,
+            ])
             from agent.api.core.teaching import create_learned_skill_tools
             def skill_tools() -> list[Any]:
                 available = list(agent.tool_registry.registry.values()) if agent is not None else [*core, *local_tools]
-                excluded = {"use_skill", "list_learned_skills", "think", "ask_user", "tool_catalog", "create_harness"}
+                excluded = {
+                    "use_skill", "list_learned_skills", "think", "ask_user", "tool_catalog", "create_harness",
+                    "subagent",
+                }
                 return [
                     value for value in available
                     if value.tool_name not in excluded
@@ -1436,13 +1510,16 @@ def create_panel_agent(
             if event.result is None or event.result.stop_reason not in ("end_turn", "stop_sequence"):
                 event.resume = None
 
+        if not is_document:
+            (PROJECT_ROOT / "tools").mkdir(exist_ok=True)
+            (Path.cwd() / "tools").mkdir(exist_ok=True)
         panel_model = model_factory("panel")
         kwargs: dict[str, Any] = {
             "model": panel_model, "system_prompt": system_prompt, "tools": [catalog],
             "agent_id": thread_agent_id(user_id),
             "session_manager": ThreadSessionManager(session_id, storage=storage),
             "storage": storage, "memory_manager": memory,
-            "callback_handler": None, "load_tools_from_directory": False,
+            "callback_handler": None, "load_tools_from_directory": not is_document,
             # Copied by the SDK onto every agent/cycle/model/tool span (tool observation, CAT-49).
             "trace_attributes": trace_attributes(session_id=session_id, user_id=user_id),
             # ``agentic`` is the native ContextManager (summarize_context / truncate_context /
@@ -1515,36 +1592,34 @@ def create_panel_agent(
         formation_names = [raw["name"] for raw in raw_formations] \
             if raw_formations is not None else [spec.name for spec in _default_formations()]
         if options.get("background", True) or kwargs["background_tasks"]:
-            # Delegated subagent/skill/formation tools always run asynchronously in the
-            # background; every other compatible tool supports agentic _background_execution
-            # and polling/cancellation via strands_manage_background_task.
+            # All execution tools run asynchronously in the background by default (always=["*"]),
+            # while subagent uses its native async supervision (background=True) and instant
+            # control/registry gates remain synchronous in "never".
             background = kwargs["background_tasks"]
             background = dict(background) if isinstance(background, dict) else {}
-            background.setdefault("agentic", ["*"])
             background["wait_for_completion"] = True
-            # Registry-mutating, interactive, and instant handle tools stay foreground.
             never = list(dict.fromkeys([
                 *background.get("never", []),
-                "tool_catalog", "mcp_client", "editor", "ask_user", "programmatic_tool_caller",
+                "tool_catalog", "load_tool", "mcp_client", "ask_user", "subagent", "todo_write",
                 *sorted(DEEP_RESEARCH_TOOL_NAMES),
             ]))
-            always_candidates = ["think", "run_skill", "use_skill", *formation_names]
-            always = list(dict.fromkeys([
-                *background.get("always", []),
-                *(name for name in always_candidates if name not in never),
-            ]))
             background["never"] = never
-            background["always"] = always
+            if "*" not in background.get("agentic", []):
+                background.setdefault("always", ["*"])
             kwargs["background_tasks"] = background
             if not is_document:
                 kwargs["system_prompt"] += (
-                    "\n\n## Async tools and background tasks\n"
-                    "Delegated skills, formations, and subagents run asynchronously in the background by default, and "
-                    "any compatible tool accepts `_background_execution: true` to run asynchronously while you continue "
-                    "other work. Inspect or control in-flight background tasks with `strands_manage_background_task` "
-                    "(`mode`: `\"list\"`, `\"get\"`, or `\"cancel\"` with `task_id`). If a tool call fails, times out, "
-                    "or stalls, cancel it if still running, pivot to an alternative tool or source, and persist until "
-                    "the user's goal is completed."
+                    "\n\n## Async tools, subagents, and runtime tool building\n"
+                    "- Every execution tool runs asynchronously in the background (`Task ID: <uuid>`) so you can keep "
+                    "working in parallel. Inspect, poll, or cancel in-flight tasks with `strands_manage_background_task` "
+                    "(`mode`: `\"list\"`, `\"get\"`, or `\"cancel\"` with `task_id`).\n"
+                    "- `subagent` also runs non-blocking in the background (`action`: `\"spawn\"` default, `\"status\"`, "
+                    "`\"steer\"`, `\"recover\"`, `\"cancel\"`), injecting live telemetry and waking you on completion or "
+                    "hangup so you can steer or recover without losing completed child steps.\n"
+                    "- If any tool fails, stalls, or lacks a needed capability, cancel it if hung, retry or pivot to an "
+                    "alternative tool, or author a `@tool`-decorated Python file under `./tools/<name>.py` (automatically "
+                    "hot-reloaded by Strands `ToolWatcher`) or load one via `load_tool(path=..., name=...)` and compose "
+                    "calls with `programmatic_tool_caller`."
                 )
         agent = config_to_agent(str(path), **kwargs)
         agent.add_hook(pause_gate, AfterInvocationEvent, order=200)

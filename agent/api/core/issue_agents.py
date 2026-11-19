@@ -294,18 +294,16 @@ class IssueAccessGuard(HookProvider):
 def _issue_chat_background(options: dict[str, Any]) -> bool | BackgroundTasksConfig:
     """``background_tasks`` for the ``background`` option, as ``create_panel_agent`` does.
 
-    Enabled by default: native ``wait_for_completion=True`` (panel_runtime.py docstring), ``use_skill`` runs child
-    agents asynchronously in ``always``, and every compatible tool gets ``_background_execution`` +
-    ``strands_manage_background_task``.
+    Enabled by default: native ``always=["*"]`` + ``wait_for_completion=True`` so every issue/network/skill/A2A tool
+    runs asynchronously while instant control gates stay foreground.
     """
     if not options.get("background", True):
         return False
     from agent.api.core.deep_research_tools import DEEP_RESEARCH_TOOL_NAMES
 
     return {
-        "agentic": ["*"],
-        "always": ["use_skill"],
-        "never": sorted(DEEP_RESEARCH_TOOL_NAMES),
+        "always": ["*"],
+        "never": ["todo_write", *sorted(DEEP_RESEARCH_TOOL_NAMES)],
         "wait_for_completion": True,
     }
 
@@ -386,6 +384,12 @@ def create_issue_chat_agent(*, user_id: str, session_id: str, issue_id: str, pro
                                          preserve_context=True))
     from agent.api.core.deep_research_tools import deep_research_tools
 
+    issue_hooks = [
+        IssueAccessGuard(service),
+        ToolObservation(),
+        *([XAIStatePruner()] if provider == "xai" else []),
+        *(agent_kwargs.pop("hooks", None) or []),
+    ]
     agent = create_harness(
         model=model,
         caching=False,
@@ -419,15 +423,10 @@ def create_issue_chat_agent(*, user_id: str, session_id: str, issue_id: str, pro
         tool_executor=SequentialToolExecutor() if options.get("tool_execution") == "sequential" else ConcurrentToolExecutor(),
         checkpointing=bool(options.get("checkpointing", False)),
         trace_attributes=trace_attributes(session_id=session_id, user_id=user_id),
+        load_tools_from_directory=False,
+        hooks=issue_hooks,
         **agent_kwargs,
     )
-    # Added after construction (not ``hooks=``), like the runtime's: the harness forwards constructor hooks to
-    # ``subagent`` children (agent.py:428-430, 461). Issue sessions are not threads, so no ThreadProjection.
-    agent.hooks.add_hook(IssueAccessGuard(service))
-    agent.hooks.add_hook(ToolObservation())
-    if provider == "xai":
-        # Keep one strands_xai encrypted-state blob, as create_panel_agent does for xAI agents.
-        agent.hooks.add_hook(XAIStatePruner())
     logger.info("user=<%s>, session=<%s>, issue=<%s>, provider=<%s>, model=<%s> | issue chat agent built",
                 user_id, session_id, issue_id, provider, model_id)
     return agent
@@ -554,6 +553,11 @@ class IssueAgentRuntime:
                 learned = create_learned_skill_tools(service.identity.user_id, agent_scope,
                     lambda _: self.model_factory(agent_record["provider"], agent_record["model_id"], hosted_tools=False),
                     additional_tools=assigned)
+                from strands.multiagent.spec import AgentSpec, Choice
+                from strands.vended_tools.subagent import make_subagent
+                from strands.vended_tools.subagent.types import GENERALIST
+                from strands_harness.tools.programmatic_tool_caller import make_programmatic_tool_caller
+
                 from agent.api.core.a2a_tools import a2a_tools
                 from agent.api.core.brave_tools import brave_tools
                 from agent.api.core.web_tools import web_tools
@@ -564,14 +568,40 @@ class IssueAgentRuntime:
                 # natively by a multimodal lead (view_media), else described by RON_MEDIA_MODEL (understand_media).
                 intake = [installed_http_request(), *media_tools(lambda: service.identity,
                     provider=agent_record["provider"], model_id=agent_record["model_id"])]
+                base_issue_tools = [*assigned, *intake, *brave_tools(), *web_tools(), *learned, make_programmatic_tool_caller(hot_reload=True)]
+
+                def build_task_subagent_child(spec: AgentSpec) -> Agent:
+                    pool = {t.tool_name: t for t in base_issue_tools if hasattr(t, "tool_name")}
+                    chosen = list(pool.values()) if spec.tools is None else [pool[n] for n in spec.tools if n in pool]
+                    return Agent(
+                        name=spec.name,
+                        model=self.model_factory(agent_record["provider"], agent_record["model_id"], hosted_tools=False),
+                        system_prompt=(spec.instructions or GENERALIST.instructions or ""),
+                        tools=chosen,
+                        background_tasks={"always": ["*"], "never": ["subagent", "todo_write"], "wait_for_completion": True},
+                        callback_handler=None,
+                        session_manager=None,
+                        checkpointing=False,
+                        load_tools_from_directory=False,
+                        hooks=[activity],
+                    )
+
+                task_subagent = make_subagent(
+                    builder=build_task_subagent_child,
+                    presets={"generalist": GENERALIST},
+                    context=Choice(["none", "all", "no_tools"]),
+                    background=True,
+                    stall_timeout=60.0,
+                    max_consecutive_errors=3,
+                )
                 agent = config_to_agent({"name": "Task Ren", "model": agent_record["model_id"], "prompt": prompt + JOURNAL_DIRECTIVE, "tools": []},
                     model=model,
-                    tools=[*assigned, *intake, *brave_tools(), *web_tools(), *deep_research_tools(user_id=service.identity.user_id), *learned, *a2a_tools()],
+                    tools=[*base_issue_tools, task_subagent, *deep_research_tools(user_id=service.identity.user_id), *a2a_tools()],
                     description="Private canonical issue assistant",
                     memory_manager={"stores": [get_teaching_service().get_memory_store(service.identity.user_id, agent_scope),
                                                *agent_memory(service.identity.user_id, agent_scope)],
                                     "search_tool_config": True, "injection": True},
-                    background_tasks={"agentic": ["*"], "always": ["use_skill"], "never": sorted(DEEP_RESEARCH_TOOL_NAMES), "wait_for_completion": True},
+                    background_tasks={"always": ["*"], "never": ["subagent", "todo_write", *sorted(DEEP_RESEARCH_TOOL_NAMES)], "wait_for_completion": True},
                     agent_id=agent_record["id"], session_manager=session, callback_handler=None,
                     checkpointing=False, load_tools_from_directory=False, plugins=plugins, hooks=[activity])
                 agents.append(agent)

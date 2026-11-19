@@ -66,7 +66,7 @@ __all__ = [
 #: Always-registered tool names (user-mandated). `tool_catalog` is appended by
 #: create_tool_catalog; `ask_user` (native interrupt) is composed separately.
 CORE_TOOL_NAMES = (
-    "mcp_client", "editor", "shell", "environment", "http_request", "perplexity_search",
+    "mcp_client", "editor", "shell", "environment", "load_tool", "http_request", "perplexity_search",
     "brave_answer", "brave_web_search", "brave_news_search", "brave_image_search",
     "brave_video_search", "brave_local_search", "brave_rich_answer",
     "render_ui", "render_workflow", "programmatic_tool_caller", "tool_catalog",
@@ -918,14 +918,14 @@ def build_core_tools(project_tools_dir: Path, *, names: Sequence[str] | None = N
     under the user-facing name with ``@tool(name=...)`` over its ``__wrapped__`` function.
     When ``names`` is given (e.g. ``DOCUMENT_TOOL_NAMES``), only matching tools are built.
     """
-    from strands_tools import editor, environment, mcp_client, shell
+    from strands_tools import editor, environment, load_tool, mcp_client, shell
     from agent.api.core import config as app_config
 
     allowed = set(names) if names is not None else None
     if allowed is None or "mcp_client" in allowed:
         _install_mcp_client_elicitation()
     tools: list[AgentTool] = []
-    for module in (mcp_client, editor, shell, environment):
+    for module in (mcp_client, editor, shell, environment, load_tool):
         short = module.__name__.rsplit(".", 1)[-1]
         if allowed is not None and short not in allowed:
             continue
@@ -957,11 +957,11 @@ def build_core_tools(project_tools_dir: Path, *, names: Sequence[str] | None = N
     from agent.api.core.render_ui_tool import render_ui_tools
 
     tools.extend(t for t in render_ui_tools() if allowed is None or t.tool_name in allowed)
-    # Native strands_harness Monty Rust-VM sandboxed Python tool orchestrator.
+    # Native strands_harness Monty Rust-VM sandboxed Python tool orchestrator with hot_reload enabled.
     if allowed is None or "programmatic_tool_caller" in allowed:
         from strands_harness.tools.programmatic_tool_caller import make_programmatic_tool_caller
 
-        tools.append(make_programmatic_tool_caller())
+        tools.append(make_programmatic_tool_caller(hot_reload=True))
     return tools
 
 
@@ -1032,6 +1032,7 @@ async def create_child_agent(
         model = model_factory(spec.name)
         if not isinstance(model, Model):
             raise TypeError("model_factory must return an explicit Strands Model instance")
+        (Path.cwd() / "tools").mkdir(exist_ok=True)
         return Agent(
             name=spec.name,
             description=spec.description,
@@ -1039,11 +1040,15 @@ async def create_child_agent(
             system_prompt=spec.system_prompt + (JOURNAL_DIRECTIVE if inherited else ""),
             tools=[*spec.tools, *inherited],
             plugins=list(plugins),
-            background_tasks={"agentic": ["*"], "wait_for_completion": True},
+            background_tasks={
+                "always": ["*"],
+                "never": ["load_tool", "subagent", "todo_write"],
+                "wait_for_completion": True,
+            },
             callback_handler=None,
             session_manager=None,
             checkpointing=False,
-            load_tools_from_directory=False,
+            load_tools_from_directory=True,
         )
 
     # Constructors may synchronously initialize plugins and managed MCP clients.
@@ -1108,7 +1113,9 @@ def create_skill_tool(
 
 #: Tools the think child never inherits: itself (no recursion), user interrupts
 #: (the parent owns the conversation), and catalog loading (parent registry only).
-THINK_EXCLUDED_TOOLS = frozenset({"think", "ask_user", "tool_catalog", "create_harness", "programmatic_tool_caller"})
+THINK_EXCLUDED_TOOLS = frozenset({
+    "think", "ask_user", "tool_catalog", "load_tool", "subagent", "create_harness", "programmatic_tool_caller",
+})
 
 #: Non-browser ways of reading the web. Withheld from the think child when the user's current
 #: request says "browser only", because browser tools themselves are parent-only.

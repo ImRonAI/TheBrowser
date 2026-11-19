@@ -61,9 +61,17 @@ class IssueModel(Model):
             yield {"contentBlockStop": {"contentBlockIndex": 0}}
             yield {"messageStop": {"stopReason": "tool_use"}}
             return
-        result = results[0]
-        text = result["content"][0]["text"]
-        answer = f"Issue: {json.loads(text)['title']}" if result["status"] == "success" else f"Blocked: {text}"
+        result = results[-1]
+        first_block = result["content"][0]
+        text = first_block.get("text", "")
+        if result["status"] != "success":
+            answer = f"Blocked: {text}"
+        elif text.startswith("Background task dispatched."):
+            answer = "Reading issue..."
+        elif len(result["content"]) >= 2 and "text" in result["content"][1]:
+            answer = f"Issue: {json.loads(result['content'][1]['text'])['title']}"
+        else:
+            answer = f"Issue: {json.loads(text)['title']}"
         yield {"contentBlockDelta": {"contentBlockIndex": 0, "delta": {"text": answer}}}
         yield {"contentBlockStop": {"contentBlockIndex": 0}}
         yield {"messageStop": {"stopReason": "end_turn"}}
@@ -173,9 +181,20 @@ def test_issue_chat_streams_its_own_harness_agent_with_the_callers_access(monkey
 
             first = events(await client.post("/chat", json=body, headers=WORKSPACE))
             assert first[-1]["type"] == "run_finished" and first[-1]["status"] == "completed", first
-            reads = [event for event in first if event["type"] == "tool_result" and event["name"] == "read_issue"]
-            assert reads and reads[0]["status"] == "success"
-            assert json.loads(reads[0]["content"][0]["text"])["id"] == issue["id"]
+            inputs = [event for event in first if event["type"] == "tool_input" and event["name"] == "read_issue"]
+            assert inputs
+            dispatched = [event for event in first if event["type"] == "tool_result" and event["id"] == inputs[0]["id"]]
+            assert dispatched and dispatched[0]["status"] == "success"
+            assert dispatched[0]["content"][0]["text"].startswith("Background task dispatched.")
+            bg_reads = [
+                event["event"]["tool_result"]
+                for event in first
+                if event["type"] == "background_event"
+                and event["event"].get("tool_use", {}).get("name") == "read_issue"
+                and "tool_result" in event["event"]
+            ]
+            assert bg_reads and bg_reads[0]["status"] == "success"
+            assert json.loads(bg_reads[0]["content"][0]["text"])["id"] == issue["id"]
             assert "Issue: Ship the beta" in "".join(event["data"] for event in first if event["type"] == "text_delta")
 
             # Its own harness agent, not the panel composition.
@@ -186,10 +205,9 @@ def test_issue_chat_streams_its_own_harness_agent_with_the_callers_access(monkey
             assert call["skills"] is False and call["session"] is False and call["mcp_servers"] is None
             assert isinstance(call["memory"], MemoryManager) and call["interventions"] is None
             assert call["background_tasks"] == {
-                "agentic": ["*"],
+                "always": ["*"],
                 "wait_for_completion": True,
-                "always": ["use_skill"],
-                "never": ["deep_research_cancel", "deep_research_start", "deep_research_status"],
+                "never": ["todo_write", "deep_research_cancel", "deep_research_start", "deep_research_status"],
             } and call["checkpointing"] is False
             session = await manager.get(user, "issue-chat")
             assert session is not None and session.agent is not None
@@ -245,10 +263,9 @@ def test_options_reach_the_harness_agent(harness_calls):
     assert isinstance(call["tool_executor"], SequentialToolExecutor) and isinstance(agent.tool_executor, SequentialToolExecutor)
     assert call["checkpointing"] is True and call["context_manager"] is False
     assert call["background_tasks"] == {
-        "agentic": ["*"],
+        "always": ["*"],
         "wait_for_completion": True,
-        "always": ["use_skill"],
-        "never": ["deep_research_cancel", "deep_research_start", "deep_research_status"],
+        "never": ["todo_write", "deep_research_cancel", "deep_research_start", "deep_research_status"],
     }
     assert any(isinstance(plugin, GoalLoop) for plugin in call["plugins"])
     create_issue_chat_agent(

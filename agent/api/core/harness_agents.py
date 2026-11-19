@@ -88,19 +88,52 @@ def build_specialist(config: dict[str, Any], owner_id: str, *, connect_mcp: bool
     ``agent_kwargs`` go to ``Agent`` (the Agent Panel passes its session's ``agent_id``, ``session_manager`` and
     ``callback_handler`` here when the user talks to the specialist directly).
     """
+    from pathlib import Path
+    from strands.tools.loader import load_tools_from_module
+    from strands_tools import load_tool as load_tool_mod
+
     from agent.api.core.a2a_tools import a2a_tools
     from agent.api.core.brave_tools import brave_tools
-    from agent.api.core.deep_research_tools import deep_research_tools
+    from agent.api.core.deep_research_tools import DEEP_RESEARCH_TOOL_NAMES, deep_research_tools
     from agent.api.core.panel_tools import installed_http_request
     from agent.api.core.web_tools import web_tools
     from agent.api.core.panel_agent import PROJECT_TOOLS_DIR, PROVIDERS, build_model
     from agent.api.core.panel_browser import BROWSERS, browser_client_factory, server_name
 
+    (Path.cwd() / "tools").mkdir(exist_ok=True)
     browsers = {server_name(browser): browser for browser in BROWSERS}
     servers = config.get("mcpServers") or {}
     run = {**config, "session": False, "memory": False,
            "mcpServers": {name: value for name, value in servers.items() if name not in browsers} if connect_mcp else {}}
     kwargs = harness_agent_kwargs_from_config(run, base_dir=PROJECT_TOOLS_DIR)
+    # Upgrade built-in subagent and programmatic_tool_caller to async background + hot_reload when enabled.
+    bt_raw = kwargs.get("builtin_tools")
+    if bt_raw is None:
+        kwargs["builtin_tools"] = {
+            "programmatic_tool_caller": {"hot_reload": True},
+            "subagent": {"background": True, "stall_timeout": 60.0, "max_consecutive_errors": 3},
+        }
+    elif isinstance(bt_raw, list):
+        kwargs["builtin_tools"] = {
+            "*": False,
+            **{
+                name: (
+                    {"hot_reload": True}
+                    if name == "programmatic_tool_caller"
+                    else {"background": True, "stall_timeout": 60.0, "max_consecutive_errors": 3}
+                    if name == "subagent"
+                    else True
+                )
+                for name in bt_raw
+            },
+        }
+    elif isinstance(bt_raw, dict):
+        upgraded = dict(bt_raw)
+        if upgraded.get("programmatic_tool_caller") is True:
+            upgraded["programmatic_tool_caller"] = {"hot_reload": True}
+        if upgraded.get("subagent") is True:
+            upgraded["subagent"] = {"background": True, "stall_timeout": 60.0, "max_consecutive_errors": 3}
+        kwargs["builtin_tools"] = upgraded
     if config.get("memory") is not False:
         kwargs["memory"] = MemoryManager(stores=agent_memory(owner_id, config["name"]))
         kwargs["instructions"] = f"{kwargs.get('instructions') or ''}{JOURNAL_DIRECTIVE}"
@@ -112,7 +145,8 @@ def build_specialist(config: dict[str, Any], owner_id: str, *, connect_mcp: bool
     clients = [browser_client_factory(browsers[name])() for name in servers if name in browsers] if connect_mcp else []
     existing = list(kwargs.get("tools", []))
     seen_names = {getattr(t, "tool_name", None) for t in existing if getattr(t, "tool_name", None)}
-    extra_web = [t for t in [*brave_tools(), *web_tools(), installed_http_request()] if t.tool_name not in seen_names]
+    loaded_tool = [t for t in load_tools_from_module(load_tool_mod, "load_tool") if t.tool_name == "load_tool"]
+    extra_web = [t for t in [*brave_tools(), *web_tools(), installed_http_request(), *loaded_tool] if t.tool_name not in seen_names]
     seen_names.update(t.tool_name for t in extra_web)
     extra_research = [t for t in deep_research_tools(user_id=owner_id) if t.tool_name not in seen_names]
     kwargs["tools"] = [*existing, *clients, *extra_web, *extra_research, *a2a_tools(), *context_search_tools(owner_id)]
@@ -120,6 +154,15 @@ def build_specialist(config: dict[str, Any], owner_id: str, *, connect_mcp: bool
     # Ren's own repository (strands_harness/plugins/environment.py).
     kwargs["builtin_plugins"] = [name for name in kwargs.get("builtin_plugins", harness_defaults.DEFAULT_BUILTIN_PLUGINS)
                                  if name != "environment"]
+    kwargs.setdefault(
+        "background_tasks",
+        {
+            "always": ["*"],
+            "never": ["subagent", "load_tool", "todo_write", *sorted(DEEP_RESEARCH_TOOL_NAMES)],
+            "wait_for_completion": True,
+        },
+    )
+    kwargs.setdefault("load_tools_from_directory", True)
     if plugins:
         kwargs["plugins"] = [*(kwargs.get("plugins") or []), *plugins]
     return harness_factory(**{"callback_handler": None, **kwargs, **agent_kwargs})

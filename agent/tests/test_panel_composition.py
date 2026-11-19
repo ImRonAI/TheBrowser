@@ -151,10 +151,10 @@ def test_real_constructor_defaults_stream_and_complete_cleanup(offline):
     assert summarizer._session_manager is None
     assert any(isinstance(plugin, ContextOffloader) for plugin in kwargs["plugins"])
     assert isinstance(kwargs["tool_executor"], ConcurrentToolExecutor)
-    assert kwargs["background_tasks"]["agentic"] == ["*"]
+    assert kwargs["background_tasks"]["always"] == ["*"]
     assert kwargs["background_tasks"]["wait_for_completion"] is True
-    assert {"think", "run_skill", "use_skill", "research_review", "reasoning_swarm", "nested_research_review"} <= set(
-        kwargs["background_tasks"]["always"]
+    assert {"tool_catalog", "load_tool", "mcp_client", "ask_user", "subagent", "todo_write"} <= set(
+        kwargs["background_tasks"]["never"]
     )
     assert kwargs["retry_strategy"]._max_attempts == 6
     names = set(agent.tool_registry.registry)
@@ -164,9 +164,9 @@ def test_real_constructor_defaults_stream_and_complete_cleanup(offline):
     from agent.api.core.panel_tools import CORE_TOOL_NAMES
     assert set(CORE_TOOL_NAMES) - set(BRAVE_TOOL_NAMES) <= names
     assert not set(BRAVE_TOOL_NAMES) & names
-    assert {"ask_user", "think", "research_review", "reasoning_swarm", "nested_research_review",
-            "retrieve_offloaded_content"} <= names
-    assert "review" not in names and "load_tool" not in names and "discover_tools" not in names
+    assert {"ask_user", "load_tool", "subagent", "think", "research_review", "reasoning_swarm",
+            "nested_research_review", "retrieve_offloaded_content"} <= names
+    assert "review" not in names and "discover_tools" not in names
     # The summarizer is one long-lived Agent on the panel model. think/formations still build per call.
     assert len(models) == 1
     result = asyncio.run(agent.invoke_async("hello"))
@@ -247,15 +247,15 @@ def test_sync_extra_adapted_and_think_child_inherits_parent_tools(offline, monke
     result = asyncio.run(agent.invoke_async("use tools"))
     assert result.stop_reason == "end_turn"
     results = [b["toolResult"] for m in agent.messages for b in m["content"] if "toolResult" in b]
-    # blocking runs foreground (1 result); think runs in `always` (dispatch ack + strands_manage_background_task settlement).
-    assert len(results) == 3 and all(r["status"] == "success" for r in results)
+    # Both blocking and think run in `always: ["*"]` (2 dispatch acks + 2 strands_manage_background_task settlements).
+    assert len(results) == 4 and all(r["status"] == "success" for r in results)
     assert len(models) == 1  # think.py reuses the parent's model instance
     child_calls = [specs for messages, specs in models[0].tool_spec_history
                    if "Thought to process:\nreason offline" in json.dumps(messages[0]["content"]).replace("\\n", "\n")]
     assert child_calls
     child_tool_names = {spec["name"] for spec in child_calls[0]}
     assert {"blocking", "shell", "editor", "perplexity_search", "mcp_client"} <= child_tool_names
-    assert not child_tool_names & {"think", "ask_user", "tool_catalog"}
+    assert not child_tool_names & {"think", "ask_user", "tool_catalog", "load_tool", "subagent"}
     assert not any(name.startswith("strands_") for name in child_tool_names)
 
 
@@ -298,11 +298,18 @@ def test_long_run_keeps_tools_and_host_files_across_turns(offline, tmp_path):
             handle.write(f"{step}\n")
         return str(step)
 
+    dispatched = 0
+
     class LongModel(OfflineModel):
         async def stream(self, messages, tool_specs=None, system_prompt=None, **kwargs):
-            # Reuse the native streaming fixture but request one fresh tool on
-            # each model cycle, rather than stopping after the first result.
-            self.uses = [("record_step", {"step": len(calls) + 1})] if len(calls) < 30 else ()
+            nonlocal dispatched
+            # Reuse the native streaming fixture and request one fresh backgrounded tool
+            # on each model cycle for 30 steps, then conclude once background tasks settle.
+            if dispatched < 30:
+                dispatched += 1
+                self.uses = [("record_step", {"step": dispatched})]
+            else:
+                self.uses = ()
             assert any(spec["name"] == "record_step" for spec in tool_specs or [])
             async for event in super().stream([messages[0]], tool_specs, system_prompt, **kwargs):
                 yield event
@@ -317,14 +324,14 @@ def test_long_run_keeps_tools_and_host_files_across_turns(offline, tmp_path):
             session = await manager.start("user", "session", "Complete thirty steps")
             await asyncio.wait_for(session.wait(), 30)
             assert session.status == "completed", (session.status, session.error, session.interrupts)
-            assert calls == list(range(1, 31))
-            assert len(session.agent.model.calls) == 31
+            assert sorted(calls) == list(range(1, 31))
+            assert 31 <= len(session.agent.model.calls) <= 32
             original_agent = session.agent
             await manager.start("user", "session", "Check the completed work")
             await asyncio.wait_for(session.wait(), 30)
             assert session.status == "completed"
             assert session.agent is original_agent
-            assert artifact.read_text().splitlines() == [str(step) for step in range(1, 31)]
+            assert sorted(int(line) for line in artifact.read_text().splitlines()) == list(range(1, 31))
         finally:
             await manager.shutdown()
 
@@ -354,10 +361,9 @@ def test_goal_judge_fresh_and_background_delegation_foreground_only(offline):
     assert goal._max_attempts == float("inf") and goal._timeout == float("inf") and goal._preserve_context
     assert len(models) == 2  # parent + fresh judge
     background = kwargs["background_tasks"]
-    assert background["agentic"] == ["*"] and background["wait_for_completion"] is True
-    assert {"editor", "tool_catalog", "mcp_client", "ask_user", "programmatic_tool_caller"} <= set(background["never"])
-    assert {"think", "run_skill", "use_skill", "research_review", "reasoning_swarm", "nested_research_review"} <= set(
-        background["always"]
+    assert background["always"] == ["*"] and background["wait_for_completion"] is True
+    assert {"tool_catalog", "load_tool", "mcp_client", "ask_user", "subagent", "todo_write"} <= set(
+        background["never"]
     )
 
 
@@ -518,7 +524,7 @@ def test_assigned_read_tool_cannot_invoke_write_and_consumers_are_independent(of
             assert len(client._consumers) == 3
             await first.invoke_async("Try both read and write")
             results = [b["toolResult"] for m in first.messages for b in m["content"] if "toolResult" in b]
-            assert [result["status"] for result in results] == ["success", "error"]
+            assert [result["status"] for result in results] == ["success", "error", "success"]
             assert [call.kwargs["name"] for call in client.call_tool_async.call_args_list] == ["read_file"]
             # New server tools do not broaden the grant on a later child load.
             tools.append(MCPAgentTool(Tool(name="delete_file", inputSchema={"type": "object"}), client))
@@ -626,8 +632,10 @@ def test_runtime_background_config_cannot_detach_or_background_children(offline)
     build(runtime_options={"background_tasks": background})
     actual = constructed[-1][1]["background_tasks"]
     assert actual["wait_for_completion"] is True
-    assert {"custom", "think", "tool_catalog", "mcp_client", "editor", "ask_user"} <= set(actual["never"])
-    assert "think" not in actual["always"] and "nested_research_review" in actual["always"]
+    assert {"custom", "think", "tool_catalog", "load_tool", "mcp_client", "ask_user", "subagent", "todo_write"} <= set(
+        actual["never"]
+    )
+    assert actual["always"] == ["*"] and "think" in actual["never"]
     assert background == {"wait_for_completion": False, "never": ["custom", "think"]}
 
 
@@ -653,7 +661,8 @@ def test_configured_graph_actual_topology_and_explicit_child_tools(offline, monk
     monkeypatch.setenv("PANEL_FORMATIONS_FILE", str(file))
     agent = build(options={"background": True})
     assert "research_review" not in agent.tool_registry.registry
-    assert "custom_graph" in constructed[-1][1]["background_tasks"]["always"]
+    assert constructed[-1][1]["background_tasks"]["always"] == ["*"]
+    assert "custom_graph" not in constructed[-1][1]["background_tasks"]["never"]
     models[-1].uses = [("custom_graph", {"prompt": "task"})]
     result = asyncio.run(agent.invoke_async("run graph"))
     assert result.stop_reason == "end_turn"

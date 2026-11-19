@@ -227,14 +227,38 @@ def build_harness_from_config(
         kwargs["model"] = f"{resolved_provider}/{raw_model}"
         kwargs["effort"] = configured_effort
 
+    from strands.tools.loader import load_tools_from_module
+    from strands_harness.tools.programmatic_tool_caller import make_programmatic_tool_caller
+    from strands_tools import load_tool as load_tool_mod
+
     from agent.api.core.brave_tools import brave_tools
+    from agent.api.core.deep_research_tools import DEEP_RESEARCH_TOOL_NAMES
     from agent.api.core.panel_tools import installed_http_request
     from agent.api.core.web_tools import web_tools
 
+    (REPO_ROOT / "tools").mkdir(exist_ok=True)
+    (Path.cwd() / "tools").mkdir(exist_ok=True)
+    loaded_tool = [t for t in load_tools_from_module(load_tool_mod, "load_tool") if t.tool_name == "load_tool"]
+    builtin_cfg = kwargs.get("builtin_tools")
+    has_builtin_ptc = (
+        (isinstance(builtin_cfg, Mapping) and bool(builtin_cfg.get("programmatic_tool_caller")))
+        or (isinstance(builtin_cfg, Sequence) and not isinstance(builtin_cfg, str) and "programmatic_tool_caller" in builtin_cfg)
+    )
+    ptc_tools = [] if has_builtin_ptc else [make_programmatic_tool_caller(hot_reload=True)]
+
     existing = list(kwargs.get("tools", []))
     seen = {getattr(t, "tool_name", None) for t in existing if getattr(t, "tool_name", None)}
-    added = [*brave_tools(), *web_tools(), installed_http_request(), *extra_tools]
+    added = [*brave_tools(), *web_tools(), installed_http_request(), *loaded_tool, *ptc_tools, *extra_tools]
     kwargs["tools"] = [*existing, *(t for t in added if getattr(t, "tool_name", None) not in seen)]
+    kwargs.setdefault(
+        "background_tasks",
+        {
+            "always": ["*"],
+            "never": ["subagent", "load_tool", "todo_write", *sorted(DEEP_RESEARCH_TOOL_NAMES)],
+            "wait_for_completion": True,
+        },
+    )
+    kwargs.setdefault("load_tools_from_directory", True)
 
     if memory:
         kwargs["memory"] = MemoryManager(stores=list(memory))
@@ -334,6 +358,9 @@ def build_shopping_subagent_tool(
         mcp_servers=Fixed(None),
         model=Fixed(None),
         context=Choice(["none", "no_tools"]),
+        background=True,
+        stall_timeout=45.0,
+        max_consecutive_errors=3,
     )
 
 
@@ -824,10 +851,14 @@ async def stream_search_session(
             return
         tool_use = stream.get("tool_use")
         tool_use_id = tool_use.get("toolUseId") if isinstance(tool_use, Mapping) else None
+        tool_input = tool_use.get("input") if isinstance(tool_use, Mapping) else None
+        is_bg_subagent = isinstance(tool_input, Mapping) and isinstance(tool_input.get("subagent_id"), str)
         state = getattr(agent, "state", None)
         tasks = state.get("strands.background_tasks") if state is not None and hasattr(state, "get") else None
-        if not tool_use_id or not isinstance(tasks, list) or not any(
-            isinstance(t, Mapping) and t.get("tool_use_id") == tool_use_id for t in tasks
+        if not is_bg_subagent and (
+            not tool_use_id
+            or not isinstance(tasks, list)
+            or not any(isinstance(t, Mapping) and t.get("tool_use_id") == tool_use_id for t in tasks)
         ):
             return
         if threading.get_ident() == loop_thread:
