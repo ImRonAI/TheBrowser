@@ -49,12 +49,13 @@ test('firstSync: a user can start on either device', () => {
 test('the client reads and saves the account profile', async () => {
   const calls: Array<{ url: string; init?: RequestInit }> = []
   const fetcher = (async (url: string | URL | Request, init?: RequestInit) => {
-    calls.push({ url: String(url), init })
+    calls.push(init === undefined ? { url: String(url) } : { url: String(url), init })
     return new Response(JSON.stringify({ profile: init?.method === 'PUT' ? done(3) : null }), { status: 200 })
   }) as typeof fetch
   const client = createProfileClient('http://127.0.0.1:8765/', 'a b', fetcher)
   assert.equal(await client.read(), null)
   assert.equal((await client.save(done(3))).updated_at, 3)
+  assert.ok(calls[0] && calls[1])
   assert.equal(calls[0].url, 'http://127.0.0.1:8765/context/profile?user_id=a%20b')
   assert.deepEqual(JSON.parse(String(calls[1].init?.body)), { user_id: 'a b', profile: done(3) })
   const refused = createProfileClient('', 'u', (async () => new Response(JSON.stringify({ detail: 'Sign in' }), { status: 401 })) as typeof fetch)

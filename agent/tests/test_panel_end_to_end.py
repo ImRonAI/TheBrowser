@@ -241,27 +241,49 @@ def test_message_foreground_progress_results_and_reload(offline, background):
             assert len(script.shell_builds) == 1
             assert script.executions == ["payload"]
             names = {spec["name"] for spec in agent.model.calls[0]["tools"]}
-            assert {"offline_shell", "ask_user", "add_memory", "search_memory", "tool_catalog",
-                    "mcp_client", "editor", "shell", "environment", "http_request", "perplexity_search"} <= names
+            assert {"offline_shell", "ask_user", "load_tool", "subagent", "add_memory", "search_memory",
+                    "tool_catalog", "mcp_client", "editor", "shell", "environment", "http_request",
+                    "perplexity_search"} <= names
             assert "think" not in names and "review" not in names  # think is Perplexity-only
             assert "https://offline.invalid/first" in json.dumps(agent.model.calls[0]["messages"])
             inputs = of_type(events, "tool_input")
-            assert inputs[-1]["input"] == {"value": "payload"}
-            progress = of_type(events, "tool_progress")
-            # The decorator can also stream its final yield as progress; the work
-            # update itself must appear exactly once, never as background activity.
-            work = [e for e in progress if e["data"].get("progress") == "working"]
-            assert len(work) == 1
-            result, = of_type(events, "tool_result")
-            assert result["content"] == [{"text": "done: payload"}]
-            assert result["status"] == "success"
-            assert result["id"] == work[0]["id"] == inputs[-1]["id"] == "use-1"
-            assert result["name"] == work[0]["name"] == "offline_shell"
-            assert result["node_path"] == work[0]["node_path"] == []
-            assert work[0]["sequence"] < result["sequence"] < events[-1]["sequence"]
-            assert not of_type(events, "background_event")
+            shell_inputs = [i for i in inputs if i["name"] == "offline_shell"]
+            assert shell_inputs[-1]["input"] == {"value": "payload"}
+            if not background:
+                progress = of_type(events, "tool_progress")
+                # Foreground mode: progress streams directly on tool_progress and never as background_event.
+                work = [e for e in progress if e["data"].get("progress") == "working"]
+                assert len(work) == 1
+                result, = of_type(events, "tool_result")
+                assert result["content"] == [{"text": "done: payload"}]
+                assert result["status"] == "success"
+                assert result["id"] == work[0]["id"] == shell_inputs[-1]["id"] == "use-1"
+                assert result["name"] == work[0]["name"] == "offline_shell"
+                assert result["node_path"] == work[0]["node_path"] == []
+                assert work[0]["sequence"] < result["sequence"] < events[-1]["sequence"]
+                assert not of_type(events, "background_event")
+                assert events[-1]["result"]["metrics"]["accumulated_usage"]["totalTokens"] == 10
+            else:
+                # Default async mode (`always: ["*"]`): progress and completion stream over background_event,
+                # never duplicating into foreground tool_progress.
+                assert not of_type(events, "tool_progress")
+                bg_events = of_type(events, "background_event")
+                bg_work = [
+                    e for e in bg_events
+                    if e["event"].get("tool_stream_event", {}).get("data", {}).get("progress") == "working"
+                ]
+                assert len(bg_work) == 1
+                bg_completions = [e["event"] for e in bg_events if "tool_result" in e["event"]]
+                assert len(bg_completions) == 1
+                assert bg_completions[0]["tool_use"]["name"] == "offline_shell"
+                assert bg_completions[0]["tool_result"]["status"] == "success"
+                assert bg_completions[0]["tool_result"]["content"] == [{"text": "done: payload"}]
+                results = of_type(events, "tool_result")
+                assert results[0]["id"] == "use-1"
+                assert results[0]["content"][0]["text"].startswith("Background task dispatched.")
+                assert "done: payload" in json.dumps((await snapshot(client))["messages"])
+                assert events[-1]["result"]["metrics"]["accumulated_usage"]["totalTokens"] == 15
             assert not of_type(events, "error")
-            assert events[-1]["result"]["metrics"]["accumulated_usage"]["totalTokens"] == 10
             assert events[-1]["result"]["structured_output"] is None
             assert "state" not in events[-1]["result"]
             before = await snapshot(client)
@@ -411,19 +433,25 @@ def test_root_retry_scope_retains_previous_cycle(offline):
             assert retry["node_path"] == [] and retry["model_attempt"] == 1 and retry["attempt"] == 2
             assert "id" not in retry
             root = [e for e in of_type(events, "text_delta") if not e["node_path"]]
-            first, discarded, replacement = root
-            assert [e["data"] for e in root] == ["retained first cycle", "discard draft", "root answer"]
+            first, discarded, replacement, post_settle = root
+            assert [e["data"] for e in root] == [
+                "retained first cycle",
+                "discard draft",
+                "root answer",
+                "root answer",
+            ]
             assert first["cycle"] != discarded["cycle"]
             assert discarded["cycle"] == replacement["cycle"] == retry["cycle"]
+            assert post_settle["cycle"] != replacement["cycle"]
             assert discarded["model_attempt"] == 1 and replacement["model_attempt"] == 2
             assert not [e for e in of_type(events, "text_delta") if e["node_path"]]
             reasoning = [e for e in of_type(events, "reasoning_delta") if not e["node_path"]]
             assert reasoning and reasoning[0]["cycle"] == retry["cycle"]
             assert reasoning[0]["model_attempt"] == 2
             assert script.executions == ["payload"]
-            assert not of_type(events, "background_event")
+            assert of_type(events, "background_event")
             session = await manager.get("alice", "e2e")
-            assert len(session.agent.model.calls) == 3
+            assert len(session.agent.model.calls) == 4
             assert "discard draft" not in json.dumps((await snapshot(client))["messages"])
 
     asyncio.run(scenario())
@@ -494,8 +522,15 @@ def test_native_failures_are_json_events_and_terminal_snapshots(offline, tool_er
             assert session.task.done() and session.task.exception() is None
             assert not before["active"]
             if tool_error:
-                result, = of_type(events, "tool_result")
-                assert result["status"] == "error" and "offline tool failed" in json.dumps(result["content"])
+                bg_completions = [
+                    e["event"]["tool_result"]
+                    for e in of_type(events, "background_event")
+                    if "tool_result" in e["event"]
+                ]
+                assert len(bg_completions) == 1
+                assert bg_completions[0]["status"] == "error"
+                assert "offline tool failed" in json.dumps(bg_completions[0]["content"])
+                assert "offline tool failed" in json.dumps(before["messages"])
                 assert not of_type(events, "error") and not before["recovery_required"]
             else:
                 error, = of_type(events, "error")

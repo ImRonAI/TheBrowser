@@ -49,6 +49,7 @@ test('the owner is listed first, then people in the order they joined', () => {
   // Inviting someone already on the project answers their row again: it replaces it, it is not repeated.
   const again = withMember(ordered, { ...member('early', 'member', 10), name: 'Early Bird' })
   assert.deepEqual(again.map((item) => item.userId), ['owner', 'early', 'late', 'unknown'])
+  assert.ok(again[1])
   assert.equal(again[1].name, 'Early Bird')
   assert.deepEqual(withMember(ordered, member('new', 'member', 40)).map((item) => item.userId), ['owner', 'early', 'late', 'new', 'unknown'])
 })
@@ -65,6 +66,7 @@ test('people, invites and removals go through the documented routes and bodies',
   assert.equal(invited.userId, 'u3')
   await removeMember(request, 'p1', 'u2')
   assert.deepEqual(calls.map(route), ['GET /p1/members', 'POST /p1/members', 'DELETE /p1/members/u2'])
+  assert.ok(calls[1])
   assert.deepEqual(calls[1].body, { email: 'bo@example.com' })
 })
 
@@ -113,7 +115,7 @@ test('who is "you", and which projects were shared with you', () => {
   assert.equal(isCurrentMember(member('derived', 'owner', 1), GUEST), true)
   assert.equal(isSharedProject({ ownerId: 'u2' }, 'u1'), true)
   assert.equal(isSharedProject({ ownerId: 'u1' }, 'u1'), false)
-  assert.equal(isSharedProject({ ownerId: undefined }, 'u1'), false)
+  assert.equal(isSharedProject({}, 'u1'), false)
   assert.equal(isSharedProject({ ownerId: 'derived' }, GUEST), false)
   assert.equal(isSharedProject({ ownerId: 'u2' }, null), false)
 })

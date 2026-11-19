@@ -113,12 +113,12 @@ const CHIP = "inline-flex h-5 items-center rounded-full px-2 font-mono text-[10p
 interface StrandsNodeComponentProps {
   agent: AgentConfig;
   status: AgentStatus;
-  result?: AgentResult;
-  isEntryPoint?: boolean;
-  dependencies?: string[];
-  canHandoffTo?: string[];
-  isSelected?: boolean;
-  onToggleExpand?: () => void;
+  result?: AgentResult | undefined;
+  isEntryPoint?: boolean | undefined;
+  dependencies?: string[] | undefined;
+  canHandoffTo?: string[] | undefined;
+  isSelected?: boolean | undefined;
+  onToggleExpand?: (() => void) | undefined;
 }
 
 export const StrandsNodeComponent = memo(function StrandsNodeComponent({

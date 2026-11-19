@@ -76,7 +76,7 @@ export function DocumentsPage({ documentId }: { documentId: string | null }) {
 
         <div className="mt-8">
           {userId ? (
-            <DocumentWorkspace key={userId} scope={LIBRARY} openDocumentId={documentId ?? undefined} onIssueSelect={setSelectedIssueId}
+            <DocumentWorkspace key={userId} scope={LIBRARY} {...(documentId !== null ? { openDocumentId: documentId } : {})} onIssueSelect={setSelectedIssueId}
               onPageChange={followPage} stacked={width > 0 && width < STACK_BELOW} />
           ) : error ? (
             <div role="alert" className="rounded-2xl bg-danger/10 px-4 py-3 text-[13px] text-danger">{error}</div>

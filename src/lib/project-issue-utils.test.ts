@@ -10,7 +10,9 @@ const issue: Issue = { id: 'i', projectId: 'p', number: 1, version: 1, type: 'ex
   rank: 100.5, createdAt: 0, updatedAt: 0, assignees: [], labels: [], customFields: { one: 'original', two: 2 }, workProducts: [], context: [] }
 
 test('configured hierarchy supports custom types and forbids cross-project parents', () => {
-  assert.equal(issueDefinitions(project)[0].key, 'goal')
+  const defs = issueDefinitions(project)
+  assert.ok(defs[0])
+  assert.equal(defs[0].key, 'goal')
   assert.equal(canPlaceIssue(project, 'step', issue), true)
   assert.equal(canPlaceIssue(project, 'step'), false)
   assert.equal(canPlaceIssue(project, 'experiment'), true)
@@ -28,26 +30,30 @@ test('datetime local conversion is a round trip and nullable clearing is explici
 })
 
 test('DST nonexistent wall time is rejected, not silently shifted', () => {
-  const previous = process.env.TZ
+  const previous = process.env["TZ"]
   try {
-    process.env.TZ = 'America/New_York'
+    process.env["TZ"] = 'America/New_York'
     assert.throws(() => fromLocalDateTime('2026-03-08T02:30'), /does not exist/)
     assert.equal(fromLocalDateTime('2026-03-08T03:30'), '2026-03-08T07:30:00.000Z')
     assert.equal(toLocalDateTime('2026-09-22T01:00:00Z'), '2026-09-21T21:00')
   } finally {
-    if (previous === undefined) delete process.env.TZ
-    else process.env.TZ = previous
+    if (previous === undefined) delete process.env["TZ"]
+    else process.env["TZ"] = previous
   }
 })
 
 test('calendar covers actual start/end spans and independent due dates without invented dates', () => {
-  const dated = { ...issue, startDate: fromLocalDateTime('2026-09-21T09:00'), endDate: fromLocalDateTime('2026-09-23T12:00'), dueDate: fromLocalDateTime('2026-09-25T15:00') }
+  const startDate = fromLocalDateTime('2026-09-21T09:00')
+  const endDate = fromLocalDateTime('2026-09-23T12:00')
+  const dueDate = fromLocalDateTime('2026-09-25T15:00')
+  assert.ok(startDate && endDate && dueDate)
+  const dated: Issue = { ...issue, startDate, endDate, dueDate }
   assert.equal(issueOnDay(dated, new Date(2026, 8, 22)), true)
   assert.equal(issueOnDay(dated, new Date(2026, 8, 25)), true)
   assert.equal(issueOnDay(dated, new Date(2026, 8, 24)), false)
   assert.equal(issueOnDay(issue, new Date(2026, 8, 21)), false)
-  assert.equal(issueOnDay({ ...issue, endDate: dated.endDate }, new Date(2026, 8, 23)), true)
-  assert.throws(() => validateIssueDates({ startDate: dated.endDate, endDate: dated.startDate }), /End/)
+  assert.equal(issueOnDay({ ...issue, endDate }, new Date(2026, 8, 23)), true)
+  assert.throws(() => validateIssueDates({ startDate: endDate, endDate: startDate }), /End/)
 })
 
 test('draft patches include only changed mutable fields, including explicit clears', () => {

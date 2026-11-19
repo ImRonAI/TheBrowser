@@ -236,6 +236,7 @@ test('computeSplitLayoutBounds produces non-overlapping DIP rectangles across od
   assert.equal(bounds.length, 4)
 
   const [tl, tr, bl, br] = bounds
+  assert.ok(tl && tr && bl && br)
   // Exact 1 DIP separator between columns and rows, spanning full width and height
   assert.equal(tl.cellBounds.width + 1 + tr.cellBounds.width, area.width)
   assert.equal(tl.cellBounds.height + 1 + bl.cellBounds.height, area.height)
@@ -276,6 +277,7 @@ test('framed clear-shell geometry aligns WebContentsView insets and drop-zone pr
     viewportInsetDip: SPLIT_VIEWPORT_INSET_PX,
   })
   const [tl, tr, bl, br] = bounds
+  assert.ok(tl && tr && bl && br)
 
   // Outer clear shell margin + inner gap sum cleanly back to area dimensions
   assert.equal(tl.cellBounds.x, area.x + SPLIT_SHELL_PADDING_PX)

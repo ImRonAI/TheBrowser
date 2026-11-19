@@ -115,5 +115,6 @@ test('adding the same article to an issue again refreshes its entry instead of r
   const note = { id: 'n1', kind: 'note', title: 'Other' }
   const merged = mergeIssueContext(mergeIssueContext([note], [first]), [again])
   assert.equal(merged.length, 2)
-  assert.match(String(merged[1].content), /\*\*Note:\*\* second/)
+  assert.ok(merged[1])
+  assert.match(String(merged[1]["content"]), /\*\*Note:\*\* second/)
 })

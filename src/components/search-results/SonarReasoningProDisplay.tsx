@@ -86,28 +86,28 @@ function getDomainFromUrl(url: string): string {
 }
 
 type PlanStep = {
-  id?: string
+  id?: string | undefined
   title: string
-  description?: string
-  status?: 'pending' | 'running' | 'complete'
+  description?: string | undefined
+  status?: 'pending' | 'running' | 'complete' | undefined
 }
 
 type PlanData = {
-  title?: string
-  description?: string
-  steps?: PlanStep[]
-  footer?: string
+  title?: string | undefined
+  description?: string | undefined
+  steps?: PlanStep[] | undefined
+  footer?: string | undefined
 }
 
 type QueueItemData = {
-  id?: string
+  id?: string | undefined
   title: string
-  description?: string
-  completed?: boolean
+  description?: string | undefined
+  completed?: boolean | undefined
 }
 
 type QueueData = {
-  label?: string
+  label?: string | undefined
   items: QueueItemData[]
 }
 

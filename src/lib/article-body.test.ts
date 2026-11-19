@@ -63,12 +63,17 @@ test('slots never separate a heading from its paragraph or split a list, quote, 
   const slots = planAdSlots(blocks, { firstAfterWords: 1, spacingWords: 1, maxInline: 20, tailWords: 0 })
   for (const slot of slots.filter((s) => s.position === 'inline')) {
     const target = blocks[slot.after]
+    assert.ok(target)
     assert.equal(target.type, 'paragraph', `slot after ${slot.after} (${target.type})`)
     assert.ok(target.words >= 15, `slot after a ${target.words}-word paragraph`)
     assert.notEqual(slot.after, 9, 'not between an image and its caption')
   }
   // a heading is never followed directly by a slot
-  assert.ok(slots.every((slot) => blocks[slot.after].type !== 'heading'))
+  assert.ok(slots.every((slot) => {
+    const b = blocks[slot.after]
+    assert.ok(b)
+    return b.type !== 'heading'
+  }))
 })
 
 test('a paragraph that leads into the next block stays attached to it', () => {

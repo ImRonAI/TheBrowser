@@ -23,7 +23,7 @@ export interface PlaylistPlayer {
   position: number
   duration: number
   error: string
-  start: (songs: SavedSong[], source: PlaylistPlayer['source'], options?: { mode?: PlayMode; startId?: string }) => void
+  start: (songs: SavedSong[], source: PlaylistPlayer['source'], options?: { mode?: PlayMode | undefined; startId?: string | undefined }) => void
   toggle: () => void
   skip: () => void
   back: () => void
@@ -114,7 +114,11 @@ export function usePlaylistPlayer(refresh?: () => Promise<SavedSong[]>): Playlis
     retried.current = null
     lastLoaded.current = { id: null, token: 0 }
     setSource(from)
-    setQueue(createQueue(list.map((song) => song.id), { mode: options?.mode ?? queueRef.current.mode, repeat: queueRef.current.repeat, startId: options?.startId }))
+    setQueue(createQueue(list.map((song) => song.id), {
+      mode: options?.mode ?? queueRef.current.mode,
+      repeat: queueRef.current.repeat,
+      ...(options?.startId !== undefined ? { startId: options.startId } : {}),
+    }))
   }, [])
 
   const toggle = useCallback(() => {

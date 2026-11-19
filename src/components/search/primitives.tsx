@@ -113,7 +113,7 @@ export function AnswerSkeleton() {
   )
 }
 
-export function SourceErrorNotice({ error, onRetry }: { error: SourceError; onRetry?: () => void }) {
+export function SourceErrorNotice({ error, onRetry }: { error: SourceError; onRetry?: (() => void) | undefined }) {
   return (
     <div
       className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-3 dark:border-amber-900 dark:bg-amber-950/40"
@@ -151,9 +151,9 @@ export function SourceErrorNotice({ error, onRetry }: { error: SourceError; onRe
  */
 export function EmptyState({ title, hint, action, children }: {
   title: string
-  hint?: string
-  action?: { label: string; onClick: () => void }
-  children?: ReactNode
+  hint?: string | undefined
+  action?: { label: string; onClick: () => void } | undefined
+  children?: ReactNode | undefined
 }) {
   return (
     <div className="flex flex-col items-center justify-center py-20 text-center">

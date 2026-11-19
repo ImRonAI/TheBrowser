@@ -523,7 +523,7 @@ export function applySplitLayout(
   _state: SplitState,
   options: {
     layout: SplitLayoutPreset
-    tabIds?: readonly string[]
+    tabIds?: readonly string[] | undefined
     activeTabId: string | null
     orderedTabIds: readonly string[]
   },
@@ -560,19 +560,20 @@ export function applySplitLayout(
     )
   }
 
-  const nextActive = activeTabId && chosen.includes(activeTabId) ? activeTabId : chosen[0]
+  const [c0 = '', c1 = '', c2 = '', c3 = ''] = chosen
+  const nextActive = activeTabId && chosen.includes(activeTabId) ? activeTabId : c0
 
   switch (layout) {
     case '50-50':
       return {
-        state: { mode: 'split-2', panes: { left: chosen[0], right: chosen[1] }, groupedSlot: 'left' },
+        state: { mode: 'split-2', panes: { left: c0, right: c1 }, groupedSlot: 'left' },
         activeTabId: nextActive,
       }
     case '2x1-left':
       return {
         state: {
           mode: 'split-3-left',
-          panes: { topLeft: chosen[0], bottomLeft: chosen[1], right: chosen[2] },
+          panes: { topLeft: c0, bottomLeft: c1, right: c2 },
           groupedSlot: 'topLeft',
         },
         activeTabId: nextActive,
@@ -581,7 +582,7 @@ export function applySplitLayout(
       return {
         state: {
           mode: 'split-3-right',
-          panes: { left: chosen[0], topRight: chosen[1], bottomRight: chosen[2] },
+          panes: { left: c0, topRight: c1, bottomRight: c2 },
           groupedSlot: 'left',
         },
         activeTabId: nextActive,
@@ -590,7 +591,7 @@ export function applySplitLayout(
       return {
         state: {
           mode: 'split-4',
-          panes: { topLeft: chosen[0], topRight: chosen[1], bottomLeft: chosen[2], bottomRight: chosen[3] },
+          panes: { topLeft: c0, topRight: c1, bottomLeft: c2, bottomRight: c3 },
           groupedSlot: 'topLeft',
         },
         activeTabId: nextActive,

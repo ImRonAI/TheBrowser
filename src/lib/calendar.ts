@@ -205,6 +205,7 @@ export function rowSpans(issues: Issue[], days: Date[]): RowSpan[] {
   const keys = days.map(calendarDay)
   const first = keys[0]
   const last = keys[keys.length - 1]
+  if (first === undefined || last === undefined) return []
   const placed = issues.flatMap((issue) => {
     const span = multiDaySpan(issue)
     if (!span || span.end < first || span.start > last) return []
@@ -265,5 +266,5 @@ export function dayLines(issues: Issue[], day: Date): DayLine[] {
 export function shortTime(minutes: number, locale?: string): string {
   const full = formatMinutes(minutes, locale)
   const match = /^(\d{1,2}(?::\d{2})?)\s?([AaPp])\.?\s?[Mm]\.?$/.exec(full)
-  return match ? `${match[1]}${match[2].toLowerCase()}` : full
+  return match && match[1] !== undefined && match[2] !== undefined ? `${match[1]}${match[2].toLowerCase()}` : full
 }

@@ -101,12 +101,12 @@ export function TabRouteContent({ tabId, url, singleSearchOverride }: TabRouteCo
   }
 
   const projectRoute = url?.match(/^ron:\/\/project\/([^/?#]+)(?:\/docs\/([^/?#]+))?\/?$/)
-  if (projectRoute) {
+  if (projectRoute && projectRoute[1]) {
     return (
       <ProjectHomePage
         key={`${userId}:${projectRoute[1]}`}
         projectKey={projectRoute[1]}
-        documentId={projectRoute[2]}
+        {...(projectRoute[2] !== undefined ? { documentId: projectRoute[2] } : {})}
       />
     )
   }

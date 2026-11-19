@@ -13,24 +13,24 @@ export interface Citation {
   id: string
   title: string
   url: string
-  snippet?: string
-  domain?: string
-  relevanceScore?: number
+  snippet?: string | undefined
+  domain?: string | undefined
+  relevanceScore?: number | undefined
 }
 
 export interface SearchResult {
   id: string
   query: string
   snippet: string
-  url?: string
+  url?: string | undefined
 }
 
 export interface ImageData {
   id: string
   url: string
-  caption?: string
-  base64?: string
-  mediaType?: string
+  caption?: string | undefined
+  base64?: string | undefined
+  mediaType?: string | undefined
 }
 
 type MessagePart = UIMessage['parts'][number]
@@ -62,15 +62,15 @@ function normalizeCitations(value: unknown): Citation[] {
   return value.flatMap((item, index): Citation[] => {
     if (!item || typeof item !== 'object') return []
     const record = item as Record<string, unknown>
-    const url = typeof record.url === 'string' ? record.url : ''
+    const url = typeof record["url"] === 'string' ? record["url"] : ''
     if (!url) return []
-    const title = typeof record.title === 'string' ? record.title : getDomainFromUrl(url) || url
-    const snippet = typeof record.snippet === 'string' ? record.snippet : undefined
-    const domain = typeof record.domain === 'string' ? record.domain : getDomainFromUrl(url)
-    const relevanceScore = typeof record.relevanceScore === 'number' ? record.relevanceScore : undefined
+    const title = typeof record["title"] === 'string' ? record["title"] : getDomainFromUrl(url) || url
+    const snippet = typeof record["snippet"] === 'string' ? record["snippet"] : undefined
+    const domain = typeof record["domain"] === 'string' ? record["domain"] : getDomainFromUrl(url)
+    const relevanceScore = typeof record["relevanceScore"] === 'number' ? record["relevanceScore"] : undefined
 
     return [{
-      id: typeof record.id === 'string' ? record.id : `cite-${index}`,
+      id: typeof record["id"] === 'string' ? record["id"] : `cite-${index}`,
       title,
       url,
       snippet,
@@ -85,12 +85,12 @@ function normalizeSearchResults(value: unknown): SearchResult[] {
   return value.flatMap((item, index): SearchResult[] => {
     if (!item || typeof item !== 'object') return []
     const record = item as Record<string, unknown>
-    const query = typeof record.query === 'string' ? record.query : ''
-    const snippet = typeof record.snippet === 'string' ? record.snippet : ''
-    const url = typeof record.url === 'string' ? record.url : undefined
+    const query = typeof record["query"] === 'string' ? record["query"] : ''
+    const snippet = typeof record["snippet"] === 'string' ? record["snippet"] : ''
+    const url = typeof record["url"] === 'string' ? record["url"] : undefined
 
     return [{
-      id: typeof record.id === 'string' ? record.id : `result-${index}`,
+      id: typeof record["id"] === 'string' ? record["id"] : `result-${index}`,
       query,
       snippet,
       url,
@@ -103,15 +103,15 @@ function normalizeImages(value: unknown): ImageData[] {
   return value.flatMap((item, index): ImageData[] => {
     if (!item || typeof item !== 'object') return []
     const record = item as Record<string, unknown>
-    const url = typeof record.url === 'string' ? record.url : ''
+    const url = typeof record["url"] === 'string' ? record["url"] : ''
     if (!url) return []
 
     return [{
-      id: typeof record.id === 'string' ? record.id : `image-${index}`,
+      id: typeof record["id"] === 'string' ? record["id"] : `image-${index}`,
       url,
-      caption: typeof record.caption === 'string' ? record.caption : undefined,
-      base64: typeof record.base64 === 'string' ? record.base64 : undefined,
-      mediaType: typeof record.mediaType === 'string' ? record.mediaType : undefined,
+      caption: typeof record["caption"] === 'string' ? record["caption"] : undefined,
+      base64: typeof record["base64"] === 'string' ? record["base64"] : undefined,
+      mediaType: typeof record["mediaType"] === 'string' ? record["mediaType"] : undefined,
     }]
   })
 }
@@ -140,7 +140,8 @@ export function useSonarReasoningPro() {
 
   const latestAssistantMessage = useMemo(() => {
     for (let i = chat.messages.length - 1; i >= 0; i -= 1) {
-      if (chat.messages[i].role === 'assistant') return chat.messages[i]
+      const message = chat.messages[i]
+      if (message?.role === 'assistant') return message
     }
     return null
   }, [chat.messages])

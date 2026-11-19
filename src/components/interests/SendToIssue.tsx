@@ -19,7 +19,7 @@ export function SendToIssue({ items, onDone, onCancel }: { items: ContextItem[];
   const [mode, setMode] = useState<'existing' | 'new'>('existing')
   const [issueId, setIssueId] = useState('')
   const [query, setQuery] = useState('')
-  const [title, setTitle] = useState(() => items.length === 1 ? items[0].title.slice(0, 200) : '')
+  const [title, setTitle] = useState(() => items.length === 1 && items[0] ? items[0].title.slice(0, 200) : '')
   const [type, setType] = useState<IssueTypeKey>('task')
   const [sending, setSending] = useState(false)
   const [error, setError] = useState('')
@@ -33,7 +33,7 @@ export function SendToIssue({ items, onDone, onCancel }: { items: ContextItem[];
     const roots = keys.filter((key) => ROOT_ISSUE_TYPES.includes(key))
     return roots.length ? roots : ROOT_ISSUE_TYPES
   }, [project])
-  useEffect(() => { if (!types.includes(type)) setType(types.includes('task') ? 'task' : types[0]) }, [types, type])
+  useEffect(() => { if (!types.includes(type)) setType(types.includes('task') ? 'task' : (types[0] ?? 'task')) }, [types, type])
 
   const projectIssues = useMemo(() => {
     const needle = query.trim().toLowerCase()

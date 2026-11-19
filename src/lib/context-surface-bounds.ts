@@ -52,15 +52,15 @@ export function widgetAnchorBounds(
 
 export interface WidgetSurfaceBoundsOptions {
   area: SurfaceRect
-  zoom?: number
+  zoom?: number | undefined
   isExpanded: boolean
   hasNotice: boolean
-  noticeWidthCss?: number
-  noticeHeightCss?: number
+  noticeWidthCss?: number | undefined
+  noticeHeightCss?: number | undefined
   orbHovered: boolean
-  pillWidthCss?: number
+  pillWidthCss?: number | undefined
   hasLabels: boolean
-  dragOffset?: { x: number; y: number }
+  dragOffset?: { x: number; y: number } | undefined
 }
 
 export function computeWidgetSurfaceBounds(options: WidgetSurfaceBoundsOptions): {

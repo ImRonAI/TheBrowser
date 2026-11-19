@@ -282,17 +282,17 @@ type AppErrorBoundaryProps = { children: ReactNode }
 type AppErrorBoundaryState = { hasError: boolean }
 
 class AppErrorBoundary extends Component<AppErrorBoundaryProps, AppErrorBoundaryState> {
-  state: AppErrorBoundaryState = { hasError: false }
+  override state: AppErrorBoundaryState = { hasError: false }
 
   static getDerivedStateFromError(): AppErrorBoundaryState {
     return { hasError: true }
   }
 
-  componentDidCatch(error: unknown) {
+  override componentDidCatch(error: unknown) {
     console.error('Route render error:', error)
   }
 
-  render() {
+  override render() {
     if (this.state.hasError) return <AppLoadingScreen />
     return this.props.children
   }

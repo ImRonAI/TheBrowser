@@ -189,7 +189,8 @@ export function RonTab({ task }: RonTabProps) {
 
     if (task.conversations && task.conversations.length > 0) {
       const sorted = [...task.conversations].sort((a, b) => b.lastActiveAt - a.lastActiveAt)
-      setActiveConversationId(sorted[0].id)
+      const latest = sorted[0]
+      if (latest) setActiveConversationId(latest.id)
     } else {
       const newId = `conv-${Date.now()}`
       setActiveConversationId(newId)

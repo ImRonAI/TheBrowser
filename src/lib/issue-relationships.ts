@@ -84,7 +84,7 @@ export interface Relation {
   kind: RelationKind
   otherId: string
   /** The loaded issue at the other end; missing when it is not loaded (deleted, or no longer shared). */
-  other?: Issue
+  other?: Issue | undefined
 }
 
 export interface RelationGroup { kind: RelationKind; label: string; relations: Relation[] }
@@ -119,7 +119,7 @@ export interface RelationCandidate {
   issue: Issue
   /** `<projectKey>-<number>`. */
   key: string
-  project?: Project
+  project?: Project | undefined
   /** 0 exact key, 1 key prefix, 2 title prefix, 3 title contains (every issue, for an empty query). */
   tier: number
 }
@@ -142,7 +142,7 @@ export function relationCandidates(query: string, { issue, kind, issues, project
   issues: Issue[]
   projects: Project[]
   links: IssueLink[]
-  limit?: number
+  limit?: number | undefined
 }): RelationCandidate[] {
   const type = RELATION_KINDS[kind].type
   const related = new Set(links.filter((link) => link.type === type).map((link) => relationOf(link, issue.id)?.otherId))

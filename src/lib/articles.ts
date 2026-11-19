@@ -34,13 +34,13 @@ export interface Story {
 }
 /** What the page itself says about the article (`POST /articles/extract`), beyond its body. */
 export interface ArticleMeta {
-  title?: string
-  description?: string
+  title?: string | undefined
+  description?: string | undefined
   authors: string[]
-  siteName?: string
-  published?: string
-  image?: string
-  language?: string
+  siteName?: string | undefined
+  published?: string | undefined
+  image?: string | undefined
+  language?: string | undefined
   truncated: boolean
 }
 export interface ArticleAttachment {
@@ -184,29 +184,29 @@ function parseExtras(raw: string | null): Extras {
     value = parsed as Record<string, unknown>
   } catch { return {} }
   const extras: Extras = {}
-  const snippets = Array.isArray(value.snippets) ? value.snippets.filter(isText).slice(0, 8) : []
+  const snippets = Array.isArray(value["snippets"]) ? value["snippets"].filter(isText).slice(0, 8) : []
   if (snippets.length) extras.snippets = snippets
-  const author = textOf(value.author); if (author) extras.author = author
-  if (value.paywalled === true) extras.paywalled = true
-  if (value.live === true) extras.live = true
-  if (value.breaking === true) extras.breaking = true
-  const language = textOf(value.language); if (language) extras.language = language
-  const hero = textOf(value.heroImage); if (hero && /^https:\/\//i.test(hero)) extras.heroImage = hero
-  const answers = (Array.isArray(value.answers) ? value.answers : [])
+  const author = textOf(value["author"]); if (author) extras.author = author
+  if (value["paywalled"] === true) extras.paywalled = true
+  if (value["live"] === true) extras.live = true
+  if (value["breaking"] === true) extras.breaking = true
+  const language = textOf(value["language"]); if (language) extras.language = language
+  const hero = textOf(value["heroImage"]); if (hero && /^https:\/\//i.test(hero)) extras.heroImage = hero
+  const answers = (Array.isArray(value["answers"]) ? value["answers"] : [])
     .filter((item): item is StoryAnswer => !!item && isText((item as StoryAnswer).question) && isText((item as StoryAnswer).answer))
     .slice(0, 4).map(({ question, answer }) => ({ question, answer }))
   if (answers.length) extras.answers = answers
-  const video = value.video && typeof value.video === 'object' ? value.video as Record<string, unknown> : null
+  const video = value["video"] && typeof value["video"] === 'object' ? value["video"] as Record<string, unknown> : null
   if (video) {
     const picked: StoryVideo = {}
     for (const key of ['duration', 'creator', 'publisher', 'views'] as const) { const text = textOf(video[key]); if (text) picked[key] = text }
     if (Object.keys(picked).length) extras.video = picked
   }
-  const discussion = value.discussion && typeof value.discussion === 'object' ? value.discussion as Record<string, unknown> : null
+  const discussion = value["discussion"] && typeof value["discussion"] === 'object' ? value["discussion"] as Record<string, unknown> : null
   if (discussion) {
     const picked: StoryDiscussion = {}
     for (const key of ['forum', 'score', 'question', 'topComment'] as const) { const text = textOf(discussion[key]); if (text) picked[key] = text }
-    if (typeof discussion.answers === 'number' && Number.isFinite(discussion.answers)) picked.answers = discussion.answers
+    if (typeof discussion["answers"] === 'number' && Number.isFinite(discussion["answers"])) picked.answers = discussion["answers"]
     if (Object.keys(picked).length) extras.discussion = picked
   }
   return extras
@@ -251,7 +251,7 @@ export function cleanTitle(title: string, siteNames: (string | undefined)[]): st
   }
   sites.delete('')
   const match = title.match(/^(.*\S)\s+[|–—·-]\s+([^|–—·]+)$/)
-  if (match && match[1].length >= 12 && sites.has(fold(match[2]))) return match[1].trim()
+  if (match && match[1] !== undefined && match[2] !== undefined && match[1].length >= 12 && sites.has(fold(match[2]))) return match[1].trim()
   return title
 }
 

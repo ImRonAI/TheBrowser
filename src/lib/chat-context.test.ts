@@ -62,6 +62,7 @@ test('important dates: overdue first, then upcoming due/start/end dates in order
   ]
   const events = importantDates(issues, [project()], NOW)
   assert.deepEqual(events.map((event) => event.id), ['event:late:due', 'event:soon:start', 'event:soon:due', 'event:finished:end'])
+  assert.ok(events[0] && events[1] && events[2])
   assert.equal(events[0].meta, 'Overdue')
   assert.equal(events[1].meta, 'Today')
   assert.equal(events[2].meta, 'Tomorrow')
@@ -77,6 +78,7 @@ test('search ranks prefix matches across categories and keeps the category', () 
   ]
   const results = searchContexts(categories, 'git')
   assert.deepEqual(results.map((result) => result.item.id), ['t', 'i'])
+  assert.ok(results[1])
   assert.equal(results[1].category.id, 'issues')
   assert.equal(searchContexts(categories, '').length, 3)
   assert.equal(searchContexts(categories, 'zzz').length, 0)
@@ -143,6 +145,7 @@ test('Context parent category merges & deduplicates saved items, Ask turns, brow
 
   const merged = mergeSavedContextRows(remoteRows, storeRows)
   assert.deepEqual(merged.map((r) => r.id), ['c3', 'c2', 'c1'])
+  assert.ok(merged[2])
   assert.equal(merged[2].title, 'Electrolyte benchmark note')
 
   const items = widgetContextItems(
@@ -183,6 +186,7 @@ test('Context parent category merges & deduplicates saved items, Ask turns, brow
   )
 
   assert.equal(items.length, 7)
+  assert.ok(items[0] && items[3] && items[4] && items[5] && items[6])
   assert.equal(items[0].id, 'file:c3')
   assert.equal(items[0].ref?.contextItemId, 'c3')
   assert.equal(items[3].id, 'context-ask:a1')
@@ -199,6 +203,7 @@ test('Context parent category merges & deduplicates saved items, Ask turns, brow
   }
   const matches = searchContexts([contextCategory], 'ferc')
   assert.ok(matches.length >= 1)
+  assert.ok(matches[0])
   assert.equal(matches[0].category.id, 'context')
 
   assert.match(contextAskContent({ id: 'a1', question: 'Why qLDPC?', answer: '10x lower overhead.' }), /Question: Why qLDPC\?/)

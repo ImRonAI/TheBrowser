@@ -77,7 +77,7 @@ function available(item: SlashItem, editor?: Editor): boolean {
   if (item.requires?.some((name) => !nodes[name] && !marks[name])) return false
   // Goal needs the editor's Ask Ron callback; Ask Ron also works through the inline Ask Ron block.
   if (item.id === 'goal') return !!askRonCallback(editor)
-  if (item.id === 'ask-ron') return !!askRonCallback(editor) || !!nodes.askRon
+  if (item.id === 'ask-ron') return !!askRonCallback(editor) || !!nodes["askRon"]
   return true
 }
 

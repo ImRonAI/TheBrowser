@@ -5,7 +5,7 @@ import type { PanelMessage, ToolPart } from './panel-stream.ts'
 
 const tool = (name: string, input: unknown, output?: unknown, extra: Partial<ToolPart> = {}): ToolPart =>
   ({ kind: 'tool', key: `${name}-${JSON.stringify(input).length}`, id: `${name}-${Math.abs(JSON.stringify(input).length)}`, name, path: [], input,
-    progress: [], output, finished: output !== undefined, status: output === undefined ? undefined : 'success', ...extra })
+    progress: [], output, finished: output !== undefined, ...(output === undefined ? {} : { status: 'success' }), ...extra })
 
 /** strands_tools shell's result: an execution summary, then one block per command. */
 const shellResult = (command: string, out: string, exit = 0, error = '') => [
@@ -37,6 +37,7 @@ test('the plan is the latest todo_write; commands, edits, servers and tests come
   assert.deepEqual(insights.todos.map((todo) => `${todo.status}:${todo.content}`), ['completed:Scaffold', 'in_progress:Style it'])
   assert.deepEqual(insights.changes.map((change) => `${change.action} ${change.path}`), ['create /ws/index.html'])
   assert.deepEqual(insights.commands.map((command) => command.state), ['done', 'failed', 'running'])
+  assert.ok(insights.commands[1] && insights.commands[2])
   assert.equal(insights.commands[1].command, 'npx vitest run')
   assert.equal(insights.commands[2].output, 'commit 1')
   assert.deepEqual(insights.servers, ['http://127.0.0.1:4100/', 'http://localhost:4100/'])

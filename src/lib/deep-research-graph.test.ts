@@ -69,6 +69,7 @@ test('resolveScope walks into nested formations and refuses agents and unknown i
 
 test('leafAgents lists the agents under a formation', () => {
   const production = topology.nodes[3]
+  assert.ok(production)
   assert.deepEqual(
     leafAgents(production, ['production_graph']).map((leaf) => leaf.path.join('/')),
     [
@@ -115,9 +116,10 @@ test('layoutScope layers left to right along the edges and keeps cards the same 
   // The PDF and the deck are built side by side, each followed by its own QA.
   const production = layoutScope(scopeAt(['production_graph']), new Set())
   const byId = Object.fromEntries(production.nodes.map((n) => [n.id, n]))
-  assert.deepEqual([byId.pdf_publisher.layer, byId.deck_producer.layer, byId.pdf_qa.layer, byId.deck_build_qa.layer], [0, 0, 1, 1])
-  assert.equal(byId.deck_producer.y, NODE_HEIGHT + GAP_Y)
-  assert.equal(byId.deck_build_qa.y, NODE_HEIGHT + GAP_Y)
+  assert.ok(byId["pdf_publisher"] && byId["deck_producer"] && byId["pdf_qa"] && byId["deck_build_qa"])
+  assert.deepEqual([byId["pdf_publisher"].layer, byId["deck_producer"].layer, byId["pdf_qa"].layer, byId["deck_build_qa"].layer], [0, 0, 1, 1])
+  assert.equal(byId["deck_producer"].y, NODE_HEIGHT + GAP_Y)
+  assert.equal(byId["deck_build_qa"].y, NODE_HEIGHT + GAP_Y)
 
   // A swarm has no edges: its agents hand off to each other themselves, so they stand in one column.
   const swarm = layoutScope(scopeAt(['writing_swarm']), new Set())
@@ -131,14 +133,16 @@ test('an open agent pushes only the cards under it; a formation never opens in p
   const closed = Object.fromEntries(layoutScope(scope, new Set()).nodes.map((n) => [n.id, n]))
   const open = layoutScope(scope, new Set(['production_graph/pdf_publisher']))
   const byId = Object.fromEntries(open.nodes.map((n) => [n.id, n]))
+  assert.ok(closed["pdf_publisher"] && closed["deck_producer"] && closed["pdf_qa"] && closed["deck_build_qa"])
+  assert.ok(byId["pdf_publisher"] && byId["deck_producer"] && byId["pdf_qa"] && byId["deck_build_qa"])
 
-  assert.equal(byId.pdf_publisher.expanded, true)
-  assert.equal(byId.pdf_publisher.height, NODE_HEIGHT + NODE_BODY_HEIGHT)
-  assert.equal(byId.pdf_publisher.y, closed.pdf_publisher.y)
-  assert.equal(byId.deck_producer.y, closed.deck_producer.y + NODE_BODY_HEIGHT)
+  assert.equal(byId["pdf_publisher"].expanded, true)
+  assert.equal(byId["pdf_publisher"].height, NODE_HEIGHT + NODE_BODY_HEIGHT)
+  assert.equal(byId["pdf_publisher"].y, closed["pdf_publisher"].y)
+  assert.equal(byId["deck_producer"].y, closed["deck_producer"].y + NODE_BODY_HEIGHT)
   // The other column does not move.
-  assert.equal(byId.pdf_qa.y, closed.pdf_qa.y)
-  assert.equal(byId.deck_build_qa.y, closed.deck_build_qa.y)
+  assert.equal(byId["pdf_qa"].y, closed["pdf_qa"].y)
+  assert.equal(byId["deck_build_qa"].y, closed["deck_build_qa"].y)
   assert.equal(open.height, 2 * NODE_HEIGHT + GAP_Y + NODE_BODY_HEIGHT)
 
   // A formation is entered, not expanded.
@@ -199,7 +203,7 @@ test('agentTranscript orders the work, resolves the subagent tool calls and spli
   const live = agentTranscript(working, path)
   assert.deepEqual(live.steps.map((step) => step.kind), ['reasoning', 'text', 'skill'])
   const liveSkill = live.steps[2]
-  assert.ok(liveSkill.kind === 'skill' && liveSkill.active && liveSkill.skill.task === 'Scan the field')
+  assert.ok(liveSkill && liveSkill.kind === 'skill' && liveSkill.active && liveSkill.skill.task === 'Scan the field')
   assert.deepEqual(liveSkill.steps.map((step) => [step.kind, step.active]), [['reasoning', false], ['tool', true]])
   assert.equal(live.output, '')
   // Nothing is written after the subagent yet: the card previews the newest text anywhere in the work.
@@ -221,9 +225,10 @@ test('agentTranscript orders the work, resolves the subagent tool calls and spli
   assert.equal(writing.output, 'The field ')
   assert.equal(writing.outputActive, true)
   const skill = writing.steps[2]
-  assert.ok(skill.kind === 'skill' && !skill.active)
+  assert.ok(skill && skill.kind === 'skill' && !skill.active)
   assert.deepEqual(skill.steps.map((step) => step.kind), ['reasoning', 'tool', 'text'])
-  assert.ok(skill.steps[1].kind === 'tool' && skill.steps[1].tool.output === 'eight hits' && skill.steps[1].tool.tool_name === 'tavily_search')
+  const skillTool = skill.steps[1]
+  assert.ok(skillTool && skillTool.kind === 'tool' && skillTool.tool.output === 'eight hits' && skillTool.tool.tool_name === 'tavily_search')
 
   const finished = run(
     [at(swarm, { type: 'multiagent_node_stop', node_id: 'researcher', node_result: { status: 'completed', execution_time: 1200 } })],
@@ -233,6 +238,7 @@ test('agentTranscript orders the work, resolves the subagent tool calls and spli
   assert.equal(closed.outputActive, false)
   assert.equal(closed.latestText, 'The field ')
   assert.ok(closed.steps.every((step) => step.kind === 'pass' || step.kind === 'skill' || !step.active))
+  assert.ok(finished.nodes['research_swarm/researcher'])
   assert.equal(finished.nodes['research_swarm/researcher'].execution_time_ms, 1200)
 
   // A swarm that hands back to an agent starts it again: its second pass is marked in its work.

@@ -27,10 +27,10 @@ export interface Suggestion {
 }
 
 export interface AssistOptions {
-  count?: number
-  rich?: boolean
-  country?: string
-  lang?: string
+  count?: number | undefined
+  rich?: boolean | undefined
+  country?: string | undefined
+  lang?: string | undefined
 }
 
 /** True when `q` satisfies the documented limits (non-empty, <=400 chars, <=50 words). */
@@ -42,12 +42,12 @@ export function assistable(q: string): boolean {
 export function normalizeSuggestion(raw: unknown): Suggestion | null {
   if (!raw || typeof raw !== 'object') return null
   const r = raw as Record<string, unknown>
-  if (typeof r.query !== 'string' || !r.query) return null
-  const type: SuggestionType = r.type === 'entity' || r.type === 'calculator' ? r.type : 'query'
-  const out: Suggestion = { query: r.query, type }
-  if (typeof r.title === 'string') out.title = r.title
-  if (typeof r.description === 'string') out.description = r.description
-  if (typeof r.img === 'string') out.img = r.img
+  if (typeof r["query"] !== 'string' || !r["query"]) return null
+  const type: SuggestionType = r["type"] === 'entity' || r["type"] === 'calculator' ? r["type"] : 'query'
+  const out: Suggestion = { query: r["query"], type }
+  if (typeof r["title"] === 'string') out.title = r["title"]
+  if (typeof r["description"] === 'string') out.description = r["description"]
+  if (typeof r["img"] === 'string') out.img = r["img"]
   return out
 }
 
@@ -64,7 +64,7 @@ export function createAssistClient(baseUrl: string, fetcher: Fetcher = fetch): A
   const post = async (path: string, body: Record<string, unknown>, signal?: AbortSignal): Promise<Record<string, unknown> | null> => {
     try {
       const response = await fetcher(`${base}${path}`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal,
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), ...(signal ? { signal } : {}),
       })
       if (!response.ok) return null
       return (await response.json()) as Record<string, unknown>
@@ -77,13 +77,13 @@ export function createAssistClient(baseUrl: string, fetcher: Fetcher = fetch): A
       if (!assistable(q)) return []
       const count = Math.max(1, Math.min(SUGGEST_MAX_COUNT, options.count ?? 5))
       const data = await post('/assist/suggest', { q: q.trim(), count, rich: options.rich ?? false, country: options.country ?? 'US', lang: options.lang ?? 'en' }, signal)
-      const results = Array.isArray(data?.results) ? data!.results : []
+      const results = Array.isArray(data?.["results"]) ? data!["results"] : []
       return results.map(normalizeSuggestion).filter((s): s is Suggestion => s !== null)
     },
     async spellcheck(q, options = {}, signal) {
       if (!assistable(q)) return null
       const data = await post('/assist/spellcheck', { q: q.trim(), country: options.country ?? 'US', lang: options.lang ?? 'en' }, signal)
-      const corrected = data?.corrected
+      const corrected = data?.["corrected"]
       // Brave echoes the query back unchanged when nothing needs fixing; only a real change is a correction.
       return typeof corrected === 'string' && corrected.trim() && corrected.trim() !== q.trim() ? corrected : null
     },
@@ -202,11 +202,11 @@ export function assistOptionId(id: string, index: number): string {
 
 /** ARIA that ties a field to its assist listbox. */
 export interface AssistFieldAria {
-  role?: 'combobox'
-  'aria-expanded'?: boolean
+  role?: 'combobox' | undefined
+  'aria-expanded'?: boolean | undefined
   'aria-autocomplete': 'list'
-  'aria-controls'?: string
-  'aria-activedescendant'?: string
+  'aria-controls'?: string | undefined
+  'aria-activedescendant'?: string | undefined
 }
 
 /**

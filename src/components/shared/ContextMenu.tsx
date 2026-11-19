@@ -193,6 +193,7 @@ export function ContextMenu({ x, y, isOpen, onClose, selectedText, pasteTarget }
       document.addEventListener('keydown', handleKeyDown)
       return () => document.removeEventListener('keydown', handleKeyDown)
     }
+    return undefined
   }, [isOpen, askRonStep, onClose])
 
   // Determine if Ask Ron UI should be shown

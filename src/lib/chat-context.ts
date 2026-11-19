@@ -24,35 +24,35 @@ export type ContextType =
 
 /** The record behind a context item, resolved again when the message is sent so the agent sees it as it is now. */
 export interface ContextRef {
-  sessionId?: string
-  issueId?: string
-  projectId?: string
-  interestId?: string
-  documentId?: string
-  contextItemId?: string
-  contextAskId?: string
-  contextVisitUrl?: string
-  contextRunId?: string
-  contextRecommendationId?: string
+  sessionId?: string | undefined
+  issueId?: string | undefined
+  projectId?: string | undefined
+  interestId?: string | undefined
+  documentId?: string | undefined
+  contextItemId?: string | undefined
+  contextAskId?: string | undefined
+  contextVisitUrl?: string | undefined
+  contextRunId?: string | undefined
+  contextRecommendationId?: string | undefined
   /** ISO time of an event. */
-  at?: string
+  at?: string | undefined
   /** For events: which date of the issue (`due`, `start`, `end`) or `today`. */
-  dateKind?: 'due' | 'start' | 'end' | 'today'
+  dateKind?: 'due' | 'start' | 'end' | 'today' | undefined
 }
 
 export interface ContextItem {
   id: string
   type: ContextType
   name: string
-  description?: string
-  meta?: string
-  color?: string
-  favicon?: string
-  url?: string
-  title?: string
-  ref?: ContextRef
+  description?: string | undefined
+  meta?: string | undefined
+  color?: string | undefined
+  favicon?: string | undefined
+  url?: string | undefined
+  title?: string | undefined
+  ref?: ContextRef | undefined
   /** Filled at send time: the text the agent reads for this item. */
-  content?: string
+  content?: string | undefined
   /** Filled at send time when an open tab was attached (page text, selection, metadata). */
   tab_context?: unknown
 }
@@ -65,8 +65,8 @@ export interface ContextCategory {
   description: string
   items: ContextItem[]
   /** Why the category is empty or partial (signed out, request failed). */
-  note?: string
-  loading?: boolean
+  note?: string | undefined
+  loading?: boolean | undefined
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000
@@ -104,7 +104,7 @@ export function dayDistance(iso: string, now: number): string {
 
 // ── Item builders ────────────────────────────────────────────────────────────
 
-export function tabItem(tab: { id: string; url: string; title: string; favicon?: string; isActive: boolean }): ContextItem {
+export function tabItem(tab: { id: string; url: string; title: string; favicon?: string | undefined; isActive: boolean }): ContextItem {
   return {
     id: tab.id, type: 'tab', name: tab.title || tab.url || 'New Tab', description: tab.url,
     meta: tab.isActive ? 'Active' : undefined, favicon: tab.favicon, url: tab.url, title: tab.title,
@@ -126,7 +126,7 @@ export function projectItem(project: Project, issues: Issue[]): ContextItem {
   return {
     id: `project:${project.id}`, type: 'project', name: project.name,
     description: `${project.key} · ${open} open of ${own.length} issue${own.length === 1 ? '' : 's'}`,
-    meta: project.lifecycle === 'active' ? undefined : project.lifecycle[0].toUpperCase() + project.lifecycle.slice(1),
+    meta: project.lifecycle === 'active' ? undefined : project.lifecycle.charAt(0).toUpperCase() + project.lifecycle.slice(1),
     color: LIFECYCLE_DOT[project.lifecycle], ref: { projectId: project.id },
   }
 }
@@ -143,7 +143,7 @@ export function issueItem(issue: Issue, projects: Project[] | Map<string, Projec
   }
 }
 
-export function interestItem(node: { id: string; label: string; weight: number; category: string; source: string; reason?: string }): ContextItem {
+export function interestItem(node: { id: string; label: string; weight: number; category: string; source: string; reason?: string | undefined }): ContextItem {
   return {
     id: `interest:${node.id}`, type: 'interest', name: node.label,
     description: node.reason || `${node.category} · from ${node.source === 'onboarding' ? 'your interview' : 'your browsing'}`,
@@ -454,7 +454,7 @@ export function searchContexts(categories: ContextCategory[], query: string, lim
 export function mentionAt(text: string, caret: number): { query: string; start: number } | null {
   const before = text.slice(0, caret)
   const match = /(^|\s)@([^\s@][^@\n]{0,59}|)$/.exec(before)
-  if (!match) return null
+  if (!match || match[2] === undefined) return null
   return { query: match[2], start: before.length - match[2].length - 1 }
 }
 
@@ -528,7 +528,7 @@ export function projectContent(project: Project, issues: Issue[], now = Date.now
 }
 
 function blockText(block: Record<string, unknown>): string {
-  return typeof block.text === 'string' ? block.text : ''
+  return typeof block["text"] === 'string' ? block["text"] : ''
 }
 
 /** A previous chat as a transcript of what the user asked and what Ron answered, newest kept when long. */
@@ -544,7 +544,9 @@ export function threadContent(thread: Thread, maxChars = 8000): string {
   const kept: string[] = []
   let size = header.length
   for (let index = turns.length - 1; index >= 0; index -= 1) {
-    const turn = clip(turns[index], 2000)
+    const rawTurn = turns[index]
+    if (rawTurn === undefined) continue
+    const turn = clip(rawTurn, 2000)
     if (size + turn.length + 2 > maxChars) {
       kept.unshift(`[${index + 1} earlier turn${index ? 's' : ''} omitted]`)
       break
@@ -555,7 +557,7 @@ export function threadContent(thread: Thread, maxChars = 8000): string {
   return [header, ...kept].join('\n\n')
 }
 
-export function interestContent(node: { label: string; weight: number; category: string; source: string; reason?: string; lastUpdated?: number }): string {
+export function interestContent(node: { label: string; weight: number; category: string; source: string; reason?: string | undefined; lastUpdated?: number | undefined }): string {
   return [
     `Interest: ${node.label} (${node.category}, strength ${Math.round(node.weight * 100)}%, from ${node.source === 'onboarding' ? 'the onboarding interview' : 'browsing'})`,
     node.reason ? `Why: ${node.reason}` : '',
@@ -583,7 +585,7 @@ export function documentContent(title: string, html: string, projectName?: strin
  * into clean Markdown passed as `context` to `POST /deep-research/runs`.
  */
 export function formatAttachmentsForResearchContext(
-  attachments: readonly { kind: string; title: string; text: string; url?: string; source?: string }[],
+  attachments: readonly { kind: string; title: string; text: string; url?: string | undefined; source?: string | undefined }[],
 ): string {
   const blocks: string[] = []
   for (const att of attachments) {

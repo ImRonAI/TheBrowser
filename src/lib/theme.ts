@@ -49,5 +49,5 @@ export function applyThemeClasses(theme: ThemeName, root: HTMLElement = document
 /** Next theme for one-click cycling (toolbar menu offers every option directly). */
 export function nextTheme(theme: ThemeName): ThemeName {
   const order: ThemeName[] = ['light', 'dark', 'glass', 'system']
-  return order[(order.indexOf(theme) + 1) % order.length]
+  return order[(order.indexOf(theme) + 1) % order.length] ?? 'light'
 }

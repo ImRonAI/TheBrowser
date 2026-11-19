@@ -31,7 +31,7 @@ test('snapshot boxes are read from nested tool results', () => {
   const elements = collectSnapshotElements({
     content: [{ text: JSON.stringify({ snapshot: { elements: [button] } }) }],
   })
-  assert.deepEqual(elements.e1, button)
+  assert.deepEqual(elements["e1"], button)
 })
 
 test('the frame follows playwright and screenshot tool names', () => {

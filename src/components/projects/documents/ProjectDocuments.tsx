@@ -69,7 +69,7 @@ export function ProjectDocuments({ project, startWithDraft, onDraftStarted, open
   startWithDraft: boolean
   onDraftStarted: () => void
   /** A deep link (`ron://project/<id>/docs/<page>`) opens this page. */
-  openDocumentId?: string
+  openDocumentId?: string | undefined
   /** Opens a linked issue (from this project or another). */
   onIssueSelect: (issueId: string) => void
 }) {
@@ -87,16 +87,16 @@ export function ProjectDocuments({ project, startWithDraft, onDraftStarted, open
 export function DocumentWorkspace({ scope, startWithDraft = false, onDraftStarted, openDocumentId, onIssueSelect, onPageChange, stacked = false }: {
   scope: DocumentScope
   /** Set by a New Document button outside the workspace: opens the template gallery for a new page. */
-  startWithDraft?: boolean
-  onDraftStarted?: () => void
+  startWithDraft?: boolean | undefined
+  onDraftStarted?: (() => void) | undefined
   /** A deep link opens this page. */
-  openDocumentId?: string
+  openDocumentId?: string | undefined
   /** Opens a linked issue (from any project). */
   onIssueSelect: (issueId: string) => void
   /** The open page changed: its id, or null for a draft that has none yet. */
-  onPageChange?: (documentId: string | null) => void
+  onPageChange?: ((documentId: string | null) => void) | undefined
   /** Little room (a narrow window, the agent panel open): the page list sits above the page instead of beside it. */
-  stacked?: boolean
+  stacked?: boolean | undefined
 }) {
   const { userId, people, projects, refreshFromServer } = useProjectsStore()
   const request = useMemo(() => (userId ? projectsRequestFor(userId) : null), [userId])
@@ -123,10 +123,10 @@ export function DocumentWorkspace({ scope, startWithDraft = false, onDraftStarte
   const [editor, setEditor] = useState<Editor | null>(null)
   const [ron, setRon] = useState<{
     goal: boolean
-    initialPrompt?: string
-    initialAttachments?: PromptAttachment[]
-    autoSend?: boolean
-    autoApply?: boolean
+    initialPrompt?: string | undefined
+    initialAttachments?: PromptAttachment[] | undefined
+    autoSend?: boolean | undefined
+    autoApply?: boolean | undefined
   } | null>(null)
   const openRon = useCallback((goal: boolean) => setRon({ goal }), [])
   const pendingHandoff = useDocumentHandoffStore((state) => state.pending)

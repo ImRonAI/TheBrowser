@@ -17,15 +17,15 @@ export interface Tab {
   id: string
   url: string
   title: string
-  favicon?: string
+  favicon?: string | undefined
   isLoading: boolean
   canGoBack: boolean
   canGoForward: boolean
   createdAt: number
   lastAccessed: number
-  isDisplayed?: boolean
-  isSplitDetached?: boolean
-  splitPane?: SplitPaneSlot | null
+  isDisplayed?: boolean | undefined
+  isSplitDetached?: boolean | undefined
+  splitPane?: SplitPaneSlot | null | undefined
 }
 
 interface TabState {
@@ -115,10 +115,11 @@ export const useTabStore = create<TabState>()(
             if (removed.survivingActiveTabId && remaining.some((t) => t.id === removed.survivingActiveTabId)) {
               activeTabId = removed.survivingActiveTabId
             } else if (remaining.length > 0) {
-              activeTabId =
-                closedTabIndex < remaining.length
-                  ? remaining[closedTabIndex].id
-                  : remaining[remaining.length - 1].id
+              const fallbackTab =
+                closedTabIndex >= 0 && closedTabIndex < remaining.length
+                  ? remaining[closedTabIndex]
+                  : remaining[remaining.length - 1]
+              activeTabId = fallbackTab?.id ?? null
             } else {
               activeTabId = null
             }
@@ -167,7 +168,7 @@ export const useTabStore = create<TabState>()(
             activeTabId !== undefined
               ? activeTabId
               : tabs.length
-                ? tabs.find((t) => t.id === state.activeTabId)?.id || tabs[0].id
+                ? tabs.find((t) => t.id === state.activeTabId)?.id || tabs[0]?.id || null
                 : null
           const hasAuthoritativeSplitFlags = tabs.some((t) => t.splitPane !== undefined)
           const finalTabs = hasAuthoritativeSplitFlags
@@ -225,6 +226,7 @@ export const useTabStore = create<TabState>()(
         set((state) => {
           const tabs = [...state.tabs]
           const [movedTab] = tabs.splice(fromIndex, 1)
+          if (!movedTab) return state
           tabs.splice(toIndex, 0, movedTab)
           return { tabs }
         })

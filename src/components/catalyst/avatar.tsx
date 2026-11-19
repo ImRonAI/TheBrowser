@@ -5,11 +5,11 @@ import { TouchTarget } from './button'
 import { Link } from './link'
 
 type AvatarProps = {
-  src?: string | null
-  square?: boolean
-  initials?: string
-  alt?: string
-  className?: string
+  src?: string | null | undefined
+  square?: boolean | undefined
+  initials?: string | undefined
+  alt?: string | undefined
+  className?: string | undefined
 }
 
 export function Avatar({

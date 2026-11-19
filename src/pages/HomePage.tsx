@@ -257,12 +257,16 @@ function DiscoverContent() {
     <SectionRule label="Stories by interest" />
     <section aria-label="Stories by interest" className="grid grid-cols-1 gap-x-6 gap-y-10 md:grid-cols-2 xl:grid-cols-3" onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)} onFocusCapture={() => setFocused(true)} onBlurCapture={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) setFocused(false) }}>
       {groups.map((group, slot) => {
-        const story = group[at(slot)]
+        const first = group[0]
+        const story = group[at(slot)] ?? first
+        if (!first || !story) return null
+        const favicon = story.favicon || undefined
+        const image = story.heroImage || story.thumbnail || undefined
         const featured = slot === 0
         // At xl the hero spans columns 1–2, so slot 1 shares its row: give it the hero's height instead of leaving a half-empty cell.
         const size: StoryCardSize = featured ? 'featured' : slot === 1 ? 'companion' : 'compact'
         const custom: SwapCustom = { name: swaps[slot]?.name ?? 'fall', direction: swaps[slot]?.direction ?? 1, reducedMotion: Boolean(reducedMotion) }
-        return <div key={group[0].topic} className={cn('[perspective:1200px]', featured && 'md:col-span-2 xl:col-span-2')}>
+        return <div key={first.topic} className={cn('[perspective:1200px]', featured && 'md:col-span-2 xl:col-span-2')}>
           <div className={cn('relative', STORY_CARD_HEIGHT[size])}>
             <AnimatePresence mode="wait" initial={false} custom={custom}>
               <motion.div key={story.url} custom={custom} variants={swapVariants} initial="initial" animate="animate" exit="exit"
@@ -272,15 +276,15 @@ function DiscoverContent() {
                   featured={featured}
                   size={size}
                   tilt={cardTilt(story.url)}
-                  hue={stickerHue(group[0].topic)}
+                  hue={stickerHue(first.topic)}
                   onRead={() => open(story)}
                   onAddContext={() => void addContext({ kind: 'article', url: story.url, title: story.title })}
                   askRen={
                     <ArticleAgentActions
                       article={previewArticle(story)}
                       headline={cleanTitle(story.title, [story.source, story.hostname])}
-                      favicon={story.favicon || undefined}
-                      image={story.heroImage || story.thumbnail || undefined}
+                      {...(favicon !== undefined ? { favicon } : {})}
+                      {...(image !== undefined ? { image } : {})}
                       ready={true}
                       triggerVariant="card"
                       onEnsureArticle={() => lazyExtractStory(story)}
@@ -291,10 +295,10 @@ function DiscoverContent() {
             </AnimatePresence>
           </div>
           <div className="mt-2.5 flex items-center justify-between gap-3">
-            <span className="flex min-w-0 items-baseline gap-2 text-[12px] text-ink-muted dark:text-ink-inverse-muted"><span className="shrink-0 font-mono text-[11px] font-medium tabular-nums tracking-[0.04em]"><span className="text-ink dark:text-ink-inverse">{String(at(slot) + 1).padStart(2, '0')}</span> / {group.length}</span> <span className="truncate">in {group[0].topic}</span></span>
+            <span className="flex min-w-0 items-baseline gap-2 text-[12px] text-ink-muted dark:text-ink-inverse-muted"><span className="shrink-0 font-mono text-[11px] font-medium tabular-nums tracking-[0.04em]"><span className="text-ink dark:text-ink-inverse">{String(at(slot) + 1).padStart(2, '0')}</span> / {group.length}</span> <span className="truncate">in {first.topic}</span></span>
             <div className="flex shrink-0 gap-0.5">
-              <button aria-label={`Previous ${group[0].topic} story`} onClick={() => swap(slot, -1, slotAnimation(slot))} className={ICON_BUTTON}><ChevronLeft className="h-4 w-4" /></button>
-              <button aria-label={`Next ${group[0].topic} story`} onClick={() => swap(slot, 1, slotAnimation(slot))} className={ICON_BUTTON}><ChevronRight className="h-4 w-4" /></button>
+              <button aria-label={`Previous ${first.topic} story`} onClick={() => swap(slot, -1, slotAnimation(slot))} className={ICON_BUTTON}><ChevronLeft className="h-4 w-4" /></button>
+              <button aria-label={`Next ${first.topic} story`} onClick={() => swap(slot, 1, slotAnimation(slot))} className={ICON_BUTTON}><ChevronRight className="h-4 w-4" /></button>
             </div>
           </div>
         </div>

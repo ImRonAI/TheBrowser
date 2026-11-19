@@ -32,16 +32,16 @@ export interface SourceData {
 
 interface SourceCardProps {
   source: SourceData
-  citationNumber?: number
-  selected?: boolean
-  onSelectionChange?: (selected: boolean) => void
-  onVisitSite?: () => void
-  onSendToRon?: () => void
-  onSendToCoding?: () => void
-  onAttachToTask?: () => void
-  onStartTask?: () => void
-  onPreview?: () => void
-  className?: string
+  citationNumber?: number | undefined
+  selected?: boolean | undefined
+  onSelectionChange?: ((selected: boolean) => void) | undefined
+  onVisitSite?: (() => void) | undefined
+  onSendToRon?: (() => void) | undefined
+  onSendToCoding?: (() => void) | undefined
+  onAttachToTask?: (() => void) | undefined
+  onStartTask?: (() => void) | undefined
+  onPreview?: (() => void) | undefined
+  className?: string | undefined
 }
 
 function getDomainFromUrl(url: string): string {

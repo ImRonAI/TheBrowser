@@ -42,9 +42,9 @@ import { applyWindowMaterial } from './window-material'
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = join(__filename, '..')
 
-const ELECTRON_PORT = Number(process.env.ELECTRON_PLAYWRIGHT_MCP_ELECTRON_PORT) || 3000
-const PLAYWRIGHT_PORT = Number(process.env.ELECTRON_PLAYWRIGHT_MCP_PLAYWRIGHT_PORT) || 8931
-const CDP_PORT = Number(process.env.ELECTRON_PLAYWRIGHT_MCP_CDP_PORT) || 9222
+const ELECTRON_PORT = Number(process.env["ELECTRON_PLAYWRIGHT_MCP_ELECTRON_PORT"]) || 3000
+const PLAYWRIGHT_PORT = Number(process.env["ELECTRON_PLAYWRIGHT_MCP_PLAYWRIGHT_PORT"]) || 8931
+const CDP_PORT = Number(process.env["ELECTRON_PLAYWRIGHT_MCP_CDP_PORT"]) || 9222
 // Single source of truth for the automation session. The MCP cookie/storage tools resolve
 // their session via session.fromPartition(SESSION_PARTITION), so every WebContentsView tab
 // MUST be created with this same partition or those tools read the wrong store.
@@ -81,7 +81,7 @@ type InterestMenuPayload = {
   stories: Array<{
     id: string
     title: string
-    url?: string
+    url?: string | undefined
     interestId: string
     interestLabel: string
     category: string
@@ -99,7 +99,7 @@ type InterestMenuPayload = {
 type InterestAction =
   | { type: 'open-graph' }
   | { type: 'select'; id: string; label: string; category: string }
-  | { type: 'story'; interestId: string; interestLabel: string; category: string; url?: string }
+  | { type: 'story'; interestId: string; interestLabel: string; category: string; url?: string | undefined }
   | { type: 'agent'; name: string; description: string; interestLabel: string }
 
 let interestMenu: InterestMenuPayload = { interests: [], stories: [], agents: [] }
@@ -132,7 +132,7 @@ const mcpPromise = registerElectronPlaywrightMcp({
 function validateIpcSender(frame: Electron.WebFrameMain | null): boolean {
   if (!frame) return false
   const url = new URL(frame.url)
-  return url.protocol === 'file:' || url.origin === process.env.ELECTRON_RENDERER_URL
+  return url.protocol === 'file:' || url.origin === process.env["ELECTRON_RENDERER_URL"]
 }
 
 async function ensureMacMediaAccess(kind: 'microphone' | 'camera'): Promise<{ status: string; granted: boolean }> {
@@ -152,7 +152,7 @@ function getShellZoomFactor(): number {
 
 function calculateWebContentsViewBounds(): { x: number; y: number; width: number; height: number } {
   if (!mainWindow || mainWindow.isDestroyed()) return { x: 0, y: CHROME_HEIGHT + drawerHeight, width: 800, height: 600 }
-  const [windowWidth, windowHeight] = mainWindow.getContentSize()
+  const [windowWidth = 0, windowHeight = 0] = mainWindow.getContentSize()
   // The chrome reports its layout in CSS pixels; the WebContentsView is placed in
   // window DIPs. Websites render across 100% of the shell width (zero interestInset column);
   // the Context Widget floats above via ContextSurface.
@@ -171,7 +171,7 @@ function calculateWebContentsViewBounds(): { x: number; y: number; width: number
 
 function calculateChromeBounds(): { x: number; y: number; width: number; height: number } {
   if (!mainWindow || mainWindow.isDestroyed()) return { x: 0, y: 0, width: 800, height: CHROME_HEIGHT }
-  const [windowWidth] = mainWindow.getContentSize()
+  const [windowWidth = 0] = mainWindow.getContentSize()
   const zoom = getShellZoomFactor()
   const left = Math.ceil(sidebarWidth * zoom)
   const height = Math.ceil((chromeHeight + drawerHeight) * zoom)
@@ -387,9 +387,9 @@ interface TabRecord {
   id: string
   url: string
   title: string
-  favicon?: string
+  favicon?: string | undefined
   isExternal: boolean
-  view?: WebContentsView
+  view?: WebContentsView | undefined
 }
 
 function defaultInternalTitle(url: string): string {
@@ -527,7 +527,7 @@ class TabsManager {
         const fsTab = this.tabs.get(this.htmlFullscreenTabId)
         if (fsTab?.isExternal) {
           this.ensureView(fsTab)
-          const [windowWidth, windowHeight] = mainWindow.getContentSize()
+          const [windowWidth = 0, windowHeight = 0] = mainWindow.getContentSize()
           if (!fsTab.view!.webContents.isDestroyed()) {
             fsTab.view!.webContents.setBackgroundThrottling(false)
             fsTab.view!.setBorderRadius(0)
@@ -625,7 +625,7 @@ class TabsManager {
     return { success: true, split: this.splitState }
   }
 
-  applySplit(options: { layout: SplitLayoutPreset; tabIds?: string[] }): SplitState {
+  applySplit(options: { layout: SplitLayoutPreset; tabIds?: string[] | undefined }): SplitState {
     const prevActive = this._activeTabId
     const res = applySplitLayout(this.splitState, {
       layout: options.layout,
@@ -1168,6 +1168,9 @@ setTabController({
         id !== undefined || index !== undefined
           ? tabByIndexOrId(index, id)
           : listed.find((t) => !t.active) || listed[0]
+      if (!target) {
+        throw new Error('Cannot split tabs: no target tab available.')
+      }
       const slot = positionToSplitSlot(position ?? 'right')
       tabsManager.splitTab(target.id, slot, 'strip')
     }
@@ -1272,7 +1275,7 @@ async function createWindow() {
   win.webContents.on('will-navigate', (event) => {
     let url: URL
     try { url = new URL(event.url) } catch { event.preventDefault(); return }
-    if (url.protocol === 'file:' || url.origin === process.env.ELECTRON_RENDERER_URL) return
+    if (url.protocol === 'file:' || url.origin === process.env["ELECTRON_RENDERER_URL"]) return
     event.preventDefault()
     if (url.protocol === 'https:' || url.protocol === 'http:') tabsManager.switch(tabsManager.create(undefined, url.href).id)
   })
@@ -1292,7 +1295,7 @@ async function createWindow() {
     if (!webContents || webContents.id !== win.webContents.id) return false
     try {
       const url = new URL(requestingOrigin)
-      if (url.protocol !== 'file:' && url.origin !== process.env.ELECTRON_RENDERER_URL) return false
+      if (url.protocol !== 'file:' && url.origin !== process.env["ELECTRON_RENDERER_URL"]) return false
     } catch {
       return false
     }
@@ -1307,7 +1310,7 @@ async function createWindow() {
     if (details.requestingUrl) {
       try {
         const url = new URL(details.requestingUrl)
-        if (url.protocol !== 'file:' && url.origin !== process.env.ELECTRON_RENDERER_URL) {
+        if (url.protocol !== 'file:' && url.origin !== process.env["ELECTRON_RENDERER_URL"]) {
           callback(false)
           return
         }
@@ -1334,10 +1337,10 @@ async function createWindow() {
     { urls: ['*://www.youtube-nocookie.com/embed/*', '*://www.youtube.com/embed/*'] },
     (details, callback) => {
       const requestHeaders = { ...details.requestHeaders }
-      const existing = requestHeaders.Referer || requestHeaders.referer || ''
+      const existing = requestHeaders["Referer"] || requestHeaders["referer"] || ''
       if (!existing || existing.startsWith('file:')) {
-        delete requestHeaders.referer
-        requestHeaders.Referer = 'https://ren.local/'
+        delete requestHeaders["referer"]
+        requestHeaders["Referer"] = 'https://ren.local/'
       }
       callback({ requestHeaders })
     },
@@ -1413,7 +1416,7 @@ async function createWindow() {
 
   mainWindow.on('resize', () => {
     if (mainWindow && !mainWindow.isDestroyed() && currentPanelMode !== 'narrow') {
-      const [windowWidth] = mainWindow.getSize()
+      const [windowWidth = 0] = mainWindow.getSize()
       const nextWidth = currentPanelMode === 'wide' ? Math.min(800, Math.floor(windowWidth * 0.5)) : windowWidth
       if (nextWidth !== agentPanelWidth) {
         agentPanelWidth = nextWidth
@@ -2026,7 +2029,7 @@ ipcMain.handle('browser:screenshot', async (event) => {
       })
       return jpegDataUrl(image)
     }
-    const [width, height] = mainWindow.getContentSize()
+    const [width = 0, height = 0] = mainWindow.getContentSize()
     const zoom = getShellZoomFactor()
     const left = Math.min(Math.ceil(sidebarWidth * zoom), Math.max(0, width - 1))
     const effectiveRightCss = hasExplicitSideInset ? rightSideInset : (isAgentPanelOpen ? agentPanelWidth : 0)
@@ -2043,7 +2046,7 @@ ipcMain.handle('browser:set-panel-mode', (event, mode: 'narrow' | 'wide' | 'full
   if (!mainWindow) return
 
   currentPanelMode = mode
-  const [windowWidth] = mainWindow.getSize()
+  const [windowWidth = 0] = mainWindow.getSize()
   if (mode === 'narrow') {
     agentPanelWidth = 420
   } else if (mode === 'wide') {

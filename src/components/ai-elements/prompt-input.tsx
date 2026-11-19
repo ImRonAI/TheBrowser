@@ -1162,8 +1162,8 @@ export const PromptInputActionMenuItem = ({
 // are provided in opt-in modules (e.g., prompt-input-attachments).
 
 export type PromptInputSubmitProps = ComponentProps<typeof InputGroupButton> & {
-  status?: ChatStatus;
-  onStop?: () => void;
+  status?: ChatStatus | undefined;
+  onStop?: (() => void) | undefined;
 };
 
 export const PromptInputSubmit = ({

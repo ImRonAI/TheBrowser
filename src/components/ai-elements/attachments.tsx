@@ -122,7 +122,7 @@ const AttachmentsContext = createContext<AttachmentsContextValue | null>(null);
 interface AttachmentContextValue {
   data: AttachmentData;
   mediaCategory: AttachmentMediaCategory;
-  onRemove?: () => void;
+  onRemove?: (() => void) | undefined;
   variant: AttachmentVariant;
 }
 
@@ -148,7 +148,7 @@ export const useAttachmentContext = () => {
 // ============================================================================
 
 export type AttachmentsProps = HTMLAttributes<HTMLDivElement> & {
-  variant?: AttachmentVariant;
+  variant?: AttachmentVariant | undefined;
 };
 
 export const Attachments = ({
@@ -182,7 +182,7 @@ export const Attachments = ({
 
 export type AttachmentProps = HTMLAttributes<HTMLDivElement> & {
   data: AttachmentData;
-  onRemove?: () => void;
+  onRemove?: (() => void) | undefined;
 };
 
 export const Attachment = ({

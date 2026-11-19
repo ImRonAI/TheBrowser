@@ -25,8 +25,8 @@ import {
 interface FileTreeContextType {
   expandedPaths: Set<string>;
   togglePath: (path: string) => void;
-  selectedPath?: string;
-  onSelect?: (path: string) => void;
+  selectedPath?: string | undefined;
+  onSelect?: ((path: string) => void) | undefined;
 }
 
 // Default noop for context default value
@@ -40,11 +40,11 @@ const FileTreeContext = createContext<FileTreeContextType>({
 });
 
 export type FileTreeProps = HTMLAttributes<HTMLDivElement> & {
-  expanded?: Set<string>;
-  defaultExpanded?: Set<string>;
-  selectedPath?: string;
-  onSelect?: (path: string) => void;
-  onExpandedChange?: (expanded: Set<string>) => void;
+  expanded?: Set<string> | undefined;
+  defaultExpanded?: Set<string> | undefined;
+  selectedPath?: string | undefined;
+  onSelect?: ((path: string) => void) | undefined;
+  onExpandedChange?: ((expanded: Set<string>) => void) | undefined;
 };
 
 export const FileTree = ({

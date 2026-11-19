@@ -43,10 +43,14 @@ test('native snapshot restores attachment alongside its user message', () => {
     { text: 'Compare the evidence' }, { text: ARTICLE_PREFIX + JSON.stringify(article) },
   ] }] })
   assert.equal(state.messages.length, 1)
-  const parts = state.messages[0].parts
+  const firstMessage = state.messages[0]
+  assert.ok(firstMessage)
+  const parts = firstMessage.parts
   assert.equal(parts.length, 2)
-  assert.equal(parts[0].kind === 'text' && parts[0].text, 'Compare the evidence')
-  assert.deepEqual(parts[1].kind === 'text' && parseArticle(parts[1].text), article)
+  const [part0, part1] = parts
+  assert.ok(part0 && part1)
+  assert.equal(part0.kind === 'text' && part0.text, 'Compare the evidence')
+  assert.deepEqual(part1.kind === 'text' && parseArticle(part1.text), article)
 })
 
 const rich: Story = {

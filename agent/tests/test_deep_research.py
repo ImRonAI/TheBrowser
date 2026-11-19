@@ -108,14 +108,22 @@ class ScriptedModel(Model):
             if "toolUse" in block
         }
         has_subagent = label == "Researcher" and "subagent" in {spec["name"] for spec in tool_specs or ()}
+        subagent_settled = any(
+            message.get("role") == "user"
+            and any(
+                isinstance(block.get("text"), str) and block["text"].startswith("[subagent-completed]")
+                for block in message.get("content") or ()
+            )
+            for message in msg_list
+        )
         handoff = _DONE_HANDOFF_RE.search(system_prompt or "")
         if role and not called:
             self.roles.append(label)
         next_call: tuple[str, dict[str, Any]] | None = None
         if has_subagent and "subagent" not in called:
             next_call = ("subagent", {"task": "Find the surface code threshold."})
-        elif has_subagent and "strands_manage_background_task" not in called:
-            # Wait for the backgrounded subagent to settle before calling handoff_to_agent.
+        elif has_subagent and not subagent_settled:
+            # Wait for the native background subagent to settle before calling handoff_to_agent.
             next_call = None
         elif handoff and "handoff_to_agent" not in called:
             next_call = ("handoff_to_agent", {"agent_name": handoff.group(1), "message": f"{label} is done."})
@@ -699,7 +707,7 @@ async def test_hung_or_failing_background_tool_is_polled_cancelled_and_formation
             if label == "Researcher" and "subagent" in spec_names:
                 assert "strands_manage_background_task" in spec_names
                 scrape_spec = next(spec for spec in (tool_specs or ()) if spec["name"] == "olostep_scrape_website")
-                assert "_background_execution" in scrape_spec["inputSchema"]["json"]["properties"]
+                assert "_background_execution" not in scrape_spec["inputSchema"]["json"]["properties"]
                 assert "handoff_to_agent" in spec_names
                 handoff_spec = next(spec for spec in (tool_specs or ()) if spec["name"] == "handoff_to_agent")
                 assert "_background_execution" not in handoff_spec["inputSchema"]["json"]["properties"]
@@ -719,15 +727,17 @@ async def test_hung_or_failing_background_tool_is_polled_cancelled_and_formation
                     for ev in _tool_use(
                         "res-scrape",
                         "olostep_scrape_website",
-                        {"url_to_scrape": "https://slow.example", "_background_execution": True},
+                        {"url_to_scrape": "https://slow.example"},
                     ):
                         yield ev
                     return
-                # Extract dispatched task_id from the initial Background task dispatched acknowledgement.
+                # Extract dispatched task_id from the initial olostep_scrape_website dispatch acknowledgement.
                 task_id = ""
                 for m in msg_list:
                     for block in m.get("content") or ():
                         tr = block.get("toolResult") or {}
+                        if tr.get("toolUseId") != "res-scrape":
+                            continue
                         for item in tr.get("content") or ():
                             txt = item.get("text", "")
                             match = re.search(r"Task ID:\s*([0-9a-fA-F-]+)", txt)
@@ -742,7 +752,7 @@ async def test_hung_or_failing_background_tool_is_polled_cancelled_and_formation
                 explicit_modes = [
                     u["input"].get("mode")
                     for u in uses
-                    if u["name"] == "strands_manage_background_task" and u["toolUseId"] != task_id
+                    if u["name"] == "strands_manage_background_task" and u["toolUseId"].startswith("res-")
                 ]
                 if "list" not in explicit_modes:
                     polled_modes.append("list")

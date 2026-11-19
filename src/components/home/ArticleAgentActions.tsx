@@ -411,12 +411,12 @@ function ActionComposer({
 }: {
   article: ArticleAttachment
   headline: string
-  favicon?: string
-  image?: string
+  favicon?: string | undefined
+  image?: string | undefined
   ready: boolean
   defaultAction: ArticleActionId
-  inline?: boolean
-  onClose?: () => void
+  inline?: boolean | undefined
+  onClose?: (() => void) | undefined
 }) {
   const { openPanel, setInteractionMode } = useAgentUi()
   const userId = useAuthStore((state) => state.user?.id || 'default')
@@ -514,7 +514,7 @@ function ActionComposer({
     const roots = keys.filter((key) => ROOT_ISSUE_TYPES.includes(key))
     return roots.length ? roots : ROOT_ISSUE_TYPES
   }, [project])
-  const newIssueType: IssueTypeKey = issueTypes.includes('task') ? 'task' : issueTypes[0]
+  const newIssueType: IssueTypeKey = issueTypes.includes('task') ? 'task' : (issueTypes[0] ?? 'task')
   const promptAttachment = useMemo(() => articlePromptAttachment(article), [article])
   const isVideo = Boolean(youtubeVideoId(article.url))
 
@@ -611,9 +611,11 @@ function ActionComposer({
       case 'document':
         sendToDocuments()
         return
-      case 'issue':
-        if (project) toPanel(projectChoices([project])[0], issueMessage(prompt, article))
+      case 'issue': {
+        const choice = project ? projectChoices([project])[0] : undefined
+        if (choice) toPanel(choice, issueMessage(prompt, article))
         return
+      }
       case 'code':
         usePanelAgentStore.getState().requestSend({
           id: crypto.randomUUID(),

@@ -87,7 +87,8 @@ export function RelatedDocumentsField({ docs, projectName, disabled, onRelate, o
                 if (event.key === 'ArrowUp') { event.preventDefault(); setActive((index) => Math.max(index - 1, 0)) }
                 if (event.key === 'Enter') {
                   event.preventDefault(); event.stopPropagation()
-                  if (active < matches.length) void pick(matches[active])
+                  const doc = matches[active]
+                  if (doc) void pick(doc)
                   else setNaming(query.trim())
                 }
               }}

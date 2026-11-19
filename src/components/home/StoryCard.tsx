@@ -72,7 +72,7 @@ export function StoryCard({ story, featured, size = featured ? 'featured' : 'com
 
   return (
     <motion.div
-      whileHover={reduced ? undefined : { y: -1 }}
+      {...(reduced ? {} : { whileHover: { y: -1 } })}
       transition={{ type: 'spring', stiffness: 380, damping: 30 }}
       data-tilt={tilt}
       className="group/card relative h-full"

@@ -55,7 +55,7 @@ function assignImages(sources: AgentSearchResult[], images: AgentImageResult[]):
       if (claimed.has(image) || !image.url) return false
       const pageHost = imagePageHost(image)
       if (pageHost && pageHost === host) return true
-      const page = (image.page_url as string) || ''
+      const page = (image["page_url"] as string) || ''
       return Boolean(page) && page.includes(host)
     })
     if (match) {
@@ -105,12 +105,12 @@ function mergeLocalStores(sources: AgentSearchResult[], places: DiscoverItem[]):
       title: item.title,
       snippet: item.description || '',
       kind: 'local',
-      address: typeof place.address === 'string' ? place.address : null,
-      rating: typeof place.rating === 'number' ? place.rating : null,
-      review_count: typeof place.review_count === 'number' ? place.review_count : null,
-      price_range: typeof place.price_range === 'string' ? place.price_range : null,
-      phone: typeof place.phone === 'string' ? place.phone : null,
-      distance: typeof place.distance === 'number' ? place.distance : null,
+      address: typeof place["address"] === 'string' ? place["address"] : null,
+      rating: typeof place["rating"] === 'number' ? place["rating"] : null,
+      review_count: typeof place["review_count"] === 'number' ? place["review_count"] : null,
+      price_range: typeof place["price_range"] === 'string' ? place["price_range"] : null,
+      phone: typeof place["phone"] === 'string' ? place["phone"] : null,
+      distance: typeof place["distance"] === 'number' ? place["distance"] : null,
     })
   }
   return merged
@@ -219,7 +219,7 @@ function ProductPhoto({ image }: { image: AgentImageResult }) {
     <li className="list-none">
       <button
         type="button"
-        onClick={() => openResult(((image.page_url as string) || (image.source as string) || image.url) as string)}
+        onClick={() => openResult(((image["page_url"] as string) || (image["source"] as string) || image.url) as string)}
         className="group block aspect-square w-full overflow-hidden rounded-lg border border-surface-200/70 bg-surface-50 dark:border-surface-800 dark:bg-surface-850"
         aria-label="Open product photo source"
       >

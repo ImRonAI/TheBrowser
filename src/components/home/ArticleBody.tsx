@@ -17,7 +17,7 @@ const IMAGE_FLOOR = { width: 160, height: 80 }
  * A figure from the article. Publisher images are third-party content: https only, no referrer, lazy. An image that
  * fails to load, or turns out to be an icon, avatar or tracking pixel, removes its whole figure instead of leaving a gap.
  */
-function ArticleFigure({ src, alt }: { src?: string; alt?: string }) {
+function ArticleFigure({ src, alt }: { src?: string | undefined; alt?: string | undefined }) {
   const [hidden, setHidden] = useState(false)
   if (!src || !/^https:\/\//i.test(src) || hidden) return null
   return <figure className="!mt-8">
@@ -51,8 +51,8 @@ const ARTICLE_COMPONENTS: Components = {
   p: ({ node, children }) => {
     const only = node?.children.length === 1 ? node.children[0] : null
     if (only && only.type === 'element' && only.tagName === 'img') {
-      return <ArticleFigure src={typeof only.properties?.src === 'string' ? only.properties.src : undefined}
-        alt={typeof only.properties?.alt === 'string' ? only.properties.alt : undefined} />
+      return <ArticleFigure src={typeof only.properties?.["src"] === 'string' ? only.properties["src"] : undefined}
+        alt={typeof only.properties?.["alt"] === 'string' ? only.properties["alt"] : undefined} />
     }
     return <p className="text-[1.0625rem] leading-[1.8] text-ink/90 dark:text-ink-inverse/90">{children}</p>
   },
@@ -101,8 +101,8 @@ const Markdown = memo(function Markdown({ children, dropCap }: { children: strin
  */
 export function ArticleBody({ blocks, renderSlot, className }: {
   blocks: ArticleBlock[]
-  renderSlot?: (slot: AdSlot) => ReactNode
-  className?: string
+  renderSlot?: ((slot: AdSlot) => ReactNode) | undefined
+  className?: string | undefined
 }) {
   const slots = useMemo(() => renderSlot ? planAdSlots(blocks) : [], [blocks, renderSlot])
   const dropCap = blocks[0]?.type === 'paragraph' && blocks[0].words >= 25
@@ -111,8 +111,9 @@ export function ArticleBody({ blocks, renderSlot, className }: {
     const out: { markdown: string; slot?: AdSlot }[] = []
     let start = 0
     slots.forEach((slot, index) => {
-      out.push({ markdown: blocks.slice(start, cuts[index]).map((block) => block.markdown).join('\n\n'), slot })
-      start = cuts[index]
+      const cut = cuts[index] ?? blocks.length
+      out.push({ markdown: blocks.slice(start, cut).map((block) => block.markdown).join('\n\n'), slot })
+      start = cut
     })
     out.push({ markdown: blocks.slice(start).map((block) => block.markdown).join('\n\n') })
     return out.filter((segment) => segment.markdown || segment.slot)

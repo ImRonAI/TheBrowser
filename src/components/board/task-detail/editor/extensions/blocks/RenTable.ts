@@ -29,16 +29,16 @@ class RenTableView extends TableView {
     this.paintHeader(node)
   }
 
-  update(node: ProseMirrorNode): boolean {
+  override update(node: ProseMirrorNode): boolean {
     if (!super.update(node)) return false
     this.paintHeader(node)
     return true
   }
 
   private paintHeader(node: ProseMirrorNode) {
-    const color: unknown = node.attrs.headerColor
-    if (typeof color === 'string' && color) this.table.dataset.headerColor = color
-    else delete this.table.dataset.headerColor
+    const color: unknown = node.attrs["headerColor"]
+    if (typeof color === 'string' && color) this.table.dataset["headerColor"] = color
+    else delete this.table.dataset["headerColor"]
   }
 }
 

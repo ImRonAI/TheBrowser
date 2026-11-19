@@ -36,12 +36,14 @@ const filter = (overrides: Partial<typeof DEFAULT_FILTERS>) =>
   filterIssues(issues, projects, { ...DEFAULT_FILTERS, ...overrides }, { userId: me.id, now }).map((item) => item.id)
 
 test('issue keys use the project key and number', () => {
+  assert.ok(issues[0] && issues[1])
   assert.equal(issueKey(issues[0], projects), 'RON-12')
   assert.equal(issueKey(issues[1], new Map(projects.map((p) => [p.id, p]))), 'OPS-3')
   assert.equal(issueKey({ projectId: 'missing', number: 9 }, projects), 'ISSUE-9')
 })
 
 test('overdue ignores done issues; due soon is the next seven days', () => {
+  assert.ok(issues[0] && issues[1] && issues[2] && issues[3])
   assert.equal(isOverdue(issues[0], now), true)
   assert.equal(isOverdue(issues[2], now), false)
   assert.equal(isOverdue(issues[3], now), false)
@@ -146,12 +148,15 @@ test('timeline groups by project, clips to the window and counts the rest', () =
   assert.equal(layout.unscheduled, 1)
   assert.equal(layout.outside, 1)
   assert.deepEqual(layout.groups.map((g) => g.project?.key), ['OPS', 'RON'])
+  assert.ok(layout.groups[1])
   const [row] = layout.groups[1].rows
+  assert.ok(row)
   assert.equal(row.issue.id, 't1')
   assert.equal(Math.round(row.leftPct), 29)
   assert.equal(Math.round(row.widthPct), 43)
   assert.equal(row.clippedStart || row.clippedEnd, false)
-  const clipped = layoutTimeline([issue('t5', { startDate: iso(-10), endDate: iso(10) })], projects, window).groups[0].rows[0]
+  const clipped = layoutTimeline([issue('t5', { startDate: iso(-10), endDate: iso(10) })], projects, window).groups[0]?.rows[0]
+  assert.ok(clipped)
   assert.deepEqual([clipped.leftPct, Math.round(clipped.widthPct), clipped.clippedStart, clipped.clippedEnd], [0, 100, true, true])
 })
 
@@ -169,10 +174,16 @@ test('fit window covers every span and today; fixed ranges start at the cursor',
 
 test('ticks pick a unit that fits the window', () => {
   const start = new Date(2026, 10, 1).getTime()
-  assert.equal(timelineTicks({ start, end: start + 42 * DAY })[0].unit, 'week')
-  assert.equal(timelineTicks({ start, end: start + 42 * DAY }).length, 6)
-  assert.equal(timelineTicks({ start, end: start + 120 * DAY })[0].unit, 'month')
-  assert.equal(timelineTicks({ start, end: start + 900 * DAY })[0].unit, 'quarter')
-  assert.ok(timelineTicks({ start, end: start + 120 * DAY }).every((tick) => tick.pct >= 0 && tick.pct < 100))
+  const ticks42 = timelineTicks({ start, end: start + 42 * DAY })
+  assert.ok(ticks42[0])
+  assert.equal(ticks42[0].unit, 'week')
+  assert.equal(ticks42.length, 6)
+  const ticks120 = timelineTicks({ start, end: start + 120 * DAY })
+  assert.ok(ticks120[0])
+  assert.equal(ticks120[0].unit, 'month')
+  const ticks900 = timelineTicks({ start, end: start + 900 * DAY })
+  assert.ok(ticks900[0])
+  assert.equal(ticks900[0].unit, 'quarter')
+  assert.ok(ticks120.every((tick) => tick.pct >= 0 && tick.pct < 100))
   assert.deepEqual(timelineTicks({ start, end: start }), [])
 })

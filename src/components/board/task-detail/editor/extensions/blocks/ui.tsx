@@ -10,7 +10,7 @@ import { cn } from '@/lib/utils'
  */
 export function BlockFrame({ selected, className, children, ...data }: {
   selected: boolean
-  className?: string
+  className?: string | undefined
   children: ReactNode
   [key: `data-${string}`]: string | undefined
 }) {
@@ -35,7 +35,7 @@ export function BlockHeader({ icon, title, subtitle, children }: { icon: ReactNo
   </div>
 }
 
-export function IconButton({ label, onClick, children, className, disabled }: { label: string; onClick: () => void; children: ReactNode; className?: string; disabled?: boolean }) {
+export function IconButton({ label, onClick, children, className, disabled }: { label: string; onClick: () => void; children: ReactNode; className?: string | undefined; disabled?: boolean | undefined }) {
   return <button type="button" title={label} aria-label={label} disabled={disabled} onClick={onClick}
     className={cn('flex size-8 shrink-0 items-center justify-center rounded-lg text-ink-secondary transition-colors duration-150 enabled:hover:bg-surface-100 enabled:hover:text-ink disabled:opacity-40 dark:text-ink-inverse-secondary dark:enabled:hover:bg-surface-850 dark:enabled:hover:text-ink-inverse', className)}>
     {children}

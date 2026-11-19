@@ -41,7 +41,7 @@ MAX_COPY_BYTES = 5 * 1024 * 1024
 EDITOR_MUTATING = frozenset({"create", "str_replace", "pattern_replace", "insert", "undo_edit"})
 #: Parent-scope tools that execute on the host without a sandbox and therefore cannot be
 #: confined to the workspace by argument inspection.
-UNCONFINABLE_TOOLS = frozenset({"shell", "environment", "mcp_client"})
+UNCONFINABLE_TOOLS = frozenset({"shell", "environment", "mcp_client", "load_tool"})
 
 
 def lesson_workspace(root: Path, scope: str, session_id: str) -> Path:

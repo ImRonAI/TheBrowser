@@ -69,7 +69,7 @@ export function captureSummary(plan: CapturePlan): string {
 export function packPcm16(samples: ArrayLike<number>): Uint8Array {
   const bytes = new Uint8Array(samples.length * 2)
   const view = new DataView(bytes.buffer)
-  for (let i = 0; i < samples.length; i++) view.setInt16(i * 2, Math.round(Math.max(-1, Math.min(1, samples[i])) * 32767), true)
+  for (let i = 0; i < samples.length; i++) view.setInt16(i * 2, Math.round(Math.max(-1, Math.min(1, samples[i] ?? 0)) * 32767), true)
   return bytes
 }
 

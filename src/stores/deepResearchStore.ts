@@ -49,13 +49,13 @@ export function useResearchUserId(): string {
 
 interface StartRunParams {
   query: string
-  userId?: string
-  depth?: ResearchDepth
-  context?: string
-  provider?: string | null
-  modelId?: string | null
-  reasoningEffort?: string | null
-  navigate?: boolean
+  userId?: string | undefined
+  depth?: ResearchDepth | undefined
+  context?: string | undefined
+  provider?: string | null | undefined
+  modelId?: string | null | undefined
+  reasoningEffort?: string | null | undefined
+  navigate?: boolean | undefined
 }
 
 export interface DeepResearchState {
@@ -153,7 +153,7 @@ export const useDeepResearchStore = create<DeepResearchState>()(
         }))
 
         const refresh = async (signal?: AbortSignal) => {
-          const fresh = await getDeepResearchRun(sessionId, userId, { signal })
+          const fresh = await getDeepResearchRun(sessionId, userId, signal ? { signal } : {})
           set((state) => ({
             snapshotsBySession: { ...state.snapshotsBySession, [sessionId]: fresh },
             runs: upsertRunInList(state.runs, fresh),
@@ -284,14 +284,18 @@ export const useDeepResearchStore = create<DeepResearchState>()(
           const depth = params.depth ?? get().preferredDepth
           set({ starting: true, error: null })
           try {
+            const context = params.context?.trim() || undefined
+            const provider = params.provider || undefined
+            const modelId = params.modelId || undefined
+            const reasoningEffort = params.reasoningEffort || undefined
             const snapshot = await startDeepResearchRun({
               query,
               user_id: userId,
               depth,
-              context: params.context?.trim() || undefined,
-              provider: params.provider || undefined,
-              model_id: params.modelId || undefined,
-              reasoning_effort: params.reasoningEffort || undefined,
+              ...(context !== undefined ? { context } : {}),
+              ...(provider !== undefined ? { provider } : {}),
+              ...(modelId !== undefined ? { model_id: modelId } : {}),
+              ...(reasoningEffort !== undefined ? { reasoning_effort: reasoningEffort } : {}),
             })
             set((state) => ({
               starting: false,

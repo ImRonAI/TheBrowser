@@ -22,24 +22,29 @@ interface Tab {
   id: TabId
   label: string
   icon: ReactNode
-  count?: number
+  count?: number | undefined
 }
 
+const DESCRIPTION_TAB: Tab = { id: 'description', label: 'Description', icon: <FileText className="h-4 w-4" /> }
+const RON_TAB: Tab = { id: 'ron', label: 'Ren', icon: <RenMark className="h-4 w-4" /> }
+const COMMS_TAB: Tab = { id: 'comms', label: 'Comms', icon: <MessageSquare className="h-4 w-4" /> }
+const HISTORY_TAB: Tab = { id: 'history', label: 'History', icon: <Clock className="h-4 w-4" /> }
+
 const TABS: Tab[] = [
-  { id: 'description', label: 'Description', icon: <FileText className="h-4 w-4" /> },
-  { id: 'ron', label: 'Ren', icon: <RenMark className="h-4 w-4" /> },
-  { id: 'comms', label: 'Comms', icon: <MessageSquare className="h-4 w-4" /> },
-  { id: 'history', label: 'History', icon: <Clock className="h-4 w-4" /> },
+  DESCRIPTION_TAB,
+  RON_TAB,
+  COMMS_TAB,
+  HISTORY_TAB,
 ]
 
 /** Canonical issues add Context and replace legacy Comms with real Comments; the legacy Task model keeps CommsTab. */
 function workspaceTabs(commentsCount?: number): Tab[] {
   return [
-    TABS[0],
+    DESCRIPTION_TAB,
     { id: 'context', label: 'Context', icon: <Layers className="h-4 w-4" /> },
-    TABS[1],
+    RON_TAB,
     { id: 'comments', label: 'Comments', icon: <MessageSquare className="h-4 w-4" />, count: commentsCount },
-    TABS[3],
+    HISTORY_TAB,
   ]
 }
 
@@ -53,8 +58,8 @@ const ICON_BUTTON = [
 interface TaskDetailViewProps {
   task: Task
   onClose: () => void
-  onUpdate?: (task: Task) => void
-  onTaskClick?: (taskId: string) => void
+  onUpdate?: ((task: Task) => void) | undefined
+  onTaskClick?: ((taskId: string) => void) | undefined
   /** Canonical callers explicitly provide every pane; legacy stores are never mounted. */
   workspace?: {
     banner: ReactNode
@@ -63,9 +68,9 @@ interface TaskDetailViewProps {
     context: ReactNode
     ron: ReactNode
     comments: ReactNode
-    commentsCount?: number
+    commentsCount?: number | undefined
     history: ReactNode
-  }
+  } | undefined
 }
 
 export function TaskDetailView({ task, onClose, onUpdate, onTaskClick, workspace }: TaskDetailViewProps) {
@@ -297,10 +302,11 @@ function TabNavigation({ tabs, activeTab, onTabChange, tabId, panelId }: TabNavi
     const next = event.key === 'ArrowRight' ? (index + 1) % tabs.length
       : event.key === 'ArrowLeft' ? (index - 1 + tabs.length) % tabs.length
       : event.key === 'Home' ? 0 : event.key === 'End' ? tabs.length - 1 : -1
-    if (next < 0) return
+    const targetTab = next >= 0 ? tabs[next] : undefined
+    if (!targetTab) return
     event.preventDefault()
-    onTabChange(tabs[next].id)
-    document.getElementById(tabId(tabs[next].id))?.focus()
+    onTabChange(targetTab.id)
+    document.getElementById(tabId(targetTab.id))?.focus()
   }
   return (
     <div className="relative z-[1] flex-shrink-0 border-b border-surface-200 dark:border-surface-800">

@@ -4,7 +4,9 @@ import { agentFromSelection, agentModel, agentTarget, projectChoices, RON_AGENT,
 import { hydratePanelSession } from './panel-stream.ts'
 
 const specialist = specialistChoices([{ id: 'a1', name: 'F1 2026 Briefing', description: 'Race weekends', config: { model: 'xai/grok-4.7' } }])[0]
+assert.ok(specialist)
 const project = projectChoices([{ id: 'p1', name: 'Calendar QA', key: 'CALQA' }])[0]
+assert.ok(project)
 
 test('agent targets: Ren sends no id; specialists and projects send theirs', () => {
   assert.deepEqual(agentTarget(RON_AGENT), { kind: 'ron', id: '' })
@@ -18,7 +20,7 @@ test('agent targets: Ren sends no id; specialists and projects send theirs', () 
 test("a specialist's own model is offered only when the panel can run its provider", () => {
   assert.deepEqual(agentModel(specialist), { provider: 'xai', model: 'grok-4.7' })
   assert.equal(agentModel({ ...specialist, model: 'bedrock/us.anthropic.claude' }), null)
-  assert.equal(agentModel({ ...specialist, model: undefined }), null)
+  assert.equal(agentModel({ kind: specialist.kind, id: specialist.id, name: specialist.name, description: specialist.description }), null)
   assert.equal(agentModel(project), null)
 })
 

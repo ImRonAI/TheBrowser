@@ -8,9 +8,9 @@ import { articleDraftKey, useArticleDraftStore } from '@/stores/articleDraftStor
 
 export type ChatMessage = UIMessage
 export function SearchChat({ searchResult, onBack, initialContext }: {
-  searchResult: { query: string; answer?: string; sources?: SourceData[] }
+  searchResult: { query: string; answer?: string | undefined; sources?: SourceData[] | undefined }
   onBack: () => void
-  initialContext?: UniversalResult | null
+  initialContext?: UniversalResult | null | undefined
 }) {
   const user = useAuthStore((state) => state.user?.id || 'default')
   useEffect(() => {

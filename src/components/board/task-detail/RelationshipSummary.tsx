@@ -6,7 +6,7 @@ import { Link, ArrowRight, Layers } from 'lucide-react'
 
 interface RelationshipSummaryProps {
   task: Task
-  onTaskClick?: (taskId: string) => void
+  onTaskClick?: ((taskId: string) => void) | undefined
 }
 
 export function RelationshipSummary({ task, onTaskClick }: RelationshipSummaryProps) {
@@ -140,7 +140,7 @@ function GroupedRelationships({
   onTaskClick 
 }: { 
   relationships: TaskRelationship[]
-  onTaskClick?: (id: string) => void
+  onTaskClick?: ((id: string) => void) | undefined
 }) {
   // Group by type
   const grouped = relationships.reduce((acc, rel) => {

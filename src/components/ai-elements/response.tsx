@@ -70,8 +70,8 @@ MessageResponse.displayName = "MessageResponse"
 
 interface ResponseMarkdownProps {
   content: string
-  isStreaming?: boolean
-  className?: string
+  isStreaming?: boolean | undefined
+  className?: string | undefined
 }
 
 export function ResponseMarkdown({ content, isStreaming, className }: ResponseMarkdownProps) {
@@ -82,8 +82,7 @@ export function ResponseMarkdown({ content, isStreaming, className }: ResponseMa
         className
       )}
       mode={isStreaming ? 'streaming' : 'static'}
-      isAnimating={isStreaming}
-      parseIncompleteMarkdown={isStreaming}
+      {...(isStreaming !== undefined ? { isAnimating: isStreaming, parseIncompleteMarkdown: isStreaming } : {})}
     >
       {content}
     </MessageResponse>

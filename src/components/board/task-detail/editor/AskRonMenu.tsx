@@ -56,7 +56,7 @@ interface AskRonMenuProps {
 export function AskRonMenu({ node, deleteNode, editor, getPos }: AskRonMenuProps) {
   const [mode, setMode] = useState<'menu' | 'input' | 'loading' | 'done'>('menu')
   const [customPrompt, setCustomPrompt] = useState('')
-  const [loadingQuote, setLoadingQuote] = useState(FUNNY_QUOTES[0])
+  const [loadingQuote, setLoadingQuote] = useState(FUNNY_QUOTES[0] ?? 'Consulting the oracle...')
   const [selectedContexts, setSelectedContexts] = useState<ContextItem[]>([])
   const [textAttachments, setTextAttachments] = useState<TextAttachment[]>([])
 
@@ -93,10 +93,11 @@ export function AskRonMenu({ node, deleteNode, editor, getPos }: AskRonMenuProps
   useEffect(() => {
     if (mode === 'loading') {
       const interval = setInterval(() => {
-        setLoadingQuote(FUNNY_QUOTES[Math.floor(Math.random() * FUNNY_QUOTES.length)])
+        setLoadingQuote(FUNNY_QUOTES[Math.floor(Math.random() * FUNNY_QUOTES.length)] ?? 'Consulting the oracle...')
       }, 2500)
       return () => clearInterval(interval)
     }
+    return undefined
   }, [mode])
 
   // Handle auto-action if provided

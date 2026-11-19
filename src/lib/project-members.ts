@@ -29,14 +29,14 @@ export const EMAIL_MAX = 320
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 export function mapMember(row: Row): ProjectMember {
-  const email = typeof row.email === 'string' ? row.email.trim() : ''
-  const joined = row.joined_at ? Date.parse(row.joined_at) : Number.NaN
+  const email = typeof row["email"] === 'string' ? row["email"].trim() : ''
+  const joined = row["joined_at"] ? Date.parse(row["joined_at"]) : Number.NaN
   return {
-    userId: String(row.user_id),
+    userId: String(row["user_id"]),
     // The API names people from their account; an address's local part is the fallback it uses too.
-    name: String(row.name ?? '').trim() || email.split('@')[0] || 'Someone',
+    name: String(row["name"] ?? '').trim() || email.split('@')[0] || 'Someone',
     email,
-    role: row.role === 'owner' ? 'owner' : 'member',
+    role: row["role"] === 'owner' ? 'owner' : 'member',
     joinedAt: Number.isNaN(joined) ? null : joined,
   }
 }

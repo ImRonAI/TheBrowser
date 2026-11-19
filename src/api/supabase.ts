@@ -138,9 +138,7 @@ export async function signUpWithEmail(email: string, password: string, metadata?
   return supabase.auth.signUp({
     email,
     password,
-    options: {
-      data: metadata
-    }
+    options: metadata !== undefined ? { data: metadata } : {},
   })
 }
 

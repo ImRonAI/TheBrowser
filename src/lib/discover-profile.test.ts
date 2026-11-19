@@ -25,9 +25,10 @@ test('interview keeps the keywords interestsStore and HomePage match on, with un
   assert.equal(INTERVIEW.length, 8)
   assert.equal(new Set(INTERVIEW.map((item) => item.id)).size, 8)
   const byId = Object.fromEntries(INTERVIEW.map((item) => [item.id, item.question]))
-  assert.match(byId.topics, /topics/)
-  assert.match(byId.intent, /brings you/)
-  assert.match(byId.goal, /goal/)
+  assert.ok(byId["topics"] !== undefined && byId["intent"] !== undefined && byId["goal"] !== undefined)
+  assert.match(byId["topics"], /topics/)
+  assert.match(byId["intent"], /brings you/)
+  assert.match(byId["goal"], /goal/)
   for (const item of INTERVIEW) assert.ok(item.placeholder.startsWith('e.g.'), item.id)
 })
 

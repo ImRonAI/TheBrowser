@@ -55,9 +55,12 @@ test('sectionsToStoryGroups skips failed/rich/paywalled/non-YouTube-video items 
     ['https://ex.com/a', 'https://ex.com/b'],
     ['https://www.youtube.com/watch?v=T5-2oqy0vSg'],
   ])
+  assert.ok(groups[1]?.[0])
   assert.equal(groups[1][0].topic, 'AI · Video')
   assert.equal(richAnswers(sections).length, 1)
-  assert.equal(failedSections(sections)[0].error?.code, 'rate_limited')
+  const failed = failedSections(sections)
+  assert.ok(failed[0])
+  assert.equal(failed[0].error?.code, 'rate_limited')
   assert.equal(sectionLabel({ kind: 'places', q: 'coffee' }), 'Near you · coffee')
 })
 
@@ -95,6 +98,7 @@ test('feed store caches by request key within TTL and refetches when the profile
   assert.equal(calls.length, 2, 'stale cache refetches')
   await store.load({ ...DEFAULT_PROFILE, topics: ['Rust'] }, { fetcher, now: 1_000 + 31 * 60_000 })
   assert.equal(calls.length, 3, 'changed profile refetches')
+  assert.ok(calls[2] !== undefined)
   assert.match(calls[2], /Rust/)
   const persisted = JSON.parse(storage.get('discover-feed-storage')!)
   assert.equal(persisted.state.sections.length, 1)

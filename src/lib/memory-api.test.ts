@@ -32,6 +32,7 @@ test('requests hit the documented routes with the right methods and bodies', asy
     ['PUT', 'http://127.0.0.1:8765/memory/entries'],
     ['DELETE', 'http://127.0.0.1:8765/memory/entries?store=remember&key=coffee.md'],
   ])
+  assert.ok(calls[2] && calls[3])
   assert.deepEqual(JSON.parse(String(calls[2].init.body)), { store: 'remember', content: '# Coffee\nOat flat white' })
   assert.deepEqual(JSON.parse(String(calls[3].init.body)), { store: 'remember', key: 'coffee.md', content: '# Coffee\nBlack' })
 })

@@ -190,12 +190,16 @@ def _context_kwargs(context: str, side_model_factory: Any) -> dict[str, Any]:
 
 
 def _background(options: dict[str, Any]) -> Any:
-    """Enabled by default with native ``wait_for_completion`` as the panel runtime requires; ``False`` only when turned off."""
+    """Enabled by default with native ``always=['*']`` and ``wait_for_completion``; ``False`` only when turned off."""
     if not options.get("background", True):
         return False
     from agent.api.core.deep_research_tools import DEEP_RESEARCH_TOOL_NAMES
 
-    return {"agentic": ["*"], "wait_for_completion": True, "never": ["editor", *sorted(DEEP_RESEARCH_TOOL_NAMES)]}
+    return {
+        "always": ["*"],
+        "wait_for_completion": True,
+        "never": ["subagent", "load_tool", "todo_write", *sorted(DEEP_RESEARCH_TOOL_NAMES)],
+    }
 
 
 def create_build_agent(*, user_id: str, session_id: str, model: Any, side_model_factory: Any, browser: str,
@@ -208,12 +212,13 @@ def create_build_agent(*, user_id: str, session_id: str, model: Any, side_model_
     (registered after construction, as the harness forwards constructor hooks to ``subagent`` children) and
     ``agent_kwargs`` go to ``Agent`` (``agent_id``, ``session_manager``, ``callback_handler``).
     """
+    from pathlib import Path
     from strands import ModelRetryStrategy
     from strands.tools.executors import ConcurrentToolExecutor, SequentialToolExecutor
     from strands.vended_plugins.context_offloader import ContextOffloader
     from strands.vended_plugins.goal import GoalLoop, JudgeConfig
     from strands_harness import create_harness
-    from strands_tools import editor, shell
+    from strands_tools import editor, load_tool, shell
 
     from agent.api.core.brave_tools import brave_tools
     from agent.api.core.web_tools import web_tools
@@ -229,6 +234,8 @@ def create_build_agent(*, user_id: str, session_id: str, model: Any, side_model_
     if context not in ("auto", "agentic", "sliding"):
         raise ValueError("context must be auto, agentic or sliding")
     workspace = ensure_workspace(user_id, session_id)
+    (Path(workspace) / "tools").mkdir(exist_ok=True)
+    (Path.cwd() / "tools").mkdir(exist_ok=True)
     storage = get_user_session_storage(user_id)
     consumer_plugins: list[Any] = [*plugins, BuildWorkspaceGuard(workspace)]
     context_kwargs = _context_kwargs(context, side_model_factory)
@@ -243,11 +250,22 @@ def create_build_agent(*, user_id: str, session_id: str, model: Any, side_model_
         model=model,
         caching=False,
         instructions=build_agent_prompt(workspace).strip() + JOURNAL_DIRECTIVE,
-        tools=[_installed_tool(shell, "shell"), _installed_tool(editor, "editor"), installed_http_request(),
-               *brave_tools(), *web_tools(), *deep_research_tools(user_id=user_id)],
+        tools=[
+            _installed_tool(shell, "shell"),
+            _installed_tool(editor, "editor"),
+            _installed_tool(load_tool, "load_tool"),
+            installed_http_request(),
+            *brave_tools(),
+            *web_tools(),
+            *deep_research_tools(user_id=user_id),
+        ],
         plugins=consumer_plugins,
         mcp_servers=None,
-        builtin_tools=[],
+        builtin_tools={
+            "*": False,
+            "programmatic_tool_caller": {"hot_reload": True},
+            "subagent": {"background": True, "stall_timeout": 60.0, "max_consecutive_errors": 3},
+        },
         builtin_plugins=["todos"],
         background_tasks=_background(options),
         session=False,
@@ -262,7 +280,7 @@ def create_build_agent(*, user_id: str, session_id: str, model: Any, side_model_
         tool_executor=SequentialToolExecutor() if options.get("tool_execution") == "sequential" else ConcurrentToolExecutor(),
         checkpointing=bool(options.get("checkpointing", False)),
         trace_attributes=trace_attributes(session_id=session_id, user_id=user_id),
-        load_tools_from_directory=False,
+        load_tools_from_directory=True,
         **context_kwargs,
         **agent_kwargs,
     )

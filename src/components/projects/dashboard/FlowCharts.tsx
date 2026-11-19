@@ -27,7 +27,7 @@ export function CumulativeFlowChart({ metrics, unit }: { metrics: DashboardMetri
   const { flow } = metrics
   const first = flow[0]
   const last = flow[flow.length - 1]
-  const wip = (point: typeof first) => point['in-progress'] + point.review + point.blocked
+  const wip = (point: NonNullable<typeof first>) => point['in-progress'] + point.review + point.blocked
   const total = last ? FLOW_BANDS.reduce((sum, status) => sum + last[status], 0) : 0
   const topDown = [...FLOW_BANDS].reverse()
   const takeaway = first && last
@@ -51,10 +51,14 @@ export function CumulativeFlowChart({ metrics, unit }: { metrics: DashboardMetri
         <CartesianGrid vertical={false} stroke={COLOR.grid} />
         <XAxis dataKey="day" type="number" scale="time" domain={['dataMin', 'dataMax']} tickFormatter={formatDay} minTickGap={28} {...AXIS} />
         <YAxis width={36} allowDecimals={metrics.measure !== 'count'} {...AXIS} axisLine={false} />
-        <Tooltip cursor={{ stroke: COLOR.axis, strokeWidth: 1 }} content={(props: TooltipContentProps) => props.active && props.payload?.length ? (
-          <TooltipCard title={formatDate(Number(props.payload[0].payload.day))}
-            rows={topDown.map((status) => ({ label: statusLabel(status), value: formatNumber(Number(props.payload[0].payload[status])), color: STATUS_COLOR[status] }))} />
-        ) : null} />
+        <Tooltip cursor={{ stroke: COLOR.axis, strokeWidth: 1 }} content={(props: TooltipContentProps) => {
+          const firstEntry = props.payload?.[0]
+          if (!props.active || !firstEntry) return null
+          return (
+            <TooltipCard title={formatDate(Number(firstEntry.payload.day))}
+              rows={topDown.map((status) => ({ label: statusLabel(status), value: formatNumber(Number(firstEntry.payload[status])), color: STATUS_COLOR[status] }))} />
+          )
+        }} />
         {FLOW_BANDS.map((status) => (
           <Area key={status} type="linear" dataKey={status} name={statusLabel(status)} stackId="flow" stroke={STATUS_COLOR[status]} strokeWidth={1.5}
             fill={STATUS_COLOR[status]} fillOpacity={0.16} isAnimationActive={false} />
@@ -82,8 +86,9 @@ function DotShape({ onSelect, ...props }: ScatterShapeProps & { onSelect: (id: s
 }
 
 function DotTooltip(props: TooltipContentProps) {
-  if (!props.active || !props.payload?.length) return null
-  const dot = props.payload[0].payload as Dot
+  const firstEntry = props.payload?.[0]
+  if (!props.active || !firstEntry) return null
+  const dot = firstEntry.payload as Dot
   return <TooltipCard title={dot.name} rows={[{ label: dot.detail, value: formatDays(dot.y) }]} note="Click the dot to open the issue." />
 }
 
@@ -143,7 +148,8 @@ export function AgingWipChart({ metrics, issueKey, onIssueSelect }: ChartProps) 
     const seen = AGING_COLUMNS.map(() => 0)
     return aging.map((item) => {
       const column = AGING_COLUMNS.indexOf(item.status)
-      const position = seen[column]++
+      const position = seen[column] ?? 0
+      seen[column] = position + 1
       // Deterministic spread inside the column so items of the same age do not hide each other.
       const offset = ((position % 5) - 2) * 0.09
       return {
@@ -182,7 +188,7 @@ export function AgingWipChart({ metrics, issueKey, onIssueSelect }: ChartProps) 
         <ScatterChart responsive style={{ width: '100%', height: CHART_HEIGHT }} margin={CHART_MARGIN}>
           <CartesianGrid vertical={false} stroke={COLOR.grid} />
           <XAxis dataKey="x" type="number" domain={[-0.5, AGING_COLUMNS.length - 0.5]} ticks={AGING_COLUMNS.map((_, index) => index)} interval={0}
-            tickFormatter={(value: number) => `${statusLabel(AGING_COLUMNS[value])} (${counts[value]})`} {...AXIS} />
+            tickFormatter={(value: number) => { const col = AGING_COLUMNS[value]; return col ? `${statusLabel(col)} (${counts[value] ?? 0})` : '' }} {...AXIS} />
           <YAxis dataKey="y" type="number" width={40} allowDecimals={false} tickFormatter={(value: number) => `${value}d`} {...AXIS} axisLine={false} />
           <Tooltip cursor={false} content={DotTooltip} />
           {lines.map((line) => (

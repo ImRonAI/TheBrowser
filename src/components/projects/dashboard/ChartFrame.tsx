@@ -2,7 +2,7 @@ import { useId, useState, type ReactNode } from 'react'
 import { Info, Table2, LineChart as LineChartIcon } from 'lucide-react'
 import { cn } from '@/utils/cn'
 
-export interface LegendEntry { label: string; color: string; mark?: 'rect' | 'line' | 'dot'; value?: string }
+export interface LegendEntry { label: string; color: string; mark?: 'rect' | 'line' | 'dot' | undefined; value?: string | undefined }
 
 /** Legend that mirrors the mark (rect for areas and bars, line for lines, dot for points); text in ink, never the series color. */
 export function Legend({ entries }: { entries: LegendEntry[] }) {
@@ -54,11 +54,11 @@ export function ChartCard({ title, question, takeaway, howToRead, legend, empty,
   question: string
   takeaway: string
   howToRead: string
-  legend?: ReactNode
+  legend?: ReactNode | undefined
   /** What data is missing; replaces the chart when set. */
-  empty?: string | null
+  empty?: string | null | undefined
   table: ChartTable
-  className?: string
+  className?: string | undefined
   children: ReactNode
 }) {
   const [showTable, setShowTable] = useState(false)

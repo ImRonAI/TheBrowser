@@ -11,7 +11,7 @@ import type { InterestCategory } from './context-api.ts'
 export interface ProfileAnswer { question: string; answer: string; timestamp: number }
 export interface ProfileInterest {
   id: string; label: string; weight: number; category: InterestCategory; source: 'onboarding' | 'browsing'
-  reason?: string; lastUpdated: number
+  reason?: string | undefined; lastUpdated: number
 }
 export interface ProfileConnection { id: string; from: string; to: string; strength: number }
 export interface AccountProfile {
@@ -76,6 +76,7 @@ export function graphChanged(
   if (next.nodes.length !== previous.nodes.length) return true
   return next.nodes.some((node, index) => {
     const before = previous.nodes[index]
+    if (!before) return true
     return node.id !== before.id || node.label !== before.label || node.weight !== before.weight || node.category !== before.category
       || node.source !== before.source || node.reason !== before.reason || node.lastUpdated !== before.lastUpdated
   })
@@ -114,7 +115,7 @@ export function createProfileClient(apiBase: string, userId: string, fetcher: ty
   const base = apiBase.replace(/\/$/, '')
   return {
     read: async (signal?: AbortSignal): Promise<AccountProfile | null> => {
-      const response = await fetcher(`${base}/context/profile?user_id=${encodeURIComponent(userId)}`, { signal })
+      const response = await fetcher(`${base}/context/profile?user_id=${encodeURIComponent(userId)}`, signal ? { signal } : {})
       if (!response.ok) throw await failure(response)
       return (await response.json() as { profile: AccountProfile | null }).profile
     },

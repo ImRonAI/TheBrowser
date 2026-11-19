@@ -28,7 +28,7 @@ import { cn } from '@/utils/cn'
  * music sink. Saved songs play through the AI Elements `AudioPlayer` (media-chrome); playlists,
  * albums and the whole library play continuously (in order or shuffled) through `PlaylistShelf`.
  */
-export function MusicDeck({ userId, agentId, className }: { userId: string; agentId?: string; className?: string }) {
+export function MusicDeck({ userId, agentId, className }: { userId: string; agentId?: string | undefined; className?: string | undefined }) {
   const deck = useLiveMusicStore()
   const { music, available, liveStatus, playing, volume, setVolume, publishTake, controls } = deck
   const signedIn = !isGuestUserId(userId)

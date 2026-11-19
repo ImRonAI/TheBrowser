@@ -36,6 +36,7 @@ test('documents round-trip through the documented routes and bodies', async () =
     { status: 200, body: { deleted: true } },
   ])
   const [summary] = await listDocuments(request, 'p1')
+  assert.ok(summary)
   assert.equal(summary.title, 'Spec')
   assert.equal('content' in summary, false)
   const created = await createDocument(request, { projectId: 'p1', title: '   ', content: '<p>Hi</p>' })
@@ -45,6 +46,7 @@ test('documents round-trip through the documented routes and bodies', async () =
   assert.deepEqual(await deleteDocument(request, 'd1'), { deleted: true })
   assert.deepEqual(calls.map((call) => `${call.method} ${call.url.replace('http://localhost:8765/projects', '')}`),
     ['GET /p1/documents?offset=0&limit=200', 'POST /documents', 'PATCH /documents/d1', 'DELETE /documents/d1'])
+  assert.ok(calls[1] && calls[2])
   assert.deepEqual(calls[1].body, { project_id: 'p1', parent_id: null, title: 'Untitled', content: '<p>Hi</p>' })
   assert.deepEqual(calls[2].body, { version: 1, title: 'Spec v2' })
 })
@@ -80,14 +82,19 @@ test('page–issue links use the documented routes, with the filter kept beside 
     { status: 200, body: link },
     { status: 200, body: { deleted: true } },
   ])
-  assert.equal((await listAllDocuments(request))[0].title, 'Spec')
+  const allDocs = await listAllDocuments(request)
+  assert.ok(allDocs[0])
+  assert.equal(allDocs[0].title, 'Spec')
   assert.deepEqual(await listDocumentLinks(request, { documentId: 'd1' }), [{ id: 'l1', documentId: 'd1', issueId: 'i9', createdAt: Date.parse(link.created_at) }])
-  assert.equal((await listDocumentLinks(request, { issueId: 'i9' }))[0].documentId, 'd1')
+  const linksByIssue = await listDocumentLinks(request, { issueId: 'i9' })
+  assert.ok(linksByIssue[0])
+  assert.equal(linksByIssue[0].documentId, 'd1')
   assert.equal((await linkDocumentToIssue(request, 'd1', 'i9')).id, 'l1')
   assert.deepEqual(await unlinkDocument(request, 'l1'), { deleted: true })
   assert.deepEqual(calls.map((call) => `${call.method} ${call.url.replace('http://localhost:8765/projects', '')}`), [
     'GET /documents?offset=0&limit=200', 'GET /document-links?document_id=d1&offset=0&limit=200',
     'GET /document-links?issue_id=i9&offset=0&limit=200', 'POST /document-links', 'DELETE /document-links/l1'])
+  assert.ok(calls[3])
   assert.deepEqual(calls[3].body, { document_id: 'd1', issue_id: 'i9' })
 })
 
@@ -104,6 +111,7 @@ test('page conversations are created on the page and touched on Try again; the s
   assert.equal(touched.updatedAt, Date.parse('2026-11-05T11:00:00Z'))
   assert.deepEqual(calls.map((call) => `${call.method} ${call.url.replace('http://localhost:8765/projects', '')}`),
     ['POST /documents/d1/conversations', 'PATCH /document-conversations/c1'])
+  assert.ok(calls[0] && calls[1])
   const title = (calls[0].body as { title: string }).title
   assert.ok(title.startsWith('Draft the runbook xxx') && title.length === 200 && title.endsWith('…'))
   assert.deepEqual(calls[1].body, { title: 'Draft the runbook' })
@@ -130,6 +138,7 @@ test('a page publishes as the agent’s skill through the documented route; prob
   assert.deepEqual(skillProblems('Name this page first: its title becomes the skill’s name.'), ['Name this page first: its title becomes the skill’s name.'])
   assert.deepEqual(calls.map((call) => `${call.method} ${call.url.replace('http://localhost:8765/projects', '')}`), [
     'GET /documents/d1/skill?user_id=alice&agent_id=panel', 'POST /documents/d1/skill', 'POST /documents/d1/skill'])
+  assert.ok(calls[1])
   assert.deepEqual(calls[1].body, { user_id: 'alice', agent_id: 'panel' })
 })
 
@@ -140,9 +149,11 @@ test('a personal page has no project; it is created with project_id null and ope
   ])
   const created = await createDocument(request, { projectId: null, title: 'Notes', content: '<p>x</p>' })
   assert.equal(created.projectId, null)
+  assert.ok(calls[0])
   assert.deepEqual(calls[0].body, { project_id: null, parent_id: null, title: 'Notes', content: '<p>x</p>' })
   const all = await listAllDocuments(request)
   assert.deepEqual(all.map((page) => [page.id, page.projectId]), [['n1', null], ['d1', 'p1']])
+  assert.ok(all[0] && all[1])
   assert.equal(documentSource(all[0]), 'ron://documents/n1')
   assert.equal(documentSource(all[1]), 'ron://project/p1/docs/d1')
 })
@@ -163,6 +174,7 @@ test('moving a page posts the target project and answers the moved page; refusal
   }
   assert.deepEqual(calls.map((call) => `${call.method} ${call.url.replace('http://localhost:8765/projects', '')}`),
     Array(4).fill('POST /documents/n1/move'))
+  assert.ok(calls[0])
   assert.deepEqual(calls[0].body, { project_id: 'p2' })
 })
 
@@ -184,6 +196,7 @@ test('a move carries the subtree into the project and makes the moved page a roo
   assert.deepEqual(moved.map((page) => `${page.id}:${page.projectId}:${page.parentId}`),
     ['a:null:null', 'a1:p2:null', 'a1x:p2:a1', 'b:null:a', 'c:null:null'])
   assert.notEqual(moved, docs)
+  assert.ok(docs[1])
   assert.equal(docs[1].projectId, null)
 })
 

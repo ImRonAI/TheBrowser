@@ -19,7 +19,7 @@ export function createProjectsRequest(
       response = await fetcher(`${baseUrl}/projects${path}`, {
         method,
         headers: { ...(guest ? { 'X-Ron-Workspace': userId.slice(6) } : { Authorization: `Bearer ${session!.access_token}` }), 'Content-Type': 'application/json' },
-        body: body === undefined ? undefined : JSON.stringify(body),
+        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
         signal: AbortSignal.timeout(45000),
       })
     } catch {

@@ -31,6 +31,7 @@ test('a project summary counts open, done, in-flight, blocked, overdue and due-s
     issue('x', { projectId: 'p2', status: 'backlog' }),
   ]
   const [ren, ops] = summarizeProjects(projects, issues, [link('a', 'd'), link('f', 'x')], now)
+  assert.ok(ren && ops)
   assert.deepEqual(
     { total: ren.total, done: ren.done, open: ren.open, inProgress: ren.inProgress, blocked: ren.blocked, overdue: ren.overdue, dueSoon: ren.dueSoon },
     { total: 6, done: 2, open: 4, inProgress: 2, blocked: 2, overdue: 1, dueSoon: 1 },
@@ -40,8 +41,10 @@ test('a project summary counts open, done, in-flight, blocked, overdue and due-s
   assert.equal(ren.lastActivity, now - DAY)
   // A finished blocker does not block, and a project without issues reports no progress.
   assert.equal(ops.blocked, 0)
-  assert.equal(summarizeProjects([project('p9', 'NEW', { createdAt: 7 })], [], [], now)[0].progress, 0)
-  assert.equal(summarizeProjects([project('p9', 'NEW', { createdAt: 7 })], [], [], now)[0].lastActivity, 7)
+  const [emptySummary] = summarizeProjects([project('p9', 'NEW', { createdAt: 7 })], [], [], now)
+  assert.ok(emptySummary)
+  assert.equal(emptySummary.progress, 0)
+  assert.equal(emptySummary.lastActivity, 7)
 })
 
 test('the lifecycle filter treats active and paused projects as open', () => {

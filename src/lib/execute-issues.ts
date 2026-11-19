@@ -262,7 +262,7 @@ export interface TimelineRow {
   clippedStart: boolean
   clippedEnd: boolean
 }
-export interface TimelineGroup { projectId: string; project?: Project; rows: TimelineRow[] }
+export interface TimelineGroup { projectId: string; project?: Project | undefined; rows: TimelineRow[] }
 export interface TimelineLayout { groups: TimelineGroup[]; outside: number; unscheduled: number }
 
 /** Scheduled issues inside the window, grouped by project (by key), each group ordered by start, end, number. */

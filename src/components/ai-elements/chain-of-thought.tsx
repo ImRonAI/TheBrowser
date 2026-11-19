@@ -42,11 +42,11 @@ const useChainOfThought = () => {
 };
 
 export type ChainOfThoughtProps = ComponentProps<"div"> & {
-  open?: boolean;
-  defaultOpen?: boolean;
-  onOpenChange?: (open: boolean) => void;
-  isStreaming?: boolean;
-  autoCollapseDelay?: number;
+  open?: boolean | undefined;
+  defaultOpen?: boolean | undefined;
+  onOpenChange?: ((open: boolean) => void) | undefined;
+  isStreaming?: boolean | undefined;
+  autoCollapseDelay?: number | undefined;
 };
 
 const AUTO_CLOSE_DELAY = 1000;
@@ -69,8 +69,8 @@ export const ChainOfThought = memo(
 
     const [isOpen, setIsOpen] = useControllableState<boolean>({
       defaultProp: resolvedDefaultOpen,
-      onChange: onOpenChange,
-      prop: open,
+      ...(onOpenChange !== undefined ? { onChange: onOpenChange } : {}),
+      ...(open !== undefined ? { prop: open } : {}),
     });
 
     const hasEverStreamedRef = useRef(isStreaming);
@@ -105,6 +105,7 @@ export const ChainOfThought = memo(
 
         return () => clearTimeout(timer);
       }
+      return undefined;
     }, [isStreaming, isOpen, setIsOpen, hasAutoClosed, closeDelay]);
 
     const chainOfThoughtContext = useMemo(
@@ -156,10 +157,10 @@ export const ChainOfThoughtHeader = memo(
 );
 
 export type ChainOfThoughtStepProps = ComponentProps<"div"> & {
-  icon?: LucideIcon;
+  icon?: LucideIcon | undefined;
   label: ReactNode;
-  description?: ReactNode;
-  status?: "complete" | "active" | "pending";
+  description?: ReactNode | undefined;
+  status?: "complete" | "active" | "pending" | undefined;
 };
 
 const stepStatusStyles = {
@@ -253,7 +254,7 @@ export const ChainOfThoughtContent = memo(
 );
 
 export type ChainOfThoughtImageProps = ComponentProps<"div"> & {
-  caption?: string;
+  caption?: string | undefined;
 };
 
 export const ChainOfThoughtImage = memo(

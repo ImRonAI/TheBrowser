@@ -62,16 +62,24 @@ def create_a2a_agent_factory(
         for value in tools:
             if not isinstance(value, (MCPClient, PanelToolCatalog, AgentTool)):
                 raise TypeError("A2A agent tools must be AgentTool, MCPClient or PanelToolCatalog instances")
+        from pathlib import Path
+
+        (Path.cwd() / "tools").mkdir(exist_ok=True)
         agent = Agent(
             model=model,
             name=name,
             description=description,
             system_prompt=system_prompt,
             tools=tools,
+            background_tasks={
+                "always": ["*"],
+                "never": ["tool_catalog", "load_tool", "mcp_client", "ask_user", "subagent", "todo_write"],
+                "wait_for_completion": True,
+            },
             callback_handler=None,
             session_manager=None,
             checkpointing=False,
-            load_tools_from_directory=False,
+            load_tools_from_directory=True,
             memory_manager=MemoryManager(stores=list(memory())) if memory is not None else None,
         )
         try:

@@ -38,12 +38,12 @@ export const EmbedBlock = Node.create({
 
   addAttributes() {
     return {
-      src: { default: '', parseHTML: (element) => safeEmbedSrc(element.getAttribute('data-src')), renderHTML: (attributes) => ({ 'data-src': safeEmbedSrc(attributes.src) }) },
-      url: { default: '', parseHTML: (element) => safeEmbedSrc(element.getAttribute('data-url')), renderHTML: (attributes) => ({ 'data-url': safeEmbedSrc(attributes.url) }) },
-      provider: { default: 'web', parseHTML: (element) => provider(element.getAttribute('data-provider')), renderHTML: (attributes) => ({ 'data-provider': provider(attributes.provider) }) },
-      title: { default: '', parseHTML: (element) => element.getAttribute('data-title') ?? '', renderHTML: (attributes) => ({ 'data-title': String(attributes.title ?? '') }) },
+      src: { default: '', parseHTML: (element) => safeEmbedSrc(element.getAttribute('data-src')), renderHTML: (attributes) => ({ 'data-src': safeEmbedSrc(attributes["src"]) }) },
+      url: { default: '', parseHTML: (element) => safeEmbedSrc(element.getAttribute('data-url')), renderHTML: (attributes) => ({ 'data-url': safeEmbedSrc(attributes["url"]) }) },
+      provider: { default: 'web', parseHTML: (element) => provider(element.getAttribute('data-provider')), renderHTML: (attributes) => ({ 'data-provider': provider(attributes["provider"]) }) },
+      title: { default: '', parseHTML: (element) => element.getAttribute('data-title') ?? '', renderHTML: (attributes) => ({ 'data-title': String(attributes["title"] ?? '') }) },
       height: { default: null, parseHTML: (element) => clampHeight(element.getAttribute('data-height'), EMBED_PROVIDERS[provider(element.getAttribute('data-provider'))].height),
-        renderHTML: (attributes) => (attributes.height ? { 'data-height': String(attributes.height) } : {}) },
+        renderHTML: (attributes) => (attributes["height"] ? { 'data-height': String(attributes["height"]) } : {}) },
     }
   },
 
@@ -52,20 +52,20 @@ export const EmbedBlock = Node.create({
   },
 
   renderHTML({ node, HTMLAttributes }) {
-    const href = safeEmbedSrc(node.attrs.url) || safeEmbedSrc(node.attrs.src)
-    return ['div', mergeAttributes(HTMLAttributes, { 'data-type': 'embed' }), ['a', { href, rel: 'noopener noreferrer' }, node.attrs.title || href]]
+    const href = safeEmbedSrc(node.attrs["url"]) || safeEmbedSrc(node.attrs["src"])
+    return ['div', mergeAttributes(HTMLAttributes, { 'data-type': 'embed' }), ['a', { href, rel: 'noopener noreferrer' }, node.attrs["title"] || href]]
   },
 
   renderMarkdown: (node) => {
-    const href = safeEmbedSrc(node.attrs?.url) || safeEmbedSrc(node.attrs?.src)
-    const label = EMBED_PROVIDERS[provider(node.attrs?.provider)].label
-    return href ? `[${label}: ${node.attrs?.title || href}](${href})` : ''
+    const href = safeEmbedSrc(node.attrs?.["url"]) || safeEmbedSrc(node.attrs?.["src"])
+    const label = EMBED_PROVIDERS[provider(node.attrs?.["provider"])].label
+    return href ? `[${label}: ${node.attrs?.["title"] || href}](${href})` : ''
   },
 
   addCommands() {
     return {
       insertEmbed: (embed) => placeBlock((schema) => safeEmbedSrc(embed.src)
-        ? schema.nodes.embed.create({ ...embed, height: EMBED_PROVIDERS[embed.provider].height })
+        ? schema.nodes["embed"]?.create({ ...embed, height: EMBED_PROVIDERS[embed.provider].height }) ?? null
         : null),
     }
   },
@@ -76,12 +76,12 @@ export const EmbedBlock = Node.create({
 })
 
 function EmbedView({ node, editor, selected, updateAttributes, deleteNode }: NodeViewProps) {
-  const kind = provider(node.attrs.provider)
-  const src = safeEmbedSrc(node.attrs.src)
-  const url = safeEmbedSrc(node.attrs.url) || src
-  const title = String(node.attrs.title || EMBED_PROVIDERS[kind].label)
+  const kind = provider(node.attrs["provider"])
+  const src = safeEmbedSrc(node.attrs["src"])
+  const url = safeEmbedSrc(node.attrs["url"]) || src
+  const title = String(node.attrs["title"] || EMBED_PROVIDERS[kind].label)
   const editable = editor.isEditable
-  const { height, handle } = useResizableHeight(node.attrs.height, EMBED_PROVIDERS[kind].height, (next) => updateAttributes({ height: next }))
+  const { height, handle } = useResizableHeight(node.attrs["height"], EMBED_PROVIDERS[kind].height, (next) => updateAttributes({ height: next }))
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(url)
   const [error, setError] = useState('')

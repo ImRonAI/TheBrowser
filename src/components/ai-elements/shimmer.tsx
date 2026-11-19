@@ -1,7 +1,7 @@
 "use client";
 
-import type { MotionProps } from "motion/react";
-import type { CSSProperties, ElementType, JSX } from "react";
+import type { MotionProps, MotionStyle } from "motion/react";
+import type { ElementType, JSX } from "react";
 
 import { cn } from "@/lib/utils";
 import { motion } from "motion/react";
@@ -26,10 +26,10 @@ const getMotionComponent = (element: keyof JSX.IntrinsicElements) => {
 
 export interface TextShimmerProps {
   children: string;
-  as?: ElementType;
-  className?: string;
-  duration?: number;
-  spread?: number;
+  as?: ElementType | undefined;
+  className?: string | undefined;
+  duration?: number | undefined;
+  spread?: number | undefined;
 }
 
 const ShimmerComponent = ({
@@ -62,7 +62,7 @@ const ShimmerComponent = ({
           "--spread": `${dynamicSpread}px`,
           backgroundImage:
             "var(--bg), linear-gradient(var(--color-muted-foreground), var(--color-muted-foreground))",
-        } as CSSProperties
+        } as MotionStyle
       }
       transition={{
         duration,

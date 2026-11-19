@@ -30,14 +30,14 @@ export interface Citation {
   number: string
   title: string
   url: string
-  snippet?: string
+  snippet?: string | undefined
 }
 
 interface ResponseWithCitationsProps {
   content: string
-  citations?: Citation[]
-  isStreaming?: boolean
-  className?: string
+  citations?: Citation[] | undefined
+  isStreaming?: boolean | undefined
+  className?: string | undefined
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

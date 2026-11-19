@@ -29,7 +29,7 @@ export function findAgentIdForStream(streamId: string): string | null {
   // or extract from streamId format like "agent-{id}-stream-{timestamp}"
 
   const match = streamId.match(/agent-([^-]+)/);
-  return match ? match[1] : null;
+  return match?.[1] ?? null;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

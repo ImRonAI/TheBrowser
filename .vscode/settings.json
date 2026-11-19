@@ -1,8 +1,11 @@
 {
   "python.defaultInterpreterPath": "${workspaceFolder}/venv/bin/python",
+  "python.analysis.typeCheckingMode": "strict",
+  "basedpyright.analysis.typeCheckingMode": "all",
   "python.analysis.extraPaths": [
     "${workspaceFolder}",
     "${workspaceFolder}/agent/api/core/harness-sdk/strands-py/src",
     "${workspaceFolder}/venv/lib/python3.14/site-packages"
-  ]
+  ],
+  "typescript.tsdk": "node_modules/typescript/lib"
 }

@@ -52,6 +52,7 @@ test('packPcm16 clamps and encodes little-endian; drainPcmChunks emits whole 100
   const pending = Array.from({ length: MIC_CHUNK_SAMPLES * 2 + 7 }, () => 0.5)
   const { chunks, rest } = drainPcmChunks(pending)
   assert.equal(chunks.length, 2)
+  assert.ok(chunks[0])
   assert.equal(chunks[0].length, MIC_CHUNK_SAMPLES * 2)
   assert.ok(chunks[0].length <= MIC_MAX_CHUNK_BYTES)
   assert.equal(chunks[0].length % 2, 0)

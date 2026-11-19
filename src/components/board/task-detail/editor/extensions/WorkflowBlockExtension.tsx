@@ -49,17 +49,17 @@ export const WorkflowBlockExtension = Node.create<Record<string, never>, { openI
       id: {
         default: null,
         parseHTML: (element) => element.getAttribute('data-id'),
-        renderHTML: (attributes) => (attributes.id ? { 'data-id': attributes.id } : {}),
+        renderHTML: (attributes) => (attributes["id"] ? { 'data-id': attributes["id"] } : {}),
       },
       title: {
         default: 'Workflow',
         parseHTML: (element) => element.getAttribute('data-title') || 'Workflow',
-        renderHTML: (attributes) => ({ 'data-title': attributes.title }),
+        renderHTML: (attributes) => ({ 'data-title': attributes["title"] }),
       },
       graph: {
         default: { steps: [], connections: [] },
         parseHTML: (element) => parseGraph(element.getAttribute('data-graph')),
-        renderHTML: (attributes) => ({ 'data-graph': JSON.stringify(attributes.graph) }),
+        renderHTML: (attributes) => ({ 'data-graph': JSON.stringify(attributes["graph"]) }),
       },
     }
   },
@@ -69,10 +69,10 @@ export const WorkflowBlockExtension = Node.create<Record<string, never>, { openI
   },
 
   // @tiptap/markdown: a workflow reads as a ```workflow JSON fence (what Ron receives as page context).
-  renderMarkdown: (node) => workflowMarkdown(String(node.attrs?.title || 'Workflow'), normalizeWorkflow(node.attrs?.graph)),
+  renderMarkdown: (node) => workflowMarkdown(String(node.attrs?.["title"] || 'Workflow'), normalizeWorkflow(node.attrs?.["graph"])),
 
   renderHTML({ node, HTMLAttributes }) {
-    const graph = node.attrs.graph as WorkflowGraph
+    const graph = node.attrs["graph"] as WorkflowGraph
     return ['workflow-block', mergeAttributes(HTMLAttributes), ['ol', ...workflowOutline(graph).map((label) => ['li', label])]]
   },
 
@@ -99,19 +99,19 @@ export const WorkflowBlockExtension = Node.create<Record<string, never>, { openI
 })
 
 function WorkflowBlockView({ node, editor, extension, updateAttributes, deleteNode, selected }: NodeViewProps) {
-  const graph = useMemo(() => normalizeWorkflow(node.attrs.graph), [node.attrs.graph])
-  const title = String(node.attrs.title || 'Workflow')
+  const graph = useMemo(() => normalizeWorkflow(node.attrs["graph"]), [node.attrs["graph"]])
+  const title = String(node.attrs["title"] || 'Workflow')
   const [open, setOpen] = useState(false)
   const editable = editor.isEditable
 
   // A block just inserted from the menu opens straight into the builder.
   useEffect(() => {
     const storage = extension.storage as { openId: string | null }
-    if (node.attrs.id && storage.openId === node.attrs.id) {
+    if (node.attrs["id"] && storage.openId === node.attrs["id"]) {
       storage.openId = null
       setOpen(true)
     }
-  }, [extension, node.attrs.id])
+  }, [extension, node.attrs["id"]])
 
   return (
     <NodeViewWrapper contentEditable={false} data-workflow-block=""

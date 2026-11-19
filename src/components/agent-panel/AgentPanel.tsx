@@ -74,20 +74,20 @@ export function AgentPanel() {
 /** `onChat` receives the conversation's live chat state (session, messages, status, send) on every change,
  * so a host page (the Build workbench) can render the same session's files, preview and plan beside it. */
 export function AgentWorkspace({ destination, onChat, hero, heroFooter }: {
-  destination: AgentDestination; onChat?: (chat: PanelChat) => void
+  destination: AgentDestination; onChat?: ((chat: PanelChat) => void) | undefined
   /** Replaces the empty state; while the conversation is empty the composer sits under it, centred. */
-  hero?: (pick: (prompt: string) => void) => ReactNode
+  hero?: ((pick: (prompt: string) => void) => ReactNode) | undefined
   /** Rendered under the hero's composer (starter prompts); `pick` puts a prompt in the composer. */
-  heroFooter?: (pick: (prompt: string) => void) => ReactNode
+  heroFooter?: ((pick: (prompt: string) => void) => ReactNode) | undefined
 }) {
   const user = useAuthStore((state) => state.user?.id || 'default')
   return <AgentConversation key={`${user}:${destination}`} destination={destination} embedded onChat={onChat} hero={hero} heroFooter={heroFooter} />
 }
 
 export function AgentConversation({ destination, embedded = false, onChat, hero, heroFooter }: {
-  destination: AgentDestination; embedded?: boolean; onChat?: (chat: PanelChat) => void
-  hero?: (pick: (prompt: string) => void) => ReactNode
-  heroFooter?: (pick: (prompt: string) => void) => ReactNode
+  destination: AgentDestination; embedded?: boolean | undefined; onChat?: ((chat: PanelChat) => void) | undefined
+  hero?: ((pick: (prompt: string) => void) => ReactNode) | undefined
+  heroFooter?: ((pick: (prompt: string) => void) => ReactNode) | undefined
 }) {
   const { isPanelOpen, closePanel, askRonPendingPrompt, consumeAskRonPendingPrompt,
     closeAskRon, agentPanelQueuedPrompts, consumeAgentPanelPrompt, agentPanelQueuedAttachments, consumeAgentPanelAttachments,
@@ -714,7 +714,10 @@ export function usePanelComposer(input: string, setInput: (value: string) => voi
           return
         }
         if (event.key === 'Tab' || (event.key === 'Enter' && !event.shiftKey)) {
-          event.preventDefault(); chooseMention(mentionResults[selectedMention].item); return
+          event.preventDefault()
+          const picked = mentionResults[selectedMention]
+          if (picked) chooseMention(picked.item)
+          return
         }
       }
     }
@@ -727,7 +730,10 @@ export function usePanelComposer(input: string, setInput: (value: string) => voi
         return
       }
       if (event.key === 'Tab' || (event.key === 'Enter' && !event.shiftKey)) {
-        event.preventDefault(); chooseCommand(commandSuggestions[selectedCommand].name); return
+        event.preventDefault()
+        const pickedCommand = commandSuggestions[selectedCommand]
+        if (pickedCommand) chooseCommand(pickedCommand.name)
+        return
       }
     }
     if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
@@ -745,16 +751,16 @@ export type PanelComposerState = ReturnType<typeof usePanelComposer>
 
 /** The panel composer card: suggestions above, the message box, then tools (left) and Stop / Send or Steer (right). */
 export function PanelComposer({ composer, active, label, placeholder, disabled, onSend, sendDisabled, onStop, stopDisabled, before, tools, onPaste, large = false }: {
-  composer: PanelComposerState; active: boolean; label: string; placeholder: string; disabled?: boolean
-  onSend: () => void; sendDisabled?: boolean; onStop: () => void; stopDisabled?: boolean
+  composer: PanelComposerState; active: boolean; label: string; placeholder: string; disabled?: boolean | undefined
+  onSend: () => void; sendDisabled?: boolean | undefined; onStop: () => void; stopDisabled?: boolean | undefined
   /** A long paste becomes an attachment card (`useComposerAttachments.onPaste`). */
-  onPaste?: ComposerAttachmentsState['onPaste']
+  onPaste?: ComposerAttachmentsState['onPaste'] | undefined
   /** Rendered inside the card above the message box (selected contexts). */
   before?: ReactNode
   /** Left side of the tool row (context picker, memory, model selector). */
   tools?: ReactNode
   /** The hero composer (Build's empty state): a taller box and a larger type size. */
-  large?: boolean
+  large?: boolean | undefined
 }) {
   const { input, setInput, inputRef, assist, commandSuggestions, selectedCommand } = composer
   return <>
@@ -948,9 +954,11 @@ export function MessageBubble({ message, status, onUiAction, superseded }: { mes
   </Message>
 }
 
+const DEFAULT_CHAIN_LABEL = { streaming: 'Thinking…', title: 'Chain of Thought', input: 'Thought', output: 'Conclusion' }
+
 /** Chain-tool labels: `think`, `repair`, and delegated subagents (`subagent`, `run_skill`, `use_skill`). */
 const CHAIN_LABELS: Record<string, { streaming: string; title: string; input: string; output: string }> = {
-  think: { streaming: 'Thinking…', title: 'Chain of Thought', input: 'Thought', output: 'Conclusion' },
+  think: DEFAULT_CHAIN_LABEL,
   repair: { streaming: 'Repairing…', title: 'Repair', input: 'Tool', output: 'Result' },
   subagent: { streaming: 'Subagent working…', title: 'Subagent', input: 'Task', output: 'Result' },
   run_skill: { streaming: 'Running skill…', title: 'Skill', input: 'Task', output: 'Result' },
@@ -959,7 +967,7 @@ const CHAIN_LABELS: Record<string, { streaming: string; title: string; input: st
 
 /** Interleaved reasoning + tool use from a chain tool's child agent, rendered with AI Elements components. */
 function ThinkChain({ tool, steps, running }: { tool: ToolPart; steps: ThinkStep[]; running: boolean }) {
-  const labels = CHAIN_LABELS[tool.name] ?? CHAIN_LABELS.think
+  const labels = CHAIN_LABELS[tool.name] ?? DEFAULT_CHAIN_LABEL
   const streaming = running && !tool.finished
   const input = tool.input as { thought?: unknown; tool?: unknown; task?: unknown; prompt?: unknown; request?: unknown } | undefined
   const thought = displayValue(
@@ -1088,18 +1096,18 @@ const list = (value: unknown): Record<string, unknown>[] => (Array.isArray(value
 const IMAGE_SEARCH_ITEM_TYPES = new Set(['image_search_results', 'response.reasoning.image_search_queries', 'response.reasoning.image_search_results'])
 const SEARCH_ITEM_TYPES = new Set(['search_results', 'response.reasoning.search_web', 'x_search_results', 'response.reasoning.x_search'])
 
-type ImageSearchHit = { image_url: string; origin_url?: string; title?: string }
-type SearchHit = { url: string; title?: string; snippet?: string; source?: string }
+type ImageSearchHit = { image_url: string; origin_url?: string | undefined; title?: string | undefined }
+type SearchHit = { url: string; title?: string | undefined; snippet?: string | undefined; source?: string | undefined }
 
 function imageSearchQueries(part: NativePart): string[] {
   const queries: string[] = []
   const push = (val: unknown) => {
     if (Array.isArray(val)) queries.push(...val.filter((q): q is string => typeof q === 'string' && q.trim().length > 0))
   }
-  push(part.item?.queries)
+  push(part.item?.["queries"])
   for (const step of part.steps) {
-    push(step.queries)
-    if (step.item && typeof step.item === 'object') push((step.item as Record<string, unknown>).queries)
+    push(step["queries"])
+    if (step["item"] && typeof step["item"] === 'object') push((step["item"] as Record<string, unknown>)["queries"])
   }
   return [...new Set(queries)]
 }
@@ -1109,16 +1117,16 @@ function imageSearchHits(part: NativePart): ImageSearchHit[] {
   const seen = new Set<string>()
   const push = (rows: Record<string, unknown>[]) => {
     for (const row of rows) {
-      const image_url = str(row.image_url)
+      const image_url = str(row["image_url"])
       if (!image_url || seen.has(image_url)) continue
       seen.add(image_url)
-      hits.push({ image_url, origin_url: str(row.origin_url), title: str(row.title) })
+      hits.push({ image_url, origin_url: str(row["origin_url"]), title: str(row["title"]) })
     }
   }
-  if (part.item?.type === 'image_search_results') push(list(part.item.results))
+  if (part.item?.["type"] === 'image_search_results') push(list(part.item["results"]))
   for (const step of part.steps) {
-    push(list(step.results))
-    if (step.item && typeof step.item === 'object') push(list((step.item as Record<string, unknown>).results))
+    push(list(step["results"]))
+    if (step["item"] && typeof step["item"] === 'object') push(list((step["item"] as Record<string, unknown>)["results"]))
   }
   return hits
 }
@@ -1129,7 +1137,7 @@ function searchHitLabel(url: string): string {
     const host = parsed.hostname.replace(/^www\./, '')
     if (host === 'x.com' || host === 'twitter.com') {
       const m = parsed.pathname.match(/^\/([^/]+)\/status\/(\d+)/)
-      if (m) return m[1].toLowerCase() !== 'i' ? `@${m[1]} · ${m[2]}` : `X post · ${m[2]}`
+      if (m && m[1] && m[2]) return m[1].toLowerCase() !== 'i' ? `@${m[1]} · ${m[2]}` : `X post · ${m[2]}`
     }
     return host || url
   } catch {
@@ -1143,15 +1151,15 @@ function searchQueries(part: NativePart): string[] {
     if (Array.isArray(val)) queries.push(...val.filter((q): q is string => typeof q === 'string' && q.trim().length > 0))
     else if (typeof val === 'string' && val.trim().length > 0) queries.push(val.trim())
   }
-  push(part.item?.queries)
-  push(part.item?.query)
+  push(part.item?.["queries"])
+  push(part.item?.["query"])
   for (const step of part.steps) {
-    push(step.queries)
-    push(step.query)
-    if (step.item && typeof step.item === 'object') {
-      const stepItem = step.item as Record<string, unknown>
-      push(stepItem.queries)
-      push(stepItem.query)
+    push(step["queries"])
+    push(step["query"])
+    if (step["item"] && typeof step["item"] === 'object') {
+      const stepItem = step["item"] as Record<string, unknown>
+      push(stepItem["queries"])
+      push(stepItem["query"])
     }
   }
   return [...new Set(queries)]
@@ -1162,10 +1170,10 @@ function searchHits(part: NativePart): SearchHit[] {
   const seen = new Set<string>()
   const pushRows = (rows: Record<string, unknown>[]) => {
     for (const row of rows) {
-      const url = str(row.url)
+      const url = str(row["url"])
       if (!url || seen.has(url)) continue
       seen.add(url)
-      hits.push({ url, title: str(row.title) ?? searchHitLabel(url), snippet: str(row.snippet), source: str(row.source) })
+      hits.push({ url, title: str(row["title"]) ?? searchHitLabel(url), snippet: str(row["snippet"]), source: str(row["source"]) })
     }
   }
   const pushUrls = (urls: unknown) => {
@@ -1178,29 +1186,29 @@ function searchHits(part: NativePart): SearchHit[] {
     }
   }
   if (part.item) {
-    pushRows(list(part.item.results))
-    pushUrls(part.item.urls)
+    pushRows(list(part.item["results"]))
+    pushUrls(part.item["urls"])
   }
   for (const step of part.steps) {
-    pushRows(list(step.results))
-    pushUrls(step.urls)
-    if (step.item && typeof step.item === 'object') {
-      const stepItem = step.item as Record<string, unknown>
-      pushRows(list(stepItem.results))
-      pushUrls(stepItem.urls)
+    pushRows(list(step["results"]))
+    pushUrls(step["urls"])
+    if (step["item"] && typeof step["item"] === 'object') {
+      const stepItem = step["item"] as Record<string, unknown>
+      pushRows(list(stepItem["results"]))
+      pushUrls(stepItem["urls"])
     }
   }
   return hits
 }
 
 function SearchNativeCard({ part, path, streaming }: { part: NativePart; path: string; streaming: boolean }) {
-  const isXSearch = part.itemType === 'x_search_results' || part.itemType === 'response.reasoning.x_search' || str(part.item?.type) === 'x_search_results'
+  const isXSearch = part.itemType === 'x_search_results' || part.itemType === 'response.reasoning.x_search' || str(part.item?.["type"]) === 'x_search_results'
   const queries = searchQueries(part)
   const hits = searchHits(part)
   const images = imageSearchHits(part)
-  const itemStatus = str(part.item?.status)
+  const itemStatus = str(part.item?.["status"])
   const isPending = streaming && (!part.item || itemStatus === 'in_progress')
-  const failed = itemStatus === 'failed' || itemStatus === 'timed_out' || Boolean(str(part.item?.error))
+  const failed = itemStatus === 'failed' || itemStatus === 'timed_out' || Boolean(str(part.item?.["error"]))
   const headerTitle = isXSearch
     ? (isPending && hits.length === 0 ? 'Searching X…' : failed ? 'X search · failed' : 'X search')
     : (isPending && hits.length === 0 ? 'Searching the web…' : failed ? 'Web search · failed' : 'Web search')
@@ -1252,7 +1260,7 @@ function SearchNativeCard({ part, path, streaming }: { part: NativePart; path: s
         )}
         {failed && (
           <p className="text-xs text-red-600 dark:text-red-400">
-            {str(part.item?.error) ?? (isXSearch ? 'X search failed.' : 'Web search failed.')}
+            {str(part.item?.["error"]) ?? (isXSearch ? 'X search failed.' : 'Web search failed.')}
           </p>
         )}
       </ChainOfThoughtContent>
@@ -1263,9 +1271,9 @@ function SearchNativeCard({ part, path, streaming }: { part: NativePart; path: s
 function ImageSearchNativeCard({ part, path, streaming }: { part: NativePart; path: string; streaming: boolean }) {
   const queries = imageSearchQueries(part)
   const images = imageSearchHits(part)
-  const itemStatus = str(part.item?.status)
+  const itemStatus = str(part.item?.["status"])
   const isPending = streaming && (!part.item || itemStatus === 'in_progress')
-  const failed = itemStatus === 'failed' || itemStatus === 'timed_out' || str(part.item?.error) === 'image_search_failed' || Boolean(str(part.item?.error))
+  const failed = itemStatus === 'failed' || itemStatus === 'timed_out' || str(part.item?.["error"]) === 'image_search_failed' || Boolean(str(part.item?.["error"]))
   return (
     <ChainOfThought className="my-3 space-y-2 text-xs" defaultOpen={isPending || images.length > 0 || queries.length > 0} isStreaming={isPending}>
       <ChainOfThoughtHeader>
@@ -1301,7 +1309,7 @@ function ImageSearchNativeCard({ part, path, streaming }: { part: NativePart; pa
         )}
         {failed && (
           <p className="text-xs text-red-600 dark:text-red-400">
-            {str(part.item?.error) && str(part.item?.error) !== 'image_search_failed' ? str(part.item?.error) : 'Image search failed.'}
+            {str(part.item?.["error"]) && str(part.item?.["error"]) !== 'image_search_failed' ? str(part.item?.["error"]) : 'Image search failed.'}
           </p>
         )}
       </ChainOfThoughtContent>
@@ -1319,31 +1327,31 @@ export function NativeToolCard({ part, path, streaming = false }: { part: Native
   }
   const label = NATIVE_LABELS[part.itemType] ?? part.itemType.replace(/^response\./, '').replace(/[._]/g, ' ')
   const item = part.item
-  const status = str(item?.status)
+  const status = str(item?.["status"])
   const failed = status === 'failed' || status === 'timed_out'
   return <Tool className="my-3 overflow-hidden border-surface-200 dark:border-surface-700">
     <ToolHeader type="dynamic-tool" toolName={label} title={label} state={item ? (failed ? 'output-error' : 'output-available') : 'input-available'} />
     {path && <p className="px-3 pb-2 text-[10px] text-ink-muted dark:text-ink-inverse-muted break-words">Node · {path}</p>}
     <ToolContent>
       {!item && <ul className="px-3 pb-2 text-xs space-y-1">{part.steps.map((step, i) => {
-        const queries = list(step.queries).length ? (step.queries as string[]) : Array.isArray(step.queries) ? step.queries as string[] : []
-        const urls = Array.isArray(step.urls) ? step.urls as string[] : []
-        return <li key={i} className="truncate">{queries.length ? queries.join(' · ') : urls.length ? urls.join(' · ') : str(step.name) ?? displayValue(step)}</li>
+        const queries = list(step["queries"]).length ? (step["queries"] as string[]) : Array.isArray(step["queries"]) ? step["queries"] as string[] : []
+        const urls = Array.isArray(step["urls"]) ? step["urls"] as string[] : []
+        return <li key={i} className="truncate">{queries.length ? queries.join(' · ') : urls.length ? urls.join(' · ') : str(step["name"]) ?? displayValue(step)}</li>
       })}</ul>}
-      {item?.type === 'sandbox_results' && <div className="px-3 pb-3 text-xs space-y-2">
-        <pre className="max-h-48 overflow-auto whitespace-pre-wrap break-words rounded bg-surface-100 dark:bg-surface-850 p-2">{str(item.code)}</pre>
-        {list(item.results).map((run, i) => <div key={i}>
-          <p className="text-[10px] text-ink-muted dark:text-ink-inverse-muted">exit {String(run.exit_code)} · {String(run.duration_ms)} ms · {str(run.status)}</p>
-          {str(run.stdout) && <pre className="max-h-48 overflow-auto whitespace-pre-wrap break-words">{str(run.stdout)}</pre>}
-          {str(run.stderr) && <pre className="max-h-32 overflow-auto whitespace-pre-wrap break-words text-red-600 dark:text-red-400">{str(run.stderr)}</pre>}
+      {item?.["type"] === 'sandbox_results' && <div className="px-3 pb-3 text-xs space-y-2">
+        <pre className="max-h-48 overflow-auto whitespace-pre-wrap break-words rounded bg-surface-100 dark:bg-surface-850 p-2">{str(item["code"])}</pre>
+        {list(item["results"]).map((run, i) => <div key={i}>
+          <p className="text-[10px] text-ink-muted dark:text-ink-inverse-muted">exit {String(run["exit_code"])} · {String(run["duration_ms"])} ms · {str(run["status"])}</p>
+          {str(run["stdout"]) && <pre className="max-h-48 overflow-auto whitespace-pre-wrap break-words">{str(run["stdout"])}</pre>}
+          {str(run["stderr"]) && <pre className="max-h-32 overflow-auto whitespace-pre-wrap break-words text-red-600 dark:text-red-400">{str(run["stderr"])}</pre>}
         </div>)}
       </div>}
-      {(item?.type === 'search_results' || item?.type === 'people_search_results' || item?.type === 'finance_results') && <ol className="px-3 pb-3 text-xs space-y-1 list-decimal list-inside">
-        {list(item.results).map((r, i) => <li key={i} className="truncate">{str(r.url) ? <a href={str(r.url)} target="_blank" rel="noreferrer" className="underline">{str(r.title) ?? str(r.url)}</a> : str(r.title) ?? displayValue(r)}{str(r.snippet) ? <span className="text-ink-muted dark:text-ink-inverse-muted"> — {str(r.snippet)?.slice(0, 140)}</span> : null}</li>)}
+      {(item?.["type"] === 'search_results' || item?.["type"] === 'people_search_results' || item?.["type"] === 'finance_results') && <ol className="px-3 pb-3 text-xs space-y-1 list-decimal list-inside">
+        {list(item["results"]).map((r, i) => <li key={i} className="truncate">{str(r["url"]) ? <a href={str(r["url"])} target="_blank" rel="noreferrer" className="underline">{str(r["title"]) ?? str(r["url"])}</a> : str(r["title"]) ?? displayValue(r)}{str(r["snippet"]) ? <span className="text-ink-muted dark:text-ink-inverse-muted"> — {str(r["snippet"])?.slice(0, 140)}</span> : null}</li>)}
       </ol>}
-      {item?.type === 'fetch_url_results' && <ul className="px-3 pb-3 text-xs space-y-1">{list(item.results).map((r, i) => <li key={i} className="truncate"><a href={str(r.url)} target="_blank" rel="noreferrer" className="underline">{str(r.title) ?? str(r.url)}</a></li>)}</ul>}
-      {item?.type === 'share_file' && <p className="px-3 pb-3 text-xs">{str(item.url) ? <a href={str(item.url)} target="_blank" rel="noreferrer" className="underline">{str(item.filename) ?? 'Download file'}</a> : str(item.filename) ?? 'File'}{typeof item.bytes === 'number' ? <span className="text-ink-muted dark:text-ink-inverse-muted"> · {item.bytes} bytes</span> : null}</p>}
-      {item && !['sandbox_results', 'search_results', 'people_search_results', 'finance_results', 'fetch_url_results', 'share_file'].includes(str(item.type) ?? '') && <ToolOutput output={item} errorText={failed ? status : undefined} />}
+      {item?.["type"] === 'fetch_url_results' && <ul className="px-3 pb-3 text-xs space-y-1">{list(item["results"]).map((r, i) => <li key={i} className="truncate"><a href={str(r["url"])} target="_blank" rel="noreferrer" className="underline">{str(r["title"]) ?? str(r["url"])}</a></li>)}</ul>}
+      {item?.["type"] === 'share_file' && <p className="px-3 pb-3 text-xs">{str(item["url"]) ? <a href={str(item["url"])} target="_blank" rel="noreferrer" className="underline">{str(item["filename"]) ?? 'Download file'}</a> : str(item["filename"]) ?? 'File'}{typeof item["bytes"] === 'number' ? <span className="text-ink-muted dark:text-ink-inverse-muted"> · {item["bytes"]} bytes</span> : null}</p>}
+      {item && !['sandbox_results', 'search_results', 'people_search_results', 'finance_results', 'fetch_url_results', 'share_file'].includes(str(item["type"]) ?? '') && <ToolOutput output={item} errorText={failed ? status : undefined} />}
     </ToolContent>
   </Tool>
 }
@@ -1359,7 +1367,7 @@ function reasoningSteps(text: string): { label: string; body: string }[] {
   while ((match = pattern.exec(text)) !== null) {
     const body = text.slice(cursor, match.index).trim()
     if (label || body) steps.push({ label: label || 'Thinking', body })
-    label = match[1].trim()
+    label = (match[1] ?? '').trim()
     cursor = pattern.lastIndex
   }
   const tail = text.slice(cursor).trim()

@@ -15,7 +15,7 @@ export type InterestMenuInterest = {
 export type InterestMenuStory = {
   id: string
   title: string
-  url?: string
+  url?: string | undefined
   interestId: string
   interestLabel: string
   category: InterestCategory
@@ -39,7 +39,7 @@ export type InterestMenuPayload = {
 export type InterestAction =
   | { type: 'open-graph' }
   | { type: 'select'; id: string; label: string; category: InterestCategory }
-  | { type: 'story'; interestId: string; interestLabel: string; category: InterestCategory; url?: string }
+  | { type: 'story'; interestId: string; interestLabel: string; category: InterestCategory; url?: string | undefined }
   | { type: 'agent'; name: string; description: string; interestLabel: string }
 
 /**

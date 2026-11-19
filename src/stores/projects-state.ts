@@ -4,7 +4,8 @@ import { allProjectPages, type ProjectsRequest } from '../lib/projects-api.ts'
 
 type Row = Record<string, any>
 type Result = { issue?: Issue; project?: Project; error?: string }
-type CreateIssueInput = Partial<Issue> & Pick<Issue, 'projectId' | 'title' | 'type'>
+export type IssuePatchInput = { [K in keyof Issue]?: Issue[K] | undefined }
+type CreateIssueInput = IssuePatchInput & Pick<Issue, 'projectId' | 'title' | 'type'>
 export interface ProjectState {
   projects: Project[]
   issues: Issue[]
@@ -22,7 +23,7 @@ export interface ProjectState {
   createProject: (input: Partial<Project> & { name: string; type: ProjectTypeKey }) => Promise<Result>
   updateProject: (id: string, updates: Partial<Project>, expectedVersion?: number) => Promise<Result>
   createIssue: (input: CreateIssueInput) => Promise<Result>
-  updateIssue: (id: string, updates: Partial<Issue>, expectedVersion?: number) => Promise<Result>
+  updateIssue: (id: string, updates: IssuePatchInput, expectedVersion?: number) => Promise<Result>
   moveIssueStatus: (id: string, status: IssueStatus) => Promise<Result>
   reparentIssue: (id: string, parentId: string | null) => Promise<Result>
   moveIssueInParent: (id: string, direction: 'up' | 'down') => Promise<Result>
@@ -33,18 +34,18 @@ export interface ProjectState {
 
 const timestamp = (value: string) => Date.parse(value)
 export const mapProjectRow = (row: Row): Project => ({
-  id: row.id, key: row.key, version: row.version, lifecycle: row.lifecycle,
-  name: row.name, type: row.type, ownerId: row.owner_id, summary: row.summary ?? '',
-  settings: row.settings, createdAt: timestamp(row.created_at), updatedAt: timestamp(row.updated_at),
+  id: row["id"], key: row["key"], version: row["version"], lifecycle: row["lifecycle"],
+  name: row["name"], type: row["type"], ownerId: row["owner_id"], summary: row["summary"] ?? '',
+  settings: row["settings"], createdAt: timestamp(row["created_at"]), updatedAt: timestamp(row["updated_at"]),
 })
 export const mapIssueRow = (row: Row): Issue => ({
-  id: row.id, projectId: row.project_id, number: row.number, version: row.version,
-  parentId: row.parent_id, type: row.type, title: row.title, description: row.description ?? '',
-  status: row.status, priority: row.priority, estimate: row.estimate ?? undefined,
-  assignees: row.assignees ?? [], labels: row.labels ?? [], startDate: row.start_date ?? undefined,
-  endDate: row.end_date ?? undefined, dueDate: row.due_date ?? undefined, rank: Number(row.rank),
-  customFields: row.custom_fields ?? {}, workProducts: row.work_products ?? [], context: row.context ?? [],
-  createdBy: row.created_by, createdAt: timestamp(row.created_at), updatedAt: timestamp(row.updated_at),
+  id: row["id"], projectId: row["project_id"], number: row["number"], version: row["version"],
+  parentId: row["parent_id"], type: row["type"], title: row["title"], description: row["description"] ?? '',
+  status: row["status"], priority: row["priority"], estimate: row["estimate"] ?? undefined,
+  assignees: row["assignees"] ?? [], labels: row["labels"] ?? [], startDate: row["start_date"] ?? undefined,
+  endDate: row["end_date"] ?? undefined, dueDate: row["due_date"] ?? undefined, rank: Number(row["rank"]),
+  customFields: row["custom_fields"] ?? {}, workProducts: row["work_products"] ?? [], context: row["context"] ?? [],
+  createdBy: row["created_by"], createdAt: timestamp(row["created_at"]), updatedAt: timestamp(row["updated_at"]),
 })
 /** Issues the server moved alongside a write (a blocking relationship, or a finished blocker). */
 export function withMovedIssues(issues: Issue[], rows: unknown): Issue[] {
@@ -56,17 +57,17 @@ export function withMovedIssues(issues: Issue[], rows: unknown): Issue[] {
   })
 }
 const mapLink = (row: Row): IssueLink => ({
-  id: row.id, sourceId: row.source_id, targetId: row.target_id, type: row.type,
-  createdBy: row.created_by, createdAt: timestamp(row.created_at),
+  id: row["id"], sourceId: row["source_id"], targetId: row["target_id"], type: row["type"],
+  createdBy: row["created_by"], createdAt: timestamp(row["created_at"]),
 })
 const mapActivity = (row: Row): ActivityLogEntry => ({
-  id: row.id, projectId: row.project_id, issueId: row.issue_id, actorId: row.actor_id,
-  actorName: row.actor_name, actorType: row.actor_type, action: row.action,
-  timestamp: timestamp(row.timestamp), field: row.field, oldValue: row.old_value, newValue: row.new_value,
+  id: row["id"], projectId: row["project_id"], issueId: row["issue_id"], actorId: row["actor_id"],
+  actorName: row["actor_name"], actorType: row["actor_type"], action: row["action"],
+  timestamp: timestamp(row["timestamp"]), field: row["field"], oldValue: row["old_value"], newValue: row["new_value"],
 })
 
 /** Only mutable fields cross the API boundary. An explicit undefined clears nullable fields. */
-export function issuePatch(updates: Partial<Issue>): Record<string, unknown> {
+export function issuePatch(updates: IssuePatchInput): Record<string, unknown> {
   const fields = {
     title: 'title', description: 'description', type: 'type', parentId: 'parent_id',
     status: 'status', priority: 'priority', assignees: 'assignees', labels: 'labels',
@@ -144,7 +145,7 @@ export function createProjectsStore(requestForUser: (userId: string) => Projects
             request<Row[]>('/activity?offset=0&limit=200'),
           ])
           check()
-          const issues = await Promise.all(projectRows.map((p) => allProjectPages<Row>(request, `/${p.id}/issues`)))
+          const issues = await Promise.all(projectRows.map((p) => allProjectPages<Row>(request, `/${p["id"]}/issues`)))
           check()
           set({ projects: projectRows.map(mapProjectRow), issues: issues.flat().map(mapIssueRow),
             issueLinks: links.map(mapLink), activity: activity.map(mapActivity), isInitialized: true })
@@ -174,7 +175,7 @@ export function createProjectsStore(requestForUser: (userId: string) => Projects
           throw new Error('Project settings changed. Reload and review before saving your retained draft.')
         const body: Row = { version: current.version }
         for (const key of ['name', 'summary', 'lifecycle'] as const) if (Object.hasOwn(updates, key)) body[key] = updates[key]
-        if (updates.settings) body.settings = { ...current.settings, ...updates.settings }
+        if (updates.settings) body["settings"] = { ...current.settings, ...updates.settings }
         const project = mapProjectRow(await request<Row>(`/${id}`, 'PATCH', body))
         check()
         set({ projects: get().projects.map((p) => p.id === id ? project : p) })
@@ -182,9 +183,9 @@ export function createProjectsStore(requestForUser: (userId: string) => Projects
       }),
       createIssue: (input) => operation(true, async (request, check) => {
         const body = issuePatch(input)
-        delete body.rank
-        delete body.work_products
-        delete body.context
+        delete body["rank"]
+        delete body["work_products"]
+        delete body["context"]
         const issue = mapIssueRow(await request<Row>('/issues', 'POST', { ...body, project_id: input.projectId }))
         check()
         set({ issues: [...get().issues, issue] })
@@ -198,7 +199,7 @@ export function createProjectsStore(requestForUser: (userId: string) => Projects
         const row = await request<Row>(`/issues/${id}`, 'PATCH', { ...issuePatch(updates), version: expectedVersion ?? current.version })
         const issue = mapIssueRow(row)
         check()
-        set({ issues: withMovedIssues(get().issues.map((i) => i.id === id ? issue : i), row.unblocked_issues) })
+        set({ issues: withMovedIssues(get().issues.map((i) => i.id === id ? issue : i), row["unblocked_issues"]) })
         return { issue }
       }),
       moveIssueStatus: (id, status) => get().updateIssue(id, { status }),
@@ -236,7 +237,7 @@ export function createProjectsStore(requestForUser: (userId: string) => Projects
         const link = mapLink(row)
         check()
         set({ issueLinks: [...get().issueLinks.filter((l) => l.id !== link.id), link],
-          issues: withMovedIssues(get().issues, row.blocked_issue ? [row.blocked_issue] : []) })
+          issues: withMovedIssues(get().issues, row["blocked_issue"] ? [row["blocked_issue"]] : []) })
         return {}
       }),
       removeIssueLink: (id) => operation(true, async (request, check) => {

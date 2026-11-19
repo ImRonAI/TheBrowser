@@ -19,13 +19,13 @@ export interface OpenToChatButtonProps {
   /** The search result to open in the agent */
   result: UniversalResult
   /** Optional original search query for context */
-  searchQuery?: string
+  searchQuery?: string | undefined
   /** Button variant: icon, text, or full */
-  variant?: 'icon' | 'text' | 'full'
+  variant?: 'icon' | 'text' | 'full' | undefined
   /** Optional custom className for styling */
-  className?: string
+  className?: string | undefined
   /** Optional onClick handler (in addition to opening in agent) */
-  onClick?: (e: React.MouseEvent) => void
+  onClick?: ((e: React.MouseEvent) => void) | undefined
 }
 
 /**

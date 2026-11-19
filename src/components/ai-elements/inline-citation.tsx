@@ -246,9 +246,9 @@ export const InlineCitationCarouselNext = ({
 };
 
 export type InlineCitationSourceProps = ComponentProps<"div"> & {
-  title?: string;
-  url?: string;
-  description?: string;
+  title?: string | undefined;
+  url?: string | undefined;
+  description?: string | undefined;
 };
 
 export const InlineCitationSource = ({

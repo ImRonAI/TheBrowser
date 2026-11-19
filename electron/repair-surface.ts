@@ -26,15 +26,15 @@ export interface RepairSurfaceState {
     tool: string
     rev: string
     state: 'investigating' | 'approval' | 'done'
-    status?: string
-    summary?: string
-    count?: number
-    exceptionClass?: string
-    applied?: boolean
-    approvalToken?: string
-    demonstrations?: unknown[]
+    status?: string | undefined
+    summary?: string | undefined
+    count?: number | undefined
+    exceptionClass?: string | undefined
+    applied?: boolean | undefined
+    approvalToken?: string | undefined
+    demonstrations?: unknown[] | undefined
   } | null
-  notification?: { title: string; body: string } | null
+  notification?: { title: string; body: string } | null | undefined
 }
 
 export type RepairSurfaceAction = { type: 'approve' | 'decline' | 'cancel' | 'rollback' | 'open' | 'dismiss'; rev: string }

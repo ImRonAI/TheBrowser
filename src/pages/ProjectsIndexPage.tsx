@@ -581,7 +581,7 @@ function Updated({ at, now, bare = false }: { at: number; now: number; bare?: bo
   )
 }
 
-function Strong({ children, className }: { children: ReactNode; className?: string }) {
+function Strong({ children, className }: { children: ReactNode; className?: string | undefined }) {
   return <span className={cn('font-semibold tabular-nums text-ink dark:text-ink-inverse', className)}>{children}</span>
 }
 
@@ -601,9 +601,9 @@ function SyncState({ pendingSaves, refreshing }: { pendingSaves: number; refresh
 
 function StatePanel({ title, detail, icon, tone = 'neutral', children }: {
   title: string
-  detail?: string
+  detail?: string | undefined
   icon?: ReactNode
-  tone?: 'neutral' | 'error'
+  tone?: 'neutral' | 'error' | undefined
   children?: ReactNode
 }) {
   return (

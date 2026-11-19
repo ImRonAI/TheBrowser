@@ -58,9 +58,9 @@ export const useVoiceSelector = () => {
 };
 
 export type VoiceSelectorProps = ComponentProps<typeof Dialog> & {
-  value?: string;
-  defaultValue?: string;
-  onValueChange?: (value: string | undefined) => void;
+  value?: string | undefined;
+  defaultValue?: string | undefined;
+  onValueChange?: ((value: string | undefined) => void) | undefined;
 };
 
 export const VoiceSelector = ({
@@ -73,16 +73,16 @@ export const VoiceSelector = ({
   children,
   ...props
 }: VoiceSelectorProps) => {
-  const [value, setValue] = useControllableState({
+  const [value, setValue] = useControllableState<string | undefined>({
     defaultProp: defaultValue,
-    onChange: onValueChange,
-    prop: valueProp,
+    ...(onValueChange !== undefined ? { onChange: onValueChange } : {}),
+    ...(valueProp !== undefined ? { prop: valueProp } : {}),
   });
 
   const [open, setOpen] = useControllableState({
     defaultProp: defaultOpen,
-    onChange: onOpenChange,
-    prop: openProp,
+    ...(onOpenChange !== undefined ? { onChange: onOpenChange } : {}),
+    ...(openProp !== undefined ? { prop: openProp } : {}),
   });
 
   const voiceSelectorContext = useMemo(

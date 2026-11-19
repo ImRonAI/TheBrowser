@@ -9,7 +9,7 @@ test('a bare host gets https, and the result parses as a URL', () => {
     ['www.example.com/a?b=1#c', 'https://www.example.com/a?b=1#c'],
     ['example.com:8443/x', 'https://example.com:8443/x'],
     ['//cdn.example.com/a.js', 'https://cdn.example.com/a.js'],
-  ]) {
+  ] as const) {
     assert.equal(toNavigableUrl(typed), expected)
     assert.doesNotThrow(() => new URL(toNavigableUrl(typed)))
   }

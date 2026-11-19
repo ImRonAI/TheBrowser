@@ -170,7 +170,7 @@ export function AgentUiProvider({ children }: { children: ReactNode }) {
     if (agentPanelQueuedPrompts.length === 0) return null
     const [nextPrompt, ...remaining] = agentPanelQueuedPrompts
     setAgentPanelQueuedPrompts(remaining)
-    return nextPrompt
+    return nextPrompt ?? null
   }, [agentPanelQueuedPrompts])
 
   const value = useMemo<AgentUiContextValue>(() => ({

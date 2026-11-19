@@ -25,11 +25,11 @@ interface TestResultsSummary {
   failed: number;
   skipped: number;
   total: number;
-  duration?: number;
+  duration?: number | undefined;
 }
 
 interface TestResultsContextType {
-  summary?: TestResultsSummary;
+  summary?: TestResultsSummary | undefined;
 }
 
 const TestResultsContext = createContext<TestResultsContextType>({});
@@ -42,7 +42,7 @@ const formatDuration = (ms: number) => {
 };
 
 export type TestResultsProps = HTMLAttributes<HTMLDivElement> & {
-  summary?: TestResultsSummary;
+  summary?: TestResultsSummary | undefined;
 };
 
 export const TestResults = ({
@@ -323,7 +323,7 @@ export const TestSuiteContent = ({
 interface TestContextType {
   name: string;
   status: TestStatus;
-  duration?: number;
+  duration?: number | undefined;
 }
 
 const TestContext = createContext<TestContextType>({
@@ -334,7 +334,7 @@ const TestContext = createContext<TestContextType>({
 export type TestProps = HTMLAttributes<HTMLDivElement> & {
   name: string;
   status: TestStatus;
-  duration?: number;
+  duration?: number | undefined;
 };
 
 export const Test = ({

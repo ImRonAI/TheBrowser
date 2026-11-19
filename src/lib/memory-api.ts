@@ -34,7 +34,7 @@ export function createMemoryRequest(baseUrl: string, getSession: () => Promise<S
     let response: Response
     try {
       response = await fetcher(`${baseUrl.replace(/\/$/, '')}/memory${path}`, {
-        method, headers, body: body === undefined ? undefined : JSON.stringify(body), signal: AbortSignal.timeout(30000),
+        method, headers, ...(body === undefined ? {} : { body: JSON.stringify(body) }), signal: AbortSignal.timeout(30000),
       })
     } catch {
       throw new Error('Cannot reach the memory backend.')

@@ -47,15 +47,15 @@ function PlaceCard({ item, index }: { item: DiscoverItem; index: number }) {
   const reduced = useReducedMotion()
   const [broken, setBroken] = useState(false)
   const place = (item.place || {}) as Place
-  const pictures = Array.isArray(place.pictures) ? (place.pictures as string[]).filter(Boolean) : []
+  const pictures = Array.isArray(place["pictures"]) ? (place["pictures"] as string[]).filter(Boolean) : []
   const hero = pictures[0] || item.thumbnail
-  const rating = typeof place.rating === 'number' ? place.rating : null
-  const reviews = typeof place.review_count === 'number' ? place.review_count : null
-  const hours = formatHours(place.hours_today)
-  const distance = formatDistance(place.distance)
-  const categories = Array.isArray(place.categories) ? (place.categories as string[]).slice(0, 2) : []
-  const address = typeof place.address === 'string' && place.address ? place.address : null
-  const phone = typeof place.phone === 'string' && place.phone ? place.phone : null
+  const rating = typeof place["rating"] === 'number' ? place["rating"] : null
+  const reviews = typeof place["review_count"] === 'number' ? place["review_count"] : null
+  const hours = formatHours(place["hours_today"])
+  const distance = formatDistance(place["distance"])
+  const categories = Array.isArray(place["categories"]) ? (place["categories"] as string[]).slice(0, 2) : []
+  const address = typeof place["address"] === 'string' && place["address"] ? place["address"] : null
+  const phone = typeof place["phone"] === 'string' && place["phone"] ? place["phone"] : null
 
   return (
     <motion.li {...rowMotion(index, reduced)} className="list-none">
@@ -82,7 +82,7 @@ function PlaceCard({ item, index }: { item: DiscoverItem; index: number }) {
                 {reviews !== null && <span className="text-ink-muted dark:text-ink-inverse-muted">({reviews.toLocaleString()})</span>}
               </span>
             )}
-            <PriceDots priceRange={place.price_range} />
+            <PriceDots priceRange={place["price_range"]} />
             {categories.length > 0 && <span className="truncate text-ink-muted dark:text-ink-inverse-muted">{categories.join(' · ')}</span>}
           </span>
           {(hours || address) && (

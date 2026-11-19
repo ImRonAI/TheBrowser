@@ -52,7 +52,7 @@ from strands.models.routing import FallbackStrategy, RoutingCandidate
 from strands.multiagent import GraphBuilder, Swarm
 from strands.multiagent.base import MultiAgentResult, NodeResult, Status
 from strands.multiagent.graph import Graph, GraphState
-from strands.hooks import BeforeModelCallEvent
+from strands.hooks import BeforeModelCallEvent, MessageAddedEvent
 from strands.injection.types import InjectionContext
 from strands.plugins import Plugin
 from strands.session import SnapshotSessionManager
@@ -559,14 +559,17 @@ def level_prompt(depth: ResearchDepth, today: str) -> str:
         "## How you work\n"
         f"- You have {level['turns']} turns; a turn is one reply of yours and the tools it calls. Each subagent you "
         "start has the same.\n"
-        f"- In every turn but your last {WRAP_UP_TURNS}, work through `subagent`: several calls in one turn for the "
-        "independent parts (a question, a source, a chart, a section each), each told the exact files to read and the "
-        "result to bring back.\n"
-        "- `subagent` always runs asynchronously in the background, and any slow or external tool call can pass "
-        "`_background_execution: true` to run asynchronously while you continue other work. Check or cancel in-flight "
-        "background tasks with `strands_manage_background_task` (`mode`: `\"list\"`, `\"get\"`, `\"cancel\"`); if a "
-        "tool fails or hangs, cancel or move past it and persist with alternative tools or sources. Never call "
-        "`handoff_to_agent` while background tasks are still running — wait for their settled results first.\n"
+        f"- In every turn but your last {WRAP_UP_TURNS}, work through `subagent`: spawn several calls in parallel for "
+        "the independent parts (a question, a source, a chart, a section each), each told the exact files to read and "
+        "the result to bring back.\n"
+        "- `subagent` runs non-blocking in the background (`action`: `\"spawn\"` default, `\"status\"`, `\"steer\"`, "
+        "`\"recover\"`, `\"cancel\"`), injecting live progress and waking you on completion or hangup so you can steer "
+        "or salvage progress via `recover`. Every other execution tool also runs asynchronously in the background "
+        "(`strands_manage_background_task` with `mode`: `\"list\"`, `\"get\"`, `\"cancel\"`).\n"
+        "- If any scraper or tool fails or stalls, cancel it if hung, pivot to another tool, or author a replacement "
+        "`@tool` Python file in `./tools/<name>.py` (auto-reloaded by `ToolWatcher`) or load it with `load_tool` and "
+        "orchestrate calls in `programmatic_tool_caller`. Never call `handoff_to_agent` while background tasks or "
+        "subagents are still running — wait for settled results first.\n"
         f"- Your last {WRAP_UP_TURNS} turns are for bringing it together: gather what your subagents returned, write "
         "it into your file, check it against your role, then hand off or finish. A reminder says when they start.\n"
     )
@@ -675,8 +678,12 @@ def artifacts_dir(session_id: str) -> Path:
 
 
 def research_tools() -> list[AgentTool]:
-    """Every Deep Research agent's tools beside the harness built-ins: the web tools and ``http_request``."""
-    return [*brave_tools(), *web_tools(), installed_http_request()]
+    """Every Deep Research agent's tools beside the harness built-ins: web tools, ``http_request``, and ``load_tool``."""
+    from strands.tools.loader import load_tools_from_module
+    from strands_tools import load_tool as load_tool_mod
+
+    loaded_tool = [t for t in load_tools_from_module(load_tool_mod, "load_tool") if t.tool_name == "load_tool"]
+    return [*brave_tools(), *web_tools(), installed_http_request(), *loaded_tool]
 
 
 def _skills() -> dict[str, Skill]:
@@ -728,6 +735,8 @@ def build_deep_research_graph(
     """Build ``FORMATION_TOPOLOGY`` as a Strands Graph whose nodes are Swarms and Graphs of harness agents."""
     workspace = artifacts_dir(session_id)
     workspace.mkdir(parents=True, exist_ok=True)
+    (workspace / "tools").mkdir(exist_ok=True)
+    (Path.cwd() / "tools").mkdir(exist_ok=True)
     skills = _skills()
     level = level_prompt(depth, datetime.now().astimezone().strftime("%A, %B %d, %Y"))
     workspace_note = (
@@ -756,7 +765,11 @@ def build_deep_research_graph(
             if not tool_use_id:
                 return
             tasks = agent_holder[0].state.get("strands.background_tasks") or []
-            if not any(isinstance(t, dict) and t.get("tool_use_id") == tool_use_id for t in tasks):
+            tool_input = tool_use.get("input") if isinstance(tool_use, dict) else None
+            is_bg_subagent = isinstance(tool_input, dict) and isinstance(tool_input.get("subagent_id"), str)
+            if not is_bg_subagent and not any(
+                isinstance(t, dict) and t.get("tool_use_id") == tool_use_id for t in tasks
+            ):
                 return
             kept = filter_event(event)
             if kept is None:
@@ -789,16 +802,58 @@ def build_deep_research_graph(
             skills=[*SLIDEV_SKILLS] if spec["id"] in SLIDEV_AGENTS else False,
             tools=[*research_tools(), render_workflow] if spec["id"] == "report_writer" else research_tools(),
             plugins=[budget, ContextInjector(budget.reminder, name="deep-research:wrap-up", trigger="everyTurn")],
-            builtin_tools=["shell", "read", "write", "edit", "programmatic_tool_caller", "subagent"],
+            builtin_tools={
+                "*": False,
+                "shell": True,
+                "read": True,
+                "write": True,
+                "edit": True,
+                "programmatic_tool_caller": {"hot_reload": True},
+                "subagent": {"background": True, "stall_timeout": 60.0, "max_consecutive_errors": 3},
+            },
             builtin_plugins=["todos"],
             caching=False,
             session=False,
             memory=MemoryManager(stores=agent_memory(user_id, "deep-research")),
-            background_tasks={"agentic": ["*"], "never": ["handoff_to_agent"], "wait_for_completion": True},
+            background_tasks={
+                "always": ["*"],
+                "never": ["handoff_to_agent", "load_tool", "subagent", "todo_write"],
+                "wait_for_completion": True,
+            },
+            load_tools_from_directory=True,
             callback_handler=node_callback if on_node_event is not None else None,
             retry_strategy=TimeoutRetryStrategy(max_attempts=2, initial_delay=2),
         )
         agent_holder.append(built)
+        if on_node_event is not None:
+            emitted_resumes: set[str] = set()
+
+            def on_node_message_added(ev: MessageAddedEvent) -> None:
+                msg = ev.message
+                if not isinstance(msg, Mapping) or msg.get("role") != "user":
+                    return
+                for block in msg.get("content", []):
+                    txt = block.get("text") if isinstance(block, Mapping) else None
+                    if isinstance(txt, str) and (
+                        txt.startswith("[subagent-completed]") or txt.startswith("[subagent-hangup]")
+                    ):
+                        if txt not in emitted_resumes:
+                            emitted_resumes.add(txt)
+                            kept = filter_event({"message": msg})
+                            if kept is not None:
+                                on_node_event(
+                                    {
+                                        "type": "multiagent_node_stream",
+                                        "node_id": formation_id,
+                                        "event": {
+                                            "type": "multiagent_node_stream",
+                                            "node_id": spec["id"],
+                                            "event": kept,
+                                        },
+                                    }
+                                )
+
+            built.add_hook(on_node_message_added, MessageAddedEvent)
         return built
 
     def make_formation(spec: FormationSpec) -> Swarm | Graph:

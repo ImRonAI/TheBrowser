@@ -55,9 +55,9 @@ export interface ProjectHistory {
 
 /** `GET /projects/{id}/history` response row shape → renderer shape. */
 export function mapHistory(body: { transitions?: Record<string, unknown>[]; rows_read?: number; truncated?: boolean; since?: number | null }): ProjectHistory {
-  const transitions = (body.transitions ?? []).flatMap((row) => typeof row.issue_id === 'string' && typeof row.at === 'number' && typeof row.status === 'string'
-    ? [{ issueId: row.issue_id, at: row.at, status: row.status as IssueStatus,
-        estimate: typeof row.estimate === 'number' ? row.estimate : null, type: typeof row.type === 'string' ? row.type : null }]
+  const transitions = (body.transitions ?? []).flatMap((row) => typeof row["issue_id"] === 'string' && typeof row["at"] === 'number' && typeof row["status"] === 'string'
+    ? [{ issueId: row["issue_id"], at: row["at"], status: row["status"] as IssueStatus,
+        estimate: typeof row["estimate"] === 'number' ? row["estimate"] : null, type: typeof row["type"] === 'string' ? row["type"] : null }]
     : [])
   return { transitions, rowsRead: body.rows_read ?? transitions.length, truncated: body.truncated === true, since: body.since ?? null }
 }
@@ -96,9 +96,9 @@ export interface IssueTimeline {
   /** Ascending; the first event is the issue's state at creation. */
   events: IssueEvent[]
   /** First entry into in-progress, review or blocked; undefined if the issue never started. */
-  started?: number
+  started?: number | undefined
   /** Final entry into done, when the issue is done now. */
-  finished?: number
+  finished?: number | undefined
   /** No audit row was available: inferred from createdAt, the current status and updatedAt. */
   inferred: boolean
 }
@@ -124,23 +124,28 @@ export function buildTimelines(issues: Issue[], transitions: IssueTransition[]):
     } else {
       events = rows.map(({ at, status, estimate: value }) => ({ at, status, estimate: value }))
       // History truncated after creation: the earliest known state stands for the first one.
-      if (events[0].at > issue.createdAt) events.unshift({ ...events[0], at: issue.createdAt })
+      const firstEvent = events[0]
+      if (firstEvent && firstEvent.at > issue.createdAt) events.unshift({ ...firstEvent, at: issue.createdAt })
       const last = events[events.length - 1]
       // A save not in the fetched history yet: the issue row is the latest state.
-      if (last.status !== issue.status || last.estimate !== estimate)
+      if (last && (last.status !== issue.status || last.estimate !== estimate))
         events.push({ at: Math.max(issue.updatedAt, last.at), status: issue.status, estimate })
     }
-    events = events.filter((event, index) => index === 0 ||
-      event.status !== events[index - 1].status || event.estimate !== events[index - 1].estimate)
+    events = events.filter((event, index) => {
+      if (index === 0) return true
+      const prev = events[index - 1]
+      return !prev || event.status !== prev.status || event.estimate !== prev.estimate
+    })
     const started = events.find((event) => isWip(event.status))?.at
     let finished: number | undefined
     if (issue.status === 'done') {
       for (let index = events.length - 1; index >= 0; index--) {
-        if (events[index].status !== 'done') break
-        finished = events[index].at
+        const current = events[index]
+        if (!current || current.status !== 'done') break
+        finished = current.at
       }
     }
-    return { issue, created: events[0].at, events, started, finished, inferred }
+    return { issue, created: events[0]?.at ?? issue.createdAt, events, started, finished, inferred }
   })
 }
 
@@ -252,7 +257,7 @@ export function dailyThroughput(timelines: IssueTimeline[], days: number[]): num
   for (const timeline of timelines) {
     if (timeline.finished === undefined) continue
     const position = index.get(startOfDay(timeline.finished))
-    if (position !== undefined) counts[position] += 1
+    if (position !== undefined) counts[position] = (counts[position] ?? 0) + 1
   }
   return counts
 }
@@ -294,7 +299,7 @@ export function percentile(values: number[], p: number): number | null {
   if (values.length === 0) return null
   const sorted = [...values].sort((a, b) => a - b)
   const rank = Math.min(sorted.length, Math.max(1, Math.ceil((p / 100) * sorted.length)))
-  return sorted[rank - 1]
+  return sorted[rank - 1] ?? null
 }
 
 export interface PercentileSet { p50: number; p85: number; p95: number; count: number }
@@ -330,8 +335,9 @@ export function blockedItems(timelines: IssueTimeline[], now: number): BlockedIt
     if (timeline.issue.status !== 'blocked') return []
     let since = timeline.created
     for (let index = timeline.events.length - 1; index >= 0; index--) {
-      if (timeline.events[index].status !== 'blocked') break
-      since = timeline.events[index].at
+      const current = timeline.events[index]
+      if (!current || current.status !== 'blocked') break
+      since = current.at
     }
     return [{ issue: timeline.issue, since, days: elapsedDays(since, now) }]
   }).sort((a, b) => a.since - b.since)
@@ -396,7 +402,7 @@ export interface Forecast {
 }
 
 export function monteCarloWhen({ dailyThroughput: sample, remaining, now, trials = 10_000, seed = 1, horizonDays = 3650 }: {
-  dailyThroughput: number[]; remaining: number; now: number; trials?: number; seed?: number; horizonDays?: number
+  dailyThroughput: number[]; remaining: number; now: number; trials?: number | undefined; seed?: number | undefined; horizonDays?: number | undefined
 }): Forecast {
   const sampleFinished = sample.reduce((sum, value) => sum + value, 0)
   const base = { remaining, sampleDays: sample.length, sampleFinished, trials: 0, histogram: [] as ForecastBucket[] }
@@ -412,7 +418,7 @@ export function monteCarloWhen({ dailyThroughput: sample, remaining, now, trials
     let done = 0
     while (done < remaining && days <= horizonDays) {
       days += 1
-      done += sample[Math.floor(random() * sample.length)]
+      done += sample[Math.floor(random() * sample.length)] ?? 0
     }
     results[trial] = days
   }
@@ -478,7 +484,7 @@ export interface DashboardMetrics {
 }
 
 export function computeDashboard({ issues, transitions, now, range, measure, seed = 1, trials }: {
-  issues: Issue[]; transitions: IssueTransition[]; now: number; range: RangeKey; measure: Measure; seed?: number; trials?: number
+  issues: Issue[]; transitions: IssueTransition[]; now: number; range: RangeKey; measure: Measure; seed?: number | undefined; trials?: number | undefined
 }): DashboardMetrics {
   const timelines = buildTimelines(issues, transitions)
   const from = rangeStart(range, timelines, now)

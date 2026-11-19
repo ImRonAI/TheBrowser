@@ -91,6 +91,7 @@ export function ChromeToolbar() {
 
       return unsubscribe
     }
+    return undefined
   }, [])
 
   const handleHome = async () => {

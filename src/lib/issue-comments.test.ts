@@ -58,12 +58,14 @@ test('the thread is oldest first by time, then id, with one row per comment', ()
   const ordered = orderComments([comment('b', 20), comment('c', 10), comment('a', 20), comment('c', 10, { body: 'second copy' })])
   assert.deepEqual(ordered.map((item) => item.id), ['c', 'a', 'b'])
   // Pages that overlap keep the later copy.
+  assert.ok(ordered[0])
   assert.equal(ordered[0].body, 'second copy')
   // A new comment joins in order; an edit replaces the earlier version in place.
   const added = withComment(ordered, comment('d', 15))
   assert.deepEqual(added.map((item) => item.id), ['c', 'd', 'a', 'b'])
   const edited = withComment(added, comment('a', 20, { body: 'edited', version: 2 }))
   assert.deepEqual(edited.map((item) => item.id), ['c', 'd', 'a', 'b'])
+  assert.ok(edited[2])
   assert.equal(edited[2].body, 'edited')
   assert.deepEqual(withoutComment(edited, 'd').map((item) => item.id), ['c', 'a', 'b'])
   // A refresh that changed nothing is the same thread; an edit, a deletion or a new comment is not.
@@ -96,6 +98,7 @@ test('comments load every page and write through the documented routes and bodie
   ])
   const thread = await listComments(request, 'i1')
   assert.equal(thread.length, 201)
+  assert.ok(thread[0] && thread[200])
   assert.equal(thread[0].id, 'c000')
   assert.equal(thread[200].id, 'c200')
   const added = await addComment(request, 'i1', '  Shipped in v2.\n')
@@ -112,6 +115,7 @@ test('comments load every page and write through the documented routes and bodie
     'DELETE /comments/n1',
   ])
   // The body is trimmed; the edit carries the version it was read at; nothing else is sent.
+  assert.ok(calls[2] && calls[3] && calls[4])
   assert.deepEqual(calls[2].body, { body: 'Shipped in v2.' })
   assert.deepEqual(calls[3].body, { version: 1, body: 'Shipped in v2.1.' })
   assert.equal(calls[4].body, undefined)

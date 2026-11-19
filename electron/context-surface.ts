@@ -24,7 +24,7 @@ const SURFACE_PARTITION = 'ron-context-surface'
 export interface ContextSurfaceLayoutFlags {
   isExpanded: boolean
   hasNotice: boolean
-  noticeWide?: boolean
+  noticeWide?: boolean | undefined
   hasLabels: boolean
   discoveryOpen: boolean
 }
@@ -210,7 +210,7 @@ export class ContextSurface {
     const url = sender.mainFrame.url
     const entry = this.host.entry()
     if (entry.url) {
-      return url.split('?')[0].split('#')[0] === entry.url.split('?')[0].split('#')[0]
+      return (url.split('?')[0] ?? '').split('#')[0] === (entry.url.split('?')[0] ?? '').split('#')[0]
     }
     return url.startsWith('file:') && url.includes('context-surface.html')
   }
@@ -310,7 +310,7 @@ export class ContextSurface {
     const win = this.host.window()
     if (!win || win.isDestroyed() || !this.state || !this.host.isShellMounted()) return
 
-    const [windowWidth, windowHeight] = win.getContentSize()
+    const [windowWidth = 0, windowHeight = 0] = win.getContentSize()
     const zoom = this.host.zoomFactor()
     const anchor = widgetAnchorBounds(this.host.contentBounds(), windowWidth, this.host.leftSidebarDip())
 
@@ -407,7 +407,7 @@ export class ContextSurface {
         return
       }
       const entry = this.host.entry()
-      if (entry.url && event.url.split('?')[0].split('#')[0] === entry.url.split('?')[0].split('#')[0]) {
+      if (entry.url && (event.url.split('?')[0] ?? '').split('#')[0] === (entry.url.split('?')[0] ?? '').split('#')[0]) {
         return
       }
       if (parsed.protocol === 'file:' && event.url.includes('context-surface.html')) {

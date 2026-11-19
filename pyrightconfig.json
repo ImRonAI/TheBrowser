@@ -1,9 +1,34 @@
 {
+  "pythonVersion": "3.14",
+  "typeCheckingMode": "strict",
+  "strictListInference": true,
+  "strictDictionaryInference": true,
+  "strictSetInference": true,
+  "deprecateTypingAliases": true,
+  "enableReachabilityAnalysis": true,
+  "reportCallInDefaultInitializer": "error",
+  "reportImplicitOverride": "error",
+  "reportImplicitStringConcatenation": "error",
+  "reportImportCycles": "error",
+  "reportMissingSuperCall": "error",
+  "reportPropertyTypeMismatch": "error",
+  "reportUninitializedInstanceVariable": "error",
+  "reportUnnecessaryTypeIgnoreComment": "error",
+  "reportUnusedCallResult": "error",
   "venvPath": "/Users/tims-stuff/RonBrowserRebuild",
   "venv": "venv",
   "extraPaths": [
     "/Users/tims-stuff/RonBrowserRebuild",
     "/Users/tims-stuff/RonBrowserRebuild/agent/api/core/harness-sdk/strands-py/src",
     "/Users/tims-stuff/RonBrowserRebuild/venv/lib/python3.14/site-packages"
+  ],
+  "exclude": [
+    "**/node_modules",
+    "**/__pycache__",
+    "dist",
+    "venv",
+    "agent/api/core/harness-sdk",
+    "agent/tools/strands_tools",
+    "agent/MemoryOpenSource"
   ]
 }

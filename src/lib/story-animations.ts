@@ -89,7 +89,7 @@ export function hashString(value: string): number {
 }
 
 export function pickAnimation(seed: number): SwapAnimationName {
-  return SWAP_ANIMATIONS[Math.abs(Math.trunc(seed)) % SWAP_ANIMATIONS.length]
+  return SWAP_ANIMATIONS[Math.abs(Math.trunc(seed)) % SWAP_ANIMATIONS.length] ?? 'fall'
 }
 
 export function reverseEase([x1, y1, x2, y2]: Ease): Ease {
@@ -127,7 +127,7 @@ export function nextSlotToRotate(lastSlot: number, slotCount: number): number {
 const TILTS = [-0.9, -0.5, 0.5, 0.9] as const
 
 export function cardTilt(seed: string): number {
-  return TILTS[hashString(seed) % TILTS.length]
+  return TILTS[hashString(seed) % TILTS.length] ?? -0.9
 }
 
 export type StickerHue = 'amber' | 'rose' | 'emerald' | 'sky' | 'violet'
@@ -135,5 +135,5 @@ export type StickerHue = 'amber' | 'rose' | 'emerald' | 'sky' | 'violet'
 const HUES: readonly StickerHue[] = ['amber', 'rose', 'emerald', 'sky', 'violet']
 
 export function stickerHue(seed: string): StickerHue {
-  return HUES[hashString(seed) % HUES.length]
+  return HUES[hashString(seed) % HUES.length] ?? 'amber'
 }

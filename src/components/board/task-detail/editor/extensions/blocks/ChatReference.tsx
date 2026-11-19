@@ -33,11 +33,11 @@ export const ChatReference = Node.create({
 
   addAttributes() {
     return {
-      sessionId: { default: '', parseHTML: (element) => element.getAttribute('data-session-id') ?? '', renderHTML: (attributes) => ({ 'data-session-id': attributes.sessionId }) },
-      ownerId: { default: '', parseHTML: (element) => element.getAttribute('data-owner-id') ?? '', renderHTML: (attributes) => ({ 'data-owner-id': attributes.ownerId }) },
-      title: { default: '', parseHTML: (element) => element.getAttribute('data-title') ?? '', renderHTML: (attributes) => ({ 'data-title': attributes.title }) },
-      messageCount: { default: 0, parseHTML: (element) => Number(element.getAttribute('data-message-count')) || 0, renderHTML: (attributes) => ({ 'data-message-count': String(attributes.messageCount ?? 0) }) },
-      updatedAt: { default: '', parseHTML: (element) => element.getAttribute('data-updated-at') ?? '', renderHTML: (attributes) => ({ 'data-updated-at': attributes.updatedAt }) },
+      sessionId: { default: '', parseHTML: (element) => element.getAttribute('data-session-id') ?? '', renderHTML: (attributes) => ({ 'data-session-id': attributes["sessionId"] }) },
+      ownerId: { default: '', parseHTML: (element) => element.getAttribute('data-owner-id') ?? '', renderHTML: (attributes) => ({ 'data-owner-id': attributes["ownerId"] }) },
+      title: { default: '', parseHTML: (element) => element.getAttribute('data-title') ?? '', renderHTML: (attributes) => ({ 'data-title': attributes["title"] }) },
+      messageCount: { default: 0, parseHTML: (element) => Number(element.getAttribute('data-message-count')) || 0, renderHTML: (attributes) => ({ 'data-message-count': String(attributes["messageCount"] ?? 0) }) },
+      updatedAt: { default: '', parseHTML: (element) => element.getAttribute('data-updated-at') ?? '', renderHTML: (attributes) => ({ 'data-updated-at': attributes["updatedAt"] }) },
     }
   },
 
@@ -46,14 +46,14 @@ export const ChatReference = Node.create({
   },
 
   renderHTML({ node, HTMLAttributes }) {
-    return ['div', mergeAttributes(HTMLAttributes, { 'data-type': 'chat-reference' }), `Chat: ${node.attrs.title || 'Untitled thread'}`]
+    return ['div', mergeAttributes(HTMLAttributes, { 'data-type': 'chat-reference' }), `Chat: ${node.attrs["title"] || 'Untitled thread'}`]
   },
 
-  renderMarkdown: (node) => `Agent Panel chat: "${node.attrs?.title || 'Untitled thread'}" (${node.attrs?.messageCount ?? 0} messages, thread ${node.attrs?.sessionId})`,
+  renderMarkdown: (node) => `Agent Panel chat: "${node.attrs?.["title"] || 'Untitled thread'}" (${node.attrs?.["messageCount"] ?? 0} messages, thread ${node.attrs?.["sessionId"]})`,
 
   addCommands() {
     return {
-      insertChatReference: (chat) => placeBlock((schema) => chat.sessionId ? schema.nodes.chatReference.create(chat) : null),
+      insertChatReference: (chat) => placeBlock((schema) => chat.sessionId ? schema.nodes["chatReference"]?.create(chat) ?? null : null),
     }
   },
 
@@ -65,18 +65,18 @@ export const ChatReference = Node.create({
 function ChatReferenceView({ node, editor, selected, deleteNode }: NodeViewProps) {
   const userId = useAuthStore((state) => state.user?.id || 'default')
   const { openPanel } = useAgentUi()
-  const owner = String(node.attrs.ownerId || '')
+  const owner = String(node.attrs["ownerId"] || '')
   const mine = !isGuestUserId(userId) && owner === userId
   const list = useThreads(mine ? userId : null)
-  const thread = list.data.threads.find((item) => item.session_id === node.attrs.sessionId)
+  const thread = list.data.threads.find((item) => item.session_id === node.attrs["sessionId"])
   const missing = mine && list.status === 'ready' && !thread
-  const title = thread?.title || String(node.attrs.title || 'Untitled thread')
-  const count = thread?.message_count ?? Number(node.attrs.messageCount || 0)
-  const updatedAt = thread?.updated_at ?? String(node.attrs.updatedAt || '')
+  const title = thread?.title || String(node.attrs["title"] || 'Untitled thread')
+  const count = thread?.message_count ?? Number(node.attrs["messageCount"] || 0)
+  const updatedAt = thread?.updated_at ?? String(node.attrs["updatedAt"] || '')
   const note = !mine ? (isGuestUserId(userId) ? 'Sign in with the account that wrote this chat to open it.' : 'This chat belongs to another account.')
     : missing ? 'This chat was deleted.' : ''
   const open = () => {
-    usePanelAgentStore.getState().requestThread(String(node.attrs.sessionId))
+    usePanelAgentStore.getState().requestThread(String(node.attrs["sessionId"]))
     openPanel()
   }
 

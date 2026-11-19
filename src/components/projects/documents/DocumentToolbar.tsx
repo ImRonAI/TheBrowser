@@ -33,12 +33,12 @@ const editorId = (editor: Editor) => {
  * has a transaction, so a replaced editor (another page, a remount) would leave the toolbar reading a
  * destroyed one: each editor instance gets its own toolbar state.
  */
-export function DocumentToolbar({ editor, onAskRon }: { editor: Editor; onAskRon?: () => void }) {
+export function DocumentToolbar({ editor, onAskRon }: { editor: Editor; onAskRon?: (() => void) | undefined }) {
   if (editor.isDestroyed) return null
   return <EditorToolbar key={editorId(editor)} editor={editor} onAskRon={onAskRon} />
 }
 
-function EditorToolbar({ editor, onAskRon }: { editor: Editor; onAskRon?: () => void }) {
+function EditorToolbar({ editor, onAskRon }: { editor: Editor; onAskRon?: (() => void) | undefined }) {
   const state = useEditorState({
     editor,
     selector: ({ editor: current }) => ({
@@ -49,7 +49,7 @@ function EditorToolbar({ editor, onAskRon }: { editor: Editor; onAskRon?: () => 
       bulletList: current.isActive('bulletList'), orderedList: current.isActive('orderedList'), taskList: current.isActive('taskList'),
       blockquote: current.isActive('blockquote'), codeBlock: current.isActive('codeBlock'),
       canUndo: current.can().undo(), canRedo: current.can().redo(),
-      href: String(current.getAttributes('link').href ?? ''),
+      href: String(current.getAttributes('link')["href"] ?? ''),
     }),
   })
   const style = STYLES.find((item) => item.id === state.style) ?? STYLES[0]

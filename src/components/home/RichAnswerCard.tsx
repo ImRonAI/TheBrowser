@@ -61,26 +61,26 @@ function Price({ value, unit }: { value: unknown; unit: string }) {
 }
 
 function Weather({ card }: { card: Card }) {
-  const temp = num(card.temp_c)
-  const daily = list(card.daily).slice(0, 4)
+  const temp = num(card["temp_c"])
+  const daily = list(card["daily"]).slice(0, 4)
   const deg = (value: unknown) => { const n = num(value); return n === null ? '–' : String(Math.round(n)) }
   // Each day's low-to-high range drawn on one scale shared by the four days (a flat week fills the track).
-  const known = daily.flatMap((day) => [num(day.min_c), num(day.max_c)]).filter((value): value is number => value !== null)
+  const known = daily.flatMap((day) => [num(day["min_c"]), num(day["max_c"])]).filter((value): value is number => value !== null)
   const low = known.length ? Math.min(...known) : 0
   const span = known.length ? Math.max(...known) - low : 0
   const position = (value: number) => (span ? ((value - low) / span) * 100 : 0)
   return <div>
-    <Heading kicker="Weather" title={str(card.location) || 'Local weather'} />
-    <p className={`mt-4 flex items-baseline gap-2 text-[2.25rem] ${figure}`}>{temp !== null ? `${Math.round(temp)}°C` : '—'}<span className={`font-sans text-[12px] font-normal tracking-normal ${muted}`}>{str(card.condition)}</span></p>
+    <Heading kicker="Weather" title={str(card["location"]) || 'Local weather'} />
+    <p className={`mt-4 flex items-baseline gap-2 text-[2.25rem] ${figure}`}>{temp !== null ? `${Math.round(temp)}°C` : '—'}<span className={`font-sans text-[12px] font-normal tracking-normal ${muted}`}>{str(card["condition"])}</span></p>
     {daily.length > 0 && <ul className={`mt-4 grid grid-cols-4 gap-1 border-t border-surface-200 pt-3 text-[11px] dark:border-surface-800 ${muted}`}>{daily.map((day, index) => {
-      const min = num(day.min_c), max = num(day.max_c)
+      const min = num(day["min_c"]), max = num(day["max_c"])
       return <li key={index} className="flex flex-col items-center text-center">
-        <div className="w-full truncate font-mono text-[10px] uppercase tracking-[0.08em]">{str(day.label).slice(0, 3) || '·'}</div>
-        <div className="mt-1 font-semibold tabular-nums text-ink dark:text-ink-inverse">{deg(day.max_c)}°</div>
+        <div className="w-full truncate font-mono text-[10px] uppercase tracking-[0.08em]">{str(day["label"]).slice(0, 3) || '·'}</div>
+        <div className="mt-1 font-semibold tabular-nums text-ink dark:text-ink-inverse">{deg(day["max_c"])}°</div>
         <div aria-hidden className="relative my-1 h-6 w-1 overflow-hidden rounded-full bg-surface-100 dark:bg-surface-850">
           {min !== null && max !== null && <span className="absolute inset-x-0 rounded-full bg-volt" style={{ bottom: `${position(min)}%`, top: `${span ? 100 - position(max) : 0}%` }} />}
         </div>
-        <div className="tabular-nums">{deg(day.min_c)}°</div>
+        <div className="tabular-nums">{deg(day["min_c"])}°</div>
       </li>
     })}</ul>}
   </div>
@@ -93,26 +93,26 @@ function TeamLogo({ src }: { src: unknown }) {
 
 /** One team's scoreboard: the last two results and the next two fixtures (the backend ships ≤3 of each). */
 function Sports({ card }: { card: Card }) {
-  const team = rec(card.team), league = rec(card.league)
-  const recent = list(card.recent).slice(-2), upcoming = list(card.upcoming).slice(0, 2)
+  const team = rec(card["team"]), league = rec(card["league"])
+  const recent = list(card["recent"]).slice(-2), upcoming = list(card["upcoming"]).slice(0, 2)
   const games = [...recent, ...upcoming]
   const renderGame = (game: Card, index: number) => {
-    const home = rec(game.home), away = rec(game.away), start = num(game.start_ts)
-    const played = index < recent.length && (num(away.score) !== null || num(home.score) !== null)
-    const when = start ? new Date(start * 1000).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : str(game.status)
+    const home = rec(game["home"]), away = rec(game["away"]), start = num(game["start_ts"])
+    const played = index < recent.length && (num(away["score"]) !== null || num(home["score"]) !== null)
+    const when = start ? new Date(start * 1000).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : str(game["status"])
     // The winning score of a finished game is the card's highlight.
-    const awayScore = num(away.score), homeScore = num(home.score)
+    const awayScore = num(away["score"]), homeScore = num(home["score"])
     const winner = played && awayScore !== null && homeScore !== null && awayScore !== homeScore ? (awayScore > homeScore ? 'away' : 'home') : null
     const score = (side: 'away' | 'home') => winner === side ? 'font-bold text-volt' : 'font-medium text-ink dark:text-ink-inverse'
     return <li key={index} className="grid grid-cols-[1fr_auto] items-center gap-x-3 gap-y-1 text-[12px]">
-      <span className="flex min-w-0 items-center gap-1.5"><TeamLogo src={away.logo} /><span className="truncate text-ink dark:text-ink-inverse">{str(away.name)}</span></span>
-      <span className={`text-right font-mono tabular-nums ${score('away')}`}>{played ? num(away.score) ?? '–' : ''}</span>
-      <span className="flex min-w-0 items-center gap-1.5"><TeamLogo src={home.logo} /><span className="truncate text-ink dark:text-ink-inverse">{str(home.name)}</span></span>
-      <span className={`text-right font-mono tabular-nums ${score('home')}`}>{played ? num(home.score) ?? '–' : <span className={`font-mono text-[11px] font-normal uppercase tracking-[0.04em] ${muted}`}>{when}</span>}</span>
+      <span className="flex min-w-0 items-center gap-1.5"><TeamLogo src={away["logo"]} /><span className="truncate text-ink dark:text-ink-inverse">{str(away["name"])}</span></span>
+      <span className={`text-right font-mono tabular-nums ${score('away')}`}>{played ? num(away["score"]) ?? '–' : ''}</span>
+      <span className="flex min-w-0 items-center gap-1.5"><TeamLogo src={home["logo"]} /><span className="truncate text-ink dark:text-ink-inverse">{str(home["name"])}</span></span>
+      <span className={`text-right font-mono tabular-nums ${score('home')}`}>{played ? num(home["score"]) ?? '–' : <span className={`font-mono text-[11px] font-normal uppercase tracking-[0.04em] ${muted}`}>{when}</span>}</span>
     </li>
   }
   return <div>
-    <Heading kicker={str(league.name) || str(card.sport) || 'Sports'} title={str(team.name) || 'Scores'} />
+    <Heading kicker={str(league["name"]) || str(card["sport"]) || 'Sports'} title={str(team["name"]) || 'Scores'} />
     {games.length === 0 ? <p className={`mt-3 text-[12px] ${muted}`}>No games scheduled.</p> : <ul className="mt-3 divide-y divide-surface-200 dark:divide-surface-800 [&>li]:py-2 [&>li:first-child]:pt-0 [&>li:last-child]:pb-0">{games.map(renderGame)}</ul>}
   </div>
 }
@@ -124,22 +124,22 @@ function renderBody(answer: RichAnswer) {
       return <Weather card={card} />
     case 'stocks':
       return <div>
-        <Heading kicker={`${str(card.exchange) || 'Stock'} · ${str(card.symbol)}`} title={str(card.name) || str(card.symbol)} />
-        <Price value={card.price} unit={str(card.currency)} />
-        <Trend change={card.change} percent={card.change_percent} series={card.sparkline} />
+        <Heading kicker={`${str(card["exchange"]) || 'Stock'} · ${str(card["symbol"])}`} title={str(card["name"]) || str(card["symbol"])} />
+        <Price value={card["price"]} unit={str(card["currency"])} />
+        <Trend change={card["change"]} percent={card["change_percent"]} series={card["sparkline"]} />
       </div>
     case 'cryptocurrency':
       return <div>
-        <Heading kicker={`Crypto · ${str(card.symbol)}`} title={str(card.name) || str(card.symbol)} />
-        <Price value={card.price} unit={str(card.vs_currency)} />
-        <Trend change={card.change_24h} percent={card.change_percent_24h} series={card.sparkline} />
+        <Heading kicker={`Crypto · ${str(card["symbol"])}`} title={str(card["name"]) || str(card["symbol"])} />
+        <Price value={card["price"]} unit={str(card["vs_currency"])} />
+        <Trend change={card["change_24h"]} percent={card["change_percent_24h"]} series={card["sparkline"]} />
       </div>
     case 'currency':
       return <div>
-        <Heading kicker="Currency" title={`${str(card.from)} → ${str(card.to)}`} />
-        <p className={`mt-4 text-[1.75rem] ${figure}`}>{formatNumber(card.result, { maximumFractionDigits: 4 })} <span className={`font-mono text-[11px] font-medium tracking-[0.04em] ${muted}`}>{str(card.to)}</span></p>
-        <p className={`mt-1.5 font-mono text-[11px] tabular-nums ${muted}`}>{formatNumber(card.amount)} {str(card.from)} · rate {formatNumber(card.rate, { maximumFractionDigits: 4 })}</p>
-        <Trend change={null} percent={null} series={card.sparkline} />
+        <Heading kicker="Currency" title={`${str(card["from"])} → ${str(card["to"])}`} />
+        <p className={`mt-4 text-[1.75rem] ${figure}`}>{formatNumber(card["result"], { maximumFractionDigits: 4 })} <span className={`font-mono text-[11px] font-medium tracking-[0.04em] ${muted}`}>{str(card["to"])}</span></p>
+        <p className={`mt-1.5 font-mono text-[11px] tabular-nums ${muted}`}>{formatNumber(card["amount"])} {str(card["from"])} · rate {formatNumber(card["rate"], { maximumFractionDigits: 4 })}</p>
+        <Trend change={null} percent={null} series={card["sparkline"]} />
       </div>
     case 'sports':
       return <Sports card={card} />

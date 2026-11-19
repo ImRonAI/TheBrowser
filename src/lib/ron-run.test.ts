@@ -40,11 +40,11 @@ test('runRon serializes prompt_attachments and screen_frame into POST /chat', as
   })
 
   assert.equal(postedUrl, 'http://localhost:8765/chat')
-  assert.equal(postedBody.destination, 'document')
-  assert.equal(postedBody.session_id, 'ron-doc-test')
-  assert.deepEqual(postedBody.prompt_attachments, [attachment])
+  assert.equal(postedBody["destination"], 'document')
+  assert.equal(postedBody["session_id"], 'ron-doc-test')
+  assert.deepEqual(postedBody["prompt_attachments"], [attachment])
   assert.equal(
-    postedBody.screen_frame,
+    postedBody["screen_frame"],
     'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
   )
   assert.equal(state.status, 'completed')

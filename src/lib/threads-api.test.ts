@@ -9,6 +9,7 @@ test('listThreads hits GET /sessions with user_id (and destination) and returns 
   const fetcher = (async (url: RequestInfo | URL) => { calls.push(String(url)); return json({ threads: [{ session_id: 's1' }], sign_in_required: false }) }) as typeof fetch
   const result = await listThreads('http://localhost:8765/', 'u-1', 'panel', fetcher)
   assert.equal(calls[0], 'http://localhost:8765/sessions?user_id=u-1&destination=panel')
+  assert.ok(result.threads[0])
   assert.equal(result.threads[0].session_id, 's1')
 })
 
@@ -16,6 +17,7 @@ test('readThread hits GET /sessions/{id}/thread and surfaces HTTP errors', async
   const fetcher = (async (url: RequestInfo | URL) => String(url).includes('/missing/') ? json({ detail: 'Unknown thread' }, 404)
     : json({ session_id: 'agent-1', messages: [{ seq: 0, kind: 'user_prompt' }] })) as typeof fetch
   const thread = await readThread('http://localhost:8765', 'u-1', 'agent-1', fetcher)
+  assert.ok(thread.messages[0])
   assert.equal(thread.messages[0].kind, 'user_prompt')
   await assert.rejects(readThread('http://localhost:8765', 'u-1', 'missing', fetcher), /404/)
 })

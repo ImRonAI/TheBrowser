@@ -498,6 +498,7 @@ export function StrandsSwarm({
 
     const targets = currentNode.data.canHandoffTo;
     const targetId = targets[Math.floor(Math.random() * targets.length)];
+    if (!targetId) return;
 
     const handoffMessage: HandoffMessage = {
       fromAgent: currentNode.id,
@@ -591,8 +592,7 @@ export function StrandsSwarm({
       <ReactFlow
         nodes={nodes}
         edges={edges}
-        onNodesChange={interactive ? onNodesChange : undefined}
-        onEdgesChange={interactive ? onEdgesChange : undefined}
+        {...(interactive ? { onNodesChange, onEdgesChange } : {})}
         onNodeClick={handleNodeClick}
         onEdgeClick={handleEdgeClick}
         nodeTypes={nodeTypes}

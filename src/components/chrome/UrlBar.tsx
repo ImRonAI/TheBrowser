@@ -77,6 +77,7 @@ export function UrlBar() {
       })
       return cleanup
     }
+    return undefined
   }, [])
 
   // ⌘L: focus and select the address.

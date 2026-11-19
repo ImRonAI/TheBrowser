@@ -45,7 +45,7 @@ export const QueueItem = ({ className, ...props }: QueueItemProps) => (
 );
 
 export type QueueItemIndicatorProps = ComponentProps<"span"> & {
-  completed?: boolean;
+  completed?: boolean | undefined;
 };
 
 export const QueueItemIndicator = ({
@@ -66,7 +66,7 @@ export const QueueItemIndicator = ({
 );
 
 export type QueueItemContentProps = ComponentProps<"span"> & {
-  completed?: boolean;
+  completed?: boolean | undefined;
 };
 
 export const QueueItemContent = ({
@@ -87,7 +87,7 @@ export const QueueItemContent = ({
 );
 
 export type QueueItemDescriptionProps = ComponentProps<"div"> & {
-  completed?: boolean;
+  completed?: boolean | undefined;
 };
 
 export const QueueItemDescription = ({

@@ -80,7 +80,7 @@ import httpx
 from strands import Agent
 from strands.agent.agent_result import AgentResult
 from strands.hooks.events import (
-    AfterInvocationEvent, AfterModelCallEvent, AfterToolCallEvent, BeforeModelCallEvent,
+    AfterInvocationEvent, AfterModelCallEvent, AfterToolCallEvent, BeforeModelCallEvent, MessageAddedEvent,
 )
 from strands.hooks.registry import HookRegistry
 from strands.multiagent.base import MultiAgentResult, NodeResult
@@ -237,6 +237,7 @@ class SessionRun:
         self._results: dict[tuple[tuple[str, ...], str], Any] = {}
         self._inputs: dict[tuple[tuple[str, ...], str], Any] = {}
         self._background_results: dict[str, Any] = {}
+        self._emitted_subagent_resumes: set[str] = set()
         self._attempt = 0
         self._cycle: str | None = None
         self._model_attempt = 0
@@ -267,6 +268,7 @@ class SessionRun:
         registry.add_callback(BeforeModelCallEvent, self._before_model, order=_HOOK_ORDER)
         registry.add_callback(AfterModelCallEvent, self._after_model, order=_HOOK_ORDER)
         registry.add_callback(AfterInvocationEvent, self._after_invocation, order=_HOOK_ORDER)
+        registry.add_callback(MessageAddedEvent, self._message_added, order=_HOOK_ORDER)
 
     def _runtime_options(self) -> dict[str, Any]:
         return {
@@ -380,6 +382,8 @@ class SessionRun:
         self._tools_in_flight.clear()
         old = self.agent
         if old is not None:
+            with suppress(Exception):
+                old.cancel()
             with suppress(Exception):
                 await self._cancel_background()
         self.agent, pre_run = None, self.messages
@@ -561,6 +565,25 @@ class SessionRun:
                     await self._emit_locked("steering_applied", id=record["id"], message=record["message"])
             self._injected.clear()
 
+    async def _message_added(self, event: MessageAddedEvent) -> None:
+        msg = event.message
+        if not isinstance(msg, Mapping) or msg.get("role") != "user":
+            return
+        for block in msg.get("content", []):
+            text = block.get("text") if isinstance(block, Mapping) else None
+            if isinstance(text, str) and (
+                text.startswith("[subagent-completed]") or text.startswith("[subagent-hangup]")
+            ):
+                if text not in self._emitted_subagent_resumes:
+                    self._emitted_subagent_resumes.add(text)
+                    if threading.get_ident() != self._thread:
+                        future = asyncio.run_coroutine_threadsafe(
+                            self._emit("background_event", event={"subagent_resume": text}), self._loop
+                        )
+                        await asyncio.wrap_future(future)
+                    else:
+                        await self._emit("background_event", event={"subagent_resume": text})
+
     async def _after_invocation(self, event: AfterInvocationEvent) -> None:
         result = event.result
         async with self._lock:
@@ -612,11 +635,14 @@ class SessionRun:
 
     def _callback(self, **event: Any) -> None:
         # Both foreground tool tasks and background tasks can run on this loop.
-        # Only the native persisted task registry establishes background ownership.
+        # Accept streams from native _BackgroundTasks AND native _SubagentTool(background=True).
         stream = event.get("tool_stream_event")
         if not isinstance(stream, Mapping):
             return
-        background_id = self._background_id(stream.get("tool_use", {}).get("toolUseId"))
+        tool_use = stream.get("tool_use") if isinstance(stream.get("tool_use"), Mapping) else {}
+        tool_input = tool_use.get("input") if isinstance(tool_use.get("input"), Mapping) else {}
+        subagent_id = tool_input.get("subagent_id") if isinstance(tool_input.get("subagent_id"), str) else None
+        background_id = self._background_id(tool_use.get("toolUseId")) or subagent_id
         if background_id is None:
             return
         # Whitelist the stream envelope: invocation_state also contains host
@@ -756,11 +782,19 @@ class SessionRun:
             await self._tool_input(event["current_tool_use"], path)
         if "tool_result" in event:
             await self._tool_result(event["tool_result"], path)
-        for block in event.get("message", {}).get("content", []):
+        msg = event.get("message", {})
+        is_user_msg = isinstance(msg, Mapping) and msg.get("role") == "user"
+        for block in (msg.get("content", []) if isinstance(msg, Mapping) else []):
             if "toolResult" in block:
                 await self._tool_result(block["toolResult"], path)
             if "toolUse" in block:
                 await self._tool_input(block["toolUse"], path)
+            if is_user_msg and isinstance(block.get("text"), str) and (
+                block["text"].startswith("[subagent-completed]") or block["text"].startswith("[subagent-hangup]")
+            ):
+                if block["text"] not in self._emitted_subagent_resumes:
+                    self._emitted_subagent_resumes.add(block["text"])
+                    await self._emit("background_event", node_path=path, event={"subagent_resume": block["text"]})
         if "event_loop_throttled_delay" in event:
             if not path:
                 # SDK emits this AFTER AfterModelCallEvent for the same attempt.
@@ -953,6 +987,14 @@ class SessionRun:
     async def _cancel_background(self) -> None:
         if self.agent is None:
             return
+        subagent_tool = self.agent.tool_registry.registry.get("subagent")
+        runs_by_parent = getattr(subagent_tool, "_runs_by_parent", None)
+        if runs_by_parent is not None:
+            for sub_run in list((runs_by_parent.get(self.agent) or {}).values()):
+                if getattr(sub_run, "status", None) == "running":
+                    sub_run.cancel_event.set()
+                    if getattr(sub_run, "task", None) is not None and not sub_run.task.done():
+                        sub_run.task.cancel()
         tasks = self.agent.state.get(_BACKGROUND_STATE) or []
         tool = self.agent.tool_registry.registry.get(_BACKGROUND_TOOL)
         if tasks and tool is None:
@@ -1173,10 +1215,20 @@ class PanelRuntimeManager:
         if session.status not in ("starting", "running") or session._closed:
             return None
         idle = time.monotonic() - session._last_event_at
-        background_busy = session.agent is not None and any(
-            isinstance(task, Mapping) and task.get("status") in ("queued", "working")
-            for task in (session.agent.state.get(_BACKGROUND_STATE) or [])
-        )
+        background_busy = False
+        if session.agent is not None:
+            background_busy = any(
+                isinstance(task, Mapping) and task.get("status") in ("queued", "working")
+                for task in (session.agent.state.get(_BACKGROUND_STATE) or [])
+            )
+            if not background_busy:
+                subagent_tool = session.agent.tool_registry.registry.get("subagent")
+                runs_by_parent = getattr(subagent_tool, "_runs_by_parent", None)
+                if runs_by_parent is not None:
+                    background_busy = any(
+                        getattr(sub_run, "status", None) == "running"
+                        for sub_run in (runs_by_parent.get(session.agent) or {}).values()
+                    )
         limit = self.tool_stall_seconds if (session._tools_in_flight or background_busy) else self.stall_seconds
         return idle if idle > limit else None
 

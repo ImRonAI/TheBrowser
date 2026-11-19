@@ -48,6 +48,7 @@ test('timelines follow history, repair a truncated start and a pending save, and
     move('b', at(1, 4), 'in-progress'),
     move('e', at(1, 1), 'backlog'), move('e', at(1, 10), 'done'),
   ])
+  assert.ok(a && b && c && d && e)
   assert.equal(a.started, at(1, 3))
   assert.equal(a.finished, at(1, 9), 'reopened work finishes at its final done')
   assert.equal(a.inferred, false)

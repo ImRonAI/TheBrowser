@@ -20,7 +20,7 @@ const EASE = [0.19, 1, 0.22, 1] as const
 
 /** Open the Agent Panel in a new chat with this specialist (on the default model) and send the task to it. */
 export function chatWithSpecialist(agent: SpecialistAgent, task: string, send: (prompt: string) => void) {
-  usePanelAgentStore.getState().requestAgent(specialistChoices([agent])[0])
+  usePanelAgentStore.getState().requestAgent(specialistChoices([agent])[0] ?? null)
   send(task)
   useContextAgentStore.getState().yieldToPanel()
 }

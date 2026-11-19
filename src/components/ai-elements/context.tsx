@@ -25,8 +25,8 @@ type ModelId = string;
 interface ContextSchema {
   usedTokens: number;
   maxTokens: number;
-  usage?: LanguageModelUsage;
-  modelId?: ModelId;
+  usage?: LanguageModelUsage | undefined;
+  modelId?: ModelId | undefined;
 }
 
 const ContextContext = createContext<ContextSchema | null>(null);

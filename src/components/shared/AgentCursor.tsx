@@ -25,6 +25,7 @@ export function AgentCursor({ suppressOverlay = false }: { suppressOverlay?: boo
     const step = () => {
       if (cancelled) return
       const next = points[index]
+      if (!next) return
       setPoint(next)
       void window.electron?.browser?.setAgentCursor?.(next)
       index += 1

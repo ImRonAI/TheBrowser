@@ -46,7 +46,11 @@ export class ChunkSchedule {
   /** Drop chunks that finished before `now` (keeps the schedule bounded). */
   prune(now: number): void {
     let keep = 0
-    while (keep < this.chunks.length && this.chunks[keep].endAt < now) keep++
+    while (keep < this.chunks.length) {
+      const chunk = this.chunks[keep]
+      if (!chunk || chunk.endAt >= now) break
+      keep++
+    }
     if (keep) this.chunks.splice(0, keep)
   }
 

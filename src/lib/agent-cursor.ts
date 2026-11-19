@@ -42,11 +42,11 @@ export function cursorTargets(input: unknown, elements: Readonly<Record<string, 
   if (!input || typeof input !== 'object') return []
   const record = input as Record<string, unknown>
   const points: CursorPoint[] = []
-  const direct = pair(record.x, record.y)
+  const direct = pair(record["x"], record["y"])
   if (direct) points.push(direct)
-  const target = record.targetCoordinates
+  const target = record["targetCoordinates"]
   if (target && typeof target === 'object') {
-    const drop = pair((target as Record<string, unknown>).x, (target as Record<string, unknown>).y)
+    const drop = pair((target as Record<string, unknown>)["x"], (target as Record<string, unknown>)["y"])
     if (drop) points.push(drop)
   }
   if (points.length) return points
@@ -79,11 +79,11 @@ export function collectSnapshotElements(value: unknown): Record<string, Snapshot
     }
     if (typeof node !== 'object') return
     const record = node as Record<string, unknown>
-    const ref = typeof record.ref === 'string' ? record.ref : null
-    const x = number(record.x)
-    const y = number(record.y)
-    const width = number(record.width)
-    const height = number(record.height)
+    const ref = typeof record["ref"] === 'string' ? record["ref"] : null
+    const x = number(record["x"])
+    const y = number(record["y"])
+    const width = number(record["width"])
+    const height = number(record["height"])
     if (ref && x != null && y != null && width != null && height != null) {
       found[ref] = { ref, x, y, width, height }
     }

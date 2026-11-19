@@ -103,10 +103,10 @@ function installStoreActionForwarders() {
       void sendAction({ type: 'context:yield-to-panel' })
     },
     flushBrowsing: async (force) => {
-      await sendAction({ type: 'context:flush-browsing', force })
+      await sendAction({ type: 'context:flush-browsing', ...(force !== undefined ? { force } : {}) })
     },
     flushReview: async (force) => {
-      await sendAction({ type: 'context:flush-review', force })
+      await sendAction({ type: 'context:flush-review', ...(force !== undefined ? { force } : {}) })
     },
     refreshItems: async () => {
       await sendAction({ type: 'context:refresh-items' })
@@ -128,7 +128,7 @@ function installStoreActionForwarders() {
       await sendAction({ type: 'context:remove', id })
     },
     captureScreenshot: async (source) => {
-      const res = await sendAction({ type: 'context:capture-screenshot', source })
+      const res = await sendAction({ type: 'context:capture-screenshot', ...(source !== undefined ? { source } : {}) })
       return (res as ContextItem | null) ?? null
     },
     stopRecording: async () => {
@@ -141,7 +141,7 @@ function installStoreActionForwarders() {
       void sendAction({ type: 'context:dismiss', id })
     },
     sendReply: async (draft, text) => {
-      await sendAction({ type: 'context:send-reply', draft, text })
+      await sendAction({ type: 'context:send-reply', draft, ...(text !== undefined ? { text } : {}) })
     },
     dismissReply: (id) => {
       void sendAction({ type: 'context:dismiss-reply', id })
@@ -236,7 +236,7 @@ function ContextSurfaceApp() {
 
   useEffect(() => {
     const preload = getPreload()
-    if (!preload) return
+    if (!preload) return undefined
     return preload.onState((state) => {
       if (applyMirroredState(state)) {
         setHydrated(true)
@@ -249,7 +249,7 @@ function ContextSurfaceApp() {
   }, [])
 
   const onSendToAgentPanel = useCallback((prompt: string, attachments?: PromptAttachment[]) => {
-    void sendAction({ type: 'panel:send', prompt, attachments })
+    void sendAction({ type: 'panel:send', prompt, ...(attachments !== undefined ? { attachments } : {}) })
   }, [])
 
   if (!hydrated) return null

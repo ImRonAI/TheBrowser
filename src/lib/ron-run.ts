@@ -22,16 +22,16 @@ export interface RonRunRequest {
   userId: string
   message: string
   /** Native GoalLoop objective; only honoured on a session's first message, so pass a fresh session. */
-  goal?: string
+  goal?: string | undefined
   /** Attached reference context cards (`ChatRequest.prompt_attachments`). */
-  promptAttachments?: PromptAttachment[]
+  promptAttachments?: PromptAttachment[] | undefined
   /** Live `data:image/...;base64,...` screenshot of the open Document workspace (`ChatRequest.screen_frame`). */
-  screenFrame?: string
+  screenFrame?: string | undefined
   /** Optional request headers (e.g. Supabase bearer or guest workspace capability for workspace tools). */
-  headers?: Record<string, string>
-  signal?: AbortSignal
-  onState?: (state: PanelState) => void
-  fetcher?: typeof fetch
+  headers?: Record<string, string> | undefined
+  signal?: AbortSignal | undefined
+  onState?: ((state: PanelState) => void) | undefined
+  fetcher?: typeof fetch | undefined
 }
 
 const FOLLOW_ATTEMPTS = 5
@@ -45,13 +45,14 @@ export async function runRon({
   apiBase, destination, sessionId, userId, message, goal, promptAttachments, screenFrame, headers, signal, onState, fetcher = fetch,
 }: RonRunRequest): Promise<PanelState> {
   let state = emptyPanelState(sessionId)
-  const accept = (event: PanelEvent) => {
+  const accept = (event: PanelEvent): boolean | undefined => {
     if (signal?.aborted || event.session_id !== sessionId || event.sequence <= state.sequence) return false
     state = reducePanelEvent(state, event)
     onState?.(state)
+    return undefined
   }
   const response = await fetcher(`${apiBase}/chat`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json', ...headers }, signal,
+    method: 'POST', headers: { 'Content-Type': 'application/json', ...headers }, ...(signal ? { signal } : {}),
     body: JSON.stringify({
       session_id: sessionId,
       user_id: userId,
@@ -65,7 +66,7 @@ export async function runRon({
   if (!response.ok) throw await responseError(response)
   let terminal = await readPanelStream(response, accept)
   for (let attempt = 0; !terminal && attempt < FOLLOW_ATTEMPTS && !signal?.aborted; attempt += 1) {
-    const follow = await fetcher(`${apiBase}/sessions/${encodeURIComponent(sessionId)}/events?user_id=${encodeURIComponent(userId)}&after=${state.sequence}`, { signal })
+    const follow = await fetcher(`${apiBase}/sessions/${encodeURIComponent(sessionId)}/events?user_id=${encodeURIComponent(userId)}&after=${state.sequence}`, signal ? { signal } : {})
     terminal = await readPanelStream(follow, accept)
   }
   if (!terminal && !signal?.aborted) throw new Error('Ren’s answer was interrupted. Try again.')

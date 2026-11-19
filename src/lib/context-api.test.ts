@@ -25,6 +25,7 @@ test('recordVisit drops repeats and hash changes but keeps the newest title', ()
   assert.deepEqual(queue, [{ url: 'https://a.com/x', title: 'A page', at: 1 }, { url: 'https://b.com/', title: 'B', at: 4 }])
   const full = Array.from({ length: 45 }, (_, i) => ({ url: `https://s.com/${i}`, title: `${i}`, at: i })).reduce((q, v) => recordVisit(q, v), [] as ReturnType<typeof recordVisit>)
   assert.equal(full.length, 40)
+  assert.ok(full[0])
   assert.equal(full[0].url, 'https://s.com/5')
 })
 
@@ -87,6 +88,7 @@ test('searches, chats, notifications, reply drafts and twice-daily reviews forma
     tool('create_project', [{ text: JSON.stringify({ id: 'p-1', name: 'Austin Half' }) }]),
   ] }] as unknown as PanelMessage[]
   const parsed = contextResults(messages)
+  assert.ok(parsed.recommendations[0] && parsed.replyDrafts[0])
   assert.equal(parsed.recommendations[0].kind, 'project')
   assert.deepEqual(parsed.recommendations[0].issues, ['Register with Dana'])
   assert.equal(parsed.replyDrafts[0].sender, 'Dana Kim')
@@ -144,7 +146,7 @@ test('searchMarkdown keeps the question, answers, citations and top results', ()
 test('createContextClient speaks the /context API', async () => {
   const calls: { url: string; init?: RequestInit }[] = []
   const fetcher = (async (url: string, init?: RequestInit) => {
-    calls.push({ url, init })
+    calls.push(init === undefined ? { url } : { url, init })
     if (url.includes('/context/agents')) return new Response(JSON.stringify({ agents: [], sign_in_required: true }))
     if (init?.method === 'DELETE') return new Response(JSON.stringify({ deleted: 'x' }))
     if (url.endsWith('/context/items') || url.endsWith('/context/files')) return new Response(JSON.stringify({ item }))
@@ -155,10 +157,13 @@ test('createContextClient speaks the /context API', async () => {
   }) as typeof fetch
   const client = createContextClient('http://api/', 'u 1', fetcher)
   assert.deepEqual(await client.list(), [item])
+  assert.ok(calls[0])
   assert.equal(calls[0].url, 'http://api/context/items?user_id=u%201')
   await client.add({ kind: 'thread', sessionId: 'panel-1' })
+  assert.ok(calls[1])
   assert.deepEqual(JSON.parse(String(calls[1].init?.body)), { user_id: 'u 1', kind: 'thread', title: '', text: '', url: '', session_id: 'panel-1' })
   await client.upload({ kind: 'screenshot', blob: new Blob(['x'], { type: 'image/jpeg' }), name: 'a.jpg' })
+  assert.ok(calls[2])
   const form = calls[2].init?.body as FormData
   assert.equal(form.get('kind'), 'screenshot')
   assert.equal((form.get('file') as File).name, 'a.jpg')
@@ -264,6 +269,7 @@ test('a dream notice names each topic by its heading and the agent whose folder 
   const client = createContextClient('http://api.test/', 'u 1', fetcher)
   assert.equal(await client.dream(), null)
   await client.reviewDream('20261117T201500123456', [{ key: 'memory/brain/panel/travel.md', right: false, comment: 'Ogden' }])
+  assert.ok(sent[0] && sent[1])
   assert.equal(sent[0].url, 'http://api.test/context/dream?user_id=u%201')
   assert.equal(sent[1].url, 'http://api.test/context/dream/20261117T201500123456')
   assert.deepEqual(JSON.parse(sent[1].body), { user_id: 'u 1', topics: [{ key: 'memory/brain/panel/travel.md', right: false, comment: 'Ogden' }] })

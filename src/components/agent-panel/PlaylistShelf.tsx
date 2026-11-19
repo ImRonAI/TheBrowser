@@ -60,8 +60,11 @@ export function PlaylistShelf({ request, songs, player, onNotice }: {
   const move = (list: Playlist, index: number, delta: number) => guard(async () => {
     const ids = list.songs.map((song) => song.id)
     const target = index + delta
-    if (target < 0 || target >= ids.length) return
-    ;[ids[index], ids[target]] = [ids[target], ids[index]]
+    const fromId = ids[index]
+    const toId = ids[target]
+    if (target < 0 || target >= ids.length || fromId === undefined || toId === undefined) return
+    ids[index] = toId
+    ids[target] = fromId
     await refreshOpen(await musicReorderPlaylist(request, list.id, ids))
   })
 

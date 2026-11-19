@@ -30,33 +30,33 @@ import type {
 
 export interface AIChainOfThoughtStep {
   label: string;
-  description?: string;
+  description?: string | undefined;
   status: 'pending' | 'running' | 'success' | 'error';
-  duration?: number;
+  duration?: number | undefined;
 }
 
 export interface AIToolExecution {
   id: string;
   name: string;
   status: 'running' | 'success' | 'error';
-  input?: Record<string, unknown>;
-  output?: string;
-  error?: string;
-  timestamp?: number;
+  input?: Record<string, unknown> | undefined;
+  output?: string | undefined;
+  error?: string | undefined;
+  timestamp?: number | undefined;
 }
 
 export interface AgentStreamingData {
   reasoning?: {
     content: string;
-    duration?: number;
-  };
-  chainOfThought?: AIChainOfThoughtStep[];
-  tools?: AIToolExecution[];
+    duration?: number | undefined;
+  } | undefined;
+  chainOfThought?: AIChainOfThoughtStep[] | undefined;
+  tools?: AIToolExecution[] | undefined;
   images?: {
     base64: string;
     mediaType: string;
-  }[];
-  output?: string;
+  }[] | undefined;
+  output?: string | undefined;
 }
 
 export interface CompletedNodeOutput {

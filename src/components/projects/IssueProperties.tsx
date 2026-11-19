@@ -82,12 +82,12 @@ export function OptionPicker<T extends string>({ label, value, options, onChange
   value: T
   options: PickerOption<T>[]
   onChange: (value: T) => void
-  disabled?: boolean
+  disabled?: boolean | undefined
   /** The value as shown in the property row. */
   children: ReactNode
-  searchable?: boolean
-  placeholder?: string
-  width?: string
+  searchable?: boolean | undefined
+  placeholder?: string | undefined
+  width?: string | undefined
 }) {
   const [open, setOpen] = useState(false)
   return <Popover open={open} onOpenChange={setOpen}>
@@ -114,14 +114,14 @@ export function OptionPicker<T extends string>({ label, value, options, onChange
   </Popover>
 }
 
-export function StatusPicker({ value, onChange, disabled }: { value: IssueStatus; onChange: (value: IssueStatus) => void; disabled?: boolean }) {
+export function StatusPicker({ value, onChange, disabled }: { value: IssueStatus; onChange: (value: IssueStatus) => void; disabled?: boolean | undefined }) {
   const options = (Object.keys(ISSUE_STATUS_CONFIG) as IssueStatus[]).map((status) => ({ value: status, label: ISSUE_STATUS_CONFIG[status].label, icon: <StatusIcon status={status} /> }))
   return <OptionPicker label="Status" value={value} options={options} onChange={onChange} disabled={disabled}>
     <StatusIcon status={value} /><span className="truncate">{ISSUE_STATUS_CONFIG[value].label}</span>
   </OptionPicker>
 }
 
-export function PriorityPicker({ value, onChange, disabled }: { value: IssuePriority; onChange: (value: IssuePriority) => void; disabled?: boolean }) {
+export function PriorityPicker({ value, onChange, disabled }: { value: IssuePriority; onChange: (value: IssuePriority) => void; disabled?: boolean | undefined }) {
   const options = (Object.keys(ISSUE_PRIORITY_CONFIG) as IssuePriority[]).map((priority) => ({ value: priority, label: ISSUE_PRIORITY_CONFIG[priority].label, icon: <PriorityIcon priority={priority} /> }))
   return <OptionPicker label="Priority" value={value} options={options} onChange={onChange} disabled={disabled}>
     <PriorityIcon priority={value} /><span className="truncate">{ISSUE_PRIORITY_CONFIG[value].label}</span>
@@ -129,7 +129,7 @@ export function PriorityPicker({ value, onChange, disabled }: { value: IssuePrio
 }
 
 /** Assignees: avatars in the row; a checklist in the popover (stays open while you pick). */
-export function AssigneePicker({ value, people, onChange, disabled }: { value: string[]; people: Person[]; onChange: (value: string[]) => void; disabled?: boolean }) {
+export function AssigneePicker({ value, people, onChange, disabled }: { value: string[]; people: Person[]; onChange: (value: string[]) => void; disabled?: boolean | undefined }) {
   const [open, setOpen] = useState(false)
   const known = useMemo(() => new Map(people.map((person) => [person.id, person])), [people])
   const everyone: Person[] = [...value.filter((id) => !known.has(id)).map((id) => ({ id, name: id, initials: '?' })), ...people]
@@ -140,7 +140,7 @@ export function AssigneePicker({ value, people, onChange, disabled }: { value: s
       <button type="button" aria-label="Assignees" disabled={disabled} className={PROPERTY_VALUE}>
         {chosen.length === 0 && <Empty>Unassigned</Empty>}
         {chosen.length > 0 && <span className="flex shrink-0 -space-x-1.5">{chosen.slice(0, 4).map((person) => <PersonAvatar key={person.id} person={person} />)}</span>}
-        {chosen.length === 1 && <span className="truncate">{chosen[0].name}</span>}
+        {chosen.length === 1 && chosen[0] && <span className="truncate">{chosen[0].name}</span>}
         {chosen.length > 1 && <span className="truncate text-ink-secondary dark:text-ink-inverse-secondary"><span className="font-mono tabular-nums">{chosen.length}</span> people</span>}
         <Chevron />
       </button>
@@ -207,7 +207,7 @@ const formatWhen = (iso: string) => {
 
 /** A date-time property: the formatted value in the row, the editor in a popover. */
 export function DateProperty({ label, value, onChange, disabled, overdue }: {
-  label: string; value?: string; onChange: (value: string | undefined) => void; disabled?: boolean; overdue?: boolean
+  label: string; value?: string | undefined; onChange: (value: string | undefined) => void; disabled?: boolean | undefined; overdue?: boolean | undefined
 }) {
   const [open, setOpen] = useState(false)
   const [problem, setProblem] = useState('')
@@ -238,7 +238,7 @@ export function DateProperty({ label, value, onChange, disabled, overdue }: {
 }
 
 /** A number typed in place, with the project's estimate unit beside it. */
-export function EstimateProperty({ value, unit, onChange, disabled }: { value?: number; unit: string; onChange: (value: number | undefined) => void; disabled?: boolean }) {
+export function EstimateProperty({ value, unit, onChange, disabled }: { value?: number | undefined; unit: string; onChange: (value: number | undefined) => void; disabled?: boolean | undefined }) {
   return <label className={cn(PROPERTY_VALUE, 'cursor-text focus-within:bg-surface-100 dark:focus-within:bg-surface-850')}>
     <input aria-label="Estimate" type="number" min={0} step="any" disabled={disabled} placeholder="—" value={value ?? ''}
       onChange={(event) => onChange(event.target.value === '' ? undefined : event.target.valueAsNumber)}

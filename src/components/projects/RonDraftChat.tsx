@@ -123,19 +123,19 @@ export function RonDraftChat({
   /** What Ron writes: “page” or “description”. */
   noun: string
   suggestions: string[]
-  initialGoal?: boolean
-  initialPrompt?: string
-  initialAttachments?: PromptAttachment[]
-  autoSend?: boolean
-  autoApply?: boolean
-  screenShare?: { enabled: boolean; onToggle: () => void }
+  initialGoal?: boolean | undefined
+  initialPrompt?: string | undefined
+  initialAttachments?: PromptAttachment[] | undefined
+  autoSend?: boolean | undefined
+  autoApply?: boolean | undefined
+  screenShare?: { enabled: boolean; onToggle: () => void } | undefined
   /** The draft went into the editor: the chat ends. */
   onApplied: (how: 'inserted' | 'overwritten') => void
-  onClose?: () => void
-  disabled?: boolean
-  headerExtra?: ReactNode
+  onClose?: (() => void) | undefined
+  disabled?: boolean | undefined
+  headerExtra?: ReactNode | undefined
   /** Shown under the composer before the first request. */
-  idleNote?: ReactNode
+  idleNote?: ReactNode | undefined
 }) {
   const [prompt, setPrompt] = useState(initialPrompt)
   const [attachments, setAttachments] = useState<PromptAttachment[]>(() => initialAttachments ?? [])

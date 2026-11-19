@@ -658,7 +658,7 @@ class BuildWorkspaceGuard(Plugin):
 
     def before_tool_call(self, event: BeforeToolCallEvent) -> None:
         name = event.tool_use.get("name")
-        if name not in ("shell", "editor"):
+        if name not in ("shell", "editor", "load_tool"):
             return
         raw = event.tool_use.get("input")
         if raw is None:

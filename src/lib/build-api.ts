@@ -58,8 +58,9 @@ export function createBuildRequest(baseUrl: string, fetcher: typeof fetch = fetc
     try {
       response = await fetcher(`${baseUrl.replace(/\/$/, '')}/build${path}`, {
         method: init.method ?? 'GET',
-        headers: init.body === undefined ? undefined : { 'Content-Type': 'application/json' },
-        body: init.body === undefined ? undefined : JSON.stringify(init.body),
+        ...(init.body === undefined
+          ? {}
+          : { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(init.body) }),
         signal: AbortSignal.timeout(30000),
       })
     } catch {

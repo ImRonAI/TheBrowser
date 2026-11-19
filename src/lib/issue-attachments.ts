@@ -57,7 +57,11 @@ const httpsUrl = (value: unknown) => {
 export function markdownBody(markdown: string): string {
   const lines = markdown.split('\n')
   let index = lines[0]?.startsWith('# ') ? 1 : 0
-  while (index < lines.length && (lines[index].trim() === '' || /^- (kind|title|added|source|file): /.test(lines[index]))) index++
+  while (index < lines.length) {
+    const line = lines[index]
+    if (line === undefined || (line.trim() !== '' && !/^- (kind|title|added|source|file): /.test(line))) break
+    index++
+  }
   return lines.slice(index).join('\n').trim()
 }
 
@@ -83,7 +87,7 @@ export function issueContextEntry(item: ContextItem, markdown: string, file?: Is
 export function mergeIssueContext(existing: Record<string, unknown>[], entries: IssueContextEntry[]): Record<string, unknown>[] {
   const incoming = new Map(entries.map((entry) => [entry.id, entry]))
   const merged = existing.map((value) => {
-    const id = typeof value.id === 'string' ? value.id : ''
+    const id = typeof value["id"] === 'string' ? value["id"] : ''
     const replacement = incoming.get(id)
     if (!replacement) return value
     incoming.delete(id)
@@ -98,7 +102,7 @@ export const pageSource = (projectId: string, documentId: string) => `ron://proj
 /** The project and page a `ron://project/<id>/docs/<page>` source points to, or null for any other source. */
 export function pageFromSource(source: string): { projectId: string; documentId: string } | null {
   const match = /^ron:\/\/project\/([^/?#]+)\/docs\/([^/?#]+)\/?$/.exec(source)
-  return match ? { projectId: match[1], documentId: match[2] } : null
+  return match && match[1] !== undefined && match[2] !== undefined ? { projectId: match[1], documentId: match[2] } : null
 }
 
 /**
@@ -113,7 +117,7 @@ export function documentContextEntry(document: { id: string; projectId: string; 
 }
 
 const isPageEntry = (value: Record<string, unknown>, documentId: string) =>
-  value.kind === 'document' && typeof value.source === 'string' && pageFromSource(value.source)?.documentId === documentId
+  value["kind"] === 'document' && typeof value["source"] === 'string' && pageFromSource(value["source"])?.documentId === documentId
 
 /** Add a related page to the Context; a page already there (from this field or the Context widget) is left as it is. */
 export function withDocumentContext(existing: Record<string, unknown>[], document: { id: string; projectId: string; title: string }, attachedAt?: string): Record<string, unknown>[] {
@@ -134,13 +138,13 @@ export function kindLabel(kind: string): string {
 
 /** File references on an entry (validated: only the attachments bucket). */
 export function entryFiles(entry: Record<string, unknown>): IssueFileRef[] {
-  if (!Array.isArray(entry.files)) return []
-  return entry.files.flatMap((value) => {
+  if (!Array.isArray(entry["files"])) return []
+  return entry["files"].flatMap((value) => {
     const file = value && typeof value === 'object' ? value as Record<string, unknown> : {}
-    if (file.bucket !== ISSUE_ATTACHMENTS_BUCKET || typeof file.path !== 'string' || !file.path) return []
-    return [{ bucket: ISSUE_ATTACHMENTS_BUCKET, path: file.path, name: typeof file.name === 'string' ? file.name : file.path,
-      mediaType: typeof file.mediaType === 'string' ? file.mediaType : 'application/octet-stream',
-      size: typeof file.size === 'number' ? file.size : 0 }]
+    if (file["bucket"] !== ISSUE_ATTACHMENTS_BUCKET || typeof file["path"] !== 'string' || !file["path"]) return []
+    return [{ bucket: ISSUE_ATTACHMENTS_BUCKET, path: file["path"], name: typeof file["name"] === 'string' ? file["name"] : file["path"],
+      mediaType: typeof file["mediaType"] === 'string' ? file["mediaType"] : 'application/octet-stream',
+      size: typeof file["size"] === 'number' ? file["size"] : 0 }]
   })
 }
 
@@ -148,12 +152,12 @@ export function entryFiles(entry: Record<string, unknown>): IssueFileRef[] {
 export function issueContextEntries(values: Record<string, unknown>[]): IssueContextEntry[] {
   const text = (value: unknown) => typeof value === 'string' ? value : ''
   return values.flatMap((value) => {
-    if (!value || typeof value !== 'object' || !text(value.id)) return []
-    const images = Array.isArray(value.images) ? value.images.flatMap((image) => {
-      const url = httpsUrl(image && typeof image === 'object' ? (image as Record<string, unknown>).url : image)
+    if (!value || typeof value !== 'object' || !text(value["id"])) return []
+    const images = Array.isArray(value["images"]) ? value["images"].flatMap((image) => {
+      const url = httpsUrl(image && typeof image === 'object' ? (image as Record<string, unknown>)["url"] : image)
       return url ? [{ url }] : []
     }) : []
-    return [{ id: text(value.id), kind: text(value.kind) || 'note', title: text(value.title) || text(value.id), content: text(value.content),
-      source: text(value.source), url: httpsUrl(value.url), images, files: entryFiles(value), added: text(value.added), attachedAt: text(value.attachedAt) }]
+    return [{ id: text(value["id"]), kind: text(value["kind"]) || 'note', title: text(value["title"]) || text(value["id"]), content: text(value["content"]),
+      source: text(value["source"]), url: httpsUrl(value["url"]), images, files: entryFiles(value), added: text(value["added"]), attachedAt: text(value["attachedAt"]) }]
   })
 }

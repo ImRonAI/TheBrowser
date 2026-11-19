@@ -127,7 +127,7 @@ export function filesFromListDir(input: unknown, output: unknown): IDEFile[] {
   return toolOutputText(output)
     .split('\n')
     .map((line) => line.split('\t'))
-    .filter(([kind, name]) => kind?.trim() === 'file' && name?.trim().length > 0)
+    .filter((parts): parts is [string, string, ...string[]] => parts[0]?.trim() === 'file' && (parts[1]?.trim().length ?? 0) > 0)
     .map(([, name]) => ({ path: `${base}/${name.trim()}`, code: '' }))
 }
 

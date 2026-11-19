@@ -72,12 +72,12 @@ import { cn } from '@/utils/cn'
  */
 export interface PremiumResultCardProps {
   result: UniversalResult
-  searchQuery?: string
-  className?: string
-  isSelected?: boolean
-  onClick?: () => void
-  onSelect?: () => void
-  onChatClick?: (result: UniversalResult) => void
+  searchQuery?: string | undefined
+  className?: string | undefined
+  isSelected?: boolean | undefined
+  onClick?: (() => void) | undefined
+  onSelect?: (() => void) | undefined
+  onChatClick?: ((result: UniversalResult) => void) | undefined
 }
 
 /**
@@ -277,13 +277,13 @@ export interface UniversalResultCardProps {
   /** The search result to display */
   result: UniversalResult
   /** Optional original search query for context */
-  searchQuery?: string
+  searchQuery?: string | undefined
   /** Optional custom className for styling */
-  className?: string
+  className?: string | undefined
   /** Optional click handler for the card */
-  onClick?: () => void
+  onClick?: (() => void) | undefined
   /** Optional handler for "Open to Chat" button */
-  onChatClick?: (result: UniversalResult) => void
+  onChatClick?: ((result: UniversalResult) => void) | undefined
 }
 
 /**
@@ -981,7 +981,7 @@ function CodeResultContent({ result }: { result: CodeResult }) {
 // Action Button Components
 // ============================================
 
-function VideoActions({ result, searchQuery, onChatClick }: { result: VideoResult; searchQuery?: string; onChatClick?: (result: UniversalResult) => void }) {
+function VideoActions({ result, searchQuery, onChatClick }: { result: VideoResult; searchQuery?: string | undefined; onChatClick?: ((result: UniversalResult) => void) | undefined }) {
   return (
     <div className="flex items-center gap-2">
       <Button variant="outline" size="sm">
@@ -999,7 +999,7 @@ function VideoActions({ result, searchQuery, onChatClick }: { result: VideoResul
   )
 }
 
-function AudioActions({ result, searchQuery, onChatClick }: { result: AudioResult; searchQuery?: string; onChatClick?: (result: UniversalResult) => void }) {
+function AudioActions({ result, searchQuery, onChatClick }: { result: AudioResult; searchQuery?: string | undefined; onChatClick?: ((result: UniversalResult) => void) | undefined }) {
   return (
     <div className="flex items-center gap-2">
       <Button variant="outline" size="sm">
@@ -1015,7 +1015,7 @@ function AudioActions({ result, searchQuery, onChatClick }: { result: AudioResul
   )
 }
 
-function PodcastActions({ result, searchQuery, onChatClick }: { result: PodcastResult; searchQuery?: string; onChatClick?: (result: UniversalResult) => void }) {
+function PodcastActions({ result, searchQuery, onChatClick }: { result: PodcastResult; searchQuery?: string | undefined; onChatClick?: ((result: UniversalResult) => void) | undefined }) {
   return (
     <div className="flex items-center gap-2">
       <Button variant="outline" size="sm">
@@ -1037,7 +1037,7 @@ function PodcastActions({ result, searchQuery, onChatClick }: { result: PodcastR
   )
 }
 
-function WebActions({ result, searchQuery, onChatClick }: { result: WebResult; searchQuery?: string; onChatClick?: (result: UniversalResult) => void }) {
+function WebActions({ result, searchQuery, onChatClick }: { result: WebResult; searchQuery?: string | undefined; onChatClick?: ((result: UniversalResult) => void) | undefined }) {
   return (
     <div className="flex items-center gap-2">
       <Button variant="outline" size="sm" asChild>
@@ -1051,7 +1051,7 @@ function WebActions({ result, searchQuery, onChatClick }: { result: WebResult; s
   )
 }
 
-function ArticleActions({ result, searchQuery, onChatClick }: { result: ArticleResult; searchQuery?: string; onChatClick?: (result: UniversalResult) => void }) {
+function ArticleActions({ result, searchQuery, onChatClick }: { result: ArticleResult; searchQuery?: string | undefined; onChatClick?: ((result: UniversalResult) => void) | undefined }) {
   return (
     <div className="flex items-center gap-2">
       <Button variant="outline" size="sm" asChild>
@@ -1065,7 +1065,7 @@ function ArticleActions({ result, searchQuery, onChatClick }: { result: ArticleR
   )
 }
 
-function SocialMediaActions({ result, searchQuery, onChatClick }: { result: SocialMediaResult; searchQuery?: string; onChatClick?: (result: UniversalResult) => void }) {
+function SocialMediaActions({ result, searchQuery, onChatClick }: { result: SocialMediaResult; searchQuery?: string | undefined; onChatClick?: ((result: UniversalResult) => void) | undefined }) {
   return (
     <div className="flex items-center gap-2">
       <Button variant="outline" size="sm">
@@ -1085,7 +1085,7 @@ function SocialMediaActions({ result, searchQuery, onChatClick }: { result: Soci
   )
 }
 
-function TravelActions({ result, searchQuery, onChatClick }: { result: TravelResult; searchQuery?: string; onChatClick?: (result: UniversalResult) => void }) {
+function TravelActions({ result, searchQuery, onChatClick }: { result: TravelResult; searchQuery?: string | undefined; onChatClick?: ((result: UniversalResult) => void) | undefined }) {
   return (
     <div className="flex items-center gap-2">
       <Button variant="default" size="sm" asChild>
@@ -1103,7 +1103,7 @@ function TravelActions({ result, searchQuery, onChatClick }: { result: TravelRes
   )
 }
 
-function AcademicActions({ result, searchQuery, onChatClick }: { result: AcademicResult; searchQuery?: string; onChatClick?: (result: UniversalResult) => void }) {
+function AcademicActions({ result, searchQuery, onChatClick }: { result: AcademicResult; searchQuery?: string | undefined; onChatClick?: ((result: UniversalResult) => void) | undefined }) {
   return (
     <div className="flex items-center gap-2">
       {result.pdfUrl && (
@@ -1123,7 +1123,7 @@ function AcademicActions({ result, searchQuery, onChatClick }: { result: Academi
   )
 }
 
-function ImageActions({ result, searchQuery, onChatClick }: { result: ImageResult; searchQuery?: string; onChatClick?: (result: UniversalResult) => void }) {
+function ImageActions({ result, searchQuery, onChatClick }: { result: ImageResult; searchQuery?: string | undefined; onChatClick?: ((result: UniversalResult) => void) | undefined }) {
   return (
     <div className="flex items-center gap-2">
       <Button variant="outline" size="sm" asChild>
@@ -1141,7 +1141,7 @@ function ImageActions({ result, searchQuery, onChatClick }: { result: ImageResul
   )
 }
 
-function CodeActions({ result, searchQuery, onChatClick }: { result: CodeResult; searchQuery?: string; onChatClick?: (result: UniversalResult) => void }) {
+function CodeActions({ result, searchQuery, onChatClick }: { result: CodeResult; searchQuery?: string | undefined; onChatClick?: ((result: UniversalResult) => void) | undefined }) {
   return (
     <div className="flex items-center gap-2">
       {result.repositoryUrl && (

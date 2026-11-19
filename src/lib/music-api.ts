@@ -30,7 +30,7 @@ export interface SavedSong {
 
 export const SOURCE_LABELS: Record<SavedSong['source'], string> = { 'lyria-realtime': 'Live take', lyria: 'Lyria 3.5', elevenlabs: 'ElevenLabs' }
 
-export interface MusicTake { seconds: number; segments: MusicSegment[]; sample_rate?: number; channels?: number; max_seconds?: number }
+export interface MusicTake { seconds: number; segments: MusicSegment[]; sample_rate?: number | undefined; channels?: number | undefined; max_seconds?: number | undefined }
 export interface SaveResult { song_id: string; title: string; duration_seconds: number; storage_path: string; segments: number; signed_url: string | null }
 
 type Session = { user: { id: string }; access_token: string } | null
@@ -56,7 +56,7 @@ export function createMusicRequest(baseUrl: string, getSession: () => Promise<Se
     let response: Response
     try {
       response = await fetcher(`${baseUrl.replace(/\/$/, '')}/music${path}`, {
-        method, headers, body: body === undefined ? undefined : JSON.stringify(body), signal: AbortSignal.timeout(30000),
+        method, headers, ...(body === undefined ? {} : { body: JSON.stringify(body) }), signal: AbortSignal.timeout(30000),
       })
     } catch {
       throw new Error('Cannot reach the music deck backend.')
@@ -117,10 +117,10 @@ export function formatSeconds(seconds: number): string {
 /** Human summary of a generation config for a chip row (`120 bpm · D major/B minor · density 0.4`). */
 export function describeConfig(config: Record<string, unknown>): string[] {
   const out: string[] = []
-  if (typeof config.bpm === 'number') out.push(`${config.bpm} bpm`)
-  if (typeof config.scale === 'string' && config.scale !== 'SCALE_UNSPECIFIED') out.push(config.scale.toLowerCase().replace(/_major_/, ' major / ').replace(/_minor$/, ' minor').replace(/_/g, ' '))
+  if (typeof config["bpm"] === 'number') out.push(`${config["bpm"]} bpm`)
+  if (typeof config["scale"] === 'string' && config["scale"] !== 'SCALE_UNSPECIFIED') out.push(config["scale"].toLowerCase().replace(/_major_/, ' major / ').replace(/_minor$/, ' minor').replace(/_/g, ' '))
   for (const key of ['density', 'brightness', 'guidance', 'temperature', 'top_k', 'seed'] as const) if (typeof config[key] === 'number') out.push(`${key.replace('_', ' ')} ${config[key]}`)
   for (const key of ['mute_bass', 'mute_drums', 'only_bass_and_drums'] as const) if (config[key] === true) out.push(key.replace(/_/g, ' '))
-  if (typeof config.music_generation_mode === 'string' && config.music_generation_mode !== 'QUALITY') out.push(config.music_generation_mode.toLowerCase())
+  if (typeof config["music_generation_mode"] === 'string' && config["music_generation_mode"] !== 'QUALITY') out.push(config["music_generation_mode"].toLowerCase())
   return out
 }

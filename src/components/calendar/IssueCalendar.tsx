@@ -436,7 +436,7 @@ function TimeGrid({ days, issues, keyFor, onIssueSelect, onOpenDay, now }: ViewP
   const hasAllDay = placements.some((placement) => placement.allDay.length > 0)
   const columns: CSSProperties = { gridTemplateColumns: `4.5rem repeat(${days.length}, minmax(0, 1fr))` }
   const single = days.length === 1
-  const firstDay = days[0].getTime()
+  const firstDay = days[0]?.getTime() ?? 0
   const earliest = Math.min(Infinity, ...placements.flatMap(({ timed }) => timed.map((block) => block.startMinutes)))
 
   // Open on the first scheduled block; with none, on the current time today, else 7 AM.
@@ -495,25 +495,29 @@ function TimeGrid({ days, issues, keyFor, onIssueSelect, onOpenDay, now }: ViewP
           <div className="px-2 py-2 text-right text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-muted dark:text-ink-inverse-muted">
             All day
           </div>
-          {placements.map(({ allDay }, index) => (
-            <div key={days[index].toISOString()} className={cn('flex min-w-0 flex-col gap-0.5 border-l p-1', HAIRLINE)}>
-              {allDay.slice(0, 3).map((issue) => (
-                <IssueChip key={issue.id} issue={issue} keyFor={keyFor} onSelect={onIssueSelect} tinted />
-              ))}
-              {allDay.length > 3 && onOpenDay && (
-                <button
-                  type="button"
-                  onClick={() => onOpenDay(days[index])}
-                  className="self-start rounded-md px-1.5 text-[11px] font-medium text-ink-muted dark:text-ink-inverse-muted hover:text-ink dark:hover:text-ink-inverse"
-                >
-                  +{allDay.length - 3} more
-                </button>
-              )}
-              {allDay.length > 3 && !onOpenDay && allDay.slice(3).map((issue) => (
-                <IssueChip key={issue.id} issue={issue} keyFor={keyFor} onSelect={onIssueSelect} tinted />
-              ))}
-            </div>
-          ))}
+          {placements.map(({ allDay }, index) => {
+            const day = days[index]
+            if (!day) return null
+            return (
+              <div key={day.toISOString()} className={cn('flex min-w-0 flex-col gap-0.5 border-l p-1', HAIRLINE)}>
+                {allDay.slice(0, 3).map((issue) => (
+                  <IssueChip key={issue.id} issue={issue} keyFor={keyFor} onSelect={onIssueSelect} tinted />
+                ))}
+                {allDay.length > 3 && onOpenDay && (
+                  <button
+                    type="button"
+                    onClick={() => onOpenDay(day)}
+                    className="self-start rounded-md px-1.5 text-[11px] font-medium text-ink-muted dark:text-ink-inverse-muted hover:text-ink dark:hover:text-ink-inverse"
+                  >
+                    +{allDay.length - 3} more
+                  </button>
+                )}
+                {allDay.length > 3 && !onOpenDay && allDay.slice(3).map((issue) => (
+                  <IssueChip key={issue.id} issue={issue} keyFor={keyFor} onSelect={onIssueSelect} tinted />
+                ))}
+              </div>
+            )
+          })}
         </div>
       )}
 
@@ -532,7 +536,7 @@ function TimeGrid({ days, issues, keyFor, onIssueSelect, onOpenDay, now }: ViewP
           </div>
           {days.map((day, index) => {
             const isToday = sameDay(day, now)
-            const blocks = layoutOverlaps(placements[index].timed)
+            const blocks = layoutOverlaps(placements[index]?.timed ?? [])
             return (
               <div
                 key={day.toISOString()}

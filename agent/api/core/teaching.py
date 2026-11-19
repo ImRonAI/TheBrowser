@@ -1064,12 +1064,20 @@ def create_learned_skill_tools(user_id: str, agent_id: str, model_factory: Calla
                 raise ValueError("Configured skill requires tools unavailable in this agent")
             from agent.api.core.a2a_tools import a2a_tools
             inherited = [value for value in inherited_memory(assigned) if value.tool_name not in names]
+            watch_dir = not agent_id.startswith("issue:")
+            if watch_dir:
+                (Path.cwd() / "tools").mkdir(exist_ok=True)
             child = Agent(model=model_factory(skill_name), system_prompt=skill.instructions +
                 "\nUse read_skill_file for progressive disclosure of actual references and scripts relative to this skill. "
                 "Validate the requested outcome using actual results. If you cannot complete it, explicitly report the missing requirements."
                 + (JOURNAL_DIRECTIVE if inherited else ""),
                 tools=[*[assigned[name] for name in names], _configured_file_reader(skill), *a2a_tools(), *inherited],
-                background_tasks={"agentic": ["*"], "wait_for_completion": True},
+                background_tasks={
+                    "always": ["*"],
+                    "never": ["load_tool", "subagent", "todo_write"],
+                    "wait_for_completion": True,
+                },
+                load_tools_from_directory=watch_dir,
                 callback_handler=None)
             async with asyncio.timeout(300):
                 outcome = cast(StepOutcome, (await child.invoke_async([{"text": request}, {"text":
@@ -1118,8 +1126,16 @@ def create_learned_skill_tools(user_id: str, agent_id: str, model_factory: Calla
         from agent.api.core.a2a_tools import a2a_tools
         # A skill run is the parent's subagent: it inherits the parent's second brain and journal.
         inherited = [value for value in inherited_memory(assigned) if value.tool_name not in tool_names]
+        watch_dir = not agent_id.startswith("issue:")
+        if watch_dir:
+            (Path.cwd() / "tools").mkdir(exist_ok=True)
         child = Agent(model=model_factory(skill_name), callback_handler=None, tools=[*tools, *a2a_tools(), *inherited],
-            background_tasks={"agentic": ["*"], "wait_for_completion": True},
+            background_tasks={
+                "always": ["*"],
+                "never": ["load_tool", "subagent", "todo_write"],
+                "wait_for_completion": True,
+            },
+            load_tools_from_directory=watch_dir,
             system_prompt=instructions + "\nFollow the native Agent SOP's ordered steps and MUST constraints. "
             "Use actual tool results to verify each expected outcome before advancing. "
             "Stop and report blocked when input, authorization or a required capability is missing."

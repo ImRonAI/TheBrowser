@@ -8,10 +8,10 @@ interface IssueColumnProps extends Omit<HTMLAttributes<HTMLElement>, 'children'>
   status: IssueStatus
   count: number
   /** A card is being dragged over this column. */
-  over?: boolean
+  over?: boolean | undefined
   /** A card is being dragged anywhere on the board. */
-  dragging?: boolean
-  onCreate?: () => void
+  dragging?: boolean | undefined
+  onCreate?: (() => void) | undefined
   children: ReactNode
 }
 
