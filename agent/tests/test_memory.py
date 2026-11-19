@@ -78,7 +78,8 @@ def test_stores_are_native_file_stores_per_category_tasks_last() -> None:
     config = mem.memory_manager_config("u1")
     names = [store.name for store in config["stores"]]
     assert names == ["facts", "remember", "people", "feedback", "context", "tasks", "brain", "journal/panel"]
-    assert all(type(store) is FileMemoryStore for store in config["stores"][:7])
+    assert all(isinstance(store, FileMemoryStore) for store in config["stores"])
+    assert isinstance(config["stores"][2], mem.People)
     # Nothing is distilled during a conversation: only the journal takes each turn, for the dream.
     assert [store.name for store in config["stores"] if store.extraction] == ["journal/panel"]
     # The Context widget fills `context` and `remember_person` fills `people`; add_memory never writes either.
@@ -109,8 +110,9 @@ def test_users_are_isolated_and_chat_and_live_share_the_same_files() -> None:
 
 def test_live_tools_are_the_native_search_and_add_plus_the_journal() -> None:
     assert [tool.tool_name for tool in mem.live_memory_tools("u1")] == [
-        "search_memory", "add_memory", "journal", "remember_person"
+        "search_memory", "add_memory", "remember_person", "journal"
     ]
+    assert mem.people_store("u1", writable=False).get_tools() == []
 
 
 def test_remember_person_merges_by_heading_and_is_injected_and_shared_over_mcp() -> None:
@@ -121,7 +123,7 @@ def test_remember_person_merges_by_heading_and_is_injected_and_shared_over_mcp()
     from agent.api.core import memory_mcp
 
     async def run() -> None:
-        tool = mem.remember_person_tool("u1")
+        tool = mem.people_store("u1").get_tools()[0]
         first = await tool(name="Dana Kim", relationship="Close friend", contact="+1 801-555-0100")  # type: ignore[operator]
         assert first["content"][0]["json"]["person"] == {"name": "Dana Kim", "key": "dana-kim.md"}
         await tool(name="Dana Kim", notes="Training for Austin half marathon", applies_to="Running, Austin trip")  # type: ignore[operator]

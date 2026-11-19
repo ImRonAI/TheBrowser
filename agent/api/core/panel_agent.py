@@ -93,7 +93,7 @@ from agent.api.core.panel_browser import (
     server_name,
 )
 from agent.api.core.dreaming import JOURNAL_DIRECTIVE, agent_memory
-from agent.api.core.memory import MEMORY_DIRECTIVE, MemoryScope, live_memory_tools, memory_manager_config, remember_person_tool
+from agent.api.core.memory import MEMORY_DIRECTIVE, MemoryScope, live_memory_tools, memory_manager_config
 from agent.api.core.panel_runtime import is_model_timeout
 from agent.api.core.panel_storage import ThreadSessionManager, get_user_session_storage, thread_agent_id
 from agent.api.core.tool_observation import ToolObservation, trace_attributes
@@ -1394,10 +1394,9 @@ def create_panel_agent(
                 user_id, agent_scope, model_factory, additional_tools=skill_tools(), tool_supplier=skill_tools,
             ))
             system_prompt += SKILLS_AND_SPECIALISTS_DIRECTIVE
-            # Native MemoryManager (core/memory.py): search_memory, add_memory, userTurn injection,
+            # Native MemoryManager (core/memory.py): search_memory, add_memory, remember_person, userTurn injection,
             # the second brain and this agent's journal (core/dreaming.py).
             memory = user_memory_config(user_id, agent_scope)
-            catalog.add_tools([remember_person_tool(user_id)])
             system_prompt += MEMORY_DIRECTIVE
             # Native A2A client tools over Ron's agents (panel A2A server + RON_A2A_AGENTS).
             from agent.api.core.a2a_tools import a2a_tools

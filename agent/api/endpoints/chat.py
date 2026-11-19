@@ -485,6 +485,11 @@ async def _create_runtime_agent(*, user_id, session_id, selection, options, runt
             "context": context_agent_prompt(user_id),
         }[destination] + agent_prompt
     )
+    if destination == "context":
+        # Native harness-sdk BackgroundTasksConfig (_BackgroundTasks / InProcessTaskManager): Context Agent's journal
+        # calls always execute in the background while the agent continues, settling before the invocation completes.
+        runtime_options = {**runtime_options, "background_tasks": {
+            "always": ["journal"], "agentic": ["*"], "wait_for_completion": True}}
     return await asyncio.to_thread(
         create_panel_agent,
         provider=selection["provider"], model_id=selection["model_id"],
