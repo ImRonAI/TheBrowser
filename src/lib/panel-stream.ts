@@ -24,7 +24,7 @@ export interface PanelConfiguration {
   effort: string
   options: Partial<RuntimeOptions> & Record<string, unknown>
   /** Who this conversation is with (`selection.agent`): Ron, a saved specialist or a project agent. */
-  agent?: { kind: 'ron' | 'specialist' | 'project'; id: string }
+  agent?: { kind: 'ron' | 'specialist' | 'project'; id: string } | undefined
 }
 export interface ToolPart {
   kind: 'tool'
@@ -34,10 +34,10 @@ export interface ToolPart {
   path: unknown[]
   input: unknown
   progress: string[]
-  status?: string
+  status?: string | undefined
   output?: unknown
   finished: boolean
-  taskId?: string
+  taskId?: string | undefined
 }
 /**
  * A Perplexity Agent API server-side tool event (`native_tool` envelope). Output items
@@ -51,7 +51,7 @@ export interface NativePart {
   /** Output item `type`, or the `response.reasoning.*` event name for reasoning steps. */
   itemType: string
   /** The output item itself (undefined for reasoning steps). */
-  item?: Record<string, unknown>
+  item?: Record<string, unknown> | undefined
   /** Raw event payloads, in arrival order (one per merged reasoning step). */
   steps: Record<string, unknown>[]
 }
@@ -60,7 +60,7 @@ export type PanelPart = ToolPart | NativePart | {
   key: string
   path: unknown[]
   text: string
-  discarded?: boolean
+  discarded?: boolean | undefined
   modelAttempt?: unknown
   cycle?: unknown
 }
@@ -70,13 +70,13 @@ export function isNativePart(part: PanelPart): part is NativePart {
 }
 
 function nativeIdentity(runId: unknown, path: unknown[], itemType: string, item: Record<string, unknown> | undefined, sequence: unknown): string {
-  const id = item && (typeof item.call_id === 'string' ? item.call_id : typeof item.id === 'string' ? item.id : undefined)
+  const id = item && (typeof item["call_id"] === 'string' ? item["call_id"] : typeof item["id"] === 'string' ? item["id"] : undefined)
   return `${String(runId)}-native-${itemType}-${id ?? String(sequence)}${path.length ? `-${JSON.stringify(path)}` : ''}`
 }
 export interface PanelMessage {
   id: string
   role: 'user' | 'assistant'
-  runId?: string
+  runId?: string | undefined
   parts: PanelPart[]
 }
 /** Where a failing tool lives; every kind is repaired per user (file / adapter / server revision). */
@@ -84,11 +84,11 @@ export type RepairKind = 'library' | 'mcp' | 'core' | 'other'
 export interface RepairDemonstration {
   kind: 'failing' | 'context'
   input: unknown
-  expected?: string
-  actual?: string
+  expected?: string | undefined
+  actual?: string | undefined
   status: 'passed' | 'failed'
   dry_run: boolean
-  source?: 'session' | 'synthetic'
+  source?: 'session' | 'synthetic' | undefined
 }
 /**
  * One investigation of a failing tool, as the panel sees it. It starts from the server's native
@@ -101,55 +101,55 @@ export interface RepairInvestigation {
   tool: string
   rev: string
   state: 'investigating' | 'approval' | 'done'
-  kind?: RepairKind
-  exceptionClass?: string
-  count?: number
-  status?: string
-  summary?: string
-  diff?: string
+  kind?: RepairKind | undefined
+  exceptionClass?: string | undefined
+  count?: number | undefined
+  status?: string | undefined
+  summary?: string | undefined
+  diff?: string | undefined
   /** file (library module), adapter (wraps any tool, incl. MCP) or server (repaired browser MCP server). */
-  repairKind?: 'file' | 'adapter' | 'server'
+  repairKind?: 'file' | 'adapter' | 'server' | undefined
   demonstrations: RepairDemonstration[]
-  sandbox?: string
-  route?: string
+  sandbox?: string | undefined
+  route?: string | undefined
   /** Present while `approval`: proof the panel must send back with Approve. */
-  approvalToken?: string
-  interrupt?: { interruptId: string; name?: string; reason?: unknown }
-  applied?: boolean
-  declined?: boolean
+  approvalToken?: string | undefined
+  interrupt?: { interruptId: string; name?: string | undefined; reason?: unknown } | undefined
+  applied?: boolean | undefined
+  declined?: boolean | undefined
 }
 /** Kept for stored sessions that recorded the former proposal event. */
 export interface RepairProposal {
   id: string
   tool: string
   kind: RepairKind
-  exceptionClass?: string
-  count?: number
+  exceptionClass?: string | undefined
+  count?: number | undefined
   observation: boolean
 }
 export interface PanelState {
   sessionId: string
   messages: PanelMessage[]
   sequence: number
-  runId?: string
+  runId?: string | undefined
   status: RunStatus
   interrupts: PanelInterrupt[]
-  repairProposal?: RepairProposal
-  repair?: RepairInvestigation
+  repairProposal?: RepairProposal | undefined
+  repair?: RepairInvestigation | undefined
   checkpoint?: unknown
   /** What failed, as people read it (`failureText`); `errorDetails` keeps the raw payload when it says more. */
-  error?: string
-  errorDetails?: string
-  stopReason?: string
-  model?: string
-  provider?: string
-  configuration?: PanelConfiguration
-  configurationLocked?: boolean
-  latestSequence?: number
-  needsReplay?: boolean
-  recoveryRequired?: boolean
-  historyIncomplete?: boolean
-  followPending?: boolean
+  error?: string | undefined
+  errorDetails?: string | undefined
+  stopReason?: string | undefined
+  model?: string | undefined
+  provider?: string | undefined
+  configuration?: PanelConfiguration | undefined
+  configurationLocked?: boolean | undefined
+  latestSequence?: number | undefined
+  needsReplay?: boolean | undefined
+  recoveryRequired?: boolean | undefined
+  historyIncomplete?: boolean | undefined
+  followPending?: boolean | undefined
 }
 
 /** A terminal snapshot can precede the runtime's finally-phase steering admission. */
@@ -208,7 +208,7 @@ function readableName(name: string): string {
 /** A tool's registered name as people read it: `http_request` is "HTTP request", a browser tool says which browser. */
 export function toolDisplayName(name: string): string {
   const browser = BROWSER_TOOL_NAME.exec(name)
-  if (browser) return `${browser[1] === 'cloud' ? 'Cloud browser' : 'Browser'} · ${readableName(browser[2])}`
+  if (browser && browser[2] !== undefined) return `${browser[1] === 'cloud' ? 'Cloud browser' : 'Browser'} · ${readableName(browser[2])}`
   return readableName(name)
 }
 
@@ -230,8 +230,8 @@ const RESULT_IMAGE_FORMATS = new Set(['png', 'jpeg', 'gif', 'webp'])
 /** Base64 of serialized bytes: the runtime's `{encoding: 'base64', data}` or a stored session's `{__bytes_encoded__: true, data}`. */
 function base64Bytes(value: unknown): string | null {
   const bytes = record(value)
-  if (typeof bytes.data !== 'string' || !bytes.data) return null
-  return bytes.encoding === 'base64' || bytes.__bytes_encoded__ === true ? bytes.data : null
+  if (typeof bytes["data"] !== 'string' || !bytes["data"]) return null
+  return bytes["encoding"] === 'base64' || bytes["__bytes_encoded__"] === true ? bytes["data"] : null
 }
 
 /** A tool part's `output` (the runtime forwards the native result `content` verbatim) as text, values, images and documents. */
@@ -244,18 +244,18 @@ export function toolResultDisplay(output: unknown): ToolResultDisplay {
   for (const block of output) {
     if (typeof block === 'string') { texts.push(block); continue }
     const entry = record(block)
-    if (typeof entry.text === 'string') { texts.push(entry.text); continue }
-    if ('json' in entry) { display.values.push(entry.json); continue }
-    const image = record(entry.image)
-    const data = base64Bytes(record(image.source).bytes)
-    if (data && typeof image.format === 'string' && RESULT_IMAGE_FORMATS.has(image.format)) {
-      display.images.push({ src: `data:image/${image.format};base64,${data}`, format: image.format })
+    if (typeof entry["text"] === 'string') { texts.push(entry["text"]); continue }
+    if ('json' in entry) { display.values.push(entry["json"]); continue }
+    const image = record(entry["image"])
+    const data = base64Bytes(record(image["source"])["bytes"])
+    if (data && typeof image["format"] === 'string' && RESULT_IMAGE_FORMATS.has(image["format"])) {
+      display.images.push({ src: `data:image/${image["format"]};base64,${data}`, format: image["format"] })
       continue
     }
-    const document = record(entry.document)
+    const document = record(entry["document"])
     if (Object.keys(document).length) {
-      display.documents.push({ name: typeof document.name === 'string' && document.name ? document.name : 'Document',
-        format: typeof document.format === 'string' ? document.format : '' })
+      display.documents.push({ name: typeof document["name"] === 'string' && document["name"] ? document["name"] : 'Document',
+        format: typeof document["format"] === 'string' ? document["format"] : '' })
       continue
     }
     display.values.push(block)
@@ -301,13 +301,13 @@ const GRPC_DETAILS = /\bdetails = "((?:[^"\\]|\\.)*)"/
 export function failureText(error: unknown): string {
   if (typeof error === 'string') {
     const details = GRPC_DETAILS.exec(error)
-    return (details ? details[1].replace(/\\(.)/g, '$1') : error).trim()
+    return (details && details[1] !== undefined ? details[1].replace(/\\(.)/g, '$1') : error).trim()
   }
   const fields = record(error)
-  for (const value of [fields.message, fields.detail]) {
+  for (const value of [fields["message"], fields["detail"]]) {
     if (typeof value === 'string' && value.trim()) return failureText(value)
   }
-  if (fields.cause !== undefined) return failureText(fields.cause)
+  if (fields["cause"] !== undefined) return failureText(fields["cause"])
   return displayValue(error)
 }
 
@@ -327,10 +327,10 @@ const BACKGROUND_TERMINAL = new Set(['completed', 'failed', 'cancelled'])
 /** Parse native Strands `_BackgroundTasks` dispatch acknowledgement (`Task ID: <uuid>`). */
 function parseBackgroundDispatchTaskId(content: unknown): string | null {
   if (!Array.isArray(content)) return null
-  const text = content.map((block) => record(block).text).filter((t): t is string => typeof t === 'string').join('\n')
+  const text = content.map((block) => record(block)["text"]).filter((t): t is string => typeof t === 'string').join('\n')
   if (!text.startsWith('Background task dispatched.')) return null
   const match = /^Task ID:\s*(\S+)/m.exec(text)
-  return match ? match[1] : null
+  return match && match[1] !== undefined ? match[1] : null
 }
 
 interface BackgroundSettlement {
@@ -338,21 +338,21 @@ interface BackgroundSettlement {
   toolUseId: string
   status: string
   content: unknown[]
-  errorMessage?: string
+  errorMessage?: string | undefined
 }
 
 /** Parse native Strands `_task_result_content` metadata block (`content[0].json`). */
 function parseBackgroundSettlement(content: unknown): BackgroundSettlement | null {
   if (!Array.isArray(content) || content.length === 0) return null
-  const meta = record(record(content[0]).json)
-  if (typeof meta.task_id !== 'string' || typeof meta.tool_use_id !== 'string' || typeof meta.status !== 'string') {
+  const meta = record(record(content[0])["json"])
+  if (typeof meta["task_id"] !== 'string' || typeof meta["tool_use_id"] !== 'string' || typeof meta["status"] !== 'string') {
     return null
   }
-  const errorMsg = record(meta.error).message
+  const errorMsg = record(meta["error"])["message"]
   return {
-    taskId: meta.task_id,
-    toolUseId: meta.tool_use_id,
-    status: meta.status,
+    taskId: meta["task_id"],
+    toolUseId: meta["tool_use_id"],
+    status: meta["status"],
     content: content.slice(1),
     errorMessage: typeof errorMsg === 'string' && errorMsg ? errorMsg : undefined,
   }
@@ -360,7 +360,92 @@ function parseBackgroundSettlement(content: unknown): BackgroundSettlement | nul
 
 function isSyntheticBackgroundGet(name: unknown, id: unknown, input: unknown): boolean {
   const fields = record(input)
-  return name === BACKGROUND_MANAGE_TOOL && fields.mode === 'get' && typeof id === 'string' && fields.task_id === id
+  return name === BACKGROUND_MANAGE_TOOL && fields["mode"] === 'get' && typeof id === 'string' && fields["task_id"] === id
+}
+
+interface SubagentControlResult {
+  kind: 'spawn' | 'recover' | 'cancel'
+  subagentId: string
+  recoveredFrom?: string
+}
+
+/** Parse native `_SubagentTool(background=True)` spawn, recover, or cancel JSON envelopes. */
+function parseSubagentControlResult(content: unknown): SubagentControlResult | null {
+  if (!Array.isArray(content) || content.length === 0) return null
+  const body = record(record(content[0])["json"])
+  if (typeof body["subagent_id"] === 'string' && body["status"] === 'running') {
+    if (typeof body["recovered_from"] === 'string' && body["recovered_from"]) {
+      return { kind: 'recover', subagentId: body["subagent_id"], recoveredFrom: body["recovered_from"] }
+    }
+    return { kind: 'spawn', subagentId: body["subagent_id"] }
+  }
+  const cancelled = record(body["cancelled"])
+  if (typeof cancelled["subagent_id"] === 'string' && cancelled["subagent_id"]) {
+    return { kind: 'cancel', subagentId: cancelled["subagent_id"] }
+  }
+  return null
+}
+
+interface SubagentResumeEntry {
+  subagentId: string
+  status: string
+  output?: string | undefined
+  hangupReason?: string | undefined
+}
+
+/** Parse `[subagent-completed]` and `[subagent-hangup]` `AfterInvocationEvent.resume` blocks. */
+function parseSubagentResume(text: unknown): { kind: 'completed' | 'hangup'; entries: SubagentResumeEntry[] } | null {
+  if (typeof text !== 'string') return null
+  const isCompleted = text.startsWith('[subagent-completed]')
+  const isHangup = text.startsWith('[subagent-hangup]')
+  if (!isCompleted && !isHangup) return null
+  const bracketIdx = text.indexOf('\n[')
+  if (bracketIdx < 0) return null
+  try {
+    const parsed = JSON.parse(text.slice(bracketIdx + 1))
+    if (!Array.isArray(parsed)) return null
+    const entries: SubagentResumeEntry[] = []
+    for (const rawItem of parsed) {
+      const item = record(rawItem)
+      if (typeof item["subagent_id"] !== 'string') continue
+      const out = typeof item["result"] === 'string'
+        ? item["result"]
+        : typeof item["error"] === 'string'
+          ? item["error"]
+          : undefined
+      entries.push({
+        subagentId: item["subagent_id"],
+        status: typeof item["status"] === 'string' ? item["status"] : 'completed',
+        output: out,
+        hangupReason: typeof item["hangup_reason"] === 'string' ? item["hangup_reason"] : undefined,
+      })
+    }
+    return entries.length ? { kind: isCompleted ? 'completed' : 'hangup', entries } : null
+  } catch {
+    return null
+  }
+}
+
+function applySubagentResumeToParts(parts: PanelPart[], resume: { kind: 'completed' | 'hangup'; entries: SubagentResumeEntry[] }): void {
+  for (const entry of resume.entries) {
+    for (let i = 0; i < parts.length; i++) {
+      const part = parts[i]
+      if (!part || part.kind !== 'tool' || (part.taskId !== entry.subagentId && part.id !== entry.subagentId)) continue
+      if (resume.kind === 'completed') {
+        parts[i] = {
+          ...part,
+          finished: true,
+          status: entry.status === 'completed' ? 'success' : 'error',
+          output: entry.output !== undefined ? [{ text: entry.output }] : part.output,
+        }
+      } else if (entry.hangupReason && !part.finished) {
+        const note = `Hangup detected: ${entry.hangupReason}`
+        if (!part.progress.includes(note)) {
+          parts[i] = { ...part, progress: [...part.progress, note] }
+        }
+      }
+    }
+  }
 }
 
 function foldBackgroundChildEvent(
@@ -370,14 +455,14 @@ function foldBackgroundChildEvent(
   rawData: Record<string, unknown>,
   sequence: number,
 ): void {
-  const scopeLabel = typeof rawData.formation === 'string' ? rawData.formation : typeof rawData.skill === 'string' ? rawData.skill : null
-  if (scopeLabel && rawData.event && typeof rawData.event === 'object' && !Array.isArray(rawData.event)) {
-    foldBackgroundChildEvent(parts, runId, [...childPath, scopeLabel], record(rawData.event), sequence)
+  const scopeLabel = typeof rawData["formation"] === 'string' ? rawData["formation"] : typeof rawData["skill"] === 'string' ? rawData["skill"] : null
+  if (scopeLabel && rawData["event"] && typeof rawData["event"] === 'object' && !Array.isArray(rawData["event"])) {
+    foldBackgroundChildEvent(parts, runId, [...childPath, scopeLabel], record(rawData["event"]), sequence)
     return
   }
-  const eventType = typeof rawData.type === 'string' ? rawData.type : ''
-  if (eventType === 'multiagent_node_stream' && rawData.event && typeof rawData.event === 'object' && !Array.isArray(rawData.event)) {
-    foldBackgroundChildEvent(parts, runId, [...childPath, String(rawData.node_id ?? '')], record(rawData.event), sequence)
+  const eventType = typeof rawData["type"] === 'string' ? rawData["type"] : ''
+  if (eventType === 'multiagent_node_stream' && rawData["event"] && typeof rawData["event"] === 'object' && !Array.isArray(rawData["event"])) {
+    foldBackgroundChildEvent(parts, runId, [...childPath, String(rawData["node_id"] ?? '')], record(rawData["event"]), sequence)
     return
   }
   const childPathKey = JSON.stringify(childPath)
@@ -386,30 +471,30 @@ function foldBackgroundChildEvent(
     parts.push({ kind: 'activity', key: childKey, path: childPath, text: `Node · ${displayValue(rawData)}` })
     return
   }
-  if (rawData.tool_stream_event && typeof rawData.tool_stream_event === 'object') {
-    const stream = record(rawData.tool_stream_event)
-    const use = record(stream.tool_use)
-    const nestedId = typeof use.toolUseId === 'string' ? use.toolUseId : ''
-    const nestedData = stream.data
+  if (rawData["tool_stream_event"] && typeof rawData["tool_stream_event"] === 'object') {
+    const stream = record(rawData["tool_stream_event"])
+    const use = record(stream["tool_use"])
+    const nestedId = typeof use["toolUseId"] === 'string' ? use["toolUseId"] : ''
+    const nestedData = stream["data"]
     if (nestedId && nestedData && typeof nestedData === 'object' && !Array.isArray(nestedData)) {
       foldBackgroundChildEvent(parts, runId, [...childPath, nestedId], record(nestedData), sequence)
       return
     }
   }
-  if (typeof rawData.data === 'string') {
+  if (typeof rawData["data"] === 'string') {
     const last = parts[parts.length - 1]
     if (last?.kind === 'text' && !last.discarded && JSON.stringify(last.path) === childPathKey) {
-      parts[parts.length - 1] = { ...last, text: last.text + rawData.data }
+      parts[parts.length - 1] = { ...last, text: last.text + rawData["data"] }
     } else {
-      parts.push({ kind: 'text', key: childKey, path: childPath, text: rawData.data })
+      parts.push({ kind: 'text', key: childKey, path: childPath, text: rawData["data"] })
     }
   }
-  if (typeof rawData.reasoningText === 'string' && rawData.reasoningText.trim()) {
+  if (typeof rawData["reasoningText"] === 'string' && rawData["reasoningText"].trim()) {
     const last = parts[parts.length - 1]
     if (last?.kind === 'reasoning' && !last.discarded && JSON.stringify(last.path) === childPathKey) {
-      parts[parts.length - 1] = { ...last, text: last.text + rawData.reasoningText }
+      parts[parts.length - 1] = { ...last, text: last.text + rawData["reasoningText"] }
     } else {
-      parts.push({ kind: 'reasoning', key: childKey, path: childPath, text: rawData.reasoningText })
+      parts.push({ kind: 'reasoning', key: childKey, path: childPath, text: rawData["reasoningText"] })
     }
   }
   const upsertChildTool = (id: string, name: string | undefined, input: unknown, result?: Record<string, unknown>) => {
@@ -430,8 +515,8 @@ function foldBackgroundChildEvent(
       taskId: prev?.taskId,
     }
     if (result) {
-      const dispatched = parseBackgroundDispatchTaskId(result.content)
-      const settled = parseBackgroundSettlement(result.content)
+      const dispatched = parseBackgroundDispatchTaskId(result["content"])
+      const settled = parseBackgroundSettlement(result["content"])
       if (settled && BACKGROUND_TERMINAL.has(settled.status)) {
         const targetPos = parts.findIndex((p) => p.kind === 'tool' && JSON.stringify(p.path) === childPathKey && p.id === settled.toolUseId)
         if (targetPos >= 0) {
@@ -448,89 +533,89 @@ function foldBackgroundChildEvent(
       if (dispatched && !prev?.finished) {
         nextTool.taskId = dispatched
       } else {
-        nextTool.output = result.content
-        nextTool.status = typeof result.status === 'string' ? result.status : 'success'
+        nextTool.output = result["content"]
+        nextTool.status = typeof result["status"] === 'string' ? result["status"] : 'success'
         nextTool.finished = true
       }
     }
     if (pos >= 0) parts[pos] = nextTool
     else parts.push(nextTool)
   }
-  if (rawData.current_tool_use) {
-    const use = record(rawData.current_tool_use)
-    if (typeof use.toolUseId === 'string' && !isSyntheticBackgroundGet(use.name, use.toolUseId, use.input)) {
-      upsertChildTool(use.toolUseId, typeof use.name === 'string' ? use.name : undefined, use.input)
+  if (rawData["current_tool_use"]) {
+    const use = record(rawData["current_tool_use"])
+    if (typeof use["toolUseId"] === 'string' && !isSyntheticBackgroundGet(use["name"], use["toolUseId"], use["input"])) {
+      upsertChildTool(use["toolUseId"], typeof use["name"] === 'string' ? use["name"] : undefined, use["input"])
     }
   }
-  if (rawData.tool_result) {
-    const res = record(rawData.tool_result)
-    if (typeof res.toolUseId === 'string') upsertChildTool(res.toolUseId, undefined, undefined, res)
+  if (rawData["tool_result"]) {
+    const res = record(rawData["tool_result"])
+    if (typeof res["toolUseId"] === 'string') upsertChildTool(res["toolUseId"], undefined, undefined, res)
   }
-  const msgBlocks = Array.isArray(record(rawData.message).content) ? (record(rawData.message).content as unknown[]) : []
+  const msgBlocks = Array.isArray(record(rawData["message"])["content"]) ? (record(rawData["message"])["content"] as unknown[]) : []
   for (const rawBlock of msgBlocks) {
     const block = record(rawBlock)
-    if (block.toolUse) {
-      const use = record(block.toolUse)
-      if (typeof use.toolUseId === 'string' && !isSyntheticBackgroundGet(use.name, use.toolUseId, use.input)) {
-        upsertChildTool(use.toolUseId, typeof use.name === 'string' ? use.name : undefined, use.input)
+    if (block["toolUse"]) {
+      const use = record(block["toolUse"])
+      if (typeof use["toolUseId"] === 'string' && !isSyntheticBackgroundGet(use["name"], use["toolUseId"], use["input"])) {
+        upsertChildTool(use["toolUseId"], typeof use["name"] === 'string' ? use["name"] : undefined, use["input"])
       }
     }
-    if (block.toolResult) {
-      const res = record(block.toolResult)
-      if (typeof res.toolUseId === 'string') upsertChildTool(res.toolUseId, undefined, undefined, res)
+    if (block["toolResult"]) {
+      const res = record(block["toolResult"])
+      if (typeof res["toolUseId"] === 'string') upsertChildTool(res["toolUseId"], undefined, undefined, res)
     }
   }
 }
 
 function repairProposalFrom(event: PanelEvent): RepairProposal | undefined {
-  if (typeof event.id !== 'string' || typeof event.tool !== 'string') return undefined
-  const kind = event.kind === 'mcp' || event.kind === 'core' || event.kind === 'other' ? event.kind : 'library'
-  return { id: event.id, tool: event.tool, kind, observation: event.observation === true,
-    exceptionClass: typeof event.exception_class === 'string' ? event.exception_class : undefined,
-    count: typeof event.count === 'number' ? event.count : undefined }
+  if (typeof event["id"] !== 'string' || typeof event["tool"] !== 'string') return undefined
+  const kind = event["kind"] === 'mcp' || event["kind"] === 'core' || event["kind"] === 'other' ? event["kind"] : 'library'
+  return { id: event["id"], tool: event["tool"], kind, observation: event["observation"] === true,
+    exceptionClass: typeof event["exception_class"] === 'string' ? event["exception_class"] : undefined,
+    count: typeof event["count"] === 'number' ? event["count"] : undefined }
 }
 
 function demonstrationsFrom(value: unknown): RepairDemonstration[] {
   return Array.isArray(value) ? value.flatMap((item) => {
     const entry = record(item)
-    const kind = entry.kind === 'failing' ? 'failing' : 'context'
-    return [{ kind, input: entry.input, status: entry.status === 'passed' ? 'passed' : 'failed', dry_run: entry.dry_run === true,
-      expected: typeof entry.expected === 'string' ? entry.expected : undefined,
-      actual: typeof entry.actual === 'string' ? entry.actual : undefined,
-      source: entry.source === 'synthetic' ? 'synthetic' : entry.source === 'session' ? 'session' : undefined } as RepairDemonstration]
+    const kind = entry["kind"] === 'failing' ? 'failing' : 'context'
+    return [{ kind, input: entry["input"], status: entry["status"] === 'passed' ? 'passed' : 'failed', dry_run: entry["dry_run"] === true,
+      expected: typeof entry["expected"] === 'string' ? entry["expected"] : undefined,
+      actual: typeof entry["actual"] === 'string' ? entry["actual"] : undefined,
+      source: entry["source"] === 'synthetic' ? 'synthetic' : entry["source"] === 'session' ? 'session' : undefined } as RepairDemonstration]
   }) : []
 }
 
 function repairInvestigationFrom(event: PanelEvent, previous: RepairInvestigation | undefined): RepairInvestigation | undefined {
-  if (typeof event.tool !== 'string' || typeof event.rev !== 'string') return undefined
-  const base: RepairInvestigation = previous && previous.rev === event.rev ? { ...previous } : { tool: event.tool, rev: event.rev, state: 'investigating', demonstrations: [] }
+  if (typeof event["tool"] !== 'string' || typeof event["rev"] !== 'string') return undefined
+  const base: RepairInvestigation = previous && previous.rev === event["rev"] ? { ...previous } : { tool: event["tool"], rev: event["rev"], state: 'investigating', demonstrations: [] }
   if (event.type === 'tool_repair_investigating') {
-    const kind = event.kind === 'mcp' || event.kind === 'core' || event.kind === 'other' || event.kind === 'library' ? event.kind : undefined
+    const kind = event["kind"] === 'mcp' || event["kind"] === 'core' || event["kind"] === 'other' || event["kind"] === 'library' ? event["kind"] : undefined
     return { ...base, state: 'investigating', kind,
-      exceptionClass: typeof event.exception_class === 'string' ? event.exception_class : base.exceptionClass,
-      count: typeof event.count === 'number' ? event.count : base.count }
+      exceptionClass: typeof event["exception_class"] === 'string' ? event["exception_class"] : base.exceptionClass,
+      count: typeof event["count"] === 'number' ? event["count"] : base.count }
   }
-  const interrupt = record(event.interrupt)
+  const interrupt = record(event["interrupt"])
   const next: RepairInvestigation = { ...base,
     state: event.type === 'tool_repair_approval' ? 'approval' : 'done',
-    status: displayValue(event.status) || (event.type === 'tool_repair_approval' ? 'verified' : 'failed'),
-    summary: displayValue(event.summary),
-    diff: typeof event.diff === 'string' ? event.diff : base.diff,
-    repairKind: event.repair_kind === 'adapter' || event.repair_kind === 'server' ? event.repair_kind : event.repair_kind === 'file' ? 'file' : base.repairKind,
-    demonstrations: Array.isArray(event.demonstrations) ? demonstrationsFrom(event.demonstrations) : base.demonstrations,
-    sandbox: typeof event.sandbox === 'string' ? event.sandbox : base.sandbox,
-    route: typeof event.route === 'string' ? event.route : base.route,
-    approvalToken: event.type === 'tool_repair_approval' && typeof event.approval_token === 'string' ? event.approval_token : undefined,
-    interrupt: event.type === 'tool_repair_approval' && typeof interrupt.interruptId === 'string'
-      ? { interruptId: interrupt.interruptId, name: typeof interrupt.name === 'string' ? interrupt.name : undefined, reason: interrupt.reason } : undefined,
-    applied: Boolean(event.applied), declined: event.declined === true }
+    status: displayValue(event["status"]) || (event.type === 'tool_repair_approval' ? 'verified' : 'failed'),
+    summary: displayValue(event["summary"]),
+    diff: typeof event["diff"] === 'string' ? event["diff"] : base.diff,
+    repairKind: event["repair_kind"] === 'adapter' || event["repair_kind"] === 'server' ? event["repair_kind"] : event["repair_kind"] === 'file' ? 'file' : base.repairKind,
+    demonstrations: Array.isArray(event["demonstrations"]) ? demonstrationsFrom(event["demonstrations"]) : base.demonstrations,
+    sandbox: typeof event["sandbox"] === 'string' ? event["sandbox"] : base.sandbox,
+    route: typeof event["route"] === 'string' ? event["route"] : base.route,
+    approvalToken: event.type === 'tool_repair_approval' && typeof event["approval_token"] === 'string' ? event["approval_token"] : undefined,
+    interrupt: event.type === 'tool_repair_approval' && typeof interrupt["interruptId"] === 'string'
+      ? { interruptId: interrupt["interruptId"], name: typeof interrupt["name"] === 'string' ? interrupt["name"] : undefined, reason: interrupt["reason"] } : undefined,
+    applied: Boolean(event["applied"]), declined: event["declined"] === true }
   return next
 }
 
 function interruptsFrom(value: unknown): PanelInterrupt[] {
   return Array.isArray(value) ? value.flatMap((item) => {
     const entry = record(item)
-    return typeof entry.id === 'string' ? [{ id: entry.id, reason: entry.reason }] : []
+    return typeof entry["id"] === 'string' ? [{ id: entry["id"], reason: entry["reason"] }] : []
   }) : []
 }
 
@@ -546,12 +631,12 @@ export function parsePanelEvent(data: string): PanelEvent {
   let raw: unknown
   try { raw = JSON.parse(data) } catch { throw new Error('Invalid JSON in agent event stream') }
   const event = record(raw)
-  if (event.code === 'replay_overflow' && event.resync_required === true) {
-    throw new PanelReplayOverflow(displayValue(event.message) || 'Replay history expired. Reconnect to restore the committed session history.')
+  if (event["code"] === 'replay_overflow' && event["resync_required"] === true) {
+    throw new PanelReplayOverflow(displayValue(event["message"]) || 'Replay history expired. Reconnect to restore the committed session history.')
   }
-  if (event.version !== 1 || !Number.isSafeInteger(event.sequence) || Number(event.sequence) < 0 ||
-      typeof event.session_id !== 'string' || typeof event.run_id !== 'string' ||
-      typeof event.type !== 'string' || !Array.isArray(event.node_path)) {
+  if (event["version"] !== 1 || !Number.isSafeInteger(event["sequence"]) || Number(event["sequence"]) < 0 ||
+      typeof event["session_id"] !== 'string' || typeof event["run_id"] !== 'string' ||
+      typeof event["type"] !== 'string' || !Array.isArray(event["node_path"])) {
     throw new Error('Invalid or unsupported agent event envelope')
   }
   return event as PanelEvent
@@ -653,8 +738,8 @@ export function reducePanelEvent(state: PanelState, event: PanelEvent): PanelSta
     next = { ...next, runId: event.run_id, status: 'running', error: undefined, errorDetails: undefined,
       stopReason: undefined, interrupts: [], checkpoint: undefined,
       configurationLocked: true, followPending: false,
-      model: typeof event.model_id === 'string' ? event.model_id : state.model,
-      provider: typeof event.provider === 'string' ? event.provider : state.provider }
+      model: typeof event["model_id"] === 'string' ? event["model_id"] : state.model,
+      provider: typeof event["provider"] === 'string' ? event["provider"] : state.provider }
     if (next.configuration) next.configuration = { ...next.configuration,
       model: next.model ?? next.configuration.model, provider: next.provider ?? next.configuration.provider }
     // The initial POST may fail after reservation but before any bytes arrive.
@@ -664,7 +749,7 @@ export function reducePanelEvent(state: PanelState, event: PanelEvent): PanelSta
       next.messages = [...next.messages.slice(0, -1), { ...last, runId: event.run_id }]
     }
   }
-  if (root && event.type === 'interrupt') next.interrupts = interruptsFrom(event.interrupts)
+  if (root && event.type === 'interrupt') next.interrupts = interruptsFrom(event["interrupts"])
   if (root && event.type === 'tool_repair_proposed') next.repairProposal = repairProposalFrom(event) ?? state.repairProposal
   if (root && (event.type === 'tool_repair_investigating' || event.type === 'tool_repair_approval' || event.type === 'tool_repair_ready')) {
     const repair = repairInvestigationFrom(event, state.repair)
@@ -673,24 +758,24 @@ export function reducePanelEvent(state: PanelState, event: PanelEvent): PanelSta
       if (next.repairProposal?.tool === repair.tool) next.repairProposal = undefined
     }
   }
-  if (root && event.type === 'checkpoint') next.checkpoint = event.checkpoint
+  if (root && event.type === 'checkpoint') next.checkpoint = event["checkpoint"]
   if (root && event.type === 'error') {
     next.status = 'error'
-    next.error = failureText(event.error) || 'Agent run failed'
-    next.errorDetails = failureDetails(event.error, next.error)
-    if (record(event.error).code === 'recovery_required' || event.recovery_required === true) {
+    next.error = failureText(event["error"]) || 'Agent run failed'
+    next.errorDetails = failureDetails(event["error"], next.error)
+    if (record(event["error"])["code"] === 'recovery_required' || event["recovery_required"] === true) {
       next.recoveryRequired = true
       next.error = `${next.error}\n\n${recoveryMessage}`
     }
   }
   if (root && event.type === 'run_finished') {
-    const status = nativeRunStatus(event.status)
+    const status = nativeRunStatus(event["status"])
     next.status = next.error || status === 'idle' || status === 'running' ? 'error' : status
-    next.stopReason = displayValue(event.stop_reason)
+    next.stopReason = displayValue(event["stop_reason"])
     if (next.status === 'error') next.error = next.error || `Agent run failed${next.stopReason ? `: ${next.stopReason}` : ''}`
-    const result = record(event.result)
-    if (event.interrupts || event.pending_interrupts || result.interrupts) next.interrupts = interruptsFrom(event.interrupts ?? event.pending_interrupts ?? result.interrupts)
-    if (event.checkpoint !== undefined || result.checkpoint !== undefined) next.checkpoint = event.checkpoint ?? result.checkpoint
+    const result = record(event["result"])
+    if (event["interrupts"] || event["pending_interrupts"] || result["interrupts"]) next.interrupts = interruptsFrom(event["interrupts"] ?? event["pending_interrupts"] ?? result["interrupts"])
+    if (event["checkpoint"] !== undefined || result["checkpoint"] !== undefined) next.checkpoint = event["checkpoint"] ?? result["checkpoint"]
     next.needsReplay = false
   }
 
@@ -700,21 +785,23 @@ export function reducePanelEvent(state: PanelState, event: PanelEvent): PanelSta
   if (!renderTypes.includes(event.type) && !(event.type === 'error' && !root)) return next
   const messages = [...next.messages]
   let index = messages.findIndex((message) => message.role === 'assistant' && message.runId === event.run_id)
-  if (index < 0) {
+  let targetMessage = index >= 0 ? messages[index] : undefined
+  if (!targetMessage) {
     index = messages.length
-    messages.push({ id: `run-${event.run_id}`, runId: event.run_id, role: 'assistant', parts: [] })
+    targetMessage = { id: `run-${event.run_id}`, runId: event.run_id, role: 'assistant', parts: [] }
+    messages.push(targetMessage)
   }
-  const parts = [...messages[index].parts]
+  const parts = [...targetMessage.parts]
   const pathKey = JSON.stringify(event.node_path)
   const key = `${event.run_id}-${event.sequence}`
   if (event.type.startsWith('tool_') && !event.type.startsWith('tool_repair_')) {
-    if (typeof event.id !== 'string') throw new Error(`${event.type} is missing its tool ID`)
-    if (event.type === 'tool_input' && isSyntheticBackgroundGet(event.name, event.id, event.input)) {
-      messages[index] = { ...messages[index], parts }
+    if (typeof event["id"] !== 'string') throw new Error(`${event.type} is missing its tool ID`)
+    if (event.type === 'tool_input' && isSyntheticBackgroundGet(event["name"], event["id"], event["input"])) {
+      messages[index] = { ...targetMessage, parts }
       return { ...next, messages }
     }
     if (event.type === 'tool_result') {
-      const settled = parseBackgroundSettlement(event.content)
+      const settled = parseBackgroundSettlement(event["content"])
       if (settled && BACKGROUND_TERMINAL.has(settled.status)) {
         const targetPos = parts.findIndex((part) => part.kind === 'tool' && JSON.stringify(part.path) === pathKey && part.id === settled.toolUseId)
         if (targetPos >= 0) {
@@ -726,83 +813,108 @@ export function reducePanelEvent(state: PanelState, event: PanelEvent): PanelSta
             output: settled.content.length ? settled.content : (settled.errorMessage ? [{ text: settled.errorMessage }] : target.output),
           }
         }
-        if (event.id === settled.taskId) {
-          messages[index] = { ...messages[index], parts }
+        if (event["id"] === settled.taskId) {
+          messages[index] = { ...targetMessage, parts }
           return { ...next, messages }
         }
       }
     }
-    const identity = toolIdentity(event.run_id, event.node_path, event.id)
+    const identity = toolIdentity(event.run_id, event.node_path, event["id"])
     const position = parts.findIndex((part) => part.kind === 'tool' && part.key === identity)
     const existing = position >= 0 ? parts[position] as ToolPart : undefined
-    const tool: ToolPart = { kind: 'tool', key: identity, id: event.id,
-      name: typeof event.name === 'string' ? event.name : existing?.name || event.id,
+    const tool: ToolPart = { kind: 'tool', key: identity, id: event["id"],
+      name: typeof event["name"] === 'string' ? event["name"] : existing?.name || event["id"],
       path: event.node_path, input: existing?.input ?? {}, progress: [], finished: false, ...existing }
-    if (typeof event.name === 'string') tool.name = event.name
-    if (event.type === 'tool_input') tool.input = event.input ?? tool.input
-    if (event.type === 'tool_progress' && !tool.finished) tool.progress = [...tool.progress, displayValue(event.data)]
+    if (typeof event["name"] === 'string') tool.name = event["name"]
+    if (event.type === 'tool_input') tool.input = event["input"] ?? tool.input
+    if (event.type === 'tool_progress' && !tool.finished) tool.progress = [...tool.progress, displayValue(event["data"])]
     // Identical results are harmless; transformed/corrected results remain authoritative.
     if (event.type === 'tool_result') {
-      const dispatchedTaskId = parseBackgroundDispatchTaskId(event.content)
+      const dispatchedTaskId = parseBackgroundDispatchTaskId(event["content"])
+      const subControl = parseSubagentControlResult(event["content"])
       if (dispatchedTaskId && !existing?.finished) {
         tool.taskId = dispatchedTaskId
+      } else if (subControl?.kind === 'spawn' && !existing?.finished) {
+        tool.taskId = subControl.subagentId
       } else {
-        tool.output = event.content
-        tool.status = typeof event.status === 'string' ? event.status : 'success'
+        if (subControl?.kind === 'recover' && subControl.recoveredFrom) {
+          const origPos = parts.findIndex((p) => p.kind === 'tool' && JSON.stringify(p.path) === pathKey &&
+            (p.taskId === subControl.recoveredFrom || p.id === subControl.recoveredFrom))
+          if (origPos >= 0) {
+            const orig = parts[origPos] as ToolPart
+            parts[origPos] = { ...orig, taskId: subControl.subagentId, finished: false, status: undefined }
+          }
+        } else if (subControl?.kind === 'cancel') {
+          const origPos = parts.findIndex((p) => p.kind === 'tool' && JSON.stringify(p.path) === pathKey &&
+            (p.taskId === subControl.subagentId || p.id === subControl.subagentId))
+          if (origPos >= 0) {
+            const orig = parts[origPos] as ToolPart
+            parts[origPos] = { ...orig, finished: true, status: 'error', output: orig.output ?? [{ text: 'Subagent cancelled.' }] }
+          }
+        }
+        tool.output = event["content"]
+        tool.status = typeof event["status"] === 'string' ? event["status"] : 'success'
         tool.finished = true
       }
     }
     if (position >= 0) parts[position] = tool
     else parts.push(tool)
   } else if (event.type === 'background_event') {
-    const payload = record(event.event)
-    const taskId = typeof event.task_id === 'string' ? event.task_id : typeof payload.task_id === 'string' ? payload.task_id : ''
-    if (payload.tool_result) {
-      const toolResult = record(payload.tool_result)
-      const toolUse = record(payload.tool_use)
-      const toolUseId = typeof toolUse.toolUseId === 'string' ? toolUse.toolUseId : typeof toolResult.toolUseId === 'string' ? toolResult.toolUseId : ''
+    const payload = record(event["event"])
+    const taskId = typeof event["task_id"] === 'string' ? event["task_id"] : typeof payload["task_id"] === 'string' ? payload["task_id"] : ''
+    const subResume = parseSubagentResume(payload["subagent_resume"])
+    if (subResume) {
+      applySubagentResumeToParts(parts, subResume)
+    } else if (payload["tool_result"]) {
+      const toolResult = record(payload["tool_result"])
+      const toolUse = record(payload["tool_use"])
+      const toolUseId = typeof toolUse["toolUseId"] === 'string' ? toolUse["toolUseId"] : typeof toolResult["toolUseId"] === 'string' ? toolResult["toolUseId"] : ''
       const pos = parts.findIndex((part) => part.kind === 'tool' && JSON.stringify(part.path) === pathKey &&
         ((toolUseId && part.id === toolUseId) || (taskId && part.taskId === taskId)))
       if (pos >= 0) {
         const target = parts[pos] as ToolPart
         parts[pos] = {
           ...target,
-          output: toolResult.content ?? target.output,
-          status: typeof toolResult.status === 'string' ? toolResult.status : 'success',
+          output: toolResult["content"] ?? target.output,
+          status: typeof toolResult["status"] === 'string' ? toolResult["status"] : 'success',
           finished: true,
         }
       }
-    } else if (payload.tool_stream_event) {
-      const stream = record(payload.tool_stream_event)
-      const use = record(stream.tool_use)
-      const toolUseId = typeof use.toolUseId === 'string' ? use.toolUseId : ''
-      const data = stream.data
+    } else if (payload["tool_stream_event"]) {
+      const stream = record(payload["tool_stream_event"])
+      const use = record(stream["tool_use"])
+      const toolUseId = typeof use["toolUseId"] === 'string' ? use["toolUseId"] : ''
+      const data = stream["data"]
       if (toolUseId) {
         const identity = toolIdentity(event.run_id, event.node_path, toolUseId)
-        let pos = parts.findIndex((part) => part.kind === 'tool' && part.key === identity)
+        let pos = parts.findIndex((part) => part.kind === 'tool' && (
+          part.key === identity ||
+          (JSON.stringify(part.path) === pathKey && (part.taskId === toolUseId || (taskId && part.taskId === taskId)))
+        ))
         if (pos < 0) {
           pos = parts.length
           parts.push({
             kind: 'tool',
             key: identity,
             id: toolUseId,
-            name: typeof use.name === 'string' ? use.name : toolUseId,
+            name: typeof use["name"] === 'string' ? use["name"] : toolUseId,
             path: event.node_path,
-            input: use.input ?? {},
+            input: use["input"] ?? {},
             progress: [],
             finished: false,
             taskId: taskId || undefined,
           })
         }
+        const ownerToolId = (parts[pos] as ToolPart).id
         const dataRec = record(data)
         const isNestedAgentEvent = data && typeof data === 'object' && !Array.isArray(data) && (
           ['event', 'tool_stream_event', 'current_tool_use', 'message', 'result', 'delta', 'tool_result', 'tool_interrupt_event', 'data', 'reasoningText'].some((k) => k in dataRec) ||
-          String(dataRec.type ?? '').startsWith('multiagent_')
+          String(dataRec["type"] ?? '').startsWith('multiagent_')
         )
         if (isNestedAgentEvent) {
-          const scopeLabel = typeof dataRec.formation === 'string' ? dataRec.formation : typeof dataRec.skill === 'string' ? dataRec.skill : null
-          const innerEvent = scopeLabel && dataRec.event && typeof dataRec.event === 'object' ? record(dataRec.event) : dataRec
-          const childPath = scopeLabel ? [...event.node_path, toolUseId, scopeLabel] : [...event.node_path, toolUseId]
+          const scopeLabel = typeof dataRec["formation"] === 'string' ? dataRec["formation"] : typeof dataRec["skill"] === 'string' ? dataRec["skill"] : null
+          const innerEvent = scopeLabel && dataRec["event"] && typeof dataRec["event"] === 'object' ? record(dataRec["event"]) : dataRec
+          const childPath = scopeLabel ? [...event.node_path, ownerToolId, scopeLabel] : [...event.node_path, ownerToolId]
           foldBackgroundChildEvent(parts, event.run_id, childPath, innerEvent, event.sequence)
         } else if (data !== undefined) {
           const current = parts[pos] as ToolPart
@@ -813,9 +925,9 @@ export function reducePanelEvent(state: PanelState, event: PanelEvent): PanelSta
       }
     }
   } else if (event.type === 'native_tool') {
-    const payload = (event.payload && typeof event.payload === 'object' ? event.payload : {}) as Record<string, unknown>
-    const item = payload.item && typeof payload.item === 'object' ? payload.item as Record<string, unknown> : undefined
-    const itemType = typeof event.item_type === 'string' ? event.item_type : typeof event.event === 'string' ? event.event : 'native'
+    const payload = (event["payload"] && typeof event["payload"] === 'object' ? event["payload"] : {}) as Record<string, unknown>
+    const item = payload["item"] && typeof payload["item"] === 'object' ? payload["item"] as Record<string, unknown> : undefined
+    const itemType = typeof event["item_type"] === 'string' ? event["item_type"] : typeof event["event"] === 'string' ? event["event"] : 'native'
     const last = parts[parts.length - 1]
     if (!item && last?.kind === 'native' && !last.item && last.itemType === itemType && JSON.stringify(last.path) === pathKey) {
       // Consecutive reasoning steps of one kind (e.g. several search_web queries) share a card.
@@ -836,46 +948,47 @@ export function reducePanelEvent(state: PanelState, event: PanelEvent): PanelSta
       else parts.push(native)
     }
   } else if (event.type === 'text_delta' || event.type === 'reasoning_delta') {
-    if (typeof event.data !== 'string') throw new Error(`${event.type} is missing text data`)
+    if (typeof event["data"] !== 'string') throw new Error(`${event.type} is missing text data`)
     const kind = event.type === 'text_delta' ? 'text' : 'reasoning'
     const last = parts[parts.length - 1]
     if (last?.kind === kind && !last.discarded && JSON.stringify(last.path) === pathKey &&
-        last.modelAttempt === event.model_attempt && last.cycle === event.cycle) {
-      parts[parts.length - 1] = { ...last, text: last.text + event.data }
-    } else if (kind === 'reasoning' && !event.data.trim()) {
+        last.modelAttempt === event["model_attempt"] && last.cycle === event["cycle"]) {
+      parts[parts.length - 1] = { ...last, text: last.text + event["data"] }
+    } else if (kind === 'reasoning' && !event["data"].trim()) {
       return next
-    } else parts.push({ kind, key, path: event.node_path, text: event.data, modelAttempt: event.model_attempt, cycle: event.cycle })
+    } else parts.push({ kind, key, path: event.node_path, text: event["data"], modelAttempt: event["model_attempt"], cycle: event["cycle"] })
   } else {
-    let text = displayValue(event.event ?? event.message ?? event.error)
+    let text = displayValue(event["event"] ?? event["message"] ?? event["error"])
     if (event.type === 'retry') {
       for (let i = 0; i < parts.length; i++) {
         const part = parts[i]
+        if (!part) continue
         // A tool retry never invalidates model output. Without attempt metadata,
         // retain drafts rather than discarding successful earlier model cycles.
-        if (event.model_attempt !== undefined && !event.id &&
+        if (event["model_attempt"] !== undefined && !event["id"] &&
             (part.kind === 'text' || part.kind === 'reasoning') && JSON.stringify(part.path) === pathKey &&
-            part.modelAttempt === event.model_attempt && part.cycle === event.cycle) {
+            part.modelAttempt === event["model_attempt"] && part.cycle === event["cycle"]) {
           parts[i] = { ...part, discarded: true }
         }
       }
       // An in-run recovery (agent respawn, overflow hook retry) drops the attempt without a visible line.
-      if (event.silent === true) {
-        messages[index] = { ...messages[index], parts }
+      if (event["silent"] === true) {
+        messages[index] = { ...targetMessage, parts }
         return { ...next, messages }
       }
-      text = `Retry${event.attempt === undefined ? '' : ` ${displayValue(event.attempt)}`}: ${displayValue(event.reason) || 'Trying again'}`
-      if (event.delay !== undefined) text += ` · delay ${displayValue(event.delay)}s`
-    } else if (event.type === 'interrupt') text = `Input requested · ${displayValue(event.interrupts)}`
+      text = `Retry${event["attempt"] === undefined ? '' : ` ${displayValue(event["attempt"])}`}: ${displayValue(event["reason"]) || 'Trying again'}`
+      if (event["delay"] !== undefined) text += ` · delay ${displayValue(event["delay"])}s`
+    } else if (event.type === 'interrupt') text = `Input requested · ${displayValue(event["interrupts"])}`
     else if (event.type === 'node_event') text = `Node · ${text}`
     else if (event.type === 'steering_accepted') text = `Steering accepted · ${text}`
     else if (event.type === 'steering_applied') text = `Steering applied · ${text}`
-    else if (event.type === 'tool_repair_proposed') text = `Repair proposed · ${displayValue(event.tool)} keeps failing (${displayValue(event.count)}× ${displayValue(event.exception_class) || 'error'})`
-    else if (event.type === 'tool_repair_investigating') text = `Investigating · ${displayValue(event.tool)} failed (${displayValue(event.count)}× ${displayValue(event.exception_class) || 'error'}); Ren's fixer is reproducing it in isolation`
-    else if (event.type === 'tool_repair_approval') text = `Repair ready for your approval · ${displayValue(event.tool)} revision ${displayValue(event.rev)}`
-    else if (event.type === 'tool_repair_ready') text = `Repair ${displayValue(event.status)} · ${displayValue(event.tool)} revision ${displayValue(event.rev)}`
+    else if (event.type === 'tool_repair_proposed') text = `Repair proposed · ${displayValue(event["tool"])} keeps failing (${displayValue(event["count"])}× ${displayValue(event["exception_class"]) || 'error'})`
+    else if (event.type === 'tool_repair_investigating') text = `Investigating · ${displayValue(event["tool"])} failed (${displayValue(event["count"])}× ${displayValue(event["exception_class"]) || 'error'}); Ren's fixer is reproducing it in isolation`
+    else if (event.type === 'tool_repair_approval') text = `Repair ready for your approval · ${displayValue(event["tool"])} revision ${displayValue(event["rev"])}`
+    else if (event.type === 'tool_repair_ready') text = `Repair ${displayValue(event["status"])} · ${displayValue(event["tool"])} revision ${displayValue(event["rev"])}`
     parts.push({ kind: event.type === 'retry' ? 'retry' : 'activity', key, path: event.node_path, text })
   }
-  messages[index] = { ...messages[index], parts }
+  messages[index] = { ...targetMessage, parts }
   return { ...next, messages }
 }
 
@@ -883,52 +996,62 @@ export function reducePanelEvent(state: PanelState, event: PanelEvent): PanelSta
 export function hydratePanelSession(sessionId: string, value: unknown): PanelState {
   const snapshot = record(value)
   const state = emptyPanelState(sessionId)
-  state.runId = typeof snapshot.run_id === 'string' ? snapshot.run_id : undefined
-  state.latestSequence = Number.isSafeInteger(snapshot.sequence) ? Number(snapshot.sequence) : 0
-  state.sequence = Number.isSafeInteger(snapshot.replay_after) ? Number(snapshot.replay_after) : state.latestSequence
-  state.status = nativeRunStatus(snapshot.status)
-  state.historyIncomplete = snapshot.history_incomplete === true || snapshot.replay_status === 'gap'
-  state.followPending = snapshot.active === true && state.status !== 'running' && !snapshot.recovery_required
+  state.runId = typeof snapshot["run_id"] === 'string' ? snapshot["run_id"] : undefined
+  state.latestSequence = Number.isSafeInteger(snapshot["sequence"]) ? Number(snapshot["sequence"]) : 0
+  state.sequence = Number.isSafeInteger(snapshot["replay_after"]) ? Number(snapshot["replay_after"]) : state.latestSequence
+  state.status = nativeRunStatus(snapshot["status"])
+  state.historyIncomplete = snapshot["history_incomplete"] === true || snapshot["replay_status"] === 'gap'
+  state.followPending = snapshot["active"] === true && state.status !== 'running' && !snapshot["recovery_required"]
   state.needsReplay = Boolean(state.runId) && (state.status === 'running' || state.sequence < state.latestSequence)
-  state.configurationLocked = snapshot.configuration_locked !== false
-  const selection = record(snapshot.selection)
-  state.model = typeof selection.model_id === 'string' ? selection.model_id : undefined
-  state.provider = typeof selection.provider === 'string' ? selection.provider : undefined
-  const agent = record(selection.agent)
+  state.configurationLocked = snapshot["configuration_locked"] !== false
+  const selection = record(snapshot["selection"])
+  state.model = typeof selection["model_id"] === 'string' ? selection["model_id"] : undefined
+  state.provider = typeof selection["provider"] === 'string' ? selection["provider"] : undefined
+  const agent = record(selection["agent"])
   if (state.model && state.provider) state.configuration = { model: state.model, provider: state.provider,
-    effort: typeof selection.reasoning_effort === 'string' ? selection.reasoning_effort : '', options: record(snapshot.options),
-    agent: (agent.kind === 'specialist' || agent.kind === 'project') && typeof agent.id === 'string' && agent.id
-      ? { kind: agent.kind, id: agent.id } : { kind: 'ron', id: '' } }
-  state.interrupts = interruptsFrom(snapshot.interrupts ?? snapshot.pending_interrupts)
-  state.checkpoint = snapshot.checkpoint
-  state.stopReason = typeof record(snapshot.result).stop_reason === 'string' ? String(record(snapshot.result).stop_reason) : undefined
-  const failure = snapshot.error == null ? '' : failureText(snapshot.error)
+    effort: typeof selection["reasoning_effort"] === 'string' ? selection["reasoning_effort"] : '', options: record(snapshot["options"]),
+    agent: (agent["kind"] === 'specialist' || agent["kind"] === 'project') && typeof agent["id"] === 'string' && agent["id"]
+      ? { kind: agent["kind"], id: agent["id"] } : { kind: 'ron', id: '' } }
+  state.interrupts = interruptsFrom(snapshot["interrupts"] ?? snapshot["pending_interrupts"])
+  state.checkpoint = snapshot["checkpoint"]
+  state.stopReason = typeof record(snapshot["result"])["stop_reason"] === 'string' ? String(record(snapshot["result"])["stop_reason"]) : undefined
+  const failure = snapshot["error"] == null ? '' : failureText(snapshot["error"])
   if (state.status === 'error') {
     state.error = failure || 'Previous agent run failed'
-    if (snapshot.error != null) state.errorDetails = failureDetails(snapshot.error, failure)
+    if (snapshot["error"] != null) state.errorDetails = failureDetails(snapshot["error"], failure)
   }
-  state.recoveryRequired = snapshot.recovery_required === true
+  state.recoveryRequired = snapshot["recovery_required"] === true
   if (state.recoveryRequired) { state.status = 'error'; state.error = failure ? `${failure}\n\n${recoveryMessage}` : recoveryMessage }
-  const sdkMessages = Array.isArray(snapshot.messages) ? snapshot.messages : []
+  const sdkMessages = Array.isArray(snapshot["messages"]) ? snapshot["messages"] : []
   let assistant: PanelMessage | undefined
   sdkMessages.forEach((raw, messageIndex) => {
     const message = record(raw)
-    const blocks = Array.isArray(message.content) ? message.content : []
+    const blocks = Array.isArray(message["content"]) ? message["content"] : []
     // Legacy sessions (before ephemeral request-context injection) persisted the
     // browser-context block as user text; never render it.
-    const userBlocks = blocks.filter((block) => !record(block).toolResult && !record(block).interruptResponse && !isRequestContextBlock(block))
-    if (message.role === 'user' && userBlocks.length) {
+    if (message["role"] === 'user') {
+      for (const rawBlock of blocks) {
+        const subResume = parseSubagentResume(record(rawBlock)["text"])
+        if (subResume) {
+          for (const msg of state.messages) {
+            if (msg.role === 'assistant') applySubagentResumeToParts(msg.parts, subResume)
+          }
+        }
+      }
+    }
+    const userBlocks = blocks.filter((block) => !record(block)["toolResult"] && !record(block)["interruptResponse"] && !isRequestContextBlock(block) && !parseSubagentResume(record(block)["text"]))
+    if (message["role"] === 'user' && userBlocks.length) {
       state.messages.push({ id: `history-user-${messageIndex}`, role: 'user', parts: userBlocks.map((block, i) => ({
         kind: 'text', key: `history-${messageIndex}-${i}`, path: [],
-        text: typeof record(block).text === 'string' ? String(record(block).text) : displayValue(block),
+        text: typeof record(block)["text"] === 'string' ? String(record(block)["text"]) : displayValue(block),
       })) })
       assistant = undefined
     }
     blocks.forEach((rawBlock, blockIndex) => {
       const block = record(rawBlock)
-      if (block.toolResult) {
-        const result = record(block.toolResult)
-        const settled = parseBackgroundSettlement(result.content)
+      if (block["toolResult"]) {
+        const result = record(block["toolResult"])
+        const settled = parseBackgroundSettlement(result["content"])
         if (settled && BACKGROUND_TERMINAL.has(settled.status)) {
           for (const msg of state.messages) {
             if (msg.role !== 'assistant') continue
@@ -940,35 +1063,61 @@ export function hydratePanelSession(sessionId: string, value: unknown): PanelSta
               }
             }
           }
-          if (String(result.toolUseId) === settled.taskId) return
+          if (String(result["toolUseId"]) === settled.taskId) return
         }
-        const dispatchedTaskId = parseBackgroundDispatchTaskId(result.content)
+        const dispatchedTaskId = parseBackgroundDispatchTaskId(result["content"])
+        const subControl = parseSubagentControlResult(result["content"])
+        if (subControl?.kind === 'recover' && subControl.recoveredFrom) {
+          for (const msg of state.messages) {
+            if (msg.role !== 'assistant') continue
+            for (const part of msg.parts) {
+              if (part.kind === 'tool' && (part.taskId === subControl.recoveredFrom || part.id === subControl.recoveredFrom)) {
+                part.taskId = subControl.subagentId
+                part.finished = false
+                part.status = undefined
+              }
+            }
+          }
+        } else if (subControl?.kind === 'cancel') {
+          for (const msg of state.messages) {
+            if (msg.role !== 'assistant') continue
+            for (const part of msg.parts) {
+              if (part.kind === 'tool' && (part.taskId === subControl.subagentId || part.id === subControl.subagentId)) {
+                part.finished = true
+                part.status = 'error'
+                part.output = part.output ?? [{ text: 'Subagent cancelled.' }]
+              }
+            }
+          }
+        }
         for (const part of assistant?.parts ?? []) {
-          if (part.kind === 'tool' && part.id === result.toolUseId && !part.finished) {
+          if (part.kind === 'tool' && part.id === result["toolUseId"] && !part.finished) {
             if (dispatchedTaskId) {
               part.taskId = dispatchedTaskId
+            } else if (subControl?.kind === 'spawn') {
+              part.taskId = subControl.subagentId
             } else {
-              part.finished = true; part.output = result.content; part.status = String(result.status || 'success')
+              part.finished = true; part.output = result["content"]; part.status = String(result["status"] || 'success')
             }
           }
         }
         return
       }
-      if (message.role !== 'assistant') return
-      const toolBlock = block.toolUse ? record(block.toolUse) : null
-      if (toolBlock && isSyntheticBackgroundGet(toolBlock.name, toolBlock.toolUseId, toolBlock.input)) return
+      if (message["role"] !== 'assistant') return
+      const toolBlock = block["toolUse"] ? record(block["toolUse"]) : null
+      if (toolBlock && isSyntheticBackgroundGet(toolBlock["name"], toolBlock["toolUseId"], toolBlock["input"])) return
       if (!assistant) {
         assistant = { id: `history-assistant-${messageIndex}`, role: 'assistant', parts: [] }
         state.messages.push(assistant)
       }
       const key = `history-${messageIndex}-${blockIndex}`
-      if (typeof block.text === 'string') assistant.parts.push({ kind: 'text', key, path: [], text: block.text })
+      if (typeof block["text"] === 'string') assistant.parts.push({ kind: 'text', key, path: [], text: block["text"] })
       else if (toolBlock) {
-        assistant.parts.push({ kind: 'tool', key, id: String(toolBlock.toolUseId), name: String(toolBlock.name),
-          path: [], input: toolBlock.input ?? {}, progress: [], finished: false })
-      } else if (block.reasoningContent) {
-        const reasoning = record(record(block.reasoningContent).reasoningText)
-        if (typeof reasoning.text === 'string' && reasoning.text.trim()) assistant.parts.push({ kind: 'reasoning', key, path: [], text: reasoning.text })
+        assistant.parts.push({ kind: 'tool', key, id: String(toolBlock["toolUseId"]), name: String(toolBlock["name"]),
+          path: [], input: toolBlock["input"] ?? {}, progress: [], finished: false })
+      } else if (block["reasoningContent"]) {
+        const reasoning = record(record(block["reasoningContent"])["reasoningText"])
+        if (typeof reasoning["text"] === 'string' && reasoning["text"].trim()) assistant.parts.push({ kind: 'reasoning', key, path: [], text: reasoning["text"] })
       } else assistant.parts.push({ kind: 'activity', key, path: [], text: displayValue(block) })
     })
   })
@@ -982,13 +1131,13 @@ export function hydratePanelSession(sessionId: string, value: unknown): PanelSta
   }
   // Active snapshots contain PRE-RUN history. Never relabel the prior answer as
   // this run, and only append native message input (not checkpoint/interrupt input).
-  if (state.needsReplay && !state.historyIncomplete && state.runId && snapshot.input != null) {
-    const input = snapshot.input
+  if (state.needsReplay && !state.historyIncomplete && state.runId && snapshot["input"] != null) {
+    const input = snapshot["input"]
     const blocks = typeof input === 'string' ? [{ text: input }] : Array.isArray(input)
-      ? input.filter((block) => !record(block).interruptResponse) : []
+      ? input.filter((block) => !record(block)["interruptResponse"]) : []
     if (blocks.length) state.messages.push({ id: `input-${state.runId}`, role: 'user', runId: state.runId,
       parts: blocks.map((block, i) => ({ kind: 'text', key: `input-${state.runId}-${i}`, path: [],
-        text: typeof record(block).text === 'string' ? String(record(block).text) : displayValue(block) })) })
+        text: typeof record(block)["text"] === 'string' ? String(record(block)["text"]) : displayValue(block) })) })
   }
   return state
 }
@@ -1014,11 +1163,16 @@ export function reconcilePanelSession(previous: PanelState, canonical: PanelStat
     if (message.role === 'assistant' && !exact) {
       const start = old ? previous.messages.indexOf(old) : -1
       let first = start
-      while (first > 0 && previous.messages[first - 1].role === 'assistant' && !used.has(previous.messages[first - 1])) first--
+      while (first > 0) {
+        const prevMessage = previous.messages[first - 1]
+        if (!prevMessage || prevMessage.role !== 'assistant' || used.has(prevMessage)) break
+        first--
+      }
       const group = first >= 0 ? previous.messages.slice(first, start + 1).filter((item) => candidates.includes(item)) : []
-      if (group.length > 1) {
+      const firstGroupItem = group[0]
+      if (group.length > 1 && firstGroupItem) {
         group.forEach((item) => used.add(item))
-        old = { ...group[0], runId: message.runId, parts: group.flatMap((item) => item.parts) }
+        old = { ...firstGroupItem, runId: message.runId, parts: group.flatMap((item) => item.parts) }
         if (signature(old) === signature(message)) exact = old
       }
     }
@@ -1078,7 +1232,7 @@ export function reconcilePanelSession(previous: PanelState, canonical: PanelStat
 
 /** Reference data the backend once injected as a leading user text block. */
 export function isRequestContextBlock(block: unknown): boolean {
-  const text = record(block).text
+  const text = record(block)["text"]
   return typeof text === 'string' && /^Browser context (reference )?for this request/.test(text)
 }
 
@@ -1102,7 +1256,12 @@ export const CHAIN_TOOLS: ReadonlySet<string> = new Set(['think', 'repair', 'sub
 export const JOURNAL_TOOL = 'journal'
 
 export function isChainTool(part: PanelPart): part is ToolPart {
-  return part.kind === 'tool' && part.path.length === 0 && CHAIN_TOOLS.has(part.name)
+  if (part.kind !== 'tool' || part.path.length !== 0 || !CHAIN_TOOLS.has(part.name)) return false
+  if (part.name === 'subagent') {
+    const action = record(part.input)["action"]
+    return action === undefined || action === 'spawn'
+  }
+  return true
 }
 
 /**
@@ -1133,7 +1292,8 @@ export function groupThinkParts(parts: PanelPart[], running: boolean): RenderIte
           }
         }
       }
-      if (!part.finished && running && steps.length) steps[steps.length - 1].active = true
+      const lastStep = steps[steps.length - 1]
+      if (!part.finished && running && lastStep) lastStep.active = true
       items.push({ kind: 'think', tool: part, steps })
       continue
     }
@@ -1153,11 +1313,11 @@ export const RENDER_UI_TOOL = 'render_ui'
 export function uiViewFromOutput(output: unknown): UiView | null {
   if (!Array.isArray(output)) return null
   for (const block of output) {
-    const json = record(record(block).json)
-    const ui = record(json.ui)
-    if (typeof ui.source !== 'string' || (ui.format !== 'html' && ui.format !== 'jsx')) continue
-    const height = typeof ui.height === 'number' && Number.isFinite(ui.height) ? Math.max(240, Math.min(ui.height, 2000)) : 520
-    return { viewId: String(ui.view_id || ''), format: ui.format, title: typeof ui.title === 'string' ? ui.title : '', source: ui.source, height }
+    const json = record(record(block)["json"])
+    const ui = record(json["ui"])
+    if (typeof ui["source"] !== 'string' || (ui["format"] !== 'html' && ui["format"] !== 'jsx')) continue
+    const height = typeof ui["height"] === 'number' && Number.isFinite(ui["height"]) ? Math.max(240, Math.min(ui["height"], 2000)) : 520
+    return { viewId: String(ui["view_id"] || ''), format: ui["format"], title: typeof ui["title"] === 'string' ? ui["title"] : '', source: ui["source"], height }
   }
   return null
 }

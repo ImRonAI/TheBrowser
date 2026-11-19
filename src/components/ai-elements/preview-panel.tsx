@@ -26,14 +26,14 @@ import { usePreviewStore, type BrowserPreviewData, type ProjectPreviewData, type
 type PreviewPanelVariant = 'sliding' | 'accordion' | 'overlay'
 
 interface PreviewPanelProps {
-  variant?: PreviewPanelVariant
-  className?: string
+  variant?: PreviewPanelVariant | undefined
+  className?: string | undefined
 }
 
 interface AccordionPreviewProps {
   isExpanded: boolean
   onToggle: () => void
-  className?: string
+  className?: string | undefined
 }
 
 const EASE = [0.16, 1, 0.3, 1] as const
@@ -184,7 +184,7 @@ function FullscreenPreview({
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface SlidingPreviewPanelProps extends FullscreenPreviewProps {
-  className?: string
+  className?: string | undefined
 }
 
 function SlidingPreviewPanel({
@@ -237,7 +237,7 @@ function SlidingPreviewPanel({
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface AccordionPreviewContentProps extends FullscreenPreviewProps {
-  className?: string
+  className?: string | undefined
 }
 
 function AccordionPreviewContent({
@@ -435,7 +435,7 @@ interface PreviewContentProps {
   browserData: BrowserPreviewData | null
   projectData: ProjectPreviewData | null
   codeData: CodePreviewData | null
-  compact?: boolean
+  compact?: boolean | undefined
 }
 
 function PreviewContent({ previewType, browserData, projectData, codeData, compact }: PreviewContentProps) {
@@ -464,7 +464,7 @@ function PreviewContent({ previewType, browserData, projectData, codeData, compa
 
 interface BrowserPreviewContentProps {
   data: BrowserPreviewData
-  compact?: boolean
+  compact?: boolean | undefined
 }
 
 function BrowserPreviewContent({ data }: BrowserPreviewContentProps) {
@@ -538,7 +538,7 @@ function BrowserPreviewContent({ data }: BrowserPreviewContentProps) {
 
 interface ProjectPreviewContentProps {
   data: ProjectPreviewData
-  compact?: boolean
+  compact?: boolean | undefined
 }
 
 function ProjectPreviewContent({ data }: ProjectPreviewContentProps) {
@@ -660,7 +660,7 @@ function ProjectPreviewContent({ data }: ProjectPreviewContentProps) {
 
 interface CodePreviewContentProps {
   data: CodePreviewData
-  compact?: boolean
+  compact?: boolean | undefined
 }
 
 function CodePreviewContent({ data }: CodePreviewContentProps) {

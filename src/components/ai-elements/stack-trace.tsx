@@ -54,7 +54,7 @@ interface StackTraceContextValue {
   raw: string;
   isOpen: boolean;
   setIsOpen: (open: boolean) => void;
-  onFilePathClick?: (filePath: string, line?: number, column?: number) => void;
+  onFilePathClick?: ((filePath: string, line?: number | undefined, column?: number | undefined) => void) | undefined;
 }
 
 const StackTraceContext = createContext<StackTraceContextValue | null>(null);
@@ -73,14 +73,14 @@ const parseStackFrame = (line: string): StackFrame => {
   // Pattern: at functionName (filePath:line:column)
   const withParensMatch = trimmed.match(STACK_FRAME_WITH_PARENS_REGEX);
   if (withParensMatch) {
-    const [, functionName, filePath, lineNum, colNum] = withParensMatch;
+    const [, functionName, filePath = "", lineNum, colNum] = withParensMatch;
     const isInternal =
       filePath.includes("node_modules") ||
       filePath.startsWith("node:") ||
       filePath.includes("internal/");
     return {
       columnNumber: colNum ? Number.parseInt(colNum, 10) : null,
-      filePath: filePath ?? null,
+      filePath: filePath || null,
       functionName: functionName ?? null,
       isInternal,
       lineNumber: lineNum ? Number.parseInt(lineNum, 10) : null,
@@ -129,7 +129,7 @@ const parseStackTrace = (trace: string): ParsedStackTrace => {
     };
   }
 
-  const firstLine = lines[0].trim();
+  const firstLine = (lines[0] ?? "").trim();
   let errorType: string | null = null;
   let errorMessage = firstLine;
 
@@ -137,7 +137,7 @@ const parseStackTrace = (trace: string): ParsedStackTrace => {
   const errorMatch = firstLine.match(ERROR_TYPE_REGEX);
   if (errorMatch) {
     const [, type, msg] = errorMatch;
-    errorType = type;
+    errorType = type ?? null;
     errorMessage = msg || "";
   }
 
@@ -157,10 +157,10 @@ const parseStackTrace = (trace: string): ParsedStackTrace => {
 
 export type StackTraceProps = ComponentProps<"div"> & {
   trace: string;
-  open?: boolean;
-  defaultOpen?: boolean;
-  onOpenChange?: (open: boolean) => void;
-  onFilePathClick?: (filePath: string, line?: number, column?: number) => void;
+  open?: boolean | undefined;
+  defaultOpen?: boolean | undefined;
+  onOpenChange?: ((open: boolean) => void) | undefined;
+  onFilePathClick?: ((filePath: string, line?: number | undefined, column?: number | undefined) => void) | undefined;
 };
 
 export const StackTrace = memo(
@@ -176,8 +176,8 @@ export const StackTrace = memo(
   }: StackTraceProps) => {
     const [isOpen, setIsOpen] = useControllableState({
       defaultProp: defaultOpen,
-      onChange: onOpenChange,
-      prop: open,
+      ...(onOpenChange !== undefined ? { onChange: onOpenChange } : {}),
+      ...(open !== undefined ? { prop: open } : {}),
     });
 
     const parsedTrace = useMemo(() => parseStackTrace(trace), [trace]);
@@ -427,11 +427,11 @@ export type StackTraceFramesProps = ComponentProps<"div"> & {
 
 interface FilePathButtonProps {
   frame: StackFrame;
-  onFilePathClick?: (
+  onFilePathClick?: ((
     filePath: string,
-    lineNumber?: number,
-    columnNumber?: number
-  ) => void;
+    lineNumber?: number | undefined,
+    columnNumber?: number | undefined
+  ) => void) | undefined;
 }
 
 const FilePathButton = memo(

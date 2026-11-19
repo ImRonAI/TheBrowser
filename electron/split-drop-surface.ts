@@ -337,7 +337,7 @@ export class SplitDropSurface {
 
     if (this.activeZone === 'regroup') {
       const sidebarDip = this.host.leftSidebarDip?.() ?? 0
-      const [, windowHeight] = win.getContentSize()
+      const [, windowHeight = 0] = win.getContentSize()
       if (sidebarDip > 0) {
         const pad = Math.round(10 * zoom)
         const targetH = Math.round(38 * zoom)

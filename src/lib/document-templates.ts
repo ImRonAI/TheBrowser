@@ -440,7 +440,7 @@ export function instantiateTemplate(template: DocumentTemplate, now = new Date()
  */
 export function isSkillDocument(html: string): boolean {
   const headings = [...html.matchAll(/<h[12][^>]*>([\s\S]*?)<\/h[12]>/gi)]
-    .map((match) => match[1].replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').trim().toLowerCase().replace(/:$/, ''))
+    .map((match) => (match[1] ?? '').replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').trim().toLowerCase().replace(/:$/, ''))
   return headings.some((text) => text === 'description' || text === 'summary')
     && headings.some((text) => text === 'steps' || text === 'workflow' || text === 'procedure')
 }

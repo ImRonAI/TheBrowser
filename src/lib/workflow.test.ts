@@ -18,7 +18,9 @@ test('layers follow the longest path and centre siblings', () => {
   const centre = (id: string) => {
     const step = graph.steps.find((item) => item.id === id)!
     const size = workflowNodeSize(inferKind(step, graph.connections), step)
-    return { x: positions[id].x + size.width / 2, y: positions[id].y + size.height / 2 }
+    const pos = positions[id]
+    assert.ok(pos)
+    return { x: pos.x + size.width / 2, y: pos.y + size.height / 2 }
   }
   const column = workflowNodeSize('step').width / 2
   assert.deepEqual(centre('start'), { x: column, y: 0 })
@@ -37,6 +39,7 @@ test('shape names and aliases normalize; unknown kinds fall back to inference; a
     connections: [{ source: 'b', target: 'c', label: '  Yes  ' }, { source: 'b', target: 'd', label: 'x'.repeat(80), type: 'temporary' }],
   })
   assert.deepEqual(graph.steps.map((step) => step.kind), ['data', 'decision', 'io', undefined])
+  assert.ok(graph.connections[0] && graph.connections[1])
   assert.equal(graph.connections[0].label, 'Yes')
   assert.equal(graph.connections[1].label!.length, 40)
   assert.equal(workflowKind('manual_task'), 'manual')
@@ -47,8 +50,9 @@ test('shape names and aliases normalize; unknown kinds fall back to inference; a
 test('tidy up re-lays out every step, discarding hand-placed positions', () => {
   const tidy = tidyWorkflow({ steps: [{ id: 'a', label: 'A', position: { x: 999, y: 999 } }, { id: 'b', label: 'B' }],
     connections: [{ id: 'a->b', source: 'a', target: 'b', type: 'animated' }] })
+  assert.ok(tidy.steps[0]?.position && tidy.steps[1]?.position)
   assert.notDeepEqual(tidy.steps[0].position, { x: 999, y: 999 })
-  assert.ok(tidy.steps[1].position!.x > tidy.steps[0].position!.x)
+  assert.ok(tidy.steps[1].position.x > tidy.steps[0].position.x)
 })
 
 test('cycles do not loop forever and explicit positions win', () => {
@@ -57,9 +61,10 @@ test('cycles do not loop forever and explicit positions win', () => {
     connections: [edge('a', 'b'), edge('b', 'a'), edge('b', 'c')],
   }
   const positions = layoutWorkflow(graph)
-  assert.deepEqual(positions.c, { x: 7, y: 9 })
-  assert.equal(positions.a.x, 0)
-  assert.equal(positions.b.x, COLUMN_GAP)
+  assert.ok(positions["a"] && positions["b"])
+  assert.deepEqual(positions["c"], { x: 7, y: 9 })
+  assert.equal(positions["a"].x, 0)
+  assert.equal(positions["b"].x, COLUMN_GAP)
 })
 
 test('kinds are inferred from arrows unless set, and decide the handles', () => {
@@ -81,6 +86,7 @@ test('normalizeWorkflow keeps valid parts of untrusted input', () => {
       { source: 'a', target: 'missing' }, { source: 'b', target: 'b' }, { source: 'b', target: 'a', type: 'zigzag' }],
   })
   assert.deepEqual(graph.steps.map((step) => [step.id, step.label, step.kind]), [['a', 'Plan', 'start'], ['b', 'Untitled step', undefined]])
+  assert.ok(graph.steps[0] && graph.steps[1])
   assert.deepEqual(graph.steps[0].position, { x: 1, y: 2 })
   assert.equal(graph.steps[1].content, undefined)
   assert.deepEqual(graph.connections.map((c) => [c.source, c.target, c.type]), [['a', 'b', 'temporary'], ['b', 'a', 'animated']])

@@ -71,7 +71,7 @@ function gridPositionStyle(mode: Exclude<SplitState['mode'], 'single'>, slot: Sp
 function formatPaneOrigin(url: string | undefined): string | null {
   if (!url || url === 'about:blank') return null
   if (url.startsWith('ron://')) {
-    const route = url.slice('ron://'.length).split(/[/?#]/, 1)[0].toLowerCase()
+    const route = (url.slice('ron://'.length).split(/[/?#]/, 1)[0] ?? '').toLowerCase()
     if (!route || route === 'home') return 'ren'
     if (route === 'project' || route === 'projects' || route === 'execute' || route === 'board') {
       return 'ren · projects'

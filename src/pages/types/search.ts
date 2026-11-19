@@ -565,15 +565,15 @@ export interface OpenToChatContext {
   resultId: string
   resultType: ResultType
   title: string
-  url?: string
+  url?: string | undefined
   content: string
-  snippet?: string
-  targetAgent?: 'ron' | 'researcher' | 'browser' | 'coding-agent'
-  routingReason?: string
-  query?: string
-  sourceUrl?: string
-  selectedText?: string
-  metadata?: Record<string, unknown>
+  snippet?: string | undefined
+  targetAgent?: 'ron' | 'researcher' | 'browser' | 'coding-agent' | undefined
+  routingReason?: string | undefined
+  query?: string | undefined
+  sourceUrl?: string | undefined
+  selectedText?: string | undefined
+  metadata?: Record<string, unknown> | undefined
 }
 
 /**

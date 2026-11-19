@@ -15,7 +15,7 @@ export interface InterestNode {
   category: InterestCategory
   source: 'onboarding' | 'browsing'
   /** Context Agent's one-line reason for this interest (agent-written graphs only). */
-  reason?: string
+  reason?: string | undefined
   lastUpdated: number
   position: { x: number; y: number }
   velocity: { x: number; y: number }
@@ -127,7 +127,7 @@ function generateInitialPosition(existingNodes: InterestNode[]): { x: number; y:
   ]
   
   const idx = existingNodes.length % positions.length
-  const pos = positions[idx]
+  const pos = positions[idx] ?? { x: 0.5, y: 0.5 }
   
   // Small jitter for variety
   const jitter = 15
@@ -243,14 +243,18 @@ export const useInterestsStore = create<InterestsState>()(
 
         // Generate connections between nodes
         for (let i = 0; i < sortedNodes.length; i++) {
+          const nodeA = sortedNodes[i]
+          if (!nodeA) continue
           for (let j = i + 1; j < sortedNodes.length; j++) {
-            const strength = calculateConnectionStrength(sortedNodes[i], sortedNodes[j])
+            const nodeB = sortedNodes[j]
+            if (!nodeB) continue
+            const strength = calculateConnectionStrength(nodeA, nodeB)
             // Only create connections above threshold
             if (strength > 0.25) {
               newConnections.push({
-                id: `conn_${sortedNodes[i].id}_${sortedNodes[j].id}`,
-                from: sortedNodes[i].id,
-                to: sortedNodes[j].id,
+                id: `conn_${nodeA.id}_${nodeB.id}`,
+                from: nodeA.id,
+                to: nodeB.id,
                 strength
               })
             }
@@ -359,11 +363,15 @@ export const useInterestsStore = create<InterestsState>()(
         const kept = new Map(connections.map((connection) => [[connection.from, connection.to].sort().join('|'), connection]))
         const nextConnections: InterestConnection[] = []
         for (let i = 0; i < next.length; i++) {
+          const nodeA = next[i]
+          if (!nodeA) continue
           for (let j = i + 1; j < next.length; j++) {
-            const previous = kept.get([next[i].id, next[j].id].sort().join('|'))
+            const nodeB = next[j]
+            if (!nodeB) continue
+            const previous = kept.get([nodeA.id, nodeB.id].sort().join('|'))
             if (previous) { nextConnections.push(previous); continue }
-            const strength = calculateConnectionStrength(next[i], next[j])
-            if (strength > 0.25) nextConnections.push({ id: `conn_${next[i].id}_${next[j].id}`, from: next[i].id, to: next[j].id, strength })
+            const strength = calculateConnectionStrength(nodeA, nodeB)
+            if (strength > 0.25) nextConnections.push({ id: `conn_${nodeA.id}_${nodeB.id}`, from: nodeA.id, to: nodeB.id, strength })
           }
         }
         set({ nodes: next, connections: nextConnections, isInitialized: true })

@@ -222,7 +222,7 @@ export function SignInPage({ onContinueAsGuest }: { onContinueAsGuest?: () => vo
           { provider: 'github' as const, icon: GitHubIcon, label: 'GitHub' },
           // Only providers enabled in the Supabase project (Authentication -> Providers).
           // Microsoft (Supabase "azure") is not configured yet; flip VITE_AUTH_MICROSOFT=1 when it is.
-          ...(import.meta.env.VITE_AUTH_MICROSOFT === '1'
+          ...(import.meta.env["VITE_AUTH_MICROSOFT"] === '1'
             ? [{ provider: 'microsoft' as const, icon: MicrosoftIcon, label: 'Microsoft' }]
             : []),
         ].map(({ provider, icon: Icon, label }) => (

@@ -120,6 +120,7 @@ const ITEMS = [
 ]
 
 test('slash search ranks label prefixes, then words, then keywords, and ignores spaces and dashes', () => {
+  assert.ok(ITEMS[0] && ITEMS[1] && ITEMS[2] && ITEMS[3])
   assert.equal(matchScore(ITEMS[2], 'todo'), 0)
   assert.equal(matchScore(ITEMS[2], 'to do'), 0)
   assert.equal(matchScore(ITEMS[1], '1'), 1)

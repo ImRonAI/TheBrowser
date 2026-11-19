@@ -37,10 +37,10 @@ function text(value: unknown): string | undefined {
 export function demonstrationsFromValue(value: unknown): RepairDemonstration[] {
   return Array.isArray(value) ? value.flatMap((item) => {
     const entry = record(item)
-    return [{ kind: entry.kind === 'failing' ? 'failing' : 'context', input: entry.input,
-      status: entry.status === 'passed' ? 'passed' : 'failed', dry_run: entry.dry_run === true,
-      expected: text(entry.expected), actual: text(entry.actual),
-      source: entry.source === 'synthetic' ? 'synthetic' : entry.source === 'session' ? 'session' : undefined } as RepairDemonstration]
+    return [{ kind: entry["kind"] === 'failing' ? 'failing' : 'context', input: entry["input"],
+      status: entry["status"] === 'passed' ? 'passed' : 'failed', dry_run: entry["dry_run"] === true,
+      expected: text(entry["expected"]), actual: text(entry["actual"]),
+      source: entry["source"] === 'synthetic' ? 'synthetic' : entry["source"] === 'session' ? 'session' : undefined } as RepairDemonstration]
   }) : []
 }
 
@@ -50,31 +50,31 @@ export function demonstrationsFromValue(value: unknown): RepairDemonstration[] {
  */
 export function investigationFromActive(entry: unknown): RepairInvestigation | undefined {
   const value = record(entry)
-  const tool = text(value.tool_name)
-  const rev = text(value.revision)
+  const tool = text(value["tool_name"])
+  const rev = text(value["revision"])
   if (!tool || !rev) return undefined
-  const artifact = record(value.artifact)
-  const serverState = text(value.state) ?? 'investigating'
+  const artifact = record(value["artifact"])
+  const serverState = text(value["state"]) ?? 'investigating'
   const state: RepairInvestigation['state'] = serverState === 'investigating' ? 'investigating' : serverState === 'approval' ? 'approval' : 'done'
-  const interrupt = record(value.interrupt)
-  const kindRaw = text(artifact.target_kind)
+  const interrupt = record(value["interrupt"])
+  const kindRaw = text(artifact["target_kind"])
   const kind: RepairKind | undefined = kindRaw === 'library' || kindRaw === 'mcp' || kindRaw === 'core' || kindRaw === 'other' ? kindRaw : undefined
-  const repairKindRaw = text(artifact.repair_kind)
+  const repairKindRaw = text(artifact["repair_kind"])
   return {
     tool, rev, state, kind,
-    exceptionClass: text(record(value.evidence).exception_class),
-    count: typeof record(value.evidence).count === 'number' ? Number(record(value.evidence).count) : undefined,
-    status: text(artifact.status) ?? (state === 'approval' ? 'verified' : serverState),
-    summary: text(artifact.summary),
-    diff: text(artifact.diff),
+    exceptionClass: text(record(value["evidence"])["exception_class"]),
+    count: typeof record(value["evidence"])["count"] === 'number' ? Number(record(value["evidence"])["count"]) : undefined,
+    status: text(artifact["status"]) ?? (state === 'approval' ? 'verified' : serverState),
+    summary: text(artifact["summary"]),
+    diff: text(artifact["diff"]),
     repairKind: repairKindRaw === 'file' || repairKindRaw === 'adapter' || repairKindRaw === 'server' ? repairKindRaw : undefined,
-    demonstrations: demonstrationsFromValue(artifact.demonstrations),
-    sandbox: text(artifact.sandbox),
-    route: text(artifact.route),
-    approvalToken: state === 'approval' ? text(artifact.approval_token) : undefined,
-    interrupt: typeof interrupt.interruptId === 'string' ? { interruptId: interrupt.interruptId, name: text(interrupt.name), reason: interrupt.reason } : undefined,
-    applied: Boolean(artifact.applied) || artifact.status === 'active',
-    declined: artifact.declined === true || artifact.status === 'declined',
+    demonstrations: demonstrationsFromValue(artifact["demonstrations"]),
+    sandbox: text(artifact["sandbox"]),
+    route: text(artifact["route"]),
+    approvalToken: state === 'approval' ? text(artifact["approval_token"]) : undefined,
+    interrupt: typeof interrupt["interruptId"] === 'string' ? { interruptId: interrupt["interruptId"], name: text(interrupt["name"]), reason: interrupt["reason"] } : undefined,
+    applied: Boolean(artifact["applied"]) || artifact["status"] === 'active',
+    declined: artifact["declined"] === true || artifact["status"] === 'declined',
   }
 }
 

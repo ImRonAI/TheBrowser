@@ -38,7 +38,7 @@ export const TableOfContentsBlock = Node.create({
 
   addCommands() {
     return {
-      insertTableOfContents: () => placeBlock((schema) => schema.nodes.tableOfContents.create()),
+      insertTableOfContents: () => placeBlock((schema) => schema.nodes["tableOfContents"]?.create() ?? null),
     }
   },
 
@@ -48,7 +48,10 @@ export const TableOfContentsBlock = Node.create({
 })
 
 const sameHeadings = (a: HeadingEntry[], b: HeadingEntry[] | null) =>
-  !!b && a.length === b.length && a.every((entry, index) => entry.pos === b[index].pos && entry.level === b[index].level && entry.text === b[index].text)
+  !!b && a.length === b.length && a.every((entry, index) => {
+    const other = b[index]
+    return !!other && entry.pos === other.pos && entry.level === other.level && entry.text === other.text
+  })
 
 function TocView({ editor, selected, deleteNode }: NodeViewProps) {
   const headings = useEditorState({
@@ -56,7 +59,7 @@ function TocView({ editor, selected, deleteNode }: NodeViewProps) {
     selector: ({ editor: current }) => {
       const found: HeadingEntry[] = []
       current.state.doc.descendants((node, pos) => {
-        if (node.type.name === 'heading') found.push({ level: Number(node.attrs.level) || 1, text: node.textContent, pos })
+        if (node.type.name === 'heading') found.push({ level: Number(node.attrs["level"]) || 1, text: node.textContent, pos })
         return true
       })
       return found

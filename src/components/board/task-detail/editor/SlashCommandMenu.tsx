@@ -118,9 +118,11 @@ export const SlashCommandMenu = forwardRef<SlashMenuHandle, MenuProps>((props, r
 
   const choose = (item: SlashItem) => {
     const { editor } = propsRef.current
-    if (IMMEDIATE[item.id]) { commit(IMMEDIATE[item.id]); return }
+    const immediate = IMMEDIATE[item.id]
+    if (immediate) { commit(immediate); return }
     if (LINK_ITEMS.has(item.id)) { setStep({ kind: 'link', item }); return }
-    if (STEP_ITEMS[item.id]) { setStep(STEP_ITEMS[item.id]); return }
+    const stepItem = STEP_ITEMS[item.id]
+    if (stepItem) { setStep(stepItem); return }
     if (item.id === 'upload') { fileInput.current?.click(); return }
     if (item.id === 'ask-ron' || item.id === 'goal') {
       const callback = askRonCallback(editor)
@@ -146,7 +148,11 @@ export const SlashCommandMenu = forwardRef<SlashMenuHandle, MenuProps>((props, r
       if (step || !flat.length) return false
       if (event.key === 'ArrowDown') { setSelected((index) => (index + 1) % flat.length); return true }
       if (event.key === 'ArrowUp') { setSelected((index) => (index + flat.length - 1) % flat.length); return true }
-      if (event.key === 'Enter' || event.key === 'Tab') { choose(flat[Math.min(selected, flat.length - 1)]); return true }
+      if (event.key === 'Enter' || event.key === 'Tab') {
+        const picked = flat[Math.min(selected, flat.length - 1)]
+        if (picked) choose(picked)
+        return true
+      }
       return false
     },
   }))
@@ -164,7 +170,7 @@ export const SlashCommandMenu = forwardRef<SlashMenuHandle, MenuProps>((props, r
   else if (step?.kind === 'math') content = <div className="overflow-y-auto"><StepHeader title={step.display ? 'Block equation' : 'Inline equation'} onBack={back} />
     <MathField initial="" displayMode={step.display} submitLabel="Insert" onCancel={back}
       // insertContent, not insertInlineMath: that command reads the pre-chain selection, which the "/query" deletion moved.
-      onSubmit={(latex) => commit((chain) => step.display ? chain.command(placeBlock((schema) => schema.nodes.blockMath.create({ latex }))) : chain.insertContent({ type: 'inlineMath', attrs: { latex } }))} /></div>
+      onSubmit={(latex) => commit((chain) => step.display ? chain.command(placeBlock((schema) => schema.nodes["blockMath"]?.create({ latex }) ?? null)) : chain.insertContent({ type: 'inlineMath', attrs: { latex } }))} /></div>
   else if (step?.kind === 'ronButton') content = <div className="overflow-y-auto"><StepHeader title="Ren button" onBack={back} />
     <div className="px-3 pb-3"><RonButtonForm initial={{ label: '', prompt: '' }} submitLabel="Insert" onCancel={back}
       onSubmit={(value) => commit((chain) => chain.insertRonButton(value))} /></div></div>
@@ -243,7 +249,11 @@ function SearchList<T>({ title, placeholder, query, setQuery, items, getKey, ren
   const onKeyDown = (event: ReactKeyboardEvent<HTMLInputElement>) => {
     if (event.key === 'ArrowDown' && items.length) { event.preventDefault(); setActive((current + 1) % items.length) }
     else if (event.key === 'ArrowUp' && items.length) { event.preventDefault(); setActive((current + items.length - 1) % items.length) }
-    else if ((event.key === 'Enter' || (event.key === 'Tab' && !event.shiftKey)) && items.length) { event.preventDefault(); onChoose(items[current]) }
+    else if ((event.key === 'Enter' || (event.key === 'Tab' && !event.shiftKey)) && items.length) {
+      event.preventDefault()
+      const picked = items[current]
+      if (picked !== undefined) onChoose(picked)
+    }
     else if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); onBack() }
   }
   return <>
@@ -294,8 +304,10 @@ const mediaConfig = (kind: 'video' | 'audio'): LinkConfig => ({
   },
 })
 
+const DEFAULT_LINK_CONFIG = embedConfig('web', 'Embed a page', 'Any https page. Google Maps, Figma, Loom, Vimeo and Google Drive links switch to their players.')
+
 const LINK_CONFIG: Record<string, LinkConfig> = {
-  embed: embedConfig('web', 'Embed a page', 'Any https page. Google Maps, Figma, Loom, Vimeo and Google Drive links switch to their players.'),
+  embed: DEFAULT_LINK_CONFIG,
   maps: embedConfig('maps', 'Google Maps', 'An address, a place name or a Google Maps link.'),
   figma: embedConfig('figma', 'Figma', 'Share link of a Figma file, prototype or FigJam board.'),
   loom: embedConfig('loom', 'Loom', 'Share link of a Loom recording.'),
@@ -363,7 +375,7 @@ export async function pdfDataUrl(file: File): Promise<string> {
 }
 
 function LinkStep({ item, commit, onBack }: StepProps & { item: SlashItem }) {
-  const config = LINK_CONFIG[item.id]
+  const config = LINK_CONFIG[item.id] ?? DEFAULT_LINK_CONFIG
   const [value, setValue] = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)

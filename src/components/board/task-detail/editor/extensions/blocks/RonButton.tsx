@@ -31,8 +31,8 @@ export const RonButton = Node.create({
 
   addAttributes() {
     return {
-      label: { default: 'Ask Ren', parseHTML: (element) => element.getAttribute('data-label') || 'Ask Ren', renderHTML: (attributes) => ({ 'data-label': attributes.label }) },
-      prompt: { default: '', parseHTML: (element) => element.getAttribute('data-prompt') ?? '', renderHTML: (attributes) => ({ 'data-prompt': attributes.prompt }) },
+      label: { default: 'Ask Ren', parseHTML: (element) => element.getAttribute('data-label') || 'Ask Ren', renderHTML: (attributes) => ({ 'data-label': attributes["label"] }) },
+      prompt: { default: '', parseHTML: (element) => element.getAttribute('data-prompt') ?? '', renderHTML: (attributes) => ({ 'data-prompt': attributes["prompt"] }) },
     }
   },
 
@@ -41,15 +41,15 @@ export const RonButton = Node.create({
   },
 
   renderHTML({ node, HTMLAttributes }) {
-    return ['div', mergeAttributes(HTMLAttributes, { 'data-type': 'ron-button' }), `Button "${node.attrs.label}": ${node.attrs.prompt}`]
+    return ['div', mergeAttributes(HTMLAttributes, { 'data-type': 'ron-button' }), `Button "${node.attrs["label"]}": ${node.attrs["prompt"]}`]
   },
 
-  renderMarkdown: (node) => `Button "${node.attrs?.label ?? 'Ask Ren'}" (asks Ren: ${String(node.attrs?.prompt ?? '').replace(/\s+/g, ' ').trim()})`,
+  renderMarkdown: (node) => `Button "${node.attrs?.["label"] ?? 'Ask Ren'}" (asks Ren: ${String(node.attrs?.["prompt"] ?? '').replace(/\s+/g, ' ').trim()})`,
 
   addCommands() {
     return {
       insertRonButton: (button) => placeBlock((schema) => button.prompt.trim()
-        ? schema.nodes.ronButton.create({ label: button.label.trim().slice(0, RON_BUTTON_LIMITS.label) || 'Ask Ren', prompt: button.prompt.trim().slice(0, RON_BUTTON_LIMITS.prompt) })
+        ? schema.nodes["ronButton"]?.create({ label: button.label.trim().slice(0, RON_BUTTON_LIMITS.label) || 'Ask Ren', prompt: button.prompt.trim().slice(0, RON_BUTTON_LIMITS.prompt) }) ?? null
         : null),
     }
   },
@@ -97,8 +97,8 @@ export function RonButtonForm({ initial, submitLabel, onSubmit, onCancel }: {
 function RonButtonView({ node, editor, selected, updateAttributes, deleteNode }: NodeViewProps) {
   const { sendToAgentPanel } = useAgentUi()
   const [editing, setEditing] = useState(false)
-  const label = String(node.attrs.label || 'Ask Ren')
-  const prompt = String(node.attrs.prompt || '')
+  const label = String(node.attrs["label"] || 'Ask Ren')
+  const prompt = String(node.attrs["prompt"] || '')
   return <BlockFrame selected={selected} className="group/button border-dashed bg-transparent dark:bg-transparent">
     {editing
       ? <div className="p-3"><RonButtonForm initial={{ label, prompt }} submitLabel="Save"

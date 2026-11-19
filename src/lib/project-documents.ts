@@ -27,11 +27,11 @@ export const DOCUMENT_TITLE_MAX = 300
 export const UNTITLED = 'Untitled'
 
 export const mapDocumentSummary = (row: Row): ProjectDocumentSummary => ({
-  id: row.id, projectId: row.project_id ?? null, parentId: row.parent_id ?? null, title: row.title,
-  version: row.version, createdBy: row.created_by ?? null,
-  createdAt: Date.parse(row.created_at), updatedAt: Date.parse(row.updated_at),
+  id: row["id"], projectId: row["project_id"] ?? null, parentId: row["parent_id"] ?? null, title: row["title"],
+  version: row["version"], createdBy: row["created_by"] ?? null,
+  createdAt: Date.parse(row["created_at"]), updatedAt: Date.parse(row["updated_at"]),
 })
-export const mapDocument = (row: Row): ProjectDocument => ({ ...mapDocumentSummary(row), content: row.content ?? '' })
+export const mapDocument = (row: Row): ProjectDocument => ({ ...mapDocumentSummary(row), content: row["content"] ?? '' })
 
 /** The title the database will accept: trimmed, never blank, at most 300 characters. */
 export const documentTitle = (value: string) => value.trim().slice(0, DOCUMENT_TITLE_MAX) || UNTITLED
@@ -144,7 +144,7 @@ export const listAllDocuments = async (request: ProjectsRequest) =>
 export interface DocumentIssueLink { id: string; documentId: string; issueId: string; createdAt: number }
 
 export const mapDocumentLink = (row: Row): DocumentIssueLink =>
-  ({ id: row.id, documentId: row.document_id, issueId: row.issue_id, createdAt: Date.parse(row.created_at) })
+  ({ id: row["id"], documentId: row["document_id"], issueId: row["issue_id"], createdAt: Date.parse(row["created_at"]) })
 
 /** The links of one page, or of one issue. */
 export const listDocumentLinks = async (request: ProjectsRequest, of: { documentId: string } | { issueId: string }) =>
@@ -173,8 +173,8 @@ export interface DocumentConversation {
 }
 
 export const mapDocumentConversation = (row: Row): DocumentConversation => ({
-  id: row.id, documentId: row.document_id, sessionId: row.session_id, title: row.title, goal: row.goal === true,
-  createdAt: Date.parse(row.created_at), updatedAt: Date.parse(row.updated_at),
+  id: row["id"], documentId: row["document_id"], sessionId: row["session_id"], title: row["title"], goal: row["goal"] === true,
+  createdAt: Date.parse(row["created_at"]), updatedAt: Date.parse(row["updated_at"]),
 })
 
 /** A conversation's title: the user's first request, trimmed to what the table accepts. */
@@ -213,9 +213,9 @@ export interface DocumentSkill {
 }
 
 export const mapDocumentSkill = (row: Row): DocumentSkill => ({
-  id: row.id, name: row.name, description: row.description, agentId: row.agent_id, files: row.files ?? [],
-  createdAt: Date.parse(row.created_at), updatedAt: Date.parse(row.updated_at),
-  publishedVersion: row.published_version ?? null, current: row.current === true, steps: row.steps ?? 0, listed: row.listed === true,
+  id: row["id"], name: row["name"], description: row["description"], agentId: row["agent_id"], files: row["files"] ?? [],
+  createdAt: Date.parse(row["created_at"]), updatedAt: Date.parse(row["updated_at"]),
+  publishedVersion: row["published_version"] ?? null, current: row["current"] === true, steps: row["steps"] ?? 0, listed: row["listed"] === true,
 })
 
 const skillScope = (userId: string, agentId: string) => new URLSearchParams({ user_id: userId, agent_id: agentId }).toString()

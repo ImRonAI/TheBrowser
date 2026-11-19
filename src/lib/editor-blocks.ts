@@ -135,11 +135,11 @@ export function driveEmbed(input: string): Result<EmbedTarget> {
   if (!url) return { ok: false, error: 'Use an https:// Google Drive link.' }
   if (hostIs(url, 'docs.google.com')) {
     const match = url.pathname.match(/^\/(document|spreadsheets|presentation|forms)\/d\/(e\/)?([A-Za-z0-9_-]+)/)
-    if (!match) return { ok: false, error: 'Use a Google Docs, Sheets, Slides or Forms link.' }
+    if (!match || !match[1] || !match[3]) return { ok: false, error: 'Use a Google Docs, Sheets, Slides or Forms link.' }
     const [, kind, published, id] = match
     const base = `https://docs.google.com/${kind}/d/${published ?? ''}${id}`
     const src = kind === 'forms' ? `${base}/viewform?embedded=true` : `${base}/preview`
-    return { ok: true, value: { src, url: url.href, provider: 'drive', title: DRIVE_KINDS[kind] } }
+    return { ok: true, value: { src, url: url.href, provider: 'drive', title: DRIVE_KINDS[kind] ?? 'Google Drive file' } }
   }
   if (hostIs(url, 'drive.google.com')) {
     const match = url.pathname.match(/^\/file\/d\/([A-Za-z0-9_-]+)/)
@@ -185,7 +185,7 @@ export interface DataUrl { mime: string; bytes: Uint8Array }
 /** A `data:<mime>;base64,<payload>` URL decoded to bytes, or null for anything else. */
 export function decodeBase64DataUrl(value: string): DataUrl | null {
   const match = /^data:([a-z0-9.+/-]+);base64,([A-Za-z0-9+/=\s]*)$/i.exec(value)
-  if (!match) return null
+  if (!match || match[1] === undefined || match[2] === undefined) return null
   try {
     const binary = atob(match[2].replace(/\s+/g, ''))
     const bytes = new Uint8Array(binary.length)
@@ -330,7 +330,7 @@ export function slashSections<T extends SearchableItem>(items: readonly T[], que
     .filter((entry): entry is { item: T; index: number; score: number } => entry.score !== null)
   const sections = SLASH_GROUPS.map(({ id, label }, order) => {
     const entries = scored.filter((entry) => entry.item.group === id).sort((a, b) => a.score - b.score || a.index - b.index)
-    return { group: id, label, order, best: entries.length ? entries[0].score : Infinity, items: entries.map((entry) => entry.item) }
+    return { group: id, label, order, best: entries[0] ? entries[0].score : Infinity, items: entries.map((entry) => entry.item) }
   }).filter((section) => section.items.length)
   if (normalize(query)) sections.sort((a, b) => a.best - b.best || a.order - b.order)
   return sections.map(({ group, label, items: sectionItems }) => ({ group, label, items: sectionItems }))

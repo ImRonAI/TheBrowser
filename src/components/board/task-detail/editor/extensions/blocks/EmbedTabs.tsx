@@ -41,10 +41,10 @@ function fenceBody(element: HTMLElement): string | null {
 
 /** Where a tab's own content points, for Open in new tab. */
 function tabHref(child: PMNode): string {
-  if (child.type.name === 'embed') return safeEmbedSrc(child.attrs.url) || safeEmbedSrc(child.attrs.src)
-  if (child.type.name === 'youtube') return youtubeEmbedUrl(String(child.attrs.src ?? '')) ?? ''
-  if (child.type.name === 'media') return safeEmbedSrc(child.attrs.src)
-  if (child.type.name === 'pdf') { const source = pdfSource(child.attrs.src); return source?.kind === 'url' ? source.src : '' }
+  if (child.type.name === 'embed') return safeEmbedSrc(child.attrs["url"]) || safeEmbedSrc(child.attrs["src"])
+  if (child.type.name === 'youtube') return youtubeEmbedUrl(String(child.attrs["src"] ?? '')) ?? ''
+  if (child.type.name === 'media') return safeEmbedSrc(child.attrs["src"])
+  if (child.type.name === 'pdf') { const source = pdfSource(child.attrs["src"]); return source?.kind === 'url' ? source.src : '' }
   return ''
 }
 
@@ -81,11 +81,14 @@ export const EmbedTabs = Node.create({
     return ['div', mergeAttributes(HTMLAttributes, { 'data-type': 'embed-tabs' }), 0]
   },
 
-  renderMarkdown: (node) => embedTabsMarkdown(node.content ?? []),
+  renderMarkdown: (node) => embedTabsMarkdown((node.content ?? []).map(({ type, attrs }) => ({
+    ...(type !== undefined ? { type } : {}),
+    ...(attrs !== undefined ? { attrs } : {}),
+  }))),
 
   addCommands() {
     return {
-      insertEmbedTabs: () => placeBlock((schema) => schema.nodes.embedTabs.create()),
+      insertEmbedTabs: () => placeBlock((schema) => schema.nodes["embedTabs"]?.create() ?? null),
     }
   },
 
@@ -187,7 +190,7 @@ function TabAction({ label, onClick, children }: { label: string; onClick: () =>
 
 /** The Add row: pick a kind, paste its link (or upload a PDF); a workflow starts from the starter graph. */
 function AddTab({ editor, autoFocus, onAdd }: { editor: NodeViewProps['editor']; autoFocus: boolean; onAdd: (tab: DocNode) => void }) {
-  const kinds = TAB_KINDS.filter((entry) => entry.kind !== 'workflow' || !!editor.schema.nodes.workflow)
+  const kinds = TAB_KINDS.filter((entry) => entry.kind !== 'workflow' || !!editor.schema.nodes["workflow"])
   const [kind, setKind] = useState<TabKind>('web')
   const [value, setValue] = useState('')
   const [error, setError] = useState('')

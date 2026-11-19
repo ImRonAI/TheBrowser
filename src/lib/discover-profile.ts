@@ -227,6 +227,6 @@ export function interestSeeds(profile: DiscoverProfile): InterestSeed[] {
   for (const team of profile.teams) push(team, 0.7)
   for (const stock of profile.stocks) push(stock, 0.6)
   for (const coin of profile.crypto) push(coin, 0.6)
-  if (profile.location) push(profile.location.split(',')[0].trim(), 0.5)
+  if (profile.location) push((profile.location.split(',')[0] ?? '').trim(), 0.5)
   return seeds
 }

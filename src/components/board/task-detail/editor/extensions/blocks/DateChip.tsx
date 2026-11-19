@@ -33,7 +33,7 @@ export const DateChip = Node.create({
 
   addAttributes() {
     return {
-      date: { default: null, parseHTML: (element) => iso(element.getAttribute('datetime')), renderHTML: (attributes) => (attributes.date ? { datetime: attributes.date } : {}) },
+      date: { default: null, parseHTML: (element) => iso(element.getAttribute('datetime')), renderHTML: (attributes) => (attributes["date"] ? { datetime: attributes["date"] } : {}) },
     }
   },
 
@@ -42,10 +42,10 @@ export const DateChip = Node.create({
   },
 
   renderHTML({ node, HTMLAttributes }) {
-    return ['time', mergeAttributes(HTMLAttributes, { 'data-type': 'date' }), node.attrs.date ? formatLongDate(node.attrs.date) : 'No date']
+    return ['time', mergeAttributes(HTMLAttributes, { 'data-type': 'date' }), node.attrs["date"] ? formatLongDate(node.attrs["date"]) : 'No date']
   },
 
-  renderMarkdown: (node) => (node.attrs?.date ? `@${formatLongDate(node.attrs.date)}` : ''),
+  renderMarkdown: (node) => (node.attrs?.["date"] ? `@${formatLongDate(node.attrs["date"])}` : ''),
 
   addCommands() {
     return {
@@ -63,7 +63,7 @@ export const DateChip = Node.create({
 
 function DateView({ node, editor, selected, updateAttributes }: NodeViewProps) {
   const input = useRef<HTMLInputElement>(null)
-  const date = iso(node.attrs.date)
+  const date = iso(node.attrs["date"])
   const days = date ? daysFrom(date) : null
   const editable = editor.isEditable
   const open = () => {

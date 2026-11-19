@@ -120,6 +120,7 @@ export function usePanelChat(selection: Selection) {
             ready.current = true
             setConnection('connected')
           }
+          return undefined
         })
         if (signal.aborted || token !== generation.current) return
         if (terminal || current.current.status !== 'running') {
@@ -248,7 +249,8 @@ export function usePanelChat(selection: Selection) {
         const messages = [...current.current.messages]
         const index = messages.findIndex((item) => item.role === 'assistant' && item.runId === current.current.runId)
         const part = { kind: 'activity' as const, key: crypto.randomUUID(), path: [], text: `You · steering sent · ${message}` }
-        if (index >= 0) messages[index] = { ...messages[index], parts: [...messages[index].parts, part] }
+        const existing = index >= 0 ? messages[index] : undefined
+        if (existing) messages[index] = { ...existing, parts: [...existing.parts, part] }
         else messages.push({ id: `steer-${crypto.randomUUID()}`, role: 'user', parts: [part] })
         commit({ ...current.current, messages })
         // The acknowledgement's run_id is the accepting run, not necessarily
@@ -319,7 +321,8 @@ export function usePanelChat(selection: Selection) {
     controller.current = abort
     setTransportError(undefined)
     setConnection('connected')
-    commit({ ...previous, status: 'running', configuration, configurationLocked: true, error: undefined, errorDetails: undefined, stopReason: undefined,
+    const { error: _error, errorDetails: _errorDetails, stopReason: _stopReason, ...previousWithoutError } = previous
+    commit({ ...previousWithoutError, status: 'running', configuration, configurationLocked: true,
       messages: action === 'message' ? [...previous.messages, {
         id: `user-${crypto.randomUUID()}`, role: 'user', parts: [{ kind: 'text', key: crypto.randomUUID(), path: [], text: text.trim() },
           ...sentArticles.map((article) => ({ kind: 'text' as const, key: article.id, path: [], text: ARTICLE_PREFIX + JSON.stringify(article) })),
@@ -365,6 +368,7 @@ export function usePanelChat(selection: Selection) {
         }
         commit(next)
         if (isTerminalEvent(event)) { ready.current = false; setConnection('reconnecting') }
+        return undefined
       })
       if (token !== generation.current || abort.signal.aborted) return accepted
       if (!terminal) await replay(id, token, abort.signal)
@@ -414,6 +418,7 @@ export function usePanelChat(selection: Selection) {
           if (signal.aborted || token !== generation.current || event.session_id !== id || event.sequence <= current.current.sequence) return false
           commit(reducePanelEvent(current.current, event))
           if (event.node_path.length === 0 && event.type === 'tool_repair_ready') done = true
+          return undefined
         })
         if (done || current.current.repair?.state === 'done') return
       } catch (error) {
@@ -443,7 +448,8 @@ export function usePanelChat(selection: Selection) {
    */
   const repairAction = useCallback(async (kind: 'approve' | 'decline' | 'cancel' | 'rollback' | 'dismiss', tool: string, rev?: string, approvalToken?: string): Promise<boolean> => {
     if (kind === 'dismiss') {
-      commit({ ...current.current, repairProposal: undefined, repair: undefined })
+      const { repairProposal: _repairProposal, repair: _repair, ...rest } = current.current
+      commit(rest)
       return true
     }
     if (controlPending.current) return false
@@ -456,9 +462,13 @@ export function usePanelChat(selection: Selection) {
       const response = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
       if (!response.ok) throw await responseError(response)
       if (token !== generation.current) return false
-      if (kind === 'rollback' || kind === 'decline') commit({ ...current.current, repair: undefined })
+      if (kind === 'rollback' || kind === 'decline') {
+        const { repair: _repair, ...rest } = current.current
+        commit(rest)
+      }
       if (kind === 'approve' && current.current.repair) {
-        commit({ ...current.current, repair: { ...current.current.repair, state: 'done', status: 'active', applied: true, approvalToken: undefined } })
+        const { approvalToken: _approvalToken, ...repairRest } = current.current.repair
+        commit({ ...current.current, repair: { ...repairRest, state: 'done', status: 'active', applied: true } })
       }
       return true
     } catch (error) {

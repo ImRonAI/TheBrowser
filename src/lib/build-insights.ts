@@ -26,7 +26,7 @@ export interface BuildTestSummary {
   skipped: number
   total: number
   /** Milliseconds, when the runner printed it. */
-  duration?: number
+  duration?: number | undefined
   /** Failing test names the runner listed (bounded). */
   failures: string[]
   commandId: string
@@ -51,9 +51,9 @@ export function toolText(output: unknown): string {
   if (Array.isArray(output)) return output.map(toolText).filter(Boolean).join('\n')
   if (typeof output === 'object') {
     const record = output as Record<string, unknown>
-    if (typeof record.text === 'string') return record.text
-    if ('content' in record) return toolText(record.content)
-    if ('json' in record) return JSON.stringify(record.json, null, 2)
+    if (typeof record["text"] === 'string') return record["text"]
+    if ('content' in record) return toolText(record["content"])
+    if ('json' in record) return JSON.stringify(record["json"], null, 2)
   }
   try { return JSON.stringify(output, null, 2) } catch { return String(output) }
 }
@@ -61,7 +61,7 @@ export function toolText(output: unknown): string {
 const isTodo = (value: unknown): value is BuildTodo => {
   if (!value || typeof value !== 'object') return false
   const todo = value as Record<string, unknown>
-  return typeof todo.content === 'string' && (todo.status === 'pending' || todo.status === 'in_progress' || todo.status === 'completed')
+  return typeof todo["content"] === 'string' && (todo["status"] === 'pending' || todo["status"] === 'in_progress' || todo["status"] === 'completed')
 }
 
 const commandLine = (input: unknown): string => {
@@ -168,40 +168,50 @@ export function parseTestSummary(text: string): Omit<BuildTestSummary, 'commandI
   if (!text) return null
   const failures: string[] = []
   const pytest = [...text.matchAll(/^=+ (.*?(?:passed|failed|error|skipped).*?) in ([\d.]+)s(?: \([^)]*\))? =+$/gm)].pop()
-  if (pytest) {
+  if (pytest && pytest[1] !== undefined && pytest[2] !== undefined) {
     const line = pytest[1]
-    for (const match of text.matchAll(/^FAILED (\S+)/gm)) failures.push(match[1])
+    for (const match of text.matchAll(/^FAILED (\S+)/gm)) {
+      if (match[1] !== undefined) failures.push(match[1])
+    }
     const passed = count(line, /(\d+) passed/), failed = count(line, /(\d+) failed/) + count(line, /(\d+) errors?/), skipped = count(line, /(\d+) skipped/)
     return { runner: 'pytest', passed, failed, skipped, total: passed + failed + skipped, duration: Math.round(Number(pytest[2]) * 1000), failures: failures.slice(0, 20) }
   }
   const vitest = [...text.matchAll(/^\s*Tests\s+(.*?)\((\d+)\)\s*$/gm)].pop()
-  if (vitest && /passed|failed|skipped/.test(vitest[1])) {
+  if (vitest && vitest[1] !== undefined && vitest[2] !== undefined && /passed|failed|skipped/.test(vitest[1])) {
     const line = vitest[1]
-    for (const match of text.matchAll(/^\s*(?:×|✗|FAIL)\s+(.+?)(?:\s+\d+ms)?$/gm)) failures.push(match[1].trim())
+    for (const match of text.matchAll(/^\s*(?:×|✗|FAIL)\s+(.+?)(?:\s+\d+ms)?$/gm)) {
+      if (match[1] !== undefined) failures.push(match[1].trim())
+    }
     const duration = text.match(/^\s*Duration\s+([\d.]+)(ms|s)/m)
     return { runner: 'vitest', passed: count(line, /(\d+) passed/), failed: count(line, /(\d+) failed/), skipped: count(line, /(\d+) skipped/),
-      total: Number(vitest[2]), duration: duration ? Math.round(Number(duration[1]) * (duration[2] === 's' ? 1000 : 1)) : undefined, failures: failures.slice(0, 20) }
+      total: Number(vitest[2]), duration: duration && duration[1] !== undefined ? Math.round(Number(duration[1]) * (duration[2] === 's' ? 1000 : 1)) : undefined, failures: failures.slice(0, 20) }
   }
   const jest = [...text.matchAll(/^Tests:\s+(.*?)(\d+) total\s*$/gm)].pop()
-  if (jest) {
-    for (const match of text.matchAll(/^\s*✕\s+(.+?)(?:\s+\(\d+ m?s\))?$/gm)) failures.push(match[1].trim())
+  if (jest && jest[1] !== undefined && jest[2] !== undefined) {
+    for (const match of text.matchAll(/^\s*✕\s+(.+?)(?:\s+\(\d+ m?s\))?$/gm)) {
+      if (match[1] !== undefined) failures.push(match[1].trim())
+    }
     const duration = text.match(/^Time:\s+([\d.]+)\s*(ms|s)/m)
     return { runner: 'jest', passed: count(jest[1], /(\d+) passed/), failed: count(jest[1], /(\d+) failed/), skipped: count(jest[1], /(\d+) skipped/),
-      total: Number(jest[2]), duration: duration ? Math.round(Number(duration[1]) * (duration[2] === 's' ? 1000 : 1)) : undefined, failures: failures.slice(0, 20) }
+      total: Number(jest[2]), duration: duration && duration[1] !== undefined ? Math.round(Number(duration[1]) * (duration[2] === 's' ? 1000 : 1)) : undefined, failures: failures.slice(0, 20) }
   }
   if (/^# pass \d+$/m.test(text) && /^# fail \d+$/m.test(text)) {
-    for (const match of text.matchAll(/^not ok \d+ - (.+)$/gm)) failures.push(match[1].trim())
+    for (const match of text.matchAll(/^not ok \d+ - (.+)$/gm)) {
+      if (match[1] !== undefined) failures.push(match[1].trim())
+    }
     const passed = count(text, /^# pass (\d+)$/m), failed = count(text, /^# fail (\d+)$/m), skipped = count(text, /^# skipped (\d+)$/m)
     const duration = text.match(/^# duration_ms ([\d.]+)$/m)
     return { runner: 'node', passed, failed, skipped, total: count(text, /^# tests (\d+)$/m) || passed + failed + skipped,
-      duration: duration ? Math.round(Number(duration[1])) : undefined, failures: failures.slice(0, 20) }
+      duration: duration && duration[1] !== undefined ? Math.round(Number(duration[1])) : undefined, failures: failures.slice(0, 20) }
   }
   const mocha = text.match(/^\s*(\d+) passing(?: \((\d+)(ms|s)\))?$/m)
-  if (mocha) {
+  if (mocha && mocha[1] !== undefined) {
     const failed = count(text, /^\s*(\d+) failing$/m), skipped = count(text, /^\s*(\d+) pending$/m)
-    for (const match of text.matchAll(/^\s*\d+\) (.+)$/gm)) failures.push(match[1].trim())
+    for (const match of text.matchAll(/^\s*\d+\) (.+)$/gm)) {
+      if (match[1] !== undefined) failures.push(match[1].trim())
+    }
     return { runner: 'mocha', passed: Number(mocha[1]), failed, skipped, total: Number(mocha[1]) + failed + skipped,
-      duration: mocha[2] ? Math.round(Number(mocha[2]) * (mocha[3] === 's' ? 1000 : 1)) : undefined, failures: failures.slice(0, 20) }
+      duration: mocha[2] !== undefined ? Math.round(Number(mocha[2]) * (mocha[3] === 's' ? 1000 : 1)) : undefined, failures: failures.slice(0, 20) }
   }
   return null
 }

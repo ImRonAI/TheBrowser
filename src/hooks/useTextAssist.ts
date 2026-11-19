@@ -57,10 +57,16 @@ export function useTextAssist(value: string, settings: UseTextAssistOptions = {}
   const options = useMemo(() => listOptions(correction, suggestions), [correction, suggestions])
   const active = activeKey === null ? -1 : options.findIndex((option) => assistOptionKey(option) === activeKey)
   const setActive = useCallback((index: number) => {
-    setActiveKey(index >= 0 && index < options.length ? assistOptionKey(options[index]) : null)
+    const option = index >= 0 && index < options.length ? options[index] : undefined
+    setActiveKey(option ? assistOptionKey(option) : null)
   }, [options])
   const forValue = useRef('')
-  const assistOptions = useMemo<AssistOptions>(() => ({ count, rich, country, lang }), [count, rich, country, lang])
+  const assistOptions = useMemo<AssistOptions>(() => ({
+    ...(count !== undefined ? { count } : {}),
+    ...(rich !== undefined ? { rich } : {}),
+    ...(country !== undefined ? { country } : {}),
+    ...(lang !== undefined ? { lang } : {}),
+  }), [count, rich, country, lang])
 
   const suggestRun = useMemo(() => debounced((signal) => client.suggest(forValue.current, assistOptions, signal), suggestDelayMs), [assistOptions, suggestDelayMs])
   const spellRun = useMemo(() => debounced((signal) => client.spellcheck(forValue.current, assistOptions, signal), spellcheckDelayMs), [assistOptions, spellcheckDelayMs])

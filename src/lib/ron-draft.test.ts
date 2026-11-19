@@ -21,7 +21,9 @@ test('tracing holds research, reasoning and narration; the draft is what Ren wro
   const { tracing, segments } = draftParts(message)
   assert.deepEqual(tracing.map((part) => part.key), ['r1', 't1', 's1'])
   assert.deepEqual(segments.map((segment) => segment.kind), ['text', 'workflow', 'text'])
-  assert.equal(segments[0].kind === 'text' && segments[0].text, '# Guide\n\nUse the SDK.')
+  const seg0 = segments[0]
+  assert.ok(seg0)
+  assert.equal(seg0.kind === 'text' && seg0.text, '# Guide\n\nUse the SDK.')
   assert.deepEqual(draftParts(null), { tracing: [], segments: [] })
 })
 
@@ -34,6 +36,7 @@ test('an issue-agent run becomes a panel message: one tool part per call, its ou
   assert.equal(message.role, 'assistant')
   const tools = message.parts.filter((part) => part.kind === 'tool')
   assert.deepEqual(tools.map((part) => [part.id, part.finished, part.status]), [['c1', true, 'success'], ['c2', false, undefined]])
+  assert.ok(tools[1])
   assert.deepEqual(tools[1].input, { query: 'key rotation' })
   const { tracing, segments } = draftParts(message)
   assert.equal(tracing.length, 2)

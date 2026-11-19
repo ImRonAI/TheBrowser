@@ -16,7 +16,7 @@ export interface AgentChoice {
   name: string
   description: string
   /** A specialist's own model as `<provider>/<model>` (from its harness config), when it names one. */
-  model?: string
+  model?: string | undefined
 }
 
 export const RON_AGENT: AgentChoice = { kind: 'ron', id: '', name: 'Ren', description: 'Your browser agent, with every tool.' }
@@ -42,14 +42,14 @@ export function agentModel(agent: AgentChoice): { provider: string; model: strin
   return PROVIDERS.has(provider) && model ? { provider, model } : null
 }
 
-export function specialistChoices(agents: { id: string; name: string; description?: string; config?: Record<string, unknown> }[]): AgentChoice[] {
+export function specialistChoices(agents: { id: string; name: string; description?: string | undefined; config?: Record<string, unknown> | undefined }[]): AgentChoice[] {
   return agents.map((agent) => ({
     kind: 'specialist', id: agent.id, name: agent.name, description: agent.description ?? '',
-    model: typeof agent.config?.model === 'string' ? agent.config.model : undefined,
+    model: typeof agent.config?.["model"] === 'string' ? agent.config["model"] : undefined,
   }))
 }
 
-export function projectChoices(projects: { id: string; name: string; key?: string; summary?: string }[]): AgentChoice[] {
+export function projectChoices(projects: { id: string; name: string; key?: string | undefined; summary?: string | undefined }[]): AgentChoice[] {
   return projects.map((project) => ({
     kind: 'project', id: project.id, name: project.key ? `${project.name} (${project.key})` : project.name,
     description: project.summary || 'Discuss the project, create issues and edit existing ones.',

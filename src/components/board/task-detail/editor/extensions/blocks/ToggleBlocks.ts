@@ -43,7 +43,7 @@ export const ToggleHeadingLevel = Extension.create({
             const level = Number(element.getAttribute('data-level'))
             return level >= 1 && level <= 3 ? level : null
           },
-          renderHTML: (attributes) => (attributes.level ? { 'data-level': String(attributes.level) } : {}),
+          renderHTML: (attributes) => (attributes["level"] ? { 'data-level': String(attributes["level"]) } : {}),
         },
       },
     }]

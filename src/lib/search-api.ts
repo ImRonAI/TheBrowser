@@ -37,16 +37,16 @@ export const SEARCH_API = normalizeApiBaseUrl(import.meta.env?.VITE_SEARCH_API_U
 
 export interface SearchRequestBody {
   q: string
-  level?: SearchLevel
-  country?: string
-  location?: { location?: string; latitude?: number; longitude?: number }
-  shopping?: boolean
+  level?: SearchLevel | undefined
+  country?: string | undefined
+  location?: { location?: string | undefined; latitude?: number | undefined; longitude?: number | undefined } | undefined
+  shopping?: boolean | undefined
   /** Whose second brain the Search and Shopping agents use; `default` for a guest. */
-  user_id?: string
-  session_id?: string | null
-  follow_up?: boolean
+  user_id?: string | undefined
+  session_id?: string | null | undefined
+  follow_up?: boolean | undefined
   /** Context attached on the home page; the backend answers such a search with the Search agent. */
-  prompt_attachments?: PromptAttachment[]
+  prompt_attachments?: PromptAttachment[] | undefined
 }
 
 export interface AgentSearchResult {
@@ -282,23 +282,23 @@ function mergeByUrl<T extends { url: string }>(existing: T[], incoming: T[]): T[
 function applyAgentEvent(run: AgentRunState, name: string, data: Record<string, unknown>): AgentRunState {
   switch (name) {
     case 'delta':
-      return { ...run, status: run.status === 'error' ? 'error' : 'streaming', text: run.text + (data.text as string) }
+      return { ...run, status: run.status === 'error' ? 'error' : 'streaming', text: run.text + (data["text"] as string) }
     case 'reasoning':
-      return { ...run, status: run.status === 'error' ? 'error' : 'streaming', reasoning: run.reasoning + (data.text as string) }
+      return { ...run, status: run.status === 'error' ? 'error' : 'streaming', reasoning: run.reasoning + (data["text"] as string) }
     case 'citation': {
       const citation = data as unknown as Citation
       if (!citation.url || run.citations.some((c) => c.url === citation.url)) return run
       return { ...run, citations: [...run.citations, citation] }
     }
     case 'sources':
-      return { ...run, sources: mergeByUrl(run.sources, (data.results as AgentSearchResult[]) || []) }
+      return { ...run, sources: mergeByUrl(run.sources, (data["results"] as AgentSearchResult[]) || []) }
     case 'images':
-      return { ...run, images: mergeByUrl(run.images, (data.results as AgentImageResult[]) || []) }
+      return { ...run, images: mergeByUrl(run.images, (data["results"] as AgentImageResult[]) || []) }
     case 'fetched':
-      return { ...run, fetched: mergeByUrl(run.fetched, (data.results as AgentSearchResult[]) || []) }
+      return { ...run, fetched: mergeByUrl(run.fetched, (data["results"] as AgentSearchResult[]) || []) }
     case 'done':
       return { ...run, status: run.status === 'error' ? 'error' : 'done',
-        usage: (data.usage as Record<string, unknown> | null) ?? null, model: (data.model as string | null) ?? null }
+        usage: (data["usage"] as Record<string, unknown> | null) ?? null, model: (data["model"] as string | null) ?? null }
     default:
       return run
   }
@@ -393,7 +393,7 @@ export async function streamSearch(
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
-      signal,
+      ...(signal ? { signal } : {}),
     })
   } catch (error) {
     if (error instanceof Error && error.name === 'AbortError') throw error
@@ -497,8 +497,8 @@ export function mergedImages(state: SearchRunState): MergedImage[] {
   for (const image of state.agent.images) {
     if (!image.url || seen.has(image.url)) continue
     seen.add(image.url)
-    out.push({ url: image.url, pageUrl: (image.page_url as string) || (image.source as string) || null,
-      title: (image.title as string) || '', width: image.width ?? null, height: image.height ?? null, origin: 'agent' })
+    out.push({ url: image.url, pageUrl: (image["page_url"] as string) || (image["source"] as string) || null,
+      title: (image["title"] as string) || '', width: image.width ?? null, height: image.height ?? null, origin: 'agent' })
   }
   const section = state.sections.images
   if (section?.status === 'ok') {

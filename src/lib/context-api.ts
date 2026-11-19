@@ -28,20 +28,20 @@ export interface ContextItem {
 
 export interface NewContextItem {
   kind: Exclude<ContextKind, 'screenshot' | 'recording' | 'file'>
-  title?: string
-  text?: string
-  url?: string
+  title?: string | undefined
+  text?: string | undefined
+  url?: string | undefined
   /** kind=thread: the panel session to transcribe. */
-  sessionId?: string
+  sessionId?: string | undefined
 }
 
 export interface NewContextFile {
   kind: 'screenshot' | 'recording' | 'image' | 'video' | 'file'
   blob: Blob
   name: string
-  title?: string
-  source?: string
-  text?: string
+  title?: string | undefined
+  source?: string | undefined
+  text?: string | undefined
 }
 
 export interface SpecialistAgent {
@@ -193,7 +193,8 @@ export function dreamTime(version: string): string {
 /** "memory/brain/<agent>/<topic>.md" as the notice names it: the topic's heading, else its file name, and the agent. */
 export function dreamTopicLabel(topic: DreamTopic): { title: string; agent: string } {
   const [, , agent = '', file = ''] = topic.key.split('/')
-  const heading = topic.text?.split('\n', 1)[0].replace(/^#+\s*/, '').trim()
+  const firstLine = topic.text?.split('\n', 1)[0]
+  const heading = firstLine?.replace(/^#+\s*/, '').trim()
   return { title: heading || file.replace(/\.md$/, '').replace(/-/g, ' '), agent }
 }
 
@@ -251,7 +252,7 @@ export function plainSummary(markdown: string): string {
  * follows it ("429 Too Many Requests. {'message': …}"). The full error stays on the run and in its thread.
  */
 export function runErrorLine(error: string): string {
-  const lead = error.split(/[{[]/, 1)[0].replace(/\s+/g, ' ').trim()
+  const lead = (error.split(/[{[]/, 1)[0] ?? '').replace(/\s+/g, ' ').trim()
   return lead || plainSummary(error)
 }
 
@@ -294,7 +295,7 @@ export function isObservable(url: string): boolean {
 /** Add a visit unless it repeats the previous page (same URL without hash) or is not observable. */
 export function recordVisit(queue: Visit[], visit: Visit, limit = 40): Visit[] {
   if (!isObservable(visit.url)) return queue
-  const key = visit.url.split('#')[0]
+  const key = visit.url.split('#')[0] ?? visit.url
   const last = queue[queue.length - 1]
   if (last && last.url.split('#')[0] === key) {
     return visit.title && visit.title !== last.title ? [...queue.slice(0, -1), { ...last, title: visit.title }] : queue
@@ -482,7 +483,7 @@ const record = (value: unknown): Record<string, unknown> => value && typeof valu
 function jsonBlock(output: unknown, key: string): unknown {
   if (!Array.isArray(output)) return undefined
   for (const block of output) {
-    const json = record(record(block).json)
+    const json = record(record(block)["json"])
     if (key in json) return json[key]
   }
   return undefined
@@ -493,33 +494,33 @@ export function interestsFromOutput(output: unknown): AgentInterest[] | null {
   if (!Array.isArray(value)) return null
   return value.flatMap((item) => {
     const entry = record(item)
-    const label = typeof entry.label === 'string' ? entry.label.trim() : ''
-    const weight = typeof entry.weight === 'number' && Number.isFinite(entry.weight) ? Math.max(0, Math.min(1, entry.weight)) : NaN
+    const label = typeof entry["label"] === 'string' ? entry["label"].trim() : ''
+    const weight = typeof entry["weight"] === 'number' && Number.isFinite(entry["weight"]) ? Math.max(0, Math.min(1, entry["weight"])) : NaN
     if (!label || Number.isNaN(weight)) return []
-    const category = CATEGORIES.includes(entry.category as InterestCategory) ? entry.category as InterestCategory : 'other'
-    return [{ label, weight, category, reason: typeof entry.reason === 'string' ? entry.reason : '' }]
+    const category = CATEGORIES.includes(entry["category"] as InterestCategory) ? entry["category"] as InterestCategory : 'other'
+    return [{ label, weight, category, reason: typeof entry["reason"] === 'string' ? entry["reason"] : '' }]
   })
 }
 
 export function recommendationFromOutput(output: unknown): AgentRecommendation | null {
   const entry = record(jsonBlock(output, 'agent_recommendation'))
   const strings = (value: unknown) => Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : []
-  if (typeof entry.id !== 'string' || typeof entry.name !== 'string') return null
-  const kind: RecommendationKind = entry.kind === 'web' || entry.kind === 'android' || entry.kind === 'project' ? entry.kind : 'agent'
+  if (typeof entry["id"] !== 'string' || typeof entry["name"] !== 'string') return null
+  const kind: RecommendationKind = entry["kind"] === 'web' || entry["kind"] === 'android' || entry["kind"] === 'project' ? entry["kind"] : 'agent'
   return {
-    id: entry.id, kind, name: entry.name, description: String(entry.description ?? ''), interest: String(entry.interest ?? ''),
-    rationale: String(entry.rationale ?? ''), tools: strings(entry.tools), skills: strings(entry.skills),
-    ...(typeof entry.key === 'string' && entry.key ? { key: entry.key } : {}),
-    ...(Array.isArray(entry.issues) ? { issues: strings(entry.issues) } : {}),
+    id: entry["id"], kind, name: entry["name"], description: String(entry["description"] ?? ''), interest: String(entry["interest"] ?? ''),
+    rationale: String(entry["rationale"] ?? ''), tools: strings(entry["tools"]), skills: strings(entry["skills"]),
+    ...(typeof entry["key"] === 'string' && entry["key"] ? { key: entry["key"] } : {}),
+    ...(Array.isArray(entry["issues"]) ? { issues: strings(entry["issues"]) } : {}),
   }
 }
 
 export function replyDraftFromOutput(output: unknown): ReplyDraft | null {
   const entry = record(jsonBlock(output, 'reply_draft'))
-  if (typeof entry.id !== 'string' || typeof entry.sender !== 'string' || typeof entry.app !== 'string' || typeof entry.draft !== 'string') return null
+  if (typeof entry["id"] !== 'string' || typeof entry["sender"] !== 'string' || typeof entry["app"] !== 'string' || typeof entry["draft"] !== 'string') return null
   return {
-    id: entry.id, sender: entry.sender, app: entry.app, incoming: String(entry.incoming ?? ''),
-    draft: entry.draft, notification_key: String(entry.notification_key ?? ''), to: String(entry.to ?? ''),
+    id: entry["id"], sender: entry["sender"], app: entry["app"], incoming: String(entry["incoming"] ?? ''),
+    draft: entry["draft"], notification_key: String(entry["notification_key"] ?? ''), to: String(entry["to"] ?? ''),
   }
 }
 
@@ -552,10 +553,10 @@ export function contextResults(messages: PanelMessage[]): ContextRunResults {
       const draft = replyDraftFromOutput(part.output)
       if (draft) replyDrafts.push(draft)
     } else if (part.name === 'create_harness') {
-      const name = record(firstJson(part.output)).name // create_harness returns its listing as JSON text
+      const name = record(firstJson(part.output))["name"] // create_harness returns its listing as JSON text
       if (typeof name === 'string') created.push(name)
     } else if (part.name === 'create_project') {
-      const name = record(firstJson(part.output)).name
+      const name = record(firstJson(part.output))["name"]
       if (typeof name === 'string') createdProjects.push(name)
     }
   }
@@ -566,9 +567,9 @@ function firstJson(output: unknown): unknown {
   if (!Array.isArray(output)) return undefined
   for (const block of output) {
     const entry = record(block)
-    if ('json' in entry) return entry.json
-    if (typeof entry.text === 'string') {
-      try { return JSON.parse(entry.text) } catch { /* plain text */ }
+    if ('json' in entry) return entry["json"]
+    if (typeof entry["text"] === 'string') {
+      try { return JSON.parse(entry["text"]) } catch { /* plain text */ }
     }
   }
   return undefined
@@ -591,7 +592,7 @@ export function agentServesInterest(agent: SpecialistAgent, label: string, built
   const key = label.trim().toLowerCase()
   if (!key) return false
   if (builtFor?.trim().toLowerCase() === key) return true
-  const instructions = typeof agent.config?.instructions === 'string' ? agent.config.instructions : ''
+  const instructions = typeof agent.config?.["instructions"] === 'string' ? agent.config["instructions"] : ''
   const text = `${agent.name}\n${agent.description}\n${instructions}`.toLowerCase()
   const escaped = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
   return new RegExp(`(^|[^a-z0-9])${escaped}($|[^a-z0-9])`).test(text)
@@ -637,7 +638,7 @@ export function formatBytes(size: number): string {
 /** A data: URL (e.g. `browser.screenshot()`) as a Blob. */
 export function dataUrlBlob(dataUrl: string): Blob {
   const match = /^data:([^;,]+)(;base64)?,(.*)$/s.exec(dataUrl)
-  if (!match) throw new Error('Not a data URL')
+  if (!match || match[1] === undefined || match[3] === undefined) throw new Error('Not a data URL')
   const [, type, base64, payload] = match
   const bytes = base64 ? Uint8Array.from(atob(payload), (char) => char.charCodeAt(0)) : new TextEncoder().encode(decodeURIComponent(payload))
   return new Blob([bytes], { type })

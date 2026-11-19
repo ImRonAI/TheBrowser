@@ -10,9 +10,9 @@ import { contextBridge, ipcRenderer } from 'electron'
 export type ContextSurfaceKind = 'widget' | 'discovery'
 
 export interface ContextSurfaceMetrics {
-  pillWidth?: number
-  noticeHeight?: number
-  orbHovered?: boolean
+  pillWidth?: number | undefined
+  noticeHeight?: number | undefined
+  orbHovered?: boolean | undefined
 }
 
 let hasLatestState = false

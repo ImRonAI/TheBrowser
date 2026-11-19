@@ -72,7 +72,8 @@ export function CreateProjectDialog({ isOpen, onClose }: CreateProjectDialogProp
     if (saving || !name.trim()) return
     setSaving(true)
     setError(null)
-    const result = await createProject({ name: name.trim(), key: key.trim() || undefined, type, summary })
+    const trimmedKey = key.trim()
+    const result = await createProject({ name: name.trim(), ...(trimmedKey ? { key: trimmedKey } : {}), type, summary })
     setSaving(false)
     if (result.error) { setError(result.error); return }
     reset()
@@ -226,13 +227,15 @@ function CreateIssueForm({
   }, [selectedProject, selectedType, issues, allowParentSelection])
 
   useEffect(() => {
-    if (!selectedProjectId && projects.length) setSelectedProjectId(projectId || projects[0].id)
+    const firstProject = projects[0]
+    if (!selectedProjectId && firstProject) setSelectedProjectId(projectId || firstProject.id)
   }, [selectedProjectId, projects, projectId])
 
   useEffect(() => {
-    if (allowedTypes.length === 0) return
+    const firstAllowed = allowedTypes[0]
+    if (!firstAllowed) return
     if (!allowedTypes.includes(selectedType)) {
-      setSelectedType(allowedTypes[0])
+      setSelectedType(firstAllowed)
     }
   }, [allowedTypes, selectedType])
 

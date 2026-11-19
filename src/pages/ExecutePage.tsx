@@ -127,7 +127,7 @@ export function ExecutePage() {
     if (activeView === 'kanban') return (
       <ErrorBoundary componentName="ExecuteKanban">
         <ExecuteKanban issues={filtered} projects={projects} people={people} now={now} onOpen={setSelectedIssueId}
-          onCreate={defaultProjectId ? (status) => setNewIssue({ status }) : undefined} />
+          {...(defaultProjectId ? { onCreate: (status: IssueStatus) => setNewIssue({ status }) } : {})} />
       </ErrorBoundary>
     )
     if (activeView === 'calendar') return <IssueCalendar issues={filtered} onIssueSelect={setSelectedIssueId} className="h-[640px] sm:h-[780px]" />
@@ -329,8 +329,10 @@ export function ExecutePage() {
         <div className="min-w-0">{body}</div>
 
         {selectedIssueId && <IssueDrawer issueId={selectedIssueId} onClose={() => setSelectedIssueId(null)} />}
-        <CreateIssueDialog isOpen={newIssue !== null} onClose={() => setNewIssue(null)} projectId={defaultProjectId}
-          initialStatus={newIssue?.status} allowParentSelection />
+        <CreateIssueDialog isOpen={newIssue !== null} onClose={() => setNewIssue(null)}
+          {...(defaultProjectId !== undefined ? { projectId: defaultProjectId } : {})}
+          {...(newIssue?.status !== undefined ? { initialStatus: newIssue.status } : {})}
+          allowParentSelection />
         <CreateProjectDialog isOpen={showProjectDialog} onClose={() => setShowProjectDialog(false)} />
       </div>
     </div>
@@ -347,7 +349,7 @@ function SyncState({ pendingSaves, refreshing }: { pendingSaves: number; refresh
   )
 }
 
-function StatusPanel({ title, detail, busy = false, children }: { title: string; detail?: string; busy?: boolean; children?: ReactNode }) {
+function StatusPanel({ title, detail, busy = false, children }: { title: string; detail?: string | undefined; busy?: boolean | undefined; children?: ReactNode }) {
   return (
     <div className={cn(SURFACE, 'flex flex-col items-center px-6 py-14 text-center')} role={busy ? 'status' : undefined}>
       {busy && <Loader2 className="mb-3 h-5 w-5 animate-spin text-ink-muted dark:text-ink-inverse-muted" />}

@@ -42,9 +42,9 @@ export function useRonRun(destination: RonDestination) {
         sessionId,
         userId,
         message,
-        goal,
-        promptAttachments,
-        screenFrame,
+        ...(goal !== undefined ? { goal } : {}),
+        ...(promptAttachments !== undefined ? { promptAttachments } : {}),
+        ...(screenFrame !== undefined ? { screenFrame } : {}),
         signal: controller.signal,
         onState: setState,
       })

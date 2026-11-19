@@ -26,8 +26,8 @@ export interface PromptNodeData {
   [key: string]: unknown;
   type: "prompt-node";
   prompt: string;
-  label?: string;
-  icon?: "chat" | "task" | "search" | "code";
+  label?: string | undefined;
+  icon?: "chat" | "task" | "search" | "code" | undefined;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -36,8 +36,8 @@ export interface PromptNodeData {
 
 interface PromptNodeComponentProps {
   prompt: string;
-  label?: string;
-  icon?: "chat" | "task" | "search" | "code";
+  label?: string | undefined;
+  icon?: "chat" | "task" | "search" | "code" | undefined;
 }
 
 export const PromptNodeComponent = memo(function PromptNodeComponent({

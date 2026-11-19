@@ -19,9 +19,9 @@ export interface ApiError {
   code: string
   message: string
   status: number
-  details?: Record<string, unknown>
-  timestamp?: string
-  requestId?: string
+  details?: Record<string, unknown> | undefined
+  timestamp?: string | undefined
+  requestId?: string | undefined
 }
 
 export interface ApiMeta {
@@ -39,10 +39,10 @@ export interface ApiRequestConfig {
   method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
   path: string
   body?: unknown
-  params?: Record<string, string | number | boolean | undefined>
-  headers?: Record<string, string>
-  timeout?: number
-  signal?: AbortSignal
+  params?: Record<string, string | number | boolean | undefined> | undefined
+  headers?: Record<string, string> | undefined
+  timeout?: number | undefined
+  signal?: AbortSignal | undefined
 }
 
 export interface StreamingRequestConfig extends Omit<ApiRequestConfig, 'method'> {

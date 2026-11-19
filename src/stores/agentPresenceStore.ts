@@ -73,10 +73,11 @@ export function notePanelTools(sessionId: string, messages: PanelMessage[]): voi
   let newestKey = ''
   let newestPoints: CursorPoint[] = []
   for (let index = tools.length - 1; index >= 0; index -= 1) {
-    if (tools[index].finished) continue
-    const points = cursorTargets(tools[index].input, elements)
+    const tool = tools[index]
+    if (!tool || tool.finished) continue
+    const points = cursorTargets(tool.input, elements)
     if (!points.length) continue
-    newestKey = `${tools[index].id}:${JSON.stringify(tools[index].input)}`
+    newestKey = `${tool.id}:${JSON.stringify(tool.input)}`
     newestPoints = points
     break
   }
@@ -103,10 +104,11 @@ export function noteLiveTools(key: string, turns: LiveTurn[]): void {
   let newestKey = ''
   let newestPoints: CursorPoint[] = []
   for (let index = tools.length - 1; index >= 0; index -= 1) {
-    if (tools[index].final || tools[index].cancelled) continue
-    const points = cursorTargets(tools[index].toolInput, state.elements)
+    const tool = tools[index]
+    if (!tool || tool.final || tool.cancelled) continue
+    const points = cursorTargets(tool.toolInput, state.elements)
     if (!points.length) continue
-    newestKey = `${tools[index].id}:${JSON.stringify(tools[index].toolInput)}`
+    newestKey = `${tool.id}:${JSON.stringify(tool.toolInput)}`
     newestPoints = points
     break
   }

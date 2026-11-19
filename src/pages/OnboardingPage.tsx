@@ -49,6 +49,7 @@ export function OnboardingPage() {
 
   const [inputValue, setInputValue] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
+  const currentInterview = INTERVIEW[currentQuestionIndex]
 
   // Opened via #onboarding while a previous run is already complete → back it up and start a fresh interview.
   useEffect(() => {
@@ -71,9 +72,10 @@ export function OnboardingPage() {
   // Handle Input Submit
   const handleSubmit = (e?: React.FormEvent) => {
     e?.preventDefault()
-    if (!inputValue.trim()) return
+    const item = INTERVIEW[currentQuestionIndex]
+    if (!inputValue.trim() || !item) return
 
-    setAnswer(INTERVIEW[currentQuestionIndex].question, inputValue)
+    setAnswer(item.question, inputValue)
     setInputValue('')
     nextQuestion()
   }
@@ -148,7 +150,7 @@ export function OnboardingPage() {
             <AnimatePresence mode="wait">
 
               {/* STEP 1: INTERVIEW */}
-              {currentStep === 'interview' && (
+              {currentStep === 'interview' && currentInterview && (
                 <motion.div
                   key={`question-${currentQuestionIndex}`}
                   variants={pageVariants}
@@ -169,7 +171,7 @@ export function OnboardingPage() {
                       Question {currentQuestionIndex + 1} of {INTERVIEW.length}
                     </p>
                     <h2 className="font-display text-display-md font-extrabold tracking-[-0.035em] text-ink dark:text-ink-inverse sm:text-display-lg">
-                      {INTERVIEW[currentQuestionIndex].question}
+                      {currentInterview.question}
                     </h2>
                   </div>
 
@@ -182,8 +184,8 @@ export function OnboardingPage() {
                           type="text"
                           value={inputValue}
                           onChange={(e) => setInputValue(e.target.value)}
-                          placeholder={INTERVIEW[currentQuestionIndex].placeholder}
-                          aria-label={INTERVIEW[currentQuestionIndex].question}
+                          placeholder={currentInterview.placeholder}
+                          aria-label={currentInterview.question}
                           className="
                             ron-field min-w-full bg-transparent [.glass_&]:rounded-2xl [.glass_&]:pl-5
                             border-b-2 border-surface-200 dark:border-surface-700

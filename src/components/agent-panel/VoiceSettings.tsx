@@ -83,7 +83,7 @@ export function VoiceSettings({
     <div className="min-w-0">
       <span aria-hidden className={label}>Voice</span>
       <Select value={voice} disabled={sessionLocked} onValueChange={(next) => { if (isGeminiVoice(next)) onVoiceChange(next) }}>
-        <SelectTrigger className={trigger} aria-label={`Agent voice: ${selectedVoice.name}`} title={sessionLocked ? 'Disconnect Live to change the voice' : undefined}>
+        <SelectTrigger className={trigger} aria-label={`Agent voice: ${selectedVoice?.name ?? voice}`} title={sessionLocked ? 'Disconnect Live to change the voice' : undefined}>
           <SelectValue placeholder="Voice" />
         </SelectTrigger>
         <SelectContent>

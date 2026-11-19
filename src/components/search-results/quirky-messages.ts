@@ -132,7 +132,7 @@ export const QUIRKY_MESSAGES = [
  * Get a random quirky message
  */
 export function getRandomQuirkyMessage(): string {
-  return QUIRKY_MESSAGES[Math.floor(Math.random() * QUIRKY_MESSAGES.length)]
+  return QUIRKY_MESSAGES[Math.floor(Math.random() * QUIRKY_MESSAGES.length)] ?? 'Herding digital cats...'
 }
 
 /**
@@ -142,7 +142,7 @@ export function getNextQuirkyMessage(currentMessage: string): string {
   let newMessage = currentMessage
   let attempts = 0
   while (newMessage === currentMessage && attempts < 10) {
-    newMessage = QUIRKY_MESSAGES[Math.floor(Math.random() * QUIRKY_MESSAGES.length)]
+    newMessage = QUIRKY_MESSAGES[Math.floor(Math.random() * QUIRKY_MESSAGES.length)] ?? currentMessage
     attempts++
   }
   return newMessage

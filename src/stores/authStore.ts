@@ -48,8 +48,8 @@ function mapSessionToUser(session: Session, additionalData?: Partial<User>): Use
   return {
     id: supabaseUser.id,
     email: supabaseUser.email || '',
-    name: supabaseUser.user_metadata?.name || supabaseUser.email?.split('@')[0] || 'User',
-    avatar: supabaseUser.user_metadata?.avatar_url,
+    name: supabaseUser.user_metadata?.["name"] || supabaseUser.email?.split('@')[0] || 'User',
+    avatar: supabaseUser.user_metadata?.["avatar_url"],
     tenantId: supabaseUser.id, // User-based tenancy: tenant = user
     preferences: {
       theme: 'dark',
@@ -232,17 +232,23 @@ export const useAuthStore = create<AuthState>()(
                 }
               }
 
+              const profileName =
+                (userProfile?.["name"] as string | undefined) ||
+                (session.user.user_metadata?.["name"] as string | undefined)
+              const profileAvatar = (userProfile?.["avatar_url"] as string | undefined) || undefined
               const user = mapSessionToUser(session, {
-                name: (userProfile?.name as string) || session.user.user_metadata?.name,
-                avatar: (userProfile?.avatar_url as string) || undefined,
-                preferences: preferences ? {
-                  theme: preferences.theme as UserPreferences['theme'],
-                  interactionMode: preferences.interaction_mode as UserPreferences['interactionMode'],
-                  searchMode: preferences.search_mode as UserPreferences['searchMode'],
-                  contentDensity: preferences.content_density as UserPreferences['contentDensity'],
-                  showAnimations: preferences.show_animations as boolean,
-                  reduceMotion: preferences.reduce_motion as boolean,
-                } : undefined,
+                ...(profileName ? { name: profileName } : {}),
+                ...(profileAvatar ? { avatar: profileAvatar } : {}),
+                ...(preferences ? {
+                  preferences: {
+                    theme: preferences["theme"] as UserPreferences['theme'],
+                    interactionMode: preferences["interaction_mode"] as UserPreferences['interactionMode'],
+                    searchMode: preferences["search_mode"] as UserPreferences['searchMode'],
+                    contentDensity: preferences["content_density"] as UserPreferences['contentDensity'],
+                    showAnimations: preferences["show_animations"] as boolean,
+                    reduceMotion: preferences["reduce_motion"] as boolean,
+                  },
+                } : {}),
               })
 
               set({
@@ -320,8 +326,8 @@ export const useAuthStore = create<AuthState>()(
                   user: {
                     ...currentUser,
                     email: session.user.email || currentUser.email,
-                    name: session.user.user_metadata?.name || currentUser.name,
-                    avatar: session.user.user_metadata?.avatar_url || currentUser.avatar,
+                    name: session.user.user_metadata?.["name"] || currentUser.name,
+                    avatar: session.user.user_metadata?.["avatar_url"] || currentUser.avatar,
                     updatedAt: new Date().toISOString(),
                   }
                 })

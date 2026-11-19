@@ -90,36 +90,36 @@ export type IDEFile = {
    * Shiki language for highlighting. Optional -- inferred from the extension
    * when omitted, falling back to plain text.
    */
-  language?: BundledLanguage
+  language?: BundledLanguage | undefined
 }
 
 /** A dependency manifest entry, rendered through PackageInfo. */
 export type IDEPackage = {
   name: string
-  version?: string
-  dependencies?: { name: string; version?: string }[]
+  version?: string | undefined
+  dependencies?: { name: string; version?: string | undefined }[] | undefined
 }
 
 export type IDEProps = {
   /** Files touched during this turn. The first is selected by default. */
   files: IDEFile[]
   /** Accumulated shell/stdout text for the Terminal pane. */
-  output?: string
+  output?: string | undefined
   /** True while a command is still running -- drives TerminalStatus. */
-  isStreaming?: boolean
+  isStreaming?: boolean | undefined
   /** Dev-server URL. When present, the web preview becomes available. */
-  previewUrl?: string
+  previewUrl?: string | undefined
   /** Console lines forwarded to WebPreviewConsole. */
   previewLogs?: {
     level: 'log' | 'warn' | 'error'
     message: string
     timestamp: Date
-  }[]
+  }[] | undefined
   /** Optional dependency manifest for the right rail. */
-  packageInfo?: IDEPackage
-  title?: string
-  description?: string
-  className?: string
+  packageInfo?: IDEPackage | undefined
+  title?: string | undefined
+  description?: string | undefined
+  className?: string | undefined
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -251,9 +251,10 @@ export function IDE({
   const defaultExpanded = useMemo(() => collectFolderPaths(tree), [tree])
 
   // FileTree keys nodes by their leading-slash path, so selection must match.
-  const [selectedPath, setSelectedPath] = useState<string>(() =>
-    files.length > 0 ? `/${files[0].path.split('/').filter(Boolean).join('/')}` : '',
-  )
+  const [selectedPath, setSelectedPath] = useState<string>(() => {
+    const first = files[0]
+    return first ? `/${first.path.split('/').filter(Boolean).join('/')}` : ''
+  })
   const [previewOpen, setPreviewOpen] = useState(false)
 
   const byTreePath = useMemo(() => {

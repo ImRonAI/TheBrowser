@@ -53,19 +53,25 @@ export const IssueEmbed = Node.create({
   },
 
   renderHTML({ node, HTMLAttributes }) {
-    const label = `${node.attrs.key}: ${node.attrs.title}`
+    const label = `${node.attrs["key"]}: ${node.attrs["title"]}`
     return ['div', mergeAttributes(HTMLAttributes, { 'data-type': 'issue' }),
-      node.attrs.projectId ? ['a', { href: projectHref(node.attrs.projectId) }, label] : ['span', {}, label]]
+      node.attrs["projectId"] ? ['a', { href: projectHref(node.attrs["projectId"]) }, label] : ['span', {}, label]]
   },
 
-  renderMarkdown: (node) => issueMarkdown({
-    key: String(node.attrs?.key ?? ''), title: String(node.attrs?.title ?? ''), projectId: String(node.attrs?.projectId ?? '') || undefined,
-    status: ISSUE_STATUS_CONFIG[statusOf(node.attrs?.status) ?? 'backlog']?.label,
-  }),
+  renderMarkdown: (node) => {
+    const pid = String(node.attrs?.["projectId"] ?? '')
+    const statusLabel = ISSUE_STATUS_CONFIG[statusOf(node.attrs?.["status"]) ?? 'backlog']?.label
+    return issueMarkdown({
+      key: String(node.attrs?.["key"] ?? ''),
+      title: String(node.attrs?.["title"] ?? ''),
+      ...(pid ? { projectId: pid } : {}),
+      ...(statusLabel !== undefined ? { status: statusLabel } : {}),
+    })
+  },
 
   addCommands() {
     return {
-      insertIssue: (issue) => placeBlock((schema) => issue.issueId ? schema.nodes.issueEmbed.create(issue) : null),
+      insertIssue: (issue) => placeBlock((schema) => issue.issueId ? schema.nodes["issueEmbed"]?.create(issue) ?? null : null),
     }
   },
 
@@ -78,11 +84,11 @@ function IssueView({ node, editor, selected, deleteNode }: NodeViewProps) {
   const { issues, projects, people, isInitialized } = useProjectsStore()
   const blockingOf = useIssueBlocking()
   const [open, setOpen] = useState(false)
-  const issue = issues.find((item) => item.id === node.attrs.issueId)
-  const project = projects.find((item) => item.id === (issue?.projectId ?? node.attrs.projectId))
-  const key = issue ? issueKey(issue, projects) : String(node.attrs.key || 'Issue')
-  const title = issue?.title ?? String(node.attrs.title || 'Untitled issue')
-  const status = issue?.status ?? statusOf(node.attrs.status)
+  const issue = issues.find((item) => item.id === node.attrs["issueId"])
+  const project = projects.find((item) => item.id === (issue?.projectId ?? node.attrs["projectId"]))
+  const key = issue ? issueKey(issue, projects) : String(node.attrs["key"] || 'Issue')
+  const title = issue?.title ?? String(node.attrs["title"] || 'Untitled issue')
+  const status = issue?.status ?? statusOf(node.attrs["status"])
   const blocking = issue ? blockingOf(issue) : null
   const missing = isInitialized && !issue
   const now = Date.now()

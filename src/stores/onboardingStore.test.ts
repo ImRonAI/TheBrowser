@@ -18,10 +18,13 @@ beforeEach(() => {
   useOnboardingStore.getState().resetOnboarding()
 })
 
+const firstQuestion = INTERVIEW[0]?.question ?? ''
+const secondQuestion = INTERVIEW[1]?.question ?? ''
+
 test('startRedo backs up answers and completion, and cancelRedo restores them', () => {
   const store = useOnboardingStore.getState()
-  store.setAnswer(INTERVIEW[0].question, 'AI news')
-  store.setAnswer(INTERVIEW[1].question, 'TypeScript, Design')
+  store.setAnswer(firstQuestion, 'AI news')
+  store.setAnswer(secondQuestion, 'TypeScript, Design')
   store.completeOnboarding()
 
   assert.equal(useOnboardingStore.getState().isComplete, true)
@@ -36,7 +39,7 @@ test('startRedo backs up answers and completion, and cancelRedo restores them', 
   assert.equal(useOnboardingStore.getState().redoBackup?.answers.length, 2)
 
   // Simulate partially answering the new interview before cancelling.
-  useOnboardingStore.getState().setAnswer(INTERVIEW[0].question, 'Sports')
+  useOnboardingStore.getState().setAnswer(firstQuestion, 'Sports')
   useOnboardingStore.getState().nextQuestion()
   assert.equal(useOnboardingStore.getState().currentQuestionIndex, 1)
 
@@ -46,22 +49,22 @@ test('startRedo backs up answers and completion, and cancelRedo restores them', 
   assert.equal(restored.redoBackup, null)
   assert.equal(restored.currentQuestionIndex, 0)
   assert.equal(restored.answers.length, 2)
-  assert.equal(restored.answers[0].answer, 'AI news')
+  assert.equal(restored.answers[0]?.answer, 'AI news')
 })
 
 test('completeOnboarding clears redoBackup and keeps new answers', () => {
   const store = useOnboardingStore.getState()
-  store.setAnswer(INTERVIEW[0].question, 'Old answer')
+  store.setAnswer(firstQuestion, 'Old answer')
   store.completeOnboarding()
 
   useOnboardingStore.getState().startRedo()
-  useOnboardingStore.getState().setAnswer(INTERVIEW[0].question, 'New answer')
+  useOnboardingStore.getState().setAnswer(firstQuestion, 'New answer')
   useOnboardingStore.getState().completeOnboarding()
 
   const finalState = useOnboardingStore.getState()
   assert.equal(finalState.isComplete, true)
   assert.equal(finalState.redoBackup, null)
   assert.equal(finalState.answers.length, 1)
-  assert.equal(finalState.answers[0].answer, 'New answer')
+  assert.equal(finalState.answers[0]?.answer, 'New answer')
 })
 

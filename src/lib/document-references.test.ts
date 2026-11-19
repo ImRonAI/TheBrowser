@@ -27,6 +27,7 @@ test('every kind is offered with the ids the skill publisher resolves', () => {
   assert.deepEqual(items.map((item) => `${item.kind}:${item.id}`), [
     'document:d1', 'document:d2', 'tool:http_request', 'tool:brave_web_search', 'tool:current_time', 'agent:ron',
     'agent:specialist/s1', 'agent:project/p1', 'mcp:user_browser', 'skill:weekly-brief'])
+  assert.ok(items[0] && items[1])
   assert.equal(items[0].group, 'WR')
   assert.equal(items[1].label, 'Untitled')
   assert.equal(items.find((item) => item.id === 'project/p1')!.label, 'Writing (WR)')

@@ -70,7 +70,7 @@ const DOMAIN_PALETTE = [
 export function domainHue(domain: string): string {
   let hash = 0
   for (let i = 0; i < domain.length; i += 1) hash = (hash * 31 + domain.charCodeAt(i)) >>> 0
-  return DOMAIN_PALETTE[hash % DOMAIN_PALETTE.length]
+  return DOMAIN_PALETTE[hash % DOMAIN_PALETTE.length] ?? 'rgb(var(--ren-volt))'
 }
 
 /**

@@ -12,11 +12,11 @@ export function IssueWorkProducts({ products }: { products: Record<string, unkno
   return <section className="space-y-3"><h3 className="font-display text-lg font-bold leading-tight tracking-tight text-ink dark:text-ink-inverse">Attachments & work products</h3>
     {!products.length && <p className="text-[13px] text-ink-muted dark:text-ink-inverse-muted">No saved work products yet.</p>}
     {products.map((product, index) => {
-      const title = typeof product.title === 'string' ? product.title : `Attachment ${index + 1}`
-      const content = typeof product.content === 'string' ? product.content : JSON.stringify(product, null, 2)
-      const url = httpsUrl(product.url)
-      const images = Array.isArray(product.images) ? product.images : []
-      return <details key={typeof product.id === 'string' ? product.id : index} className="group/product rounded-xl border border-surface-200 text-ink transition-colors duration-150 open:border-surface-300 hover:border-surface-300 dark:border-surface-800 dark:text-ink-inverse dark:open:border-surface-700 dark:hover:border-surface-700">
+      const title = typeof product["title"] === 'string' ? product["title"] : `Attachment ${index + 1}`
+      const content = typeof product["content"] === 'string' ? product["content"] : JSON.stringify(product, null, 2)
+      const url = httpsUrl(product["url"])
+      const images = Array.isArray(product["images"]) ? product["images"] : []
+      return <details key={typeof product["id"] === 'string' ? product["id"] : index} className="group/product rounded-xl border border-surface-200 text-ink transition-colors duration-150 open:border-surface-300 hover:border-surface-300 dark:border-surface-800 dark:text-ink-inverse dark:open:border-surface-700 dark:hover:border-surface-700">
         <summary className={`${SUMMARY} rounded-xl px-3.5 py-2.5 text-[13.5px] font-semibold focus-visible:ring-2 focus-visible:ring-blurple-600/70 dark:focus-visible:ring-blurple-400/70`}>
           <ChevronRight className="size-3.5 shrink-0 text-ink-muted transition-transform duration-150 group-open/product:rotate-90 dark:text-ink-inverse-muted" aria-hidden />
           <span className="min-w-0 break-words">{title}</span>

@@ -115,6 +115,7 @@ test('the REST helpers call /deep-research/* and read the run back', async () =>
     options,
   )
   assert.deepEqual([started.session_id, started.depth, started.status, started.active], ['dr-101', 'ultra', 'running', true])
+  assert.ok(calls[1])
   assert.deepEqual(JSON.parse(calls[1].body), {
     query: 'Solid-state battery supply chain 2026',
     user_id: 'user-7',
@@ -127,10 +128,12 @@ test('the REST helpers call /deep-research/* and read the run back', async () =>
 
   const runs = await listDeepResearchRuns('user-7', options)
   assert.deepEqual(runs.map((item) => [item.session_id, item.status]), [['dr-101', 'completed']])
+  assert.ok(calls[2])
   assert.match(calls[2].url, /user_id=user-7&limit=50$/)
 
   const opened = await getDeepResearchRun('dr-101', 'user-7', options)
-  assert.equal(opened.nodes.research_swarm.status, 'executing')
+  assert.ok(opened.nodes["research_swarm"])
+  assert.equal(opened.nodes["research_swarm"].status, 'executing')
   assert.equal(opened.report_markdown, '# Dossier')
   assert.deepEqual(opened.artifacts, {
     report_pdf_url: '/deep-research/runs/dr-101/artifacts/report.pdf',
@@ -143,7 +146,8 @@ test('the REST helpers call /deep-research/* and read the run back', async () =>
   // A cancel answers the run's meta; the events folded so far stay.
   const cancelled = await cancelDeepResearchRun('dr-101', 'user-7', options, opened)
   assert.deepEqual([cancelled.status, cancelled.active], ['cancelled', false])
-  assert.equal(cancelled.nodes.research_swarm.status, 'executing')
+  assert.ok(cancelled.nodes["research_swarm"])
+  assert.equal(cancelled.nodes["research_swarm"].status, 'executing')
   assert.equal(cancelled.report_markdown, '# Dossier')
 
   // The report as a Document page, and the page it was saved as on the run.
@@ -154,12 +158,16 @@ test('the REST helpers call /deep-research/* and read the run back', async () =>
   })
   assert.equal(opened.document_id, null)
   const saved = await saveReportDocument('dr-101', 'doc-9', 'user-7', options, opened)
-  assert.deepEqual(JSON.parse(calls[calls.length - 1].body), { document_id: 'doc-9' })
+  const saveCall = calls[calls.length - 1]
+  assert.ok(saveCall)
+  assert.deepEqual(JSON.parse(saveCall.body), { document_id: 'doc-9' })
   assert.equal(saved.document_id, 'doc-9')
   assert.equal(saved.report_markdown, '# Dossier')
 
   await deleteDeepResearchRun('dr-101', 'user-7', options)
-  assert.equal(calls[calls.length - 1].method, 'DELETE')
+  const deleteCall = calls[calls.length - 1]
+  assert.ok(deleteCall)
+  assert.equal(deleteCall.method, 'DELETE')
 
   await assert.rejects(getDeepResearchRun('dr-404', 'user-7', options), /HTTP 404: Not found/)
 })
@@ -177,11 +185,12 @@ test('the SSE parser takes any chunk split and streamDeepResearchEvents ends on 
   const parser = new DeepResearchSSEParser((event) => seen.push(event), (value) => runs.push(value))
   for (let i = 0; i < frames.length; i += 7) parser.push(frames.slice(i, i + 7))
   parser.push('', true)
-  assert.deepEqual(seen.map((event) => [event.sequence, event.event.type]), [
+  assert.deepEqual(seen.map((event) => [event.sequence, event.event["type"]]), [
     [1, 'multiagent_node_start'],
     [2, 'multiagent_handoff'],
   ])
-  assert.equal(runs[0].status, 'completed')
+  assert.ok(runs[0])
+  assert.equal(runs[0]["status"], 'completed')
 
   const requested: string[] = []
   const fetcher: typeof fetch = async (input) => {
@@ -255,11 +264,15 @@ test('reduceDeepResearchEvent folds the nested formations, handoffs and the resu
   assert.equal(state.sequence, 8)
   assert.equal(state.status, 'failed')
   assert.equal(state.error, 'Telnyx 403')
-  assert.equal(state.nodes['research_swarm/researcher'].status, 'completed')
-  assert.equal(state.nodes['research_swarm/researcher'].node_type, 'agent')
-  assert.equal(state.nodes.research_swarm.node_type, 'swarm')
-  assert.equal(state.nodes.research_swarm.error, 'Telnyx 403')
-  assert.equal(state.nodes['research_swarm/fact_checker'].error, 'Telnyx 403')
+  const researcherNode = state.nodes['research_swarm/researcher']
+  const swarmNode = state.nodes["research_swarm"]
+  const factCheckerNode = state.nodes['research_swarm/fact_checker']
+  assert.ok(researcherNode && swarmNode && factCheckerNode)
+  assert.equal(researcherNode.status, 'completed')
+  assert.equal(researcherNode.node_type, 'agent')
+  assert.equal(swarmNode.node_type, 'swarm')
+  assert.equal(swarmNode.error, 'Telnyx 403')
+  assert.equal(factCheckerNode.error, 'Telnyx 403')
   assert.deepEqual(state.completed_nodes, ['research_swarm/researcher'])
   assert.deepEqual(state.failed_nodes, ['research_swarm/fact_checker', 'research_swarm'])
   assert.deepEqual(state.execution_order, ['research_swarm', 'research_swarm/researcher', 'research_swarm/fact_checker'])
@@ -288,8 +301,9 @@ test('a run is folded from its saved events, and a cancelled node keeps its mess
   })
   assert.equal(snapshot.sequence, 2)
   assert.equal(snapshot.status, 'cancelled')
-  assert.equal(snapshot.nodes.research_swarm.status, 'cancelled')
-  assert.equal(snapshot.nodes.research_swarm.error, 'Cancelled by the user.')
+  assert.ok(snapshot.nodes["research_swarm"])
+  assert.equal(snapshot.nodes["research_swarm"].status, 'cancelled')
+  assert.equal(snapshot.nodes["research_swarm"].error, 'Cancelled by the user.')
   assert.deepEqual(snapshot.active_node_path, [])
   assert.equal(snapshot.artifacts.report_pdf_url, null)
   assert.equal(snapshot.selection.model_id, 'moonshotai/Kimi-K3.1-Pro')
@@ -401,10 +415,77 @@ test('backgrounded subagent and tool calls stay running on dispatch, stream live
   assert.ok(researcher)
   assert.equal(researcher.skill_invocations.length, 1)
   const sub = researcher.skill_invocations[0]
+  assert.ok(sub)
   assert.equal(sub.id, 'sub-1')
   assert.equal(sub.status, 'completed')
   assert.equal(sub.output_text, 'Threshold is 1.0%.')
   assert.deepEqual(sub.tools.map((tc) => [tc.id, tc.status, tc.output]), [
     ['scr-1', 'failed', 'Cancelled hung scrape'],
   ])
+})
+
+test('deep research folds native _SubagentTool(background=True) spawn, subagent_id stream, recover, and [subagent-completed]', () => {
+  const path = ['research_swarm', 'researcher']
+  const state = run([
+    { type: 'multiagent_node_start', node_id: 'research_swarm' },
+    at(['research_swarm'], { type: 'multiagent_node_start', node_id: 'researcher' }),
+    at(path, {
+      message: {
+        role: 'assistant',
+        content: [{ toolUse: { toolUseId: 'call-1', name: 'subagent', input: { task: 'Gather filings' } } }],
+      },
+    }),
+    at(path, {
+      message: {
+        role: 'user',
+        content: [{ toolResult: { toolUseId: 'call-1', status: 'success', content: [{ json: { subagent_id: 'subagent-1111', status: 'running' } }] } }],
+      },
+    }),
+    at(path, {
+      tool_stream_event: {
+        tool_use: { toolUseId: 'subagent-1111', name: 'subagent', input: { task: 'Gather filings', subagent_id: 'subagent-1111' } },
+        data: { data: '10-K located. ' },
+      },
+    }),
+    at(path, {
+      message: {
+        role: 'user',
+        content: [{ text: '[subagent-hangup] Background subagent hangup detected:\n[\n  {"subagent_id": "subagent-1111", "status": "running", "hangup_reason": "scraper stalled"}\n]' }],
+      },
+    }),
+    at(path, {
+      message: {
+        role: 'assistant',
+        content: [{ toolUse: { toolUseId: 'call-rec', name: 'subagent', input: { action: 'recover', subagent_id: 'subagent-1111', task: 'Use custom EDGAR tool' } } }],
+      },
+    }),
+    at(path, {
+      message: {
+        role: 'user',
+        content: [{ toolResult: { toolUseId: 'call-rec', status: 'success', content: [{ json: { recovered_from: 'subagent-1111', subagent_id: 'subagent-2222', status: 'running' } }] } }],
+      },
+    }),
+    at(path, {
+      tool_stream_event: {
+        tool_use: { toolUseId: 'subagent-2222', name: 'subagent', input: { task: 'Use custom EDGAR tool', subagent_id: 'subagent-2222' } },
+        data: { data: 'Revenue verified.' },
+      },
+    }),
+    at(path, {
+      message: {
+        role: 'user',
+        content: [{ text: '[subagent-completed] Background subagent(s) finished:\n[\n  {"subagent_id": "subagent-2222", "status": "completed", "result": "10-K located. Revenue verified."}\n]' }],
+      },
+    }),
+  ])
+
+  const researcher = state.nodes['research_swarm/researcher']
+  assert.ok(researcher)
+  assert.equal(researcher.skill_invocations.length, 1)
+  const sub = researcher.skill_invocations[0]
+  assert.ok(sub)
+  assert.equal(sub.id, 'call-1')
+  assert.equal(sub.subagent_id, 'subagent-2222')
+  assert.equal(sub.status, 'completed')
+  assert.equal(sub.output_text, '10-K located. Revenue verified.')
 })

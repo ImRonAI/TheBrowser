@@ -20,7 +20,7 @@ const RAIL_MIN_WIDTH = 940
 
 const microLabel = 'font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-ink-muted dark:text-ink-inverse-muted'
 
-function BriefRail({ state, onOpenAnswer }: { state: SearchRunState; onOpenAnswer?: () => void }) {
+function BriefRail({ state, onOpenAnswer }: { state: SearchRunState; onOpenAnswer?: (() => void) | undefined }) {
   const agent = state.agent
   const summary = plainText(agent.text)
   const sources = agent.citations.slice(0, 5)
@@ -113,7 +113,7 @@ export function WebResults({ state, onRetry, onOpenAnswer, deeper }: {
   const measure = useCallback((node: HTMLDivElement | null) => {
     observer.current?.disconnect()
     if (!node) return
-    observer.current = new ResizeObserver(([entry]) => setRailVisible(entry.contentRect.width >= RAIL_MIN_WIDTH))
+    observer.current = new ResizeObserver(([entry]) => { if (entry) setRailVisible(entry.contentRect.width >= RAIL_MIN_WIDTH) })
     observer.current.observe(node)
   }, [])
   useEffect(() => () => observer.current?.disconnect(), [])
@@ -143,7 +143,7 @@ export function WebResults({ state, onRetry, onOpenAnswer, deeper }: {
           />
         )}
 
-        {consensus.length > 0 && (
+        {consensus[0] && (
           <section aria-label="Consensus" className="mt-8 first:mt-0">
             <GroupLabel label="Consensus" count={consensus.length} />
             <ul>
@@ -153,7 +153,7 @@ export function WebResults({ state, onRetry, onOpenAnswer, deeper }: {
           </section>
         )}
 
-        {agentOnly.length > 0 && (
+        {agentOnly[0] && (
           <section aria-label="Agent picks" className="mt-8 first:mt-0">
             <GroupLabel label="Agent picks" count={agentOnly.length} />
             <ul>

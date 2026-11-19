@@ -209,7 +209,7 @@ export function initializeNodePositions(
   ]
 
   return nodes.map((node, i) => {
-    const pos = positions[i % positions.length]
+    const pos = positions[i % positions.length] ?? { x: 0.5, y: 0.5 }
     return {
       ...node,
       position: {

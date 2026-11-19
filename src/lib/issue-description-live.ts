@@ -21,6 +21,9 @@ export function descriptionLivePrompt(intent: string, currentDraft: string): str
 
 /** Latest assistant text from Live; the user applies it explicitly. */
 export function latestProposal<T extends { role: 'user' | 'assistant'; text: string }>(turns: readonly T[]): T | undefined {
-  for (let i = turns.length - 1; i >= 0; i--) if (turns[i].role === 'assistant' && turns[i].text.trim()) return turns[i]
+  for (let i = turns.length - 1; i >= 0; i--) {
+    const turn = turns[i]
+    if (turn && turn.role === 'assistant' && turn.text.trim()) return turn
+  }
   return undefined
 }

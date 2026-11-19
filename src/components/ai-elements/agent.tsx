@@ -27,7 +27,7 @@ export const Agent = memo(({ className, ...props }: AgentProps) => (
 
 export type AgentHeaderProps = ComponentProps<"div"> & {
   name: string;
-  model?: string;
+  model?: string | undefined;
 };
 
 export const AgentHeader = memo(

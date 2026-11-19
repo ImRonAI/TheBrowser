@@ -40,7 +40,8 @@ test('sending an item again replaces its entry in place; new items are appended'
   const b = issueContextEntry({ ...shot, id: 'b', title: 'B' }, '', undefined, 't1')
   const existing = [{ id: 'kept', title: 'Kept' }, { ...a }]
   const merged = mergeIssueContext(existing, [{ ...a, title: 'A again' }, b])
-  assert.deepEqual(merged.map((entry) => [entry.id, entry.title]), [['kept', 'Kept'], ['a', 'A again'], ['b', 'B']])
+  assert.deepEqual(merged.map((entry) => [entry["id"], entry["title"]]), [['kept', 'Kept'], ['a', 'A again'], ['b', 'B']])
+  assert.ok(existing[1])
   assert.equal(existing[1].title, 'A')
 })
 
@@ -54,6 +55,7 @@ test('stored entries are validated for display and files must be in the attachme
   assert.deepEqual(entryFiles({}), [])
   const [entry, ...rest] = issueContextEntries([{ id: 'x', title: 'T', url: 'javascript:alert(1)', images: [{ url: 'http://a' }, 'https://b.png'], content: 7 }, { title: 'no id' }])
   assert.equal(rest.length, 0)
+  assert.ok(entry)
   assert.equal(entry.url, '')
   assert.deepEqual(entry.images, [{ url: 'https://b.png' }])
   assert.equal(entry.content, '')
@@ -72,7 +74,9 @@ test('a related page becomes one document entry addressed by its ron:// page lin
   assert.equal(pageFromSource('ron://project/p1'), null)
   assert.equal(pageFromSource('https://example.com/docs/d1'), null)
   // The stored entry reads back for the Context tab.
-  assert.equal(issueContextEntries([{ ...entry }])[0].source, 'ron://project/p1/docs/d1')
+  const roundTripped = issueContextEntries([{ ...entry }])
+  assert.ok(roundTripped[0])
+  assert.equal(roundTripped[0].source, 'ron://project/p1/docs/d1')
 })
 
 test('relating a page adds it to the Context once; unrelating removes every entry for that page', () => {
@@ -81,7 +85,8 @@ test('relating a page adds it to the Context once; unrelating removes every entr
   const page = { id: 'd1', projectId: 'p1', title: 'Rollout plan' }
   const added = withDocumentContext([note], page)
   assert.equal(added.length, 2)
-  assert.equal(added[1].id, 'document:d1')
+  assert.ok(added[1])
+  assert.equal(added[1]["id"], 'document:d1')
   assert.equal(withDocumentContext(added, page), added)
   assert.equal(withDocumentContext([note, fromWidget], page).length, 2, 'a page sent from the Context widget is not doubled')
   assert.deepEqual(withoutDocumentContext([...added, fromWidget], 'd1'), [note])

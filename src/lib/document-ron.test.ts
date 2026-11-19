@@ -72,14 +72,14 @@ test('Ren’s answer becomes ordered segments: top-level text and finished rende
   const segments = ronSegments(state)
   assert.deepEqual(segments.map((segment) => segment.kind), ['text', 'workflow', 'text'])
   const drawn = segments[1]
-  assert.ok(drawn.kind === 'workflow' && drawn.title === 'Approval' && drawn.graph.connections[1].label === 'Yes')
+  assert.ok(drawn && drawn.kind === 'workflow' && drawn.title === 'Approval' && drawn.graph.connections[1]?.label === 'Yes')
   assert.ok(hasDraft(segments))
   // Without connections, render_workflow chains the steps; the drawn graph mirrors that.
   let chained = reducePanelEvent(emptyPanelState('doc-a'), event(1, 'run_started'))
   chained = reducePanelEvent(chained, event(2, 'tool_input', { id: 't', name: 'render_workflow', input: { title: 'T', steps } }))
   chained = reducePanelEvent(chained, event(3, 'tool_result', { id: 't', name: 'render_workflow', status: 'success', content: [] }))
   const only = ronSegments(chained)[0]
-  assert.ok(only.kind === 'workflow' && only.graph.connections.length === 2)
+  assert.ok(only && only.kind === 'workflow' && only.graph.connections.length === 2)
 })
 
 test('segments become editor content: parsed Markdown, drawn workflows and workflow fences as blocks', () => {
@@ -92,8 +92,9 @@ test('segments become editor content: parsed Markdown, drawn workflows and workf
     { kind: 'text', text: '   ' },
   ], parse, () => `w${(n += 1)}`)
   assert.deepEqual(content.map((node) => node.type), ['heading', 'workflow', 'paragraph', 'workflow'])
-  assert.equal(content[0].content![0].text, 'Intro')
-  assert.deepEqual([content[1].attrs!.title, content[3].attrs!.title], ['Drawn', 'Release'])
+  assert.ok(content[0]?.content?.[0] && content[1]?.attrs && content[3]?.attrs)
+  assert.equal(content[0].content[0].text, 'Intro')
+  assert.deepEqual([content[1].attrs["title"], content[3].attrs["title"]], ['Drawn', 'Release'])
   assert.equal(unwrapMarkdown('```md\n# A\n```'), '# A')
 })
 
@@ -103,6 +104,7 @@ test('workflow fences round-trip; bad fences stay code', () => {
   const parsed = workflowFromFence(body)!
   assert.equal(parsed.title, 'Release')
   assert.deepEqual(parsed.graph.steps.map((step) => step.id), ['start', 'step-1', 'end'])
+  assert.ok(parsed.graph.connections[0])
   assert.equal(parsed.graph.connections[0].label, 'Skip')
   assert.equal(workflowFromFence('{"steps": []}'), null)
   assert.equal(workflowFromFence('not json'), null)
@@ -128,18 +130,22 @@ test('an ```embeds fence becomes Embed tabs and reads back as the same fence', (
     '````',
   ].join('\n')
   const doc = withWorkflowBlocks(parse(markdown), () => 'w1')
-  const tabs = doc.content![0]
+  const tabs = doc.content?.[0]
+  assert.ok(tabs && tabs.content)
+  const tabList = tabs.content
   assert.equal(tabs.type, 'embedTabs')
-  assert.deepEqual(tabs.content!.map((tab) => tab.type), ['embed', 'embed', 'youtube', 'pdf', 'media', 'media', 'workflow'])
-  assert.deepEqual([tabs.content![0].attrs!.provider, tabs.content![0].attrs!.title], ['figma', 'Home [v2]'])
-  assert.equal(tabs.content![1].attrs!.provider, 'loom')
-  assert.equal(tabs.content![2].attrs!.src, 'https://www.youtube.com/watch?v=dQw4w9WgXcQ')
-  assert.deepEqual([tabs.content![4].attrs!.kind, tabs.content![5].attrs!.kind, tabs.content![5].attrs!.title], ['video', 'audio', 'Episode 1'])
-  assert.deepEqual([tabs.content![6].attrs!.id, tabs.content![6].attrs!.title], ['w1', 'Release'])
-  const again = embedTabsMarkdown(tabs.content!)
+  assert.deepEqual(tabList.map((tab) => tab.type), ['embed', 'embed', 'youtube', 'pdf', 'media', 'media', 'workflow'])
+  const [t0, t1, t2, , t4, t5, t6] = tabList
+  assert.ok(t0?.attrs && t1?.attrs && t2?.attrs && t4?.attrs && t5?.attrs && t6?.attrs)
+  assert.deepEqual([t0.attrs["provider"], t0.attrs["title"]], ['figma', 'Home [v2]'])
+  assert.equal(t1.attrs["provider"], 'loom')
+  assert.equal(t2.attrs["src"], 'https://www.youtube.com/watch?v=dQw4w9WgXcQ')
+  assert.deepEqual([t4.attrs["kind"], t5.attrs["kind"], t5.attrs["title"]], ['video', 'audio', 'Episode 1'])
+  assert.deepEqual([t6.attrs["id"], t6.attrs["title"]], ['w1', 'Release'])
+  const again = embedTabsMarkdown(tabList)
   assert.match(again, /^````embeds\n\[Figma: Home \\\[v2\\\]\]\(https:\/\/www\.figma\.com\/file\/abc\/Home\)\n\[Loom: /)
   assert.match(again, /\n\[Audio: Episode 1\]\(<https:\/\/example\.com\/a\(1\)\.mp3>\)\n```workflow\n/)
-  assert.deepEqual(tabsFromFence(again.split('\n').slice(1, -1).join('\n')).map((tab) => tab.type), tabs.content!.map((tab) => tab.type))
+  assert.deepEqual(tabsFromFence(again.split('\n').slice(1, -1).join('\n')).map((tab) => tab.type), tabList.map((tab) => tab.type))
   assert.equal(embedTabsMarkdown([]), '')
   assert.equal(embedTabsMarkdown([{ type: 'media', attrs: { kind: 'audio', src: 'https://e.com/a.mp3', title: 'Ep' } }]), '```embeds\n[Audio: Ep](https://e.com/a.mp3)\n```')
 })
@@ -149,5 +155,5 @@ test('a tab is built only from a link that fits its kind', () => {
   assert.deepEqual(tabNode('pdf', 'http://example.com/a.pdf'), { ok: false, error: 'Use a full https:// link to the PDF.' })
   assert.equal(tabNode('web', 'javascript:alert(1)').ok, false)
   const routed = tabNode('web', 'https://vimeo.com/76979871')
-  assert.ok(routed.ok && routed.value.attrs!.provider === 'vimeo')
+  assert.ok(routed.ok && routed.value.attrs!["provider"] === 'vimeo')
 })

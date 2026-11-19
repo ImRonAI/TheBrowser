@@ -69,7 +69,7 @@ export function KpiRow({ metrics, unit }: { metrics: DashboardMetrics; unit: str
 
 // ── Needs attention ──────────────────────────────────────────────────────────
 
-interface Row { issue: Issue; meta: string; flag?: string }
+interface Row { issue: Issue; meta: string; flag?: string | undefined }
 
 function AttentionList({ title, icon, rows, empty, issueKey, onIssueSelect, limit = 6 }: {
   title: string

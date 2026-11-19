@@ -80,23 +80,25 @@ function useDocumentAgent(
       id: nanoid(8),
       kind,
       ask,
-      attachments: promptAttachments,
+      ...(promptAttachments !== undefined ? { attachments: promptAttachments } : {}),
       screenShared: Boolean(screenFrame),
     }
     setCurrent(turn)
     const message = kind === 'request'
       ? documentRonMessage({ target: target(), intent: ask, currentMarkdown })
       : documentRetryMessage(ask)
+    const goalValue = kind === 'request' && goal ? ask : undefined
     const final = await ron.start({
       sessionId: session.current.sessionId,
       message,
-      goal: kind === 'request' && goal ? ask : undefined,
-      promptAttachments,
-      screenFrame,
+      ...(goalValue !== undefined ? { goal: goalValue } : {}),
+      ...(promptAttachments !== undefined ? { promptAttachments } : {}),
+      ...(screenFrame !== undefined ? { screenFrame } : {}),
     })
     setDone((turns) => [...turns, {
       ...turn, message: final ? latestAssistant(final) ?? null : null,
-      status: final?.status ?? 'error', error: final?.error,
+      status: final?.status ?? 'error',
+      ...(final?.error !== undefined ? { error: final.error } : {}),
     }])
     setCurrent(null)
   }
@@ -127,15 +129,15 @@ export function RonWriter({
   editor: Editor | null
   /** Read when the request is sent, so the newest title and facts are used. */
   target: () => RonWritingTarget
-  goal?: boolean
-  initialPrompt?: string
-  initialAttachments?: PromptAttachment[]
-  autoSend?: boolean
-  autoApply?: boolean
-  onApplied?: () => void
+  goal?: boolean | undefined
+  initialPrompt?: string | undefined
+  initialAttachments?: PromptAttachment[] | undefined
+  autoSend?: boolean | undefined
+  autoApply?: boolean | undefined
+  onApplied?: (() => void) | undefined
   onClose: () => void
-  disabled?: boolean
-  conversations?: PageConversations
+  disabled?: boolean | undefined
+  conversations?: PageConversations | undefined
 }) {
   const [screenShareEnabled, setScreenShareEnabled] = useState(true)
   const agent = useDocumentAgent(editor, target, conversations, screenShareEnabled)

@@ -22,6 +22,7 @@ import type {
   Citation,
   CenterView,
   MessageBlock,
+  ToolCallStatus,
 } from '@/components/build/types'
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -136,7 +137,7 @@ interface BuildState {
   navigationCounter: number
 
   // Error state
-  error: { message: string; code?: string } | null
+  error: { message: string; code?: string | undefined } | null
 
   // ─────────────────────────────────────────────────────────────────────────
   // Computed
@@ -408,8 +409,10 @@ export const useBuildStore = create<BuildState>()(
             }
           }
           // Update existing
+          const existing = messages[idx]
+          if (!existing) return state
           const updated = [...messages]
-          updated[idx] = { ...updated[idx], blocks, isStreaming: true }
+          updated[idx] = { ...existing, blocks, isStreaming: true }
           return {
             threads: { ...state.threads, [key]: updated },
             streamingMessageId: messageId,
@@ -427,8 +430,10 @@ export const useBuildStore = create<BuildState>()(
           const idx = messages.findIndex((m) => m.id === streamingMessageId)
           if (idx === -1) return state
 
+          const existing = messages[idx]
+          if (!existing) return state
           const updated = [...messages]
-          updated[idx] = { ...updated[idx], isStreaming: false }
+          updated[idx] = { ...existing, isStreaming: false }
           return {
             threads: { ...state.threads, [key]: updated },
             streamingMessageId: null,
@@ -536,15 +541,21 @@ export const useBuildStore = create<BuildState>()(
           if (idx === -1) return state
 
           const msg = messages[idx]
-          const blocks = msg.blocks.map((block) => {
+          if (!msg) return state
+          const blocks: MessageBlock[] = msg.blocks.map((block) => {
             if (block.type === 'tool_call' && block.toolName === toolName) {
-              return { ...block, status: status as any, output, error }
+              return {
+                ...block,
+                status: status as ToolCallStatus,
+                ...(output !== undefined ? { output } : {}),
+                ...(error !== undefined ? { error } : {}),
+              }
             }
             return block
           })
 
           const updated = [...messages]
-          updated[idx] = { ...updated[idx], blocks }
+          updated[idx] = { ...msg, blocks }
           return { threads: { ...state.threads, [key]: updated } }
         })
       },
@@ -610,7 +621,7 @@ export const useBuildStore = create<BuildState>()(
             if (parts.length >= 3) {
               const workspacePart = parts[0] || workspaceId
               const agentPart = parts[1] || fallbackAgentId
-              const sessionPart = parts[2]
+              const sessionPart = parts[2] ?? ''
               const normalizedKey = `${workspacePart}:${agentPart}:${sessionPart}`
               migratedThreads[normalizedKey] = messages as BuildMessage[]
 

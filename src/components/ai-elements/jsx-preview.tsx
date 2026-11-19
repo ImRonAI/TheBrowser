@@ -24,7 +24,7 @@ interface JSXPreviewContextValue {
   setError: (error: Error | null) => void;
   components: JsxParserProps["components"];
   bindings: JsxParserProps["bindings"];
-  onErrorProp?: (error: Error) => void;
+  onErrorProp?: ((error: Error) => void) | undefined;
 }
 
 const JSXPreviewContext = createContext<JSXPreviewContextValue | null>(null);
@@ -50,7 +50,7 @@ const matchJsxTag = (code: string) => {
     return null;
   }
 
-  const [fullMatch, tagName, attributes, selfClosing] = match;
+  const [fullMatch, tagName = "", attributes = "", selfClosing] = match;
 
   let type: "self-closing" | "closing" | "opening";
   if (selfClosing) {
@@ -108,10 +108,10 @@ const completeJsxTag = (code: string) => {
 
 export type JSXPreviewProps = ComponentProps<"div"> & {
   jsx: string;
-  isStreaming?: boolean;
-  components?: JsxParserProps["components"];
-  bindings?: JsxParserProps["bindings"];
-  onError?: (error: Error) => void;
+  isStreaming?: boolean | undefined;
+  components?: JsxParserProps["components"] | undefined;
+  bindings?: JsxParserProps["bindings"] | undefined;
+  onError?: ((error: Error) => void) | undefined;
 };
 
 export const JSXPreview = memo(

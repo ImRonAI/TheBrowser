@@ -33,7 +33,8 @@ export function TemplateGallery({ open, onOpenChange, onChoose, mode, extensions
 }) {
   const id = useId()
   const [query, setQuery] = useState('')
-  const [selectedId, setSelectedId] = useState(mode === 'apply' ? DOCUMENT_TEMPLATES[1].id : DOCUMENT_TEMPLATES[0].id)
+  const defaultTemplateId = (m: 'new' | 'apply') => (m === 'apply' ? DOCUMENT_TEMPLATES[1]?.id : DOCUMENT_TEMPLATES[0]?.id) ?? 'blank'
+  const [selectedId, setSelectedId] = useState(() => defaultTemplateId(mode))
   const listRef = useRef<HTMLDivElement>(null)
   const templates = useMemo(() => searchTemplates(query).filter((template) => mode === 'new' || template.id !== 'blank'), [query, mode])
   const selected = templates.find((template) => template.id === selectedId) ?? templates[0]
@@ -43,7 +44,7 @@ export function TemplateGallery({ open, onOpenChange, onChoose, mode, extensions
   const ordered = useMemo(() => groups.flatMap((group) => group.items), [groups])
   const preview = useMemo(() => (selected ? instantiateTemplate(selected, new Date(), () => 'template-preview') : null), [selected])
 
-  useEffect(() => { if (open) { setQuery(''); setSelectedId(mode === 'apply' ? DOCUMENT_TEMPLATES[1].id : DOCUMENT_TEMPLATES[0].id) } }, [open, mode])
+  useEffect(() => { if (open) { setQuery(''); setSelectedId(defaultTemplateId(mode)) } }, [open, mode])
   useEffect(() => {
     if (selected) listRef.current?.querySelector<HTMLElement>(`[data-template="${selected.id}"]`)?.scrollIntoView({ block: 'nearest' })
   }, [selected])
@@ -56,7 +57,8 @@ export function TemplateGallery({ open, onOpenChange, onChoose, mode, extensions
   const move = (delta: number) => {
     if (!ordered.length) return
     const index = Math.max(0, ordered.findIndex((template) => template.id === selected?.id))
-    setSelectedId(ordered[(index + delta + ordered.length) % ordered.length].id)
+    const next = ordered[(index + delta + ordered.length) % ordered.length]
+    if (next) setSelectedId(next.id)
   }
   const optionId = (template: DocumentTemplate) => `${id}-template-${template.id}`
 

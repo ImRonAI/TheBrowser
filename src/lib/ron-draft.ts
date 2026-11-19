@@ -16,13 +16,13 @@ export interface DraftTurn {
   /** What the user typed (the request or the feedback), not the context sent with it. */
   ask: string
   /** Attached reference context cards sent with this turn (`ai-elements/attachments.tsx`). */
-  attachments?: PromptAttachment[]
+  attachments?: PromptAttachment[] | undefined
   /** True when the live Document screen screenshot was shared on this turn. */
-  screenShared?: boolean
+  screenShared?: boolean | undefined
   /** Ron's answer so far; null until anything arrives. */
   message: PanelMessage | null
   status: RunStatus
-  error?: string
+  error?: string | undefined
 }
 
 /** Ron's answer split into the tracing (shown in an accordion) and the draft (what can go into the editor). */

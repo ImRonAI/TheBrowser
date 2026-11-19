@@ -224,7 +224,7 @@ export function sparklinePoints(series: unknown): number[] {
     if (Array.isArray(point)) value = point[point.length - 1]
     else if (point && typeof point === 'object') {
       const record = point as Record<string, unknown>
-      value = record.value ?? record.price ?? record.close ?? record.rate ?? record.y
+      value = record["value"] ?? record["price"] ?? record["close"] ?? record["rate"] ?? record["y"]
     }
     if (typeof value === 'string' && value.trim() !== '') value = Number(value)
     if (typeof value === 'number' && Number.isFinite(value)) values.push(value)

@@ -57,10 +57,10 @@ export async function fetchReferenceCatalog(apiBase: string, userId: string, age
 
 /** Every reference the menu can offer, in menu order. */
 export function referenceItems(sources: {
-  catalog?: TeachingReferenceCatalog | null
-  documents?: { id: string; title: string; projectId: string | null }[]
-  projects?: { id: string; name: string; key?: string; summary?: string; lifecycle?: string }[]
-  specialists?: { id: string; name: string; description?: string }[]
+  catalog?: TeachingReferenceCatalog | null | undefined
+  documents?: { id: string; title: string; projectId: string | null }[] | undefined
+  projects?: { id: string; name: string; key?: string | undefined; summary?: string | undefined; lifecycle?: string | undefined }[] | undefined
+  specialists?: { id: string; name: string; description?: string | undefined }[] | undefined
 }): ReferenceItem[] {
   const projectName = new Map((sources.projects ?? []).map((project) => [project.id, project.key ? `${project.key}` : project.name]))
   const items: ReferenceItem[] = []
@@ -104,7 +104,7 @@ export function filterReferences(items: ReferenceItem[], query: string, perGroup
       else if (description.some((word) => word.startsWith(needle))) total += 1
       else return 0
     }
-    return total + (item.label.toLowerCase().startsWith(needles[0]) ? 2 : 0)
+    return total + (needles[0] !== undefined && item.label.toLowerCase().startsWith(needles[0]) ? 2 : 0)
   }
   return REFERENCE_KINDS.map(({ kind, title }) => ({
     kind, title,
@@ -129,7 +129,7 @@ export const REFERENCE_MARKDOWN = /^@\[((?:\\.|[^\]\\])*)\]\(ron:\/\/(document|t
 
 export function parseReferenceMarkdown(src: string): { raw: string; kind: ReferenceKind; id: string; label: string } | null {
   const match = REFERENCE_MARKDOWN.exec(src)
-  if (!match) return null
+  if (!match || match[1] === undefined || match[2] === undefined || match[3] === undefined) return null
   return { raw: match[0], kind: match[2] as ReferenceKind, id: match[3], label: match[1].replace(/\\(.)/g, '$1') }
 }
 

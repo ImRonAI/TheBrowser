@@ -12,9 +12,9 @@ import type { MusicPosition } from '../lib/music-position.ts'
 export interface LiveMusicControls {
   setVolume: (value: number) => void
   /** The chunk audible now in the music sink (`useMusicPlayback.position`). */
-  position?: () => MusicPosition | null
+  position?: (() => MusicPosition | null) | undefined
   /** Send a typed user turn to the Live agent (`VoiceAgent.sendText`); false when not connected. */
-  sendText?: (text: string) => boolean
+  sendText?: ((text: string) => boolean) | undefined
 }
 
 interface LiveMusicStore {
@@ -26,7 +26,7 @@ interface LiveMusicStore {
   /** `ready.music`: the music_* tools exist on the connected session. */
   available: boolean
   /** The Live socket's random per-session `agent_id` and the user it was opened for (`/music/*` identity). */
-  agentId?: string
+  agentId?: string | undefined
   userId: string
   music: MusicState
   /** Audio currently scheduled in the music sink. */

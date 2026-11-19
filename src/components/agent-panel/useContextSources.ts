@@ -28,7 +28,7 @@ import { useContextAgentStore } from '@/stores/contextAgentStore'
 import { getProjectsState, projectsRequestFor, useProjectsStore } from '@/stores/projectsStore'
 import { useInterestsStore } from '@/stores/interestsStore'
 
-interface Remote<T> { items: T[]; loading: boolean; note?: string }
+interface Remote<T> { items: T[]; loading: boolean; note?: string | undefined }
 const idle = <T,>(): Remote<T> => ({ items: [], loading: false })
 const message = (error: unknown) => (error instanceof Error ? error.message : String(error))
 
@@ -106,6 +106,10 @@ export function useContextSources(open: boolean) {
       .sort((a, b) => b.updatedAt - a.updatedAt)
       .map((doc) => documentItem(doc, projects, now))
 
+    const contextNote = saved.note ?? (contextItems.length ? undefined : 'Nothing in Context yet. Capture a page, add a note, or upload a file above.')
+    const interestsNote = interests.length ? undefined : 'No interests yet. Finish the interview or turn on “Learn from my browsing”.'
+    const documentsNote = documents.note ?? (pages.length ? undefined : 'No project or personal pages yet.')
+
     return [
       {
         id: 'context',
@@ -115,23 +119,23 @@ export function useContextSources(open: boolean) {
           : 'Saved notes, links, captures, Ask turns & browsing',
         items: contextItems,
         loading: saved.loading && !contextItems.length,
-        note: saved.note ?? (contextItems.length ? undefined : 'Nothing in Context yet. Capture a page, add a note, or upload a file above.'),
+        ...(contextNote !== undefined ? { note: contextNote } : {}),
       },
-      { id: 'tabs', name: 'Open tabs', description: tabs.items.length ? `${tabs.items.length} open` : 'Pages open in Ren', items: tabs.items, loading: tabs.loading, note: tabs.note },
+      { id: 'tabs', name: 'Open tabs', description: tabs.items.length ? `${tabs.items.length} open` : 'Pages open in Ren', items: tabs.items, loading: tabs.loading, ...(tabs.note !== undefined ? { note: tabs.note } : {}) },
       { id: 'conversations', name: 'Previous chats', description: threads.items.length ? `${threads.items.length} chats` : 'Reference a past conversation',
-        items: threads.items.map((thread) => threadItem(thread, now)), loading: threads.loading, note: threads.note },
+        items: threads.items.map((thread) => threadItem(thread, now)), loading: threads.loading, ...(threads.note !== undefined ? { note: threads.note } : {}) },
       { id: 'issues', name: 'Issues', description: liveIssues.length ? `${liveIssues.length} across ${visibleProjects.length} projects` : 'Work items in your projects',
-        items: liveIssues.map((issue) => issueItem(issue, projectMap, now)), loading: projectsLoading && !issues.length, note: projectNote },
+        items: liveIssues.map((issue) => issueItem(issue, projectMap, now)), loading: projectsLoading && !issues.length, ...(projectNote !== undefined ? { note: projectNote } : {}) },
       { id: 'projects', name: 'Projects', description: visibleProjects.length ? `${visibleProjects.length} projects` : 'Your projects',
         items: visibleProjects.sort((a, b) => b.updatedAt - a.updatedAt).map((project) => projectItem(project, issues)),
-        loading: projectsLoading && !projects.length, note: projectNote },
+        loading: projectsLoading && !projects.length, ...(projectNote !== undefined ? { note: projectNote } : {}) },
       { id: 'dates', name: 'Dates & events', description: 'Today, due dates, starts and deadlines',
         items: [todayItem(now), ...importantDates(issues, projects, now)], loading: projectsLoading && !issues.length },
       { id: 'interests', name: 'Interests', description: interests.length ? `${interests.length} interests` : 'From your interview and browsing',
         items: [...interests].sort((a, b) => b.weight - a.weight).map(interestItem),
-        note: interests.length ? undefined : 'No interests yet. Finish the interview or turn on “Learn from my browsing”.' },
+        ...(interestsNote !== undefined ? { note: interestsNote } : {}) },
       { id: 'documents', name: 'Pages & files', description: pages.length ? `${pages.length} project & personal page${pages.length === 1 ? '' : 's'}` : 'Project and personal pages', items: pages,
-        loading: documents.loading, note: documents.note ?? (pages.length ? undefined : 'No project or personal pages yet.') },
+        loading: documents.loading, ...(documentsNote !== undefined ? { note: documentsNote } : {}) },
     ]
   }, [tabs, threads, documents, saved, storeItems, asks, visits, runs, recommendations, projects, issues, projectsLoading, projectsError, interests, now])
 

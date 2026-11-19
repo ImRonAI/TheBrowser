@@ -75,7 +75,7 @@ export function SearchBar() {
               strokeLinejoin="round"
               animate={{
                 scale: isFocused ? 1.1 : 1,
-                color: isFocused ? 'rgb(194, 106, 65)' : undefined,
+                ...(isFocused ? { color: 'rgb(194, 106, 65)' } : {}),
               }}
               transition={{ duration: 0.2 }}
             >

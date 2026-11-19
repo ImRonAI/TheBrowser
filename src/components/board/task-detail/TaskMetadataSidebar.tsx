@@ -38,8 +38,8 @@ const CARD = 'rounded-xl border border-surface-200 bg-surface-0 dark:border-surf
 
 interface TaskMetadataSidebarProps {
   task: Task
-  onUpdate?: (task: Task) => void
-  onTaskClick?: (taskId: string) => void
+  onUpdate?: ((task: Task) => void) | undefined
+  onTaskClick?: ((taskId: string) => void) | undefined
 }
 
 export function TaskMetadataSidebar({ task, onUpdate: _onUpdate, onTaskClick }: TaskMetadataSidebarProps) {
@@ -228,7 +228,7 @@ function StatusSelect({ value }: { value: TaskStatus }) {
 // PRIORITY SELECT
 // ─────────────────────────────────────────────────────────────────────────────
 
-function PrioritySelect({ value }: { value?: TaskPriority }) {
+function PrioritySelect({ value }: { value?: TaskPriority | undefined }) {
   if (!value) {
     return (
       <span className="block px-1 text-[13px] text-ink-muted dark:text-ink-inverse-muted">
@@ -327,7 +327,7 @@ function AssigneeList({ assignees }: { assignees: Task['assignees'] }) {
 // DATE DISPLAY
 // ─────────────────────────────────────────────────────────────────────────────
 
-function DateDisplay({ date }: { date?: number | null }) {
+function DateDisplay({ date }: { date?: number | null | undefined }) {
   if (!date) {
     return (
       <button type="button" className={ADD_FIELD}>

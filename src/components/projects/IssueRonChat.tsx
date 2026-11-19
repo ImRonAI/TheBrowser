@@ -25,7 +25,7 @@ interface IssueRonChatProps {
   /** `KEY-12`, shown in the header. */
   issueKey: string
   /** Saved issue fields: the title for the header; title and description go to Live as read-only context. */
-  issue: { title: string; description?: string }
+  issue: { title: string; description?: string | undefined }
   /** Unsaved issue edits. Ron only sees saved data, so nothing is sent until the issue is saved. */
   hasUnsavedChanges: boolean
 }

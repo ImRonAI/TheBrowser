@@ -21,7 +21,7 @@ export const RonInlineMath = InlineMath.extend({
     start: (src: string) => src.indexOf('$'),
     tokenize: (src: string) => {
       const match = src.match(/^\$(?=\S)([^$\n]*?\S)\$(?!\d)/)
-      return match ? { type: 'inlineMath', raw: match[0], latex: match[1].trim() } : undefined
+      return match && match[1] ? { type: 'inlineMath', raw: match[0], latex: match[1].trim() } : undefined
     },
   },
 }).configure({ katexOptions: { throwOnError: false } })
@@ -109,7 +109,7 @@ function editEquation(editor: Editor, pos: number) {
   }
   const renderer = new ReactRenderer(MathField, {
     editor,
-    props: { initial: String(node.attrs.latex ?? ''), displayMode: block, submitLabel: 'Save', onSubmit: save, onCancel: () => { close(); editor.commands.focus() }, onDelete: remove },
+    props: { initial: String(node.attrs["latex"] ?? ''), displayMode: block, submitLabel: 'Save', onSubmit: save, onCancel: () => { close(); editor.commands.focus() }, onDelete: remove },
   })
   const element = renderer.element as HTMLElement
   element.className = 'ron-floating fixed z-[400] rounded-xl border border-surface-200 bg-surface-0 shadow-xl dark:border-surface-700 dark:bg-surface-850'

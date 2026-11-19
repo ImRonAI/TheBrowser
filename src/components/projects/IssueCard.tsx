@@ -7,17 +7,17 @@ import { useIssueBlocking } from '@/hooks/useIssueBlocking'
 interface IssueCardProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   issue: Issue
   /** `KEY-12`, set in mono at the head of the dateline. */
-  issueKey?: string
+  issueKey?: string | undefined
   /** Resolves assignee ids to names and initials. */
-  people?: Person[]
+  people?: Person[] | undefined
   /** All loaded issues: this issue's children are its subtasks. */
-  issues?: Issue[]
+  issues?: Issue[] | undefined
   /** Lists mixing statuses show the status; board columns already do. */
-  showStatus?: boolean
+  showStatus?: boolean | undefined
   /** Cross-project lists name the project. */
-  projectName?: string
+  projectName?: string | undefined
   /** True while this card is being dragged. */
-  dragging?: boolean
+  dragging?: boolean | undefined
 }
 
 const DAY = 86_400_000

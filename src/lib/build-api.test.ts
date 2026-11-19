@@ -31,6 +31,7 @@ test('workspace, file, save and delete hit the documented /build routes scoped b
     'PUT http://localhost:8765/build/file',
     'DELETE http://localhost:8765/build/file?user_id=u+1&session_id=s1&path=old.txt',
   ])
+  assert.ok(calls[2])
   assert.deepEqual(calls[2].body, { user_id: 'u 1', session_id: 's1', path: 'index.html', content: '<html>!', base_sha256: 'abc' })
 })
 
@@ -55,6 +56,7 @@ test('the listing becomes a folders-first tree; the default file prefers index.h
   ]
   const tree = buildTree(entries)
   assert.deepEqual(tree.map((node) => node.name), ['src', 'index.html', 'README.md'])
+  assert.ok(tree[0])
   assert.deepEqual(tree[0].children.map((node) => node.name), ['lib', 'main.ts'])
   assert.equal(defaultBuildFile(entries), 'index.html')
   assert.equal(defaultBuildFile(entries.filter((entry) => entry.path !== 'index.html')), 'README.md')

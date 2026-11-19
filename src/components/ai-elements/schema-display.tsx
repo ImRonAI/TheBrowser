@@ -17,27 +17,27 @@ type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 interface SchemaParameter {
   name: string;
   type: string;
-  required?: boolean;
-  description?: string;
-  location?: "path" | "query" | "header";
+  required?: boolean | undefined;
+  description?: string | undefined;
+  location?: "path" | "query" | "header" | undefined;
 }
 
 interface SchemaProperty {
   name: string;
   type: string;
-  required?: boolean;
-  description?: string;
-  properties?: SchemaProperty[];
-  items?: SchemaProperty;
+  required?: boolean | undefined;
+  description?: string | undefined;
+  properties?: SchemaProperty[] | undefined;
+  items?: SchemaProperty | undefined;
 }
 
 interface SchemaDisplayContextType {
   method: HttpMethod;
   path: string;
-  description?: string;
-  parameters?: SchemaParameter[];
-  requestBody?: SchemaProperty[];
-  responseBody?: SchemaProperty[];
+  description?: string | undefined;
+  parameters?: SchemaParameter[] | undefined;
+  requestBody?: SchemaProperty[] | undefined;
+  responseBody?: SchemaProperty[] | undefined;
 }
 
 const SchemaDisplayContext = createContext<SchemaDisplayContextType>({
@@ -48,10 +48,10 @@ const SchemaDisplayContext = createContext<SchemaDisplayContextType>({
 export type SchemaDisplayProps = HTMLAttributes<HTMLDivElement> & {
   method: HttpMethod;
   path: string;
-  description?: string;
-  parameters?: SchemaParameter[];
-  requestBody?: SchemaProperty[];
-  responseBody?: SchemaProperty[];
+  description?: string | undefined;
+  parameters?: SchemaParameter[] | undefined;
+  requestBody?: SchemaProperty[] | undefined;
+  responseBody?: SchemaProperty[] | undefined;
 };
 
 export const SchemaDisplay = ({

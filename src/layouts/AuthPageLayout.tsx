@@ -34,8 +34,8 @@ function AuthPageLayoutInner({ children }: AuthPageLayoutProps) {
     x: number
     y: number
     isOpen: boolean
-    selectedText?: string
-    pasteTarget?: HTMLElement | null
+    selectedText?: string | undefined
+    pasteTarget?: HTMLElement | null | undefined
   }>({
     x: 0,
     y: 0,
@@ -148,8 +148,8 @@ function AuthPageLayoutInner({ children }: AuthPageLayoutProps) {
         x={contextMenu.x}
         y={contextMenu.y}
         isOpen={contextMenu.isOpen}
-        selectedText={contextMenu.selectedText}
-        pasteTarget={contextMenu.pasteTarget}
+        {...(contextMenu.selectedText !== undefined ? { selectedText: contextMenu.selectedText } : {})}
+        {...(contextMenu.pasteTarget !== undefined ? { pasteTarget: contextMenu.pasteTarget } : {})}
         onClose={() => setContextMenu(prev => ({ ...prev, isOpen: false }))}
       />
     </div>

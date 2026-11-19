@@ -17,10 +17,10 @@ export interface ProjectField {
   key: string
   label: string
   type: ProjectFieldType
-  options?: string[]
-  required?: boolean
-  archived?: boolean
-  issueTypes?: string[]
+  options?: string[] | undefined
+  required?: boolean | undefined
+  archived?: boolean | undefined
+  issueTypes?: string[] | undefined
   default?: unknown
   [key: string]: unknown
 }
@@ -29,8 +29,8 @@ export interface Person {
   id: string
   name: string
   initials: string
-  avatar?: string
-  title?: string
+  avatar?: string | undefined
+  title?: string | undefined
 }
 
 /** Ron, the built-in agent. A fixed UUID so it fits the uuid[] assignees column. Mirrors RON_ASSIGNEE_ID in agent/api/core/projects.py. */
@@ -44,7 +44,7 @@ export interface ProjectTypeScheme {
   boardIssueTypes: IssueTypeKey[]
   statuses: IssueStatus[]
   estimateUnit: 'points' | 'hours' | 'effort' | 'items'
-  isDiscovery?: boolean
+  isDiscovery?: boolean | undefined
 }
 
 export interface Project {
@@ -54,14 +54,14 @@ export interface Project {
   key: string
   name: string
   type: ProjectTypeKey
-  ownerId?: string
+  ownerId?: string | undefined
   summary?: string
   createdAt: number
   updatedAt: number
   settings: {
     allowCrossProjectParents: boolean
-    issueTypes?: { key: IssueTypeKey; label: string; level: number }[]
-    fields?: ProjectField[]
+    issueTypes?: { key: IssueTypeKey; label: string; level: number }[] | undefined
+    fields?: ProjectField[] | undefined
     [key: string]: unknown
   }
 }
@@ -76,18 +76,18 @@ export interface Issue {
   context: Record<string, unknown>[]
   projectId: string
   type: IssueTypeKey
-  parentId?: string | null
+  parentId?: string | null | undefined
   title: string
-  description?: string
+  description?: string | undefined
   status: IssueStatus
   priority: IssuePriority
-  estimate?: number
+  estimate?: number | undefined
   assignees: string[]
   labels: string[]
-  startDate?: string
-  endDate?: string
-  dueDate?: string
-  createdBy?: string
+  startDate?: string | undefined
+  endDate?: string | undefined
+  dueDate?: string | undefined
+  createdBy?: string | undefined
   createdAt: number
   updatedAt: number
   rank: number
@@ -101,21 +101,21 @@ export interface IssueLink {
   targetId: string
   type: IssueLinkType
   createdAt: number
-  createdBy?: string
+  createdBy?: string | undefined
 }
 
 export interface ActivityLogEntry {
   id: string
   projectId: string
-  issueId?: string
-  actorId?: string
-  actorName?: string
+  issueId?: string | undefined
+  actorId?: string | undefined
+  actorName?: string | undefined
   actorType: 'user' | 'system' | 'ai'
   timestamp: number
   action: string
-  field?: string
-  oldValue?: string | number | null
-  newValue?: string | number | null
+  field?: string | undefined
+  oldValue?: string | number | null | undefined
+  newValue?: string | number | null | undefined
 }
 
 export const STANDARD_HIERARCHY: Record<IssueTypeKey, IssueTypeKey | null> = {

@@ -15,7 +15,7 @@ interface TranscriptionContextValue {
   segments: TranscriptionSegment[];
   currentTime: number;
   onTimeUpdate: (time: number) => void;
-  onSeek?: (time: number) => void;
+  onSeek?: ((time: number) => void) | undefined;
 }
 
 const TranscriptionContext = createContext<TranscriptionContextValue | null>(
@@ -34,8 +34,8 @@ const useTranscription = () => {
 
 export type TranscriptionProps = Omit<ComponentProps<"div">, "children"> & {
   segments: TranscriptionSegment[];
-  currentTime?: number;
-  onSeek?: (time: number) => void;
+  currentTime?: number | undefined;
+  onSeek?: ((time: number) => void) | undefined;
   children: (segment: TranscriptionSegment, index: number) => ReactNode;
 };
 
@@ -49,8 +49,8 @@ export const Transcription = ({
 }: TranscriptionProps) => {
   const [currentTime, setCurrentTime] = useControllableState({
     defaultProp: 0,
-    onChange: onSeek,
-    prop: externalCurrentTime,
+    ...(onSeek !== undefined ? { onChange: onSeek } : {}),
+    ...(externalCurrentTime !== undefined ? { prop: externalCurrentTime } : {}),
   });
 
   const contextValue = useMemo(

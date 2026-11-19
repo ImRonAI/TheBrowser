@@ -36,7 +36,7 @@ export function placeBlock(build: (schema: Schema) => PMNode | null) {
     if (node.isAtom || !hasText) {
       const end = at + node.nodeSize
       const $end = tr.doc.resolve(end)
-      const paragraph = tr.doc.type.schema.nodes.paragraph
+      const paragraph = tr.doc.type.schema.nodes["paragraph"]
       if (!$end.nodeAfter?.isTextblock && paragraph && $end.parent.canReplaceWith($end.index(), $end.index(), paragraph)) {
         tr.insert(end, paragraph.create())
       }

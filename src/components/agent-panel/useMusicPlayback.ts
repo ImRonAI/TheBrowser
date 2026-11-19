@@ -76,7 +76,10 @@ export function useMusicPlayback(onPlaying: (playing: boolean) => void) {
     const decoded = decodeMusicPcm16(frame)
     if (!decoded) return
     const buffer = sink.createBuffer(decoded.channels, decoded.frames, decoded.sampleRate)
-    for (let channel = 0; channel < decoded.channels; channel++) buffer.getChannelData(channel).set(decoded.samples[channel])
+    for (let channel = 0; channel < decoded.channels; channel++) {
+      const samples = decoded.samples[channel]
+      if (samples) buffer.getChannelData(channel).set(samples)
+    }
     const node = sink.createBufferSource()
     node.buffer = buffer
     node.connect(out)

@@ -18,13 +18,13 @@ export function Combobox<T>({
 }: {
   options: T[]
   displayValue: (value: T | null) => string | undefined
-  filter?: (value: T, query: string) => boolean
-  className?: string
-  placeholder?: string
-  autoFocus?: boolean
-  'aria-label'?: string
+  filter?: ((value: T, query: string) => boolean) | undefined
+  className?: string | undefined
+  placeholder?: string | undefined
+  autoFocus?: boolean | undefined
+  'aria-label'?: string | undefined
   children: (value: NonNullable<T>) => React.ReactElement
-} & Omit<Headless.ComboboxProps<T, false>, 'as' | 'multiple' | 'children'> & { anchor?: 'top' | 'bottom' }) {
+} & Omit<Headless.ComboboxProps<T, false>, 'as' | 'multiple' | 'children'> & { anchor?: 'top' | 'bottom' | undefined }) {
   const [query, setQuery] = useState('')
 
   const filteredOptions =
@@ -55,12 +55,12 @@ export function Combobox<T>({
         ])}
       >
         <Headless.ComboboxInput
-          autoFocus={autoFocus}
+          {...(autoFocus !== undefined ? { autoFocus } : {})}
           data-slot="control"
-          aria-label={ariaLabel}
+          {...(ariaLabel !== undefined ? { 'aria-label': ariaLabel } : {})}
           displayValue={(option: T) => displayValue(option) ?? ''}
           onChange={(event) => setQuery(event.target.value)}
-          placeholder={placeholder}
+          {...(placeholder !== undefined ? { placeholder } : {})}
           className={clsx([
             className,
             // Basic layout

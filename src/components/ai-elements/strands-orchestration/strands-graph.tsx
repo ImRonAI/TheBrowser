@@ -468,8 +468,7 @@ export function StrandsGraph({
       <ReactFlow
         nodes={nodes}
         edges={edges}
-        onNodesChange={interactive ? onNodesChange : undefined}
-        onEdgesChange={interactive ? onEdgesChange : undefined}
+        {...(interactive ? { onNodesChange, onEdgesChange } : {})}
         onConnect={onConnect}
         onNodeClick={handleNodeClick}
         onEdgeClick={handleEdgeClick}

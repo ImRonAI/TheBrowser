@@ -12,7 +12,7 @@ interface ExecuteKanbanProps {
   now: number
   onOpen: (issueId: string) => void
   /** Opens New Issue with this status; omitted when there is no project to put it in. */
-  onCreate?: (status: IssueStatus) => void
+  onCreate?: ((status: IssueStatus) => void) | undefined
 }
 
 /**

@@ -9,8 +9,8 @@ import { TaskPriority } from '@/pages/types/task'
 
 interface DescriptionTabProps {
   task: Task
-  onUpdate?: (task: Task) => void
-  onTaskClick?: (taskId: string) => void
+  onUpdate?: ((task: Task) => void) | undefined
+  onTaskClick?: ((taskId: string) => void) | undefined
 }
 
 export function DescriptionTab({ task, onUpdate, onTaskClick }: DescriptionTabProps) {
@@ -109,8 +109,8 @@ function SubtasksSection({
   onTaskClick
 }: { 
   subtasks: Task['subtasks']
-  onUpdate?: (subtasks: Task['subtasks']) => void
-  onTaskClick?: (taskId: string) => void 
+  onUpdate?: ((subtasks: Task['subtasks']) => void) | undefined
+  onTaskClick?: ((taskId: string) => void) | undefined 
 }) {
   // CLOSED BY DEFAULT as requested
   const [isExpanded, setIsExpanded] = useState(false)
@@ -132,7 +132,7 @@ function SubtasksSection({
       title,
       completed: false,
       order: subtasks.length,
-      priority,
+      ...(priority !== undefined ? { priority } : {}),
     }
     onUpdate([...subtasks, newSubtask])
   }

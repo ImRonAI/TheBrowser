@@ -93,6 +93,7 @@ export function planAdSlots(blocks: readonly ArticleBlock[], options: Partial<Ad
   let read = 0
   for (let index = 0; index < blocks.length - 1 && slots.length < plan.maxInline; index++) {
     const block = blocks[index]
+    if (!block) continue
     read += block.words
     sinceLast += block.words
     const caption = blocks[index - 1]?.type === 'image' && block.words < 25

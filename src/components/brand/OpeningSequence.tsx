@@ -8,9 +8,9 @@
  *
  * Reduced motion shows the finished frame without movement. `#intro` replays it (src/lib/intro.ts).
  */
-import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
+import { AnimatePresence, motion, useReducedMotion, type MotionStyle } from 'framer-motion'
 import { ArrowRight } from 'lucide-react'
 import { INTRO_HASH, markIntroSeen, shouldPlayIntro } from '@/lib/intro'
 import { LOGOTYPE_DOT, LOGOTYPE_HEIGHT, LOGOTYPE_REN, LOGOTYPE_TOP, LOGOTYPE_WIDTH } from './logotype'
@@ -37,7 +37,7 @@ const FLECKS = [
 ]
 
 /** The stage is always ink, whatever the theme: pin the dark variants of the brand channels for Marker and friends. */
-const STAGE_VARS = { '--ren-volt': '141 152 254', '--ren-volt-soft': '179 189 255', '--ren-ink': '245 245 250' } as CSSProperties
+const STAGE_VARS = { '--ren-volt': '141 152 254', '--ren-volt-soft': '179 189 255', '--ren-ink': '245 245 250' } as MotionStyle
 
 export function OpeningSequence({ onDone }: { onDone: () => void }) {
   const reduce = useReducedMotion() ?? false
@@ -143,27 +143,27 @@ export function OpeningSequence({ onDone }: { onDone: () => void }) {
             {FLECKS.map((fleck, index) => (
               <motion.circle key={index} cx={DOT.cx} cy={DOT.cy} r={fleck.r} fill={VOLT}
                 initial={reduce ? false : { x: 0, y: 0, opacity: 0 }}
-                animate={settled ? { x: fleck.dx, y: fleck.dy, opacity: reduce ? 0.5 : [0, 1, 0.5] } : undefined}
+                {...(settled ? { animate: { x: fleck.dx, y: fleck.dy, opacity: reduce ? 0.5 : [0, 1, 0.5] } } : {})}
                 transition={{ delay: LANDING + index * 0.012, duration: 0.55, ease: EXPO_OUT }} />
             ))}
             <motion.rect x={DOT.cx - 8} y={DOT.cy + DOT.r - 12} width={16} height={96} rx={8} fill={VOLT}
               style={{ transformBox: 'fill-box', transformOrigin: '50% 0%' }}
-              initial={reduce ? false : { scaleY: 0 }} animate={settled ? { scaleY: 1 } : undefined}
+              initial={reduce ? false : { scaleY: 0 }} {...(settled ? { animate: { scaleY: 1 } } : {})}
               transition={{ delay: LANDING + 0.3, duration: 1.5, ease: [0.33, 0, 0.2, 1] }} />
             <motion.circle cx={DOT.cx} cy={DOT.cy + DOT.r + 92} r={13} fill={VOLT}
               style={{ transformBox: 'fill-box', transformOrigin: '50% 0%' }}
-              initial={reduce ? false : { opacity: 0, scale: 0.3 }} animate={settled ? { opacity: 1, scale: 1 } : undefined}
+              initial={reduce ? false : { opacity: 0, scale: 0.3 }} {...(settled ? { animate: { opacity: 1, scale: 1 } } : {})}
               transition={{ delay: LANDING + 1.6, duration: 0.35, ease: EXPO_OUT }} />
             {[0, 0.12].map((delay) => (
               <motion.circle key={delay} cx={DOT.cx} cy={DOT.cy} r={DOT.r} fill="none" stroke={VOLT} strokeWidth={delay ? 3 : 6}
                 style={{ transformBox: 'fill-box', transformOrigin: 'center' }}
                 initial={{ scale: 1, opacity: 0 }}
-                animate={dropped && !reduce ? { scale: [1, delay ? 7 : 5], opacity: [0.85, 0] } : undefined}
+                {...(dropped && !reduce ? { animate: { scale: [1, delay ? 7 : 5], opacity: [0.85, 0] } } : {})}
                 transition={{ delay: LANDING + delay, duration: 1, ease: EXPO_OUT }} />
             ))}
             <motion.path ref={dotRef} d={LOGOTYPE_DOT} fill={VOLT} style={{ transformBox: 'fill-box', transformOrigin: '50% 100%' }}
               initial={reduce ? false : { y: -1500, scaleX: 0.84, scaleY: 1.2, opacity: 0 }}
-              animate={settled ? { y: [-1500, 0, 0, 0, 0], scaleX: [0.84, 0.84, 1.34, 0.95, 1], scaleY: [1.2, 1.2, 0.66, 1.06, 1], opacity: [1, 1, 1, 1, 1] } : undefined}
+              {...(settled ? { animate: { y: [-1500, 0, 0, 0, 0], scaleX: [0.84, 0.84, 1.34, 0.95, 1], scaleY: [1.2, 1.2, 0.66, 1.06, 1], opacity: [1, 1, 1, 1, 1] } } : {})}
               transition={{ duration: 0.82, times: [0, 0.46, 0.6, 0.8, 1], ease: ['easeIn', 'linear', 'easeOut', 'easeOut'] }} />
           </svg>
         </div>

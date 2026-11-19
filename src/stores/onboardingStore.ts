@@ -112,7 +112,7 @@ export const useOnboardingStore = create<OnboardingState>()(
       nextStep: () => {
         set(state => {
           const currentIndex = ONBOARDING_STEPS.indexOf(state.currentStep)
-          const nextStep = ONBOARDING_STEPS[Math.min(currentIndex + 1, ONBOARDING_STEPS.length - 1)]
+          const nextStep = ONBOARDING_STEPS[Math.min(currentIndex + 1, ONBOARDING_STEPS.length - 1)] ?? state.currentStep
           return { currentStep: nextStep }
         })
       },
@@ -120,7 +120,7 @@ export const useOnboardingStore = create<OnboardingState>()(
       previousStep: () => {
         set(state => {
           const currentIndex = ONBOARDING_STEPS.indexOf(state.currentStep)
-          const previousStep = ONBOARDING_STEPS[Math.max(currentIndex - 1, 0)]
+          const previousStep = ONBOARDING_STEPS[Math.max(currentIndex - 1, 0)] ?? state.currentStep
           return { currentStep: previousStep }
         })
       },
@@ -264,17 +264,17 @@ export const useOnboardingStore = create<OnboardingState>()(
 export function migrateOnboardingState(persisted: unknown, version: number): Partial<OnboardingState> {
   const state = (persisted ?? {}) as Record<string, unknown>
   if (version >= 2) return state as Partial<OnboardingState>
-  const answers = Array.isArray(state.answers)
-    ? (state.answers as OnboardingAnswer[]).filter((item) => INTERVIEW_QUESTIONS.includes(item.question))
+  const answers = Array.isArray(state["answers"])
+    ? (state["answers"] as OnboardingAnswer[]).filter((item) => INTERVIEW_QUESTIONS.includes(item.question))
     : []
-  const currentStep = state.currentStep === 'mode-selection' || !ONBOARDING_STEPS.includes(state.currentStep as OnboardingStep)
+  const currentStep = state["currentStep"] === 'mode-selection' || !ONBOARDING_STEPS.includes(state["currentStep"] as OnboardingStep)
     ? 'interview'
-    : (state.currentStep as OnboardingStep)
+    : (state["currentStep"] as OnboardingStep)
   return {
     ...state,
     mode: 'type',
     currentStep,
-    currentQuestionIndex: currentStep === 'interview' ? 0 : (state.currentQuestionIndex as number) ?? 0,
+    currentQuestionIndex: currentStep === 'interview' ? 0 : (state["currentQuestionIndex"] as number) ?? 0,
     answers,
   }
 }

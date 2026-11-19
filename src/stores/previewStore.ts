@@ -112,7 +112,7 @@ export function isProjectTool(toolName: string): boolean {
 export function isDevServerCommand(input: unknown): boolean {
   if (typeof input !== 'object' || input === null) return false
   
-  const command = (input as Record<string, unknown>).command
+  const command = (input as Record<string, unknown>)["command"]
   if (typeof command !== 'string') return false
   
   const devPatterns = [

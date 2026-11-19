@@ -232,10 +232,10 @@ export function AgentAnswer({
                 <span>effort: {effort}</span>
               </>
             )}
-            {typeof run.usage?.total_tokens === 'number' && (
+            {typeof run.usage?.["total_tokens"] === 'number' && (
               <>
                 <span aria-hidden>·</span>
-                <span className="tabular-nums">{run.usage.total_tokens.toLocaleString()} tokens</span>
+                <span className="tabular-nums">{run.usage["total_tokens"].toLocaleString()} tokens</span>
               </>
             )}
           </p>

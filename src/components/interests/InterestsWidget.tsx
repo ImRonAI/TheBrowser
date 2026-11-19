@@ -267,8 +267,10 @@ function ExpandedPanel({ onClose }: { onClose: () => void }) {
     else if (event.key === 'Home') next = 0
     else if (event.key === 'End') next = TABS.length - 1
     else return
+    const targetTab = TABS[next]
+    if (!targetTab) return
     event.preventDefault()
-    const id = TABS[next].id
+    const id = targetTab.id
     setTab(id)
     tabRefs.current[id]?.focus()
   }
@@ -278,11 +280,10 @@ function ExpandedPanel({ onClose }: { onClose: () => void }) {
       {!inNativeSurface && <div ref={constraintsRef} className="pointer-events-none fixed inset-4 z-40" />}
       <motion.div
         drag={!inNativeSurface}
-        dragControls={inNativeSurface ? undefined : dragControls}
         dragListener={false}
         dragMomentum={false}
         dragElastic={0.1}
-        dragConstraints={inNativeSurface ? undefined : constraintsRef}
+        {...(inNativeSurface ? {} : { dragControls, dragConstraints: constraintsRef })}
         initial={{ scale: 0.96, opacity: 0, x: 0, y: 0 }}
         animate={{ scale: 1, opacity: 1 }}
         exit={{ scale: 0.96, opacity: 0 }}

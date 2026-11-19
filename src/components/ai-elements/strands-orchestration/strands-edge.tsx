@@ -168,7 +168,7 @@ export const GraphEdgeComponent = memo(function GraphEdgeComponent({
           strokeDasharray: isConditional ? "6 4" : "none",
           transition: "stroke 200ms ease-out, stroke-width 200ms ease-out",
         }}
-        markerEnd={isActive ? `url(#arrow-${isConditional ? "conditional" : "normal"})` : undefined}
+        {...(isActive ? { markerEnd: `url(#arrow-${isConditional ? "conditional" : "normal"})` } : {})}
       />
 
       {/* Animated particle (live flow only; hidden under reduced motion) */}
@@ -259,7 +259,7 @@ export const SwarmEdgeComponent = memo(function SwarmEdgeComponent({
           strokeDasharray: isActive ? "none" : "4 4",
           transition: "stroke 200ms ease-out, stroke-width 200ms ease-out",
         }}
-        markerEnd={isActive ? "url(#arrow-handoff)" : undefined}
+        {...(isActive ? { markerEnd: "url(#arrow-handoff)" } : {})}
       />
 
       {/* Animated handoff particle (hidden under reduced motion) */}

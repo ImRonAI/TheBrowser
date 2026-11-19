@@ -35,14 +35,14 @@ const toTab = (t: TabSummary): Tab => ({
   id: t.id,
   url: t.url,
   title: t.title,
-  favicon: t.favicon,
+  ...(t.favicon !== undefined ? { favicon: t.favicon } : {}),
   isLoading: false,
   canGoBack: false,
   canGoForward: false,
   createdAt: Date.now(),
   lastAccessed: Date.now(),
-  isDisplayed: t.isDisplayed,
-  isSplitDetached: t.isSplitDetached,
+  ...(t.isDisplayed !== undefined ? { isDisplayed: t.isDisplayed } : {}),
+  ...(t.isSplitDetached !== undefined ? { isSplitDetached: t.isSplitDetached } : {}),
   splitPane: t.splitPane ?? null,
 })
 
@@ -65,7 +65,7 @@ export function measureShellSplitRegions(): {
     shouldShowMusicDeck(musicState) && musicState.open ? Math.min(panelState.panelWidth, 420) : 0
   const domPanelWidth = panelEl ? panelEl.getBoundingClientRect().width : 0
   const explicitSideInset =
-    contentEl?.dataset.sideInset !== undefined ? Number(contentEl.dataset.sideInset) : NaN
+    contentEl?.dataset["sideInset"] !== undefined ? Number(contentEl.dataset["sideInset"]) : NaN
   const rightInset = Number.isFinite(explicitSideInset)
     ? Math.max(0, explicitSideInset)
     : Math.max(domPanelWidth, panelState.teachingInset, musicInset)
@@ -220,7 +220,7 @@ const INTERNAL_PAGE_ICONS: Record<string, LucideIcon> = {
 }
 
 function internalPageIcon(url: string): LucideIcon | null {
-  const page = url.slice('ron://'.length).split(/[/?#]/, 1)[0].toLowerCase()
+  const page = (url.slice('ron://'.length).split(/[/?#]/, 1)[0] ?? '').toLowerCase()
   return INTERNAL_PAGE_ICONS[page] ?? null
 }
 
@@ -574,7 +574,7 @@ export function TabBar() {
                 layout={!reduced}
                 initial={reduced ? false : { opacity: 0, y: 4 }}
                 animate={{ opacity: isDragging ? 0.52 : 1, y: 0 }}
-                exit={reduced ? undefined : { opacity: 0, scale: 0.96 }}
+                {...(reduced ? {} : { exit: { opacity: 0, scale: 0.96 } })}
                 transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
                 role="tab"
                 aria-selected={isActive}
@@ -679,7 +679,7 @@ export function VerticalTabList() {
               layout={!reduced}
               initial={reduced ? false : { opacity: 0, x: -6 }}
               animate={{ opacity: isDragging ? 0.52 : 1, x: 0 }}
-              exit={reduced ? undefined : { opacity: 0, height: 0 }}
+              {...(reduced ? {} : { exit: { opacity: 0, height: 0 } })}
               transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
               role="tab"
               aria-selected={isActive}

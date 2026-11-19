@@ -59,12 +59,12 @@ export function authFrame(scope: string, identity: { userId: string; accessToken
 
 export interface LiveContextTurn { role: 'user' | 'assistant'; text: string }
 export interface LiveContext {
-  page_url?: string
-  page_title?: string
-  selected_text?: string
-  page_text?: string
-  history?: LiveContextTurn[]
-  issue?: { id: string; title?: string; description?: string }
+  page_url?: string | undefined
+  page_title?: string | undefined
+  selected_text?: string | undefined
+  page_text?: string | undefined
+  history?: LiveContextTurn[] | undefined
+  issue?: { id: string; title?: string | undefined; description?: string | undefined } | undefined
 }
 
 export const CONTEXT_LIMITS = {
@@ -129,8 +129,8 @@ export interface LiveTurn {
   text: string
   final: boolean
   /** Tool-only: cancelled by Gemini (toolCallCancellation) — result is dropped by the provider. */
-  cancelled?: boolean
-  toolName?: string
+  cancelled?: boolean | undefined
+  toolName?: string | undefined
   toolInput?: unknown
 }
 
@@ -141,37 +141,37 @@ export interface LiveState {
   /** `processing` means Gemini reported interaction_status=in_progress (extended thinking still working). */
   processing: boolean
   /** Last `bidi_interaction_status` seen was in_progress; lets response_stop defer completion on extended thinking. */
-  lastStatusInProgress?: boolean
+  lastStatusInProgress?: boolean | undefined
   playing: boolean
   turns: LiveTurn[]
   reasoning: string
-  model?: string
-  voice?: string
-  effort?: string
-  conversationId?: string
+  model?: string | undefined
+  voice?: string | undefined
+  effort?: string | undefined
+  conversationId?: string | undefined
   /** Tool names fixed at connect (from `ready.tools`). */
-  tools?: string[]
+  tools?: string[] | undefined
   /** `ready.music`: the Live Music (Lyria RealTime) tools are registered on this session. */
-  musicAvailable?: boolean
+  musicAvailable?: boolean | undefined
   /** `ready.agent_id`: the BidiAgent id, used by the music deck to address this session's stream (`/music/*`). */
-  agentId?: string
+  agentId?: string | undefined
   /** Live Music stream state, folded from the `music_*` frames (`agent/api/core/live_music.py`). */
   music: MusicState
   /** `snapshot` = a persisted Live snapshot for this conversation restored and client history was ignored. */
-  historySource?: 'snapshot' | 'client' | 'none'
+  historySource?: 'snapshot' | 'client' | 'none' | undefined
   /** Last `context_applied.mode`. */
-  contextMode?: 'initial' | 'realtime' | 'queued'
-  journalHtml?: string
-  journalSaved?: boolean
-  error?: string
-  errorCode?: string
+  contextMode?: 'initial' | 'realtime' | 'queued' | undefined
+  journalHtml?: string | undefined
+  journalSaved?: boolean | undefined
+  error?: string | undefined
+  errorCode?: string | undefined
   /** Non-fatal server warnings (e.g. browser_tools_unavailable). */
   warnings: string[]
   /** Set by bidi_connection_restart when a turn was cut off. */
-  restartNotice?: string
+  restartNotice?: string | undefined
   /** Tool ids whose results are unknown after a stop (server `stopped.pending_tools`). */
-  unknownResults?: string[]
-  usage?: { input: number; output: number; total: number }
+  unknownResults?: string[] | undefined
+  usage?: { input: number; output: number; total: number } | undefined
 }
 
 // ─── Live Music (Lyria RealTime) ─────────────────────────────────────────────
@@ -181,17 +181,17 @@ export type MusicPlayback = 'idle' | 'playing' | 'paused' | 'stopped'
 export interface MusicState {
   /** Lyria session open on the backend (`music_ready` … `music_closed`). */
   connected: boolean
-  model?: string
+  model?: string | undefined
   playback: MusicPlayback
   prompts: WeightedPrompt[]
   config: Record<string, unknown>
   /** Prompts Lyria's safety filter dropped, newest last (kept to 10). */
-  filtered: { text?: string; reason?: string }[]
-  error?: string
+  filtered: { text?: string | undefined; reason?: string | undefined }[]
+  error?: string | undefined
   /** Audio chunks received on this socket (each is 2 s of 48 kHz stereo PCM). */
   chunks: number
   /** Rolling take held on the backend for saving (`music_take`, also estimated from audio deltas). */
-  take: { seconds: number; segments: MusicSegment[]; maxSeconds?: number }
+  take: { seconds: number; segments: MusicSegment[]; maxSeconds?: number | undefined }
 }
 export interface MusicSegment { start_s: number; duration_s: number; prompts: WeightedPrompt[]; config: Record<string, unknown> }
 
@@ -204,28 +204,28 @@ export const isMusicFrame = (type: string): boolean => type.startsWith('music_')
 
 /** Reduce one `music_*` frame into `MusicState`. Unknown music frames leave the state untouched. */
 export function reduceMusicEvent(music: MusicState, data: Record<string, unknown>): MusicState {
-  switch (str(data.type)) {
+  switch (str(data["type"])) {
     case 'music_ready':
-      return { ...music, connected: true, model: str(data.model) || music.model, error: undefined }
+      return { ...music, connected: true, model: str(data["model"]) || music.model, error: undefined }
     case 'music_setup_complete':
       return { ...music, connected: true }
     case 'music_prompts': {
-      const prompts = Array.isArray(data.prompts)
-        ? data.prompts.filter((p): p is WeightedPrompt => !!p && typeof p === 'object' && typeof (p as WeightedPrompt).text === 'string' && typeof (p as WeightedPrompt).weight === 'number')
+      const prompts = Array.isArray(data["prompts"])
+        ? data["prompts"].filter((p): p is WeightedPrompt => !!p && typeof p === 'object' && typeof (p as WeightedPrompt).text === 'string' && typeof (p as WeightedPrompt).weight === 'number')
         : music.prompts
       return { ...music, connected: true, prompts }
     }
     case 'music_config':
-      return { ...music, connected: true, config: data.config && typeof data.config === 'object' ? data.config as Record<string, unknown> : music.config }
+      return { ...music, connected: true, config: data["config"] && typeof data["config"] === 'object' ? data["config"] as Record<string, unknown> : music.config }
     case 'music_playback': {
-      const state = str(data.state)
+      const state = str(data["state"])
       return { ...music, connected: true, playback: state === 'playing' || state === 'paused' || state === 'stopped' ? state : music.playback }
     }
     case 'music_audio_delta': {
       // Each chunk is bytes/(rate*channels*2) seconds; the backend's take grows by the same amount.
-      const bytes = typeof data.audio === 'string' ? Math.floor(data.audio.length * 3 / 4) : 0
-      const rate = typeof data.sample_rate === 'number' && data.sample_rate > 0 ? data.sample_rate : 48000
-      const channels = data.channels === 1 ? 1 : 2
+      const bytes = typeof data["audio"] === 'string' ? Math.floor(data["audio"].length * 3 / 4) : 0
+      const rate = typeof data["sample_rate"] === 'number' && data["sample_rate"] > 0 ? data["sample_rate"] : 48000
+      const channels = data["channels"] === 1 ? 1 : 2
       const seconds = bytes / (rate * channels * 2)
       // The backend recorder is rolling: never report more than it can hold.
       const total = music.take.seconds + seconds
@@ -236,9 +236,9 @@ export function reduceMusicEvent(music: MusicState, data: Record<string, unknown
     case 'music_take':
       return { ...music, take: takeFromFrame(music.take, data) }
     case 'music_filtered_prompt':
-      return { ...music, filtered: [...music.filtered, { text: str(data.text) || undefined, reason: str(data.reason) || undefined }].slice(-10) }
+      return { ...music, filtered: [...music.filtered, { text: str(data["text"]) || undefined, reason: str(data["reason"]) || undefined }].slice(-10) }
     case 'music_error':
-      return { ...music, error: str(data.message) || 'Live music failed.' }
+      return { ...music, error: str(data["message"]) || 'Live music failed.' }
     case 'music_closed':
       return { ...music, connected: false, playback: 'idle' }
     default:
@@ -248,14 +248,14 @@ export function reduceMusicEvent(music: MusicState, data: Record<string, unknown
 
 /** Fold a backend `MusicTake` shape (`music_take` frame or `/music/take*` response) into the state. */
 export function takeFromFrame(current: MusicState['take'], data: Record<string, unknown>): MusicState['take'] {
-  const segments = Array.isArray(data.segments) ? data.segments as MusicSegment[] : current.segments
-  const maxSeconds = typeof data.max_seconds === 'number' && data.max_seconds > 0 ? data.max_seconds : current.maxSeconds
-  return { seconds: typeof data.seconds === 'number' ? data.seconds : current.seconds, segments, maxSeconds }
+  const segments = Array.isArray(data["segments"]) ? data["segments"] as MusicSegment[] : current.segments
+  const maxSeconds = typeof data["max_seconds"] === 'number' && data["max_seconds"] > 0 ? data["max_seconds"] : current.maxSeconds
+  return { seconds: typeof data["seconds"] === 'number' ? data["seconds"] : current.seconds, segments, maxSeconds }
 }
 
 /** Decode a `music_audio_delta` frame: base64 PCM16 LE, stereo 48 kHz by default (Lyria's `audio/l16;rate=48000;channels=2`). */
 export function decodeMusicPcm16(frame: Record<string, unknown>, decodeBase64: (text: string) => Uint8Array = defaultBase64): DecodedPcm | null {
-  return decodePcm16({ ...frame, channels: frame.channels === 1 ? 1 : 2, sample_rate: typeof frame.sample_rate === 'number' && frame.sample_rate > 0 ? frame.sample_rate : 48000 }, decodeBase64)
+  return decodePcm16({ ...frame, channels: frame["channels"] === 1 ? 1 : 2, sample_rate: typeof frame["sample_rate"] === 'number' && frame["sample_rate"] > 0 ? frame["sample_rate"] : 48000 }, decodeBase64)
 }
 
 /** Side effects the component must perform; the reducer itself is pure. */
@@ -276,51 +276,51 @@ function upsertTurn(turns: LiveTurn[], id: string, make: () => LiveTurn, update:
 export function reduceLiveEvent(state: LiveState, event: unknown): LiveReduction {
   if (!event || typeof event !== 'object') return { state, effects: [] }
   const data = event as Record<string, unknown>
-  const type = str(data.type)
+  const type = str(data["type"])
   const effects: LiveEffect[] = []
   const derive = (next: LiveState): LiveState => ({ ...next, activity: deriveActivity(next) })
   if (isMusicFrame(type)) return { effects, state: { ...state, music: reduceMusicEvent(state.music ?? EMPTY_MUSIC_STATE, data) } }
 
   switch (type) {
     case 'ready': {
-      const source = str(data.history_source)
+      const source = str(data["history_source"])
       return { effects, state: derive({ ...state, status: 'ready', error: undefined, errorCode: undefined, unknownResults: undefined,
-        model: str(data.model) || state.model, voice: str(data.voice) || state.voice, effort: str(data.effort) || state.effort,
-        conversationId: str(data.conversation_id) || state.conversationId,
-        tools: Array.isArray(data.tools) ? data.tools.map(String) : state.tools,
-        musicAvailable: data.music === true, agentId: str(data.agent_id) || undefined,
-        music: { ...EMPTY_MUSIC_STATE, take: { ...EMPTY_MUSIC_STATE.take, maxSeconds: typeof data.music_max_seconds === 'number' && data.music_max_seconds > 0 ? data.music_max_seconds : undefined } },
+        model: str(data["model"]) || state.model, voice: str(data["voice"]) || state.voice, effort: str(data["effort"]) || state.effort,
+        conversationId: str(data["conversation_id"]) || state.conversationId,
+        tools: Array.isArray(data["tools"]) ? data["tools"].map(String) : state.tools,
+        musicAvailable: data["music"] === true, agentId: str(data["agent_id"]) || undefined,
+        music: { ...EMPTY_MUSIC_STATE, take: { ...EMPTY_MUSIC_STATE.take, maxSeconds: typeof data["music_max_seconds"] === 'number' && data["music_max_seconds"] > 0 ? data["music_max_seconds"] : undefined } },
         historySource: source === 'snapshot' || source === 'client' || source === 'none' ? source : state.historySource }) }
     }
     case 'error':
       effects.push('stop_playback')
-      return { effects, state: derive({ ...state, error: str(data.message) || 'Live session failed.', errorCode: str(data.code) || undefined, processing: false }) }
+      return { effects, state: derive({ ...state, error: str(data["message"]) || 'Live session failed.', errorCode: str(data["code"]) || undefined, processing: false }) }
     case 'warning': {
-      const text = str(data.message) || str(data.code)
+      const text = str(data["message"]) || str(data["code"])
       return { effects, state: text && !state.warnings.includes(text) ? { ...state, warnings: [...state.warnings, text] } : state }
     }
     case 'context_applied': {
-      const mode = str(data.mode)
+      const mode = str(data["mode"])
       return { effects, state: mode === 'initial' || mode === 'realtime' || mode === 'queued' ? { ...state, contextMode: mode } : state }
     }
     case 'stopped': {
       // Server acknowledged stop; the socket closes 1000 next. Unknown results are reported, never replayed.
-      const pending = Array.isArray(data.pending_tools) ? data.pending_tools.map(String) : []
+      const pending = Array.isArray(data["pending_tools"]) ? data["pending_tools"].map(String) : []
       effects.push('stop_playback')
       return { effects, state: derive({ ...state, processing: false, unknownResults: pending.length ? pending : undefined,
         turns: state.turns.map((turn) => (turn.kind === 'tool' && !turn.final ? { ...turn, final: true, cancelled: pending.includes(turn.id) ? turn.cancelled : turn.cancelled } : turn)) }) }
     }
     case 'tool_result': {
-      const result = data.tool_result && typeof data.tool_result === 'object' ? data.tool_result as Record<string, unknown> : null
-      const id = result ? str(result.toolUseId) : ''
+      const result = data["tool_result"] && typeof data["tool_result"] === 'object' ? data["tool_result"] as Record<string, unknown> : null
+      const id = result ? str(result["toolUseId"]) : ''
       if (!id) return { effects, state }
-      const failed = result ? str(result.status) === 'error' : false
+      const failed = result ? str(result["status"]) === 'error' : false
       return { effects, state: { ...state, turns: state.turns.map((turn) => (turn.id === id ? { ...turn, final: true, text: failed ? 'error' : 'done' } : turn)) } }
     }
     case 'journal':
-      return { effects, state: { ...state, journalHtml: str(data.html) || state.journalHtml, journalSaved: data.saved === true } }
+      return { effects, state: { ...state, journalHtml: str(data["html"]) || state.journalHtml, journalSaved: data["saved"] === true } }
     case 'bidi_connection_restart':
-      return { effects, state: { ...state, restartNotice: data.turn_interrupted === true
+      return { effects, state: { ...state, restartNotice: data["turn_interrupted"] === true
         ? 'The Live connection restarted and cut off the last turn. Repeat it if you did not get an answer.' : undefined } }
     case 'bidi_connection_stop':
       effects.push('stop_playback', 'close')
@@ -331,7 +331,7 @@ export function reduceLiveEvent(state: LiveState, event: unknown): LiveReduction
       // Output ended; extended thinking may still report in_progress via interaction_status.
       return { effects, state: derive({ ...state, processing: state.processing && state.lastStatusInProgress === true }) }
     case 'bidi_interaction_status': {
-      const inProgress = str(data.status) === 'in_progress' || str(data.status) === 'requires_action'
+      const inProgress = str(data["status"]) === 'in_progress' || str(data["status"]) === 'requires_action'
       return { effects, state: derive({ ...state, processing: inProgress, lastStatusInProgress: inProgress }) }
     }
     case 'bidi_barge_in':
@@ -340,11 +340,11 @@ export function reduceLiveEvent(state: LiveState, event: unknown): LiveReduction
     case 'bidi_transcript_delta':
     case 'bidi_transcript_block':
     case 'bidi_transcript_stop': {
-      const id = str(data.content_id) || `transcript-${state.turns.length}`
-      const role = data.role === 'assistant' ? 'assistant' : 'user'
+      const id = str(data["content_id"]) || `transcript-${state.turns.length}`
+      const role = data["role"] === 'assistant' ? 'assistant' : 'user'
       const turns = upsertTurn(state.turns, id, () => ({ id, role, kind: 'transcript', text: '', final: false }), (turn) => {
-        if (type === 'bidi_transcript_delta') return { ...turn, text: turn.text + str(data.delta) }
-        if (type === 'bidi_transcript_block') return { ...turn, text: str(data.transcript) || turn.text, final: true }
+        if (type === 'bidi_transcript_delta') return { ...turn, text: turn.text + str(data["delta"]) }
+        if (type === 'bidi_transcript_block') return { ...turn, text: str(data["transcript"]) || turn.text, final: true }
         return { ...turn, final: true }
       })
       return { effects, state: { ...state, turns } }
@@ -352,36 +352,36 @@ export function reduceLiveEvent(state: LiveState, event: unknown): LiveReduction
     case 'bidi_text_delta':
     case 'bidi_text_block':
     case 'bidi_text_stop': {
-      const id = str(data.content_id) || `text-${state.turns.length}`
+      const id = str(data["content_id"]) || `text-${state.turns.length}`
       const turns = upsertTurn(state.turns, id, () => ({ id, role: 'assistant', kind: 'text', text: '', final: false }), (turn) => {
-        if (type === 'bidi_text_delta') return { ...turn, text: turn.text + str(data.delta) }
-        if (type === 'bidi_text_block') return { ...turn, text: str(data.text) || turn.text, final: true }
+        if (type === 'bidi_text_delta') return { ...turn, text: turn.text + str(data["delta"]) }
+        if (type === 'bidi_text_block') return { ...turn, text: str(data["text"]) || turn.text, final: true }
         return { ...turn, final: true }
       })
       return { effects, state: { ...state, turns } }
     }
     case 'bidi_reasoning_delta':
-      return { effects, state: derive({ ...state, processing: true, reasoning: (state.reasoning + str(data.delta)).slice(-8_000) }) }
+      return { effects, state: derive({ ...state, processing: true, reasoning: (state.reasoning + str(data["delta"])).slice(-8_000) }) }
     case 'bidi_reasoning_block':
-      return { effects, state: { ...state, reasoning: (str(data.text) || state.reasoning).slice(-8_000) } }
+      return { effects, state: { ...state, reasoning: (str(data["text"]) || state.reasoning).slice(-8_000) } }
     case 'bidi_tool_use_blocks': {
-      const uses = Array.isArray(data.tool_uses) ? data.tool_uses : []
+      const uses = Array.isArray(data["tool_uses"]) ? data["tool_uses"] : []
       let turns = state.turns
       for (const use of uses) {
         if (!use || typeof use !== 'object') continue
         const record = use as Record<string, unknown>
-        const id = str(record.toolUseId) || `tool-${turns.length}`
-        turns = upsertTurn(turns, id, () => ({ id, role: 'assistant', kind: 'tool', text: '', final: false, toolName: str(record.name) || 'tool', toolInput: record.input }), (turn) => turn)
+        const id = str(record["toolUseId"]) || `tool-${turns.length}`
+        turns = upsertTurn(turns, id, () => ({ id, role: 'assistant', kind: 'tool', text: '', final: false, toolName: str(record["name"]) || 'tool', toolInput: record["input"] }), (turn) => turn)
       }
       return { effects, state: derive({ ...state, processing: true, turns }) }
     }
     case 'bidi_tool_cancel': {
-      const ids = new Set(Array.isArray(data.tool_use_ids) ? data.tool_use_ids.map(String) : [])
+      const ids = new Set(Array.isArray(data["tool_use_ids"]) ? data["tool_use_ids"].map(String) : [])
       // Gemini no longer wants the result, but the host tool may still be executing.
       return { effects, state: { ...state, turns: state.turns.map((turn) => (ids.has(turn.id) ? { ...turn, cancelled: true } : turn)) } }
     }
     case 'bidi_usage': {
-      const input = Number(data.inputTokens ?? 0), output = Number(data.outputTokens ?? 0), total = Number(data.totalTokens ?? input + output)
+      const input = Number(data["inputTokens"] ?? 0), output = Number(data["outputTokens"] ?? 0), total = Number(data["totalTokens"] ?? input + output)
       return { effects, state: { ...state, usage: { input, output, total } } }
     }
     default:
@@ -433,16 +433,21 @@ export interface DecodedPcm { channels: number; sampleRate: number; frames: numb
 
 /** Decode a native `bidi_audio_delta` frame (base64 PCM16 LE, interleaved) into per-channel floats. */
 export function decodePcm16(frame: Record<string, unknown>, decodeBase64: (text: string) => Uint8Array = defaultBase64): DecodedPcm | null {
-  if (typeof frame.audio !== 'string' || !frame.audio) return null
-  if (frame.format !== undefined && frame.format !== 'pcm') return null
-  const bytes = decodeBase64(frame.audio)
-  const channels = frame.channels === 2 ? 2 : 1
-  const sampleRate = typeof frame.sample_rate === 'number' && frame.sample_rate > 0 ? frame.sample_rate : 24000
+  if (typeof frame["audio"] !== 'string' || !frame["audio"]) return null
+  if (frame["format"] !== undefined && frame["format"] !== 'pcm') return null
+  const bytes = decodeBase64(frame["audio"])
+  const channels = frame["channels"] === 2 ? 2 : 1
+  const sampleRate = typeof frame["sample_rate"] === 'number' && frame["sample_rate"] > 0 ? frame["sample_rate"] : 24000
   const frames = Math.floor(bytes.byteLength / 2 / channels)
   if (!frames) return null
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
   const samples = Array.from({ length: channels }, () => new Float32Array(frames))
-  for (let i = 0; i < frames; i++) for (let channel = 0; channel < channels; channel++) samples[channel][i] = view.getInt16((i * channels + channel) * 2, true) / 32768
+  for (let i = 0; i < frames; i++) {
+    for (let channel = 0; channel < channels; channel++) {
+      const buf = samples[channel]
+      if (buf) buf[i] = view.getInt16((i * channels + channel) * 2, true) / 32768
+    }
+  }
   return { channels, sampleRate, frames, samples }
 }
 

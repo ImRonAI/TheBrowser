@@ -30,7 +30,7 @@ export interface RonWritingTarget {
   projectName: string
   projectKey: string
   /** Extra facts Ron should use (issue type/status/priority, the issue's Context items, …). */
-  facts?: string
+  facts?: string | undefined
 }
 
 export function documentRonMessage({ target, intent, currentMarkdown }: {
@@ -70,7 +70,7 @@ export function documentRetryMessage(feedback: string): string {
 export function unwrapMarkdown(text: string): string {
   const trimmed = text.trim()
   const wrapped = /^```(?:markdown|md)?\n([\s\S]*?)\n```$/i.exec(trimmed)
-  const body = wrapped ? wrapped[1].trim() : trimmed
+  const body = wrapped && wrapped[1] !== undefined ? wrapped[1].trim() : trimmed
   // A status sentence glued to the content that follows it ("Checking the docs.## Install",
   // "Confirming the details.Intro paragraph…") is narration, not content: the missing space shows two
   // separate pieces of text. A single word ("Node.JS") or an abbreviation ("the U.S.") is never taken for one.
@@ -216,9 +216,10 @@ export function tabsFromFence(body: string, newId: () => string | null = () => n
   const tabs: DocNode[] = []
   const lines = body.split(/\r?\n/)
   for (let index = 0; index < lines.length; index += 1) {
-    const open = /^\s*(`{3,}|~{3,})\s*workflow\s*$/i.exec(lines[index])
+    const line = lines[index] ?? ''
+    const open = /^\s*(`{3,}|~{3,})\s*workflow\s*$/i.exec(line)
     if (!open) {
-      const tab = tabFromLine(lines[index])
+      const tab = tabFromLine(line)
       if (tab) tabs.push(tab)
       continue
     }
@@ -242,24 +243,24 @@ function linkLine(kind: string, title: string, href: string): string {
 export function tabMarkdown(node: DocNode): string {
   const attrs = node.attrs ?? {}
   if (node.type === 'embed') {
-    const href = safeEmbedSrc(attrs.url) || safeEmbedSrc(attrs.src)
-    return href ? linkLine(PROVIDER_LABELS.get(text(attrs.provider)) ?? EMBED_PROVIDERS.web.label, text(attrs.title), href) : ''
+    const href = safeEmbedSrc(attrs["url"]) || safeEmbedSrc(attrs["src"])
+    return href ? linkLine(PROVIDER_LABELS.get(text(attrs["provider"])) ?? EMBED_PROVIDERS.web.label, text(attrs["title"]), href) : ''
   }
   if (node.type === 'youtube') {
-    const href = youtubeEmbedUrl(text(attrs.src))
+    const href = youtubeEmbedUrl(text(attrs["src"]))
     return href ? linkLine('YouTube', '', href) : ''
   }
   if (node.type === 'media') {
-    const src = safeEmbedSrc(attrs.src)
-    return src ? linkLine(attrs.kind === 'audio' ? 'Audio' : 'Video', text(attrs.title), src) : ''
+    const src = safeEmbedSrc(attrs["src"])
+    return src ? linkLine(attrs["kind"] === 'audio' ? 'Audio' : 'Video', text(attrs["title"]), src) : ''
   }
   if (node.type === 'pdf') {
-    const source = pdfSource(attrs.src)
-    const name = text(attrs.name) || 'Document.pdf'
+    const source = pdfSource(attrs["src"])
+    const name = text(attrs["name"]) || 'Document.pdf'
     if (!source) return ''
     return source.kind === 'url' ? linkLine('PDF', name, source.src) : `PDF: ${name} (uploaded into this page)`
   }
-  if (node.type === 'workflow') return workflowMarkdown(text(attrs.title) || 'Workflow', normalizeWorkflow(attrs.graph))
+  if (node.type === 'workflow') return workflowMarkdown(text(attrs["title"]) || 'Workflow', normalizeWorkflow(attrs["graph"]))
   return ''
 }
 
@@ -275,20 +276,20 @@ export function embedTabsMarkdown(tabs: readonly DocNode[]): string {
 export function tabSummary(node: DocNode): { kind: TabKind; title: string } {
   const attrs = node.attrs ?? {}
   if (node.type === 'embed') {
-    const kind = TAB_KINDS.find((entry) => entry.kind === attrs.provider)?.kind ?? 'web'
-    const href = safeEmbedSrc(attrs.url) || safeEmbedSrc(attrs.src)
-    return { kind, title: text(attrs.title) || parseHttpsUrl(href)?.hostname.replace(/^www\./, '') || '' }
+    const kind = TAB_KINDS.find((entry) => entry.kind === attrs["provider"])?.kind ?? 'web'
+    const href = safeEmbedSrc(attrs["url"]) || safeEmbedSrc(attrs["src"])
+    return { kind, title: text(attrs["title"]) || parseHttpsUrl(href)?.hostname.replace(/^www\./, '') || '' }
   }
   if (node.type === 'youtube') return { kind: 'youtube', title: '' }
-  if (node.type === 'media') return { kind: attrs.kind === 'audio' ? 'audio' : 'video', title: text(attrs.title) }
-  if (node.type === 'pdf') return { kind: 'pdf', title: text(attrs.name) }
-  return { kind: 'workflow', title: text(attrs.title) }
+  if (node.type === 'media') return { kind: attrs["kind"] === 'audio' ? 'audio' : 'video', title: text(attrs["title"]) }
+  if (node.type === 'pdf') return { kind: 'pdf', title: text(attrs["name"]) }
+  return { kind: 'workflow', title: text(attrs["title"]) }
 }
 
 /** Replace parsed ```workflow code blocks with workflow blocks and standalone YouTube URLs/fences with YouTube blocks. */
 export function withWorkflowBlocks(node: DocNode, newId: () => string): DocNode {
   if (node.type === 'codeBlock') {
-    const lang = typeof node.attrs?.language === 'string' ? node.attrs.language.toLowerCase() : ''
+    const lang = typeof node.attrs?.["language"] === 'string' ? node.attrs["language"].toLowerCase() : ''
     const body = (node.content ?? []).map((child) => child.text ?? '').join('')
     if (lang === EMBEDS_FENCE) return { type: 'embedTabs', content: tabsFromFence(body, newId) }
     if (lang === WORKFLOW_FENCE) {
@@ -301,16 +302,16 @@ export function withWorkflowBlocks(node: DocNode, newId: () => string): DocNode 
       if (yt) return { type: 'youtube', attrs: { src: yt } }
     }
   }
-  if (node.type === 'image' && typeof node.attrs?.src === 'string') {
-    const yt = youtubeEmbedUrl(node.attrs.src)
+  if (node.type === 'image' && typeof node.attrs?.["src"] === 'string') {
+    const yt = youtubeEmbedUrl(node.attrs["src"])
     if (yt) return { type: 'youtube', attrs: { src: yt } }
   }
-  if (node.type === 'paragraph' && node.content?.length === 1 && node.content[0].type === 'text') {
-    const only = node.content[0]
+  const only = node.content?.length === 1 ? node.content[0] : undefined
+  if (node.type === 'paragraph' && only && only.type === 'text') {
     const directYt = youtubeEmbedUrl(only.text ?? '')
     if (directYt) return { type: 'youtube', attrs: { src: directYt } }
-    const linkMark = (only.marks ?? []).find((mark) => mark.type === 'link' && typeof mark.attrs?.href === 'string')
-    const linkedYt = linkMark ? youtubeEmbedUrl(String(linkMark.attrs?.href ?? '')) : null
+    const linkMark = (only.marks ?? []).find((mark) => mark.type === 'link' && typeof mark.attrs?.["href"] === 'string')
+    const linkedYt = linkMark ? youtubeEmbedUrl(String(linkMark.attrs?.["href"] ?? '')) : null
     if (linkedYt) return { type: 'youtube', attrs: { src: linkedYt } }
   }
   return node.content ? { ...node, content: node.content.map((child) => withWorkflowBlocks(child, newId)) } : node

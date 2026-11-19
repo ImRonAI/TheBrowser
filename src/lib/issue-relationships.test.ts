@@ -74,6 +74,7 @@ test("an issue's links group by how it reads them, dependencies first, oldest li
     ['fixed-by', 'Fixed by', ['gone']],
     ['relates', 'Relates to', ['b']],
   ])
+  assert.ok(groups[0]?.relations[1] && groups[2]?.relations[0])
   assert.equal(groups[0].relations[1].other?.title, 'A')
   assert.equal(groups[2].relations[0].other, undefined, 'an issue that is not loaded is still listed, without its copy')
   assert.equal(relationCount('me', links), 5)
@@ -84,12 +85,15 @@ test('a blocking relationship holds work only while its blocker is unfinished', 
   const me = issue('me', 'p', 1, 'Me', 'in-progress')
   const [heldBy, holds] = relationGroups('me', [link('1', 'a', 'me', 'blocks'), link('2', 'me', 'b', 'blocks')],
     [me, issue('a', 'p', 2, 'A', 'review'), issue('b', 'p', 3, 'B', 'blocked')])
+  assert.ok(heldBy?.relations[0] && holds?.relations[0])
   assert.equal(isActiveBlock(heldBy.relations[0], me), true)
   assert.equal(isActiveBlock(holds.relations[0], me), true)
   assert.equal(isActiveBlock(holds.relations[0], { status: 'done' }), false, 'a finished issue holds nothing')
   const [released] = relationGroups('me', [link('1', 'a', 'me', 'blocks')], [me, issue('a', 'p', 2, 'A', 'done')])
+  assert.ok(released?.relations[0])
   assert.equal(isActiveBlock(released.relations[0], me), false)
   const [related] = relationGroups('me', [link('1', 'me', 'a', 'relates')], [me, issue('a', 'p', 2, 'A')])
+  assert.ok(related?.relations[0])
   assert.equal(isActiveBlock(related.relations[0], me), false)
 })
 
@@ -104,12 +108,13 @@ const issues = [
   issue('ops9', 'q', 9, 'Unrelated work'),
 ]
 const search = (query: string, kind: RelationKind = 'relates', links: IssueLink[] = [], limit?: number) =>
-  relationCandidates(query, { issue: me, kind, issues, projects, links, limit })
+  relationCandidates(query, { issue: me, kind, issues, projects, links, ...(limit === undefined ? {} : { limit }) })
 const keys = (query: string, kind?: RelationKind, links?: IssueLink[]) => search(query, kind, links).map((candidate) => candidate.key)
 
 test('the search ranks an exact key, a key prefix, a title prefix, then a title containing the query', () => {
   const found = search('  CAL-12 ')
   assert.deepEqual(found.map((candidate) => [candidate.key, candidate.tier]), [['CAL-12', 0], ['CAL-120', 1], ['OPS-7', 2], ['OPS-8', 3]])
+  assert.ok(found[2])
   assert.equal(found[2].project?.key, 'OPS')
   assert.deepEqual(keys('cal-'), ['CAL-120', 'CAL-12', 'OPS-7', 'OPS-8'], 'key prefixes rank above title matches')
   assert.deepEqual(keys('archive'), ['CAL-120'])

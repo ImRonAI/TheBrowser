@@ -11,10 +11,10 @@ export type RepairDecisionKind = 'approve' | 'decline' | 'cancel' | 'rollback' |
 
 interface RepairStore {
   /** The investigation the owning panel chat currently tracks, keyed by session so stale sessions do not linger. */
-  repair?: RepairInvestigation
-  sessionId?: string
+  repair?: RepairInvestigation | undefined
+  sessionId?: string | undefined
   /** Performs a decision against the API (bound by the panel chat that owns the session). */
-  decide?: (kind: RepairDecisionKind, repair: RepairInvestigation) => Promise<boolean>
+  decide?: ((kind: RepairDecisionKind, repair: RepairInvestigation) => Promise<boolean>) | undefined
   publish: (sessionId: string, repair: RepairInvestigation | undefined, decide: RepairStore['decide']) => void
   clear: (sessionId: string) => void
 }

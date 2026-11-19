@@ -37,6 +37,7 @@ test('bytewise UTF-8 stream is decoded and terminal errors are delivered, not sw
   const state = events.reduce(reducePanelEvent, emptyPanelState('session'))
   assert.equal(state.status, 'error')
   assert.equal(state.error, 'Provider failed after text')
+  assert.ok(state.messages[0]?.parts[0])
   assert.equal(state.messages[0].parts[0].kind, 'text')
 })
 
@@ -119,6 +120,7 @@ test('ordered parts distinguish nested tool IDs and dedupe sequences and results
     event(8, 'tool_result', { id: 'same', status: 'success', content: 'root result' }),
   ]
   for (const frame of frames) state = reducePanelEvent(state, frame)
+  assert.ok(state.messages[0])
   assert.deepEqual(state.messages[0].parts.map((part) => part.kind), ['text', 'tool', 'tool', 'text'])
   const root = state.messages[0].parts[1] as ToolPart
   const nested = state.messages[0].parts[2] as ToolPart
@@ -126,10 +128,13 @@ test('ordered parts distinguish nested tool IDs and dedupe sequences and results
   assert.equal(root.output, 'root result')
   assert.equal(nested.output, 'nested result')
   assert.deepEqual(nested.progress, ['searching'])
+  assert.ok(frames[6])
   assert.equal(reducePanelEvent(state, frames[6]), state)
   state = reducePanelEvent(state, event(9, 'tool_result', { id: 'same', content: 'root result' }))
+  assert.ok(state.messages[0])
   assert.equal((state.messages[0].parts[1] as ToolPart).output, 'root result')
   state = reducePanelEvent(state, event(10, 'tool_result', { id: 'same', content: 'corrected result' }))
+  assert.ok(state.messages[0])
   assert.equal((state.messages[0].parts[1] as ToolPart).output, 'corrected result')
   assert.equal(reducePanelEvent(state, event(10, 'text_delta', { session_id: 'old-session', data: 'pollution' })), state)
 })
@@ -143,13 +148,14 @@ test('retry marks draft text and reasoning discarded without erasing tools or ne
     event(6, 'retry', { attempt: 2, model_attempt: 1, cycle: 1, reason: 'Rate limit' }),
     event(7, 'text_delta', { data: 'Recovered response' }),
   ].reduce(reducePanelEvent, emptyPanelState('session'))
-  const parts = state.messages[0].parts
-  assert.ok(parts[0].kind === 'text' && parts[0].discarded)
-  assert.ok(parts[1].kind === 'reasoning' && parts[1].discarded)
-  assert.ok(parts[2].kind === 'text' && !parts[2].discarded)
-  assert.equal(parts[3].kind, 'tool')
-  assert.equal(parts[4].kind, 'retry')
-  assert.ok(parts[5].kind === 'text' && !parts[5].discarded)
+  assert.ok(state.messages[0])
+  const [p0, p1, p2, p3, p4, p5] = state.messages[0].parts
+  assert.ok(p0?.kind === 'text' && p0.discarded)
+  assert.ok(p1?.kind === 'reasoning' && p1.discarded)
+  assert.ok(p2?.kind === 'text' && !p2.discarded)
+  assert.equal(p3?.kind, 'tool')
+  assert.equal(p4?.kind, 'retry')
+  assert.ok(p5?.kind === 'text' && !p5.discarded)
 })
 
 test('a silent retry (in-run agent respawn) discards the attempt without a visible retry line', () => {
@@ -159,10 +165,12 @@ test('a silent retry (in-run agent respawn) discards the attempt without a visib
     event(4, 'text_delta', { data: 'Fresh agent answer', model_attempt: 1, cycle: 2 }),
     event(5, 'run_finished', { status: 'completed', stop_reason: 'end_turn' }),
   ].reduce(reducePanelEvent, emptyPanelState('session'))
+  assert.ok(state.messages[0])
   const parts = state.messages[0].parts
   assert.deepEqual(parts.map((part) => part.kind), ['text', 'text'])
-  assert.ok(parts[0].kind === 'text' && parts[0].discarded)
-  assert.ok(parts[1].kind === 'text' && !parts[1].discarded && parts[1].text === 'Fresh agent answer')
+  const [sp0, sp1] = parts
+  assert.ok(sp0?.kind === 'text' && sp0.discarded)
+  assert.ok(sp1?.kind === 'text' && !sp1.discarded && sp1.text === 'Fresh agent answer')
   assert.equal(state.status, 'completed')
   assert.equal(state.error, undefined)
 })
@@ -183,6 +191,7 @@ test('active PRE-RUN snapshot replays from replay_after, preserves previous answ
   assert.equal(state.sequence, 10)
   assert.equal(state.latestSequence, 15)
   assert.equal(state.needsReplay, true)
+  assert.ok(state.messages[1] && state.messages[2])
   assert.equal(state.messages[1].runId, undefined)
   assert.equal(state.messages[2].runId, 'run')
   assert.deepEqual(state.configuration, { model: 'grok-test', provider: 'xai', effort: 'high', options: configuration.options, agent: { kind: 'ron', id: '' } })
@@ -191,6 +200,7 @@ test('active PRE-RUN snapshot replays from replay_after, preserves previous answ
     event(14, 'tool_progress', { id: 't', data: 'Searching' }), event(15, 'text_delta', { data: 'answer' })]
   state = frames.reduce(reducePanelEvent, state)
   assert.equal(state.messages.length, 4)
+  assert.ok(state.messages[1])
   assert.deepEqual(state.messages[1].parts.map((part) => part.kind !== 'tool' && part.kind !== 'native' && part.text), ['First answer'])
   assert.equal(state.messages.filter((message) => message.role === 'user').length, 2)
   assert.deepEqual(frames.reduce(reducePanelEvent, state), state)
@@ -208,6 +218,7 @@ test('native statuses, retained completed events, recovery and resume inputs hyd
     messages: previousHistory, input: 'Second question' })
   assert.equal(retained.needsReplay, true)
   assert.equal(retained.sequence, 10)
+  assert.ok(retained.messages[1])
   assert.equal(retained.messages[1].runId, undefined)
   for (const input of [{ checkpointResume: { checkpoint: 'opaque' } }, [{ interruptResponse: { interruptId: 'ask', response: true } }]]) {
     const state = hydratePanelSession('session', { status: 'starting', run_id: 'resume', sequence: 10, replay_after: 10,
@@ -236,6 +247,7 @@ test('model retry discards only its attempt/cycle/path; tool and unscoped retrie
     event(9, 'retry', { attempt: 3, model_attempt: 2, cycle: 2, id: 't', reason: 'tool hook retry' }),
     event(10, 'retry', { attempt: 4, reason: 'Unscoped retry' }),
   ].reduce(reducePanelEvent, emptyPanelState('session'))
+  assert.ok(state.messages[0])
   const drafts = state.messages[0].parts.filter((part) => part.kind === 'text' || part.kind === 'reasoning')
   assert.deepEqual(drafts.map((part) => part.kind !== 'tool' && part.kind !== 'native' && Boolean(part.discarded)), [false, true, true, false, false])
   assert.equal((state.messages[0].parts[1] as ToolPart).output, 'Found')
@@ -260,10 +272,12 @@ test('canonical completion preserves live progress, nested ordering, IDs, and ca
     ] })
   const result = reconcilePanelSession(live, canonical)
   assert.deepEqual(result.messages.map((message) => message.id), live.messages.map((message) => message.id))
+  assert.ok(result.messages[3])
   const parts = result.messages[3].parts
   assert.deepEqual(parts.map((part) => part.kind), ['text', 'tool', 'text', 'text', 'activity'])
   assert.deepEqual((parts[1] as ToolPart).progress, ['Halfway'])
   assert.equal((parts[1] as ToolPart).output, 'Canonical result')
+  assert.ok(parts[2])
   assert.deepEqual(parts[2].path, ['worker'])
   assert.deepEqual(reconcilePanelSession(result, canonical), result)
 })
@@ -275,6 +289,7 @@ test('canonical changed root answer wins without losing nested or retry evidence
     messages: [{ role: 'assistant', content: [{ text: 'Canonical answer' }] }] })
   const result = reconcilePanelSession(live, canonical)
   assert.equal(result.messages.length, 1)
+  assert.ok(result.messages[0])
   assert.deepEqual(result.messages[0].parts.map((part) => part.kind !== 'tool' && part.kind !== 'native' && part.text), ['Canonical answer', 'Nested'])
 })
 
@@ -299,6 +314,7 @@ test('checkpoint resume canonical history merges consecutive runs without losing
     ] })
   live = reconcilePanelSession(live, canonical)
   assert.equal(live.messages.length, 1)
+  assert.ok(live.messages[0])
   assert.equal(live.messages[0].runId, 'resume')
   const tool = live.messages[0].parts.find((part): part is ToolPart => part.kind === 'tool')!
   assert.deepEqual(tool.progress, ['Scanning'])
@@ -320,9 +336,11 @@ test('active rehydration rebuilds only the current run and keeps prior rich hist
   const reset = reconcilePanelSession(live, refreshed)
   assert.equal(reset.sequence, 3)
   assert.equal(reset.messages.length, 3)
+  assert.ok(reset.messages[1])
   assert.equal(reset.messages[1].parts.length, 2)
   const replayed = [event(4, 'run_started'), event(5, 'text_delta', { data: 'Partial' })].reduce(reducePanelEvent, reset)
   assert.equal(replayed.messages.length, 4)
+  assert.ok(replayed.messages[3])
   assert.equal(replayed.messages[3].parts.length, 1)
 })
 
@@ -334,6 +352,7 @@ test('failed run refresh keeps incomplete output as evidence alongside committed
     replay_after: 7, messages: previousHistory })
   const merged = reconcilePanelSession(live, snapshot)
   assert.equal(merged.messages.length, 4)
+  assert.ok(merged.messages[1])
   assert.equal(merged.messages[1].runId, undefined)
   assert.equal(merged.recoveryRequired, true)
   assert.deepEqual(reconcilePanelSession(merged, snapshot), merged)
@@ -368,6 +387,7 @@ test('SDK snapshot hydration preserves text/tool order and handles result-only u
   })
   assert.equal(state.sequence, 21)
   assert.equal(state.messages.length, 2)
+  assert.ok(state.messages[1] && state.interrupts[0])
   assert.deepEqual(state.messages[1].parts.map((part) => part.kind), ['text', 'tool', 'reasoning', 'text'])
   assert.equal(state.messages[1].runId, 'run')
   assert.deepEqual((state.messages[1].parts[1] as ToolPart).output, [{ text: 'file contents' }])
@@ -400,6 +420,7 @@ test('gap snapshot attaches at latest without duplicating input; terminal refres
   assert.equal(shouldFollowPanel(state), false)
   assert.equal(state.historyIncomplete, true, 'missing ephemeral progress still warrants a gap notice')
   assert.equal(state.messages.length, 4)
+  assert.ok(state.messages[3])
   assert.deepEqual(state.messages[3].parts.filter((part) => part.kind === 'text').map((part) => part.kind !== 'tool' && part.kind !== 'native' && part.text),
     ['Completed cycle', 'Full beginning and end of in-flight answer', 'Nested progress'])
   assert.deepEqual(reconcilePanelSession(state, canonical), state)
@@ -433,6 +454,7 @@ test('finishing snapshot follows admission; idle steering acknowledgement cannot
   state = reducePanelEvent(state, event(22, 'run_started', { run_id: 'follow-up' }))
   state = reducePanelEvent(state, event(23, 'text_delta', { run_id: 'follow-up', data: 'Continued' }))
   assert.equal(state.messages.at(-1)?.runId, 'follow-up')
+  assert.ok(state.messages[1])
   assert.equal(state.messages[1].runId, 'old')
   const settled = hydratePanelSession('session', { status: 'completed', active: false, run_id: 'follow-up', sequence: 24, replay_after: 24 })
   assert.equal(shouldFollowPanel(settled), false)
@@ -460,11 +482,14 @@ test('native string cycles reset attempt numbering; only discarded model_attempt
     event(7, 'retry', { node_path: ['child'], reason: 'throttled', delay: 1 }),
   ]
   const state = frames.reduce(reducePanelEvent, emptyPanelState('session'))
+  assert.ok(state.messages[0])
   const parts = state.messages[0].parts
   assert.deepEqual(parts.filter((part) => part.kind === 'text' || part.kind === 'reasoning')
     .map((part) => part.kind !== 'tool' && part.kind !== 'native' && Boolean(part.discarded)), [false, true, true, false, false])
-  assert.ok(parts[3].kind === 'retry' && parts[3].text.includes('Retry 2: throttled'))
-  assert.ok(parts[6].kind === 'retry' && parts[6].text === 'Retry: throttled · delay 1s')
+  const part3 = parts[3]
+  const part6 = parts[6]
+  assert.ok(part3?.kind === 'retry' && part3.text.includes('Retry 2: throttled'))
+  assert.ok(part6?.kind === 'retry' && part6.text === 'Retry: throttled · delay 1s')
 })
 
 test('think tool nested events group into a chain-of-thought block; other nested parts stay flat', () => {
@@ -486,6 +511,7 @@ test('think tool nested events group into a chain-of-thought block; other nested
     event(11, 'tool_result', { id: 'think-1', status: 'success', content: [{ text: 'Final: do X' }] }),
     event(12, 'text_delta', { data: ' Done.' }),
   )
+  assert.ok(state.messages[0])
   const parts = state.messages[0].parts
   const running = groupThinkParts(parts, true)
   const think = running.find((i) => i.kind === 'think')
@@ -500,13 +526,15 @@ test('think tool nested events group into a chain-of-thought block; other nested
   // Non-think nested output is untouched (still flat, still nested-labelled).
   assert.ok(flat.some((p) => p.kind === 'text' && p.path.length === 2 && p.path[0] === 'graph-1'))
   // Root text before/after remains in order around the think block.
+  assert.ok(running[0] && running[1])
   assert.equal(running[0].kind, 'part'); assert.equal(running[1].kind, 'think')
   // Finished think while running: no step is active.
   assert.ok(think.steps.every((s) => !s.active))
   // Unfinished think while running: last step is active.
   const partial = groupThinkParts(parts.map((p) => p.kind === 'tool' && p.id === 'think-1' ? { ...p, finished: false } : p), true)
   const live = partial.find((i) => i.kind === 'think')
-  assert.ok(live && live.kind === 'think' && live.steps[live.steps.length - 1].active)
+  const lastLiveStep = live?.kind === 'think' ? live.steps[live.steps.length - 1] : undefined
+  assert.ok(live && live.kind === 'think' && lastLiveStep?.active)
 })
 
 test('think child nested events group into a chain; non-chain tools stay flat', () => {
@@ -524,6 +552,7 @@ test('think child nested events group into a chain; non-chain tools stay flat', 
     { ...event(8, 'text_delta', { data: 'progress' }), node_path: ['shell-1'] },
     event(9, 'text_delta', { data: 'Thai it is.' }),
   )
+  assert.ok(state.messages[0])
   const items = groupThinkParts(state.messages[0].parts, true)
   const chain = items.find((i) => i.kind === 'think')
   assert.ok(chain && chain.kind === 'think')
@@ -646,12 +675,16 @@ test('native_tool envelopes become NativePart entries: output items once, reason
   const natives = assistant.parts.filter(isNativePart) as NativePart[]
   assert.deepEqual(natives.map((n) => n.itemType), ['response.reasoning.search_web', 'sandbox_results', 'share_file'])
   // consecutive reasoning steps of the same kind collapse into one part with both payloads
-  assert.equal(natives[0].steps.length, 2)
-  assert.deepEqual(natives[0].steps.map((s) => (s as { queries: string[] }).queries), [['a'], ['b']])
-  assert.equal((natives[1].item as { results: { stdout: string }[] }).results[0].stdout, '1\n')
-  assert.equal(natives[1].key, 'r1-native-sandbox_results-sb1')
-  assert.equal((natives[2].item as { filename: string }).filename, 'out.csv')
-  assert.equal(natives[2].key, 'r1-native-share_file-sf1')
+  const [n0, n1, n2] = natives
+  assert.ok(n0 && n1 && n2)
+  assert.equal(n0.steps.length, 2)
+  assert.deepEqual(n0.steps.map((s) => (s as { queries: string[] }).queries), [['a'], ['b']])
+  const sbResults = (n1.item as { results: { stdout: string }[] }).results
+  assert.ok(sbResults[0])
+  assert.equal(sbResults[0].stdout, '1\n')
+  assert.equal(n1.key, 'r1-native-sandbox_results-sb1')
+  assert.equal((n2.item as { filename: string }).filename, 'out.csv')
+  assert.equal(n2.key, 'r1-native-share_file-sf1')
   // unaffected: no tool parts were fabricated
   assert.equal(assistant.parts.filter((p) => p.kind === 'tool').length, 0)
 })
@@ -686,7 +719,8 @@ test('image_search native_tool events retain queries and image results on Native
     'response.reasoning.image_search_results',
     'image_search_results',
   ])
-  assert.equal(natives[2].item?.type, 'image_search_results')
+  assert.ok(natives[2])
+  assert.equal(natives[2].item?.["type"], 'image_search_results')
 })
 
 test('tool_repair_investigating / approval / ready reduce into one investigation; repair is a chain tool', () => {
@@ -736,7 +770,8 @@ test('tool_repair_investigating / approval / ready reduce into one investigation
   assert.equal(state.repair?.repairKind, 'file')
   assert.equal(state.repair?.diff, '-a\n+b')
   assert.equal(state.repair?.demonstrations.length, 2)
-  assert.equal(state.repair?.demonstrations[1].source, 'synthetic')
+  assert.ok(state.repair?.demonstrations[1])
+  assert.equal(state.repair.demonstrations[1].source, 'synthetic')
   assert.ok(state.messages.find((m) => m.role === 'assistant')!.parts.some((p) => p.kind === 'activity' && p.text.startsWith('Repair ready for your approval · perplexity_search revision r1')))
 
   // Terminal: applied. The token is gone (nothing left to approve); demonstrations/diff carry over.
@@ -806,8 +841,9 @@ test('reducePanelEvent updates xAI web_search, x_search, and image_search native
   assert.ok(assistant)
   const nativeParts = assistant.parts.filter(isNativePart) as NativePart[]
   assert.equal(nativeParts.length, 3)
+  assert.ok(nativeParts[0] && nativeParts[1] && nativeParts[2])
   assert.equal(nativeParts[0].itemType, 'search_results')
-  assert.equal(nativeParts[0].item?.status, 'completed')
+  assert.equal(nativeParts[0].item?.["status"], 'completed')
   assert.equal(nativeParts[0].steps.length, 2)
   assert.equal(nativeParts[1].itemType, 'x_search_results')
   assert.equal(nativeParts[2].itemType, 'image_search_results')
@@ -821,6 +857,7 @@ test('journal calls are never drawn in a conversation', () => {
     event(3, 'tool_result', { id: 'j-1', status: 'success', content: [{ text: 'Noted.' }] }),
     event(4, 'text_delta', { data: 'Thai it is.' }),
   ]) state = reducePanelEvent(state, e)
+  assert.ok(state.messages[0])
   const items = groupThinkParts(state.messages[0].parts, false)
   assert.deepEqual(items.map((i) => (i.kind === 'part' ? i.part.kind : i.kind)), ['text'])
 })
@@ -874,12 +911,15 @@ test('native background tasks stay running on dispatch, stream nested child even
   ]
   for (const e of seq) state = reducePanelEvent(state, e)
 
+  assert.ok(state.messages[0])
   let tools = state.messages[0].parts.filter((p) => p.kind === 'tool' && p.path.length === 0)
   assert.equal(tools.length, 2)
-  assert.equal(tools[0].kind === 'tool' && tools[0].finished, false)
-  assert.equal(tools[0].kind === 'tool' && tools[0].taskId, 'task-sub-1')
-  assert.equal(tools[1].kind === 'tool' && tools[1].finished, false)
-  assert.equal(tools[1].kind === 'tool' && tools[1].taskId, 'task-scr-1')
+  const [tool0, tool1] = tools
+  assert.ok(tool0 && tool1)
+  assert.equal(tool0.kind === 'tool' && tool0.finished, false)
+  assert.equal(tool0.kind === 'tool' && tool0.taskId, 'task-sub-1')
+  assert.equal(tool1.kind === 'tool' && tool1.finished, false)
+  assert.equal(tool1.kind === 'tool' && tool1.taskId, 'task-scr-1')
 
   // Subagent groups into a ChainOfThought item with its child tool and text while streaming.
   const liveItems = groupThinkParts(state.messages[0].parts, true)
@@ -918,6 +958,7 @@ test('native background tasks stay running on dispatch, stream nested child even
     event(16, 'run_finished', { status: 'completed', stop_reason: 'end_turn', result: {} }),
   ]) state = reducePanelEvent(state, e)
 
+  assert.ok(state.messages[0])
   tools = state.messages[0].parts.filter((p) => p.kind === 'tool' && p.path.length === 0)
   // Root tools are sub-1, scr-1, and explicit-cancel (no synthetic task-sub-1 or task-scr-1 cards).
   assert.deepEqual(tools.map((t) => t.kind === 'tool' ? [t.id, t.finished, t.status] : []), [
@@ -972,4 +1013,105 @@ test('native background tasks stay running on dispatch, stream nested child even
     ['sub-1', true, 'success'],
     ['scr-1', true, 'error'],
   ])
+})
+
+test('native _SubagentTool(background=True) spawn, live subagent_id stream, hangup, recover, and [subagent-completed] settlement', () => {
+  let state = emptyPanelState('session')
+  for (const e of [
+    event(1, 'run_started', { model_id: 'm', provider: 'mistral' }),
+    // 1) Parent spawns background subagent -> returns {subagent_id, status: "running"}
+    event(2, 'tool_input', { id: 'call-sub-1', name: 'subagent', input: { task: 'Scrape competitor pricing' } }),
+    event(3, 'tool_result', {
+      id: 'call-sub-1',
+      status: 'success',
+      content: [{ json: { subagent_id: 'subagent-aaaa1111', status: 'running', message: 'Subagent dispatched asynchronously' } }],
+    }),
+    // 2) Live child stream arrives via synthetic_tool_use carrying subagent_id
+    event(4, 'background_event', {
+      event: {
+        task_id: 'subagent-aaaa1111',
+        tool_stream_event: {
+          tool_use: { toolUseId: 'subagent-aaaa1111', name: 'subagent', input: { task: 'Scrape competitor pricing', subagent_id: 'subagent-aaaa1111' } },
+          data: { data: 'Step 1 gathered.' },
+        },
+      },
+    }),
+    // 3) Hangup detected on subagent-aaaa1111
+    event(5, 'background_event', {
+      event: {
+        subagent_resume: '[subagent-hangup] Background subagent hangup detected:\n[\n  {"subagent_id": "subagent-aaaa1111", "status": "running", "hangup_reason": "Tool \'olostep_scrape_website\' hung for 60.0s"}\n]',
+      },
+    }),
+  ]) state = reducePanelEvent(state, e)
+
+  let spawned = state.messages[0]?.parts.find((p) => p.kind === 'tool' && p.id === 'call-sub-1')
+  assert.ok(spawned && spawned.kind === 'tool')
+  assert.equal(spawned.finished, false)
+  assert.equal(spawned.taskId, 'subagent-aaaa1111')
+  assert.ok(spawned.progress.some((line) => line.includes('Hangup detected')))
+
+  // Child steps route under call-sub-1's ChainOfThought block (not a duplicate subagent-aaaa1111 root card)
+  const itemsDuringRun = groupThinkParts(state.messages[0]?.parts ?? [], true)
+  const chainDuringRun = itemsDuringRun.find((i) => i.kind === 'think' && i.tool.id === 'call-sub-1')
+  assert.ok(chainDuringRun && chainDuringRun.kind === 'think')
+  assert.equal(chainDuringRun.steps.length, 1)
+
+  // 4) Parent calls subagent(action="recover") -> rebinds call-sub-1 to subagent-bbbb2222, then [subagent-completed] settles it
+  for (const e of [
+    event(6, 'tool_input', { id: 'call-recover', name: 'subagent', input: { action: 'recover', subagent_id: 'subagent-aaaa1111', task: 'Use custom_scraper instead' } }),
+    event(7, 'tool_result', {
+      id: 'call-recover',
+      status: 'success',
+      content: [{ json: { recovered_from: 'subagent-aaaa1111', salvaged_message_count: 2, subagent_id: 'subagent-bbbb2222', status: 'running' } }],
+    }),
+    event(8, 'background_event', {
+      event: {
+        task_id: 'subagent-bbbb2222',
+        tool_stream_event: {
+          tool_use: { toolUseId: 'subagent-bbbb2222', name: 'subagent', input: { task: 'Use custom_scraper instead', subagent_id: 'subagent-bbbb2222' } },
+          data: { data: ' Pricing matrix verified.' },
+        },
+      },
+    }),
+    event(9, 'background_event', {
+      event: {
+        subagent_resume: '[subagent-completed] Background subagent(s) finished:\n[\n  {"subagent_id": "subagent-bbbb2222", "status": "completed", "result": "Recovered pricing report"}\n]',
+      },
+    }),
+    event(10, 'run_finished', { status: 'completed', stop_reason: 'end_turn', result: {} }),
+  ]) state = reducePanelEvent(state, e)
+
+  spawned = state.messages[0]?.parts.find((p) => p.kind === 'tool' && p.id === 'call-sub-1')
+  assert.ok(spawned && spawned.kind === 'tool')
+  assert.equal(spawned.finished, true)
+  assert.equal(spawned.status, 'success')
+  assert.equal(spawned.taskId, 'subagent-bbbb2222')
+  // action='recover' is a control call (regular Tool card, not a second ThinkChain)
+  const finalItems = groupThinkParts(state.messages[0]?.parts ?? [], false)
+  assert.equal(finalItems.filter((i) => i.kind === 'think').length, 1)
+
+  // Hydration hides internal [subagent-completed] / [subagent-hangup] user blocks and settles call-sub-1
+  const hydrated = hydratePanelSession('session', {
+    run_id: 'r1',
+    sequence: 10,
+    status: 'completed',
+    messages: [
+      { role: 'user', content: [{ text: 'Get competitor pricing' }] },
+      { role: 'assistant', content: [{ toolUse: { toolUseId: 'call-sub-1', name: 'subagent', input: { task: 'Scrape competitor pricing' } } }] },
+      { role: 'user', content: [{ toolResult: { toolUseId: 'call-sub-1', status: 'success', content: [{ json: { subagent_id: 'subagent-aaaa1111', status: 'running' } }] } }] },
+      { role: 'user', content: [{ text: '[subagent-hangup] Background subagent hangup detected:\n[\n  {"subagent_id": "subagent-aaaa1111", "status": "running", "hangup_reason": "hung"}\n]' }] },
+      { role: 'assistant', content: [{ toolUse: { toolUseId: 'call-recover', name: 'subagent', input: { action: 'recover', subagent_id: 'subagent-aaaa1111', task: 'Use custom_scraper' } } }] },
+      { role: 'user', content: [{ toolResult: { toolUseId: 'call-recover', status: 'success', content: [{ json: { recovered_from: 'subagent-aaaa1111', subagent_id: 'subagent-bbbb2222', status: 'running' } }] } }] },
+      { role: 'user', content: [{ text: '[subagent-completed] Background subagent(s) finished:\n[\n  {"subagent_id": "subagent-bbbb2222", "status": "completed", "result": "Recovered pricing report"}\n]' }] },
+      { role: 'assistant', content: [{ text: 'Done.' }] },
+    ],
+  })
+  assert.equal(hydrated.messages.filter((m) => m.role === 'user').length, 1)
+  const hydratedSpawn = hydrated.messages
+    .filter((m) => m.role === 'assistant')
+    .flatMap((m) => m.parts)
+    .find((p) => p.kind === 'tool' && p.id === 'call-sub-1')
+  assert.ok(hydratedSpawn && hydratedSpawn.kind === 'tool')
+  assert.equal(hydratedSpawn.finished, true)
+  assert.equal(hydratedSpawn.status, 'success')
 })

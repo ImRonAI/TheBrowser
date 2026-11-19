@@ -38,13 +38,13 @@ export const COMMENT_MAX = 20000
 const time = (value: unknown) => (typeof value === 'string' ? Date.parse(value) : Number.NaN)
 
 export function mapComment(row: Row): IssueComment {
-  const agent = row.author_kind === 'agent'
+  const agent = row["author_kind"] === 'agent'
   return {
-    id: String(row.id), issueId: String(row.issue_id), projectId: String(row.project_id),
-    authorId: row.author_id ?? null, authorName: typeof row.author_name === 'string' ? row.author_name : '',
-    authorKind: agent ? 'agent' : 'user', agentName: agent && typeof row.agent_name === 'string' ? row.agent_name : null,
-    body: typeof row.body === 'string' ? row.body : '', version: Number(row.version),
-    createdAt: time(row.created_at), updatedAt: time(row.updated_at), editedAt: row.edited_at ? time(row.edited_at) : null,
+    id: String(row["id"]), issueId: String(row["issue_id"]), projectId: String(row["project_id"]),
+    authorId: row["author_id"] ?? null, authorName: typeof row["author_name"] === 'string' ? row["author_name"] : '',
+    authorKind: agent ? 'agent' : 'user', agentName: agent && typeof row["agent_name"] === 'string' ? row["agent_name"] : null,
+    body: typeof row["body"] === 'string' ? row["body"] : '', version: Number(row["version"]),
+    createdAt: time(row["created_at"]), updatedAt: time(row["updated_at"]), editedAt: row["edited_at"] ? time(row["edited_at"]) : null,
   }
 }
 
@@ -58,8 +58,10 @@ export const withComment = (comments: IssueComment[], comment: IssueComment) =>
   orderComments([...comments.filter((item) => item.id !== comment.id), comment])
 export const withoutComment = (comments: IssueComment[], id: string) => comments.filter((item) => item.id !== id)
 /** Whether two lists hold the same versions of the same comments: a refresh that changed nothing keeps the old list. */
-export const sameComments = (a: IssueComment[], b: IssueComment[]) => a.length === b.length && a.every((item, index) =>
-  item.id === b[index].id && item.version === b[index].version && item.updatedAt === b[index].updatedAt && item.authorId === b[index].authorId)
+export const sameComments = (a: IssueComment[], b: IssueComment[]) => a.length === b.length && a.every((item, index) => {
+  const other = b[index]
+  return other !== undefined && item.id === other.id && item.version === other.version && item.updatedAt === other.updatedAt && item.authorId === other.authorId
+})
 
 /** The length the API checks: characters (code points, not UTF-16 units) of the trimmed body. */
 export const commentLength = (body: string) => Array.from(body.trim()).length

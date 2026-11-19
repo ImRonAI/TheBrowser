@@ -96,6 +96,7 @@ export function NewsResults({ state, onRetry, onOpenWeb }: { state: SearchRunSta
     )
   }
   const [lead, ...rest] = items
+  if (!lead) return null
   return (
     <div className="max-w-[720px]">
       <LeadStory item={lead} />

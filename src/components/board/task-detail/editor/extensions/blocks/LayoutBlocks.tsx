@@ -58,7 +58,7 @@ export const Callout = Node.create({
       variant: {
         default: 'info',
         parseHTML: (element) => calloutVariant(element.getAttribute('data-variant')),
-        renderHTML: (attributes) => ({ 'data-variant': calloutVariant(attributes.variant) }),
+        renderHTML: (attributes) => ({ 'data-variant': calloutVariant(attributes["variant"]) }),
       },
     }
   },
@@ -85,9 +85,9 @@ export const Callout = Node.create({
 })
 
 function CalloutView({ node, editor, updateAttributes }: NodeViewProps) {
-  const variant = calloutVariant(node.attrs.variant)
+  const variant = calloutVariant(node.attrs["variant"])
   const style = CALLOUT_STYLE[variant]
-  const next = CALLOUT_VARIANTS[(CALLOUT_VARIANTS.indexOf(variant) + 1) % CALLOUT_VARIANTS.length]
+  const next: CalloutVariant = CALLOUT_VARIANTS[(CALLOUT_VARIANTS.indexOf(variant) + 1) % CALLOUT_VARIANTS.length] ?? 'info'
   const Icon = style.icon
   return <NodeViewWrapper data-type="callout" data-variant={variant}
     className={cn('ron-callout my-4 flex gap-3 rounded-xl border px-4 py-3', style.box)}>
@@ -145,9 +145,14 @@ export const Card = Node.create({
 
   addCommands() {
     return {
-      insertCard: () => placeBlock((schema) => schema.nodes.card.create(null, [
-        schema.nodes.cardTitle.create(), schema.nodes.paragraph.create(),
-      ])),
+      insertCard: () => placeBlock((schema) => {
+        const cardNode = schema.nodes["card"]
+        const titleNode = schema.nodes["cardTitle"]
+        const paragraphNode = schema.nodes["paragraph"]
+        return cardNode && titleNode && paragraphNode
+          ? cardNode.create(null, [titleNode.create(), paragraphNode.create()])
+          : null
+      }),
     }
   },
 
@@ -213,8 +218,12 @@ export const Columns = Node.create({
     return {
       insertColumns: (count) => placeBlock((schema) => {
         const columns = Math.min(4, Math.max(2, Math.round(count)))
-        return schema.nodes.columns.create(null, Array.from({ length: columns }, () =>
-          schema.nodes.column.create(null, schema.nodes.paragraph.create())))
+        const columnsNode = schema.nodes["columns"]
+        const columnNode = schema.nodes["column"]
+        const paragraphNode = schema.nodes["paragraph"]
+        if (!columnsNode || !columnNode || !paragraphNode) return null
+        return columnsNode.create(null, Array.from({ length: columns }, () =>
+          columnNode.create(null, paragraphNode.create())))
       }),
     }
   },

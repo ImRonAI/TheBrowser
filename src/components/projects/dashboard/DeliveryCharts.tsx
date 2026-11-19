@@ -40,8 +40,9 @@ export function ThroughputChart({ metrics, unit, measure }: DeliveryProps & { me
         <XAxis dataKey="end" type="category" tickFormatter={formatDay} minTickGap={16} {...AXIS} />
         <YAxis width={36} allowDecimals={velocity} {...AXIS} axisLine={false} />
         <Tooltip cursor={{ fill: COLOR.grid, fillOpacity: 0.6 }} content={(props: TooltipContentProps) => {
-          if (!props.active || !props.payload?.length) return null
-          const bucket = props.payload[0].payload as (typeof data)[number]
+          const firstEntry = props.payload?.[0]
+          if (!props.active || !firstEntry) return null
+          const bucket = firstEntry.payload as (typeof data)[number]
           return <TooltipCard title={`${formatDay(bucket.start)} – ${formatDay(bucket.end)}`}
             rows={[{ label: `${unit} finished`, value: formatNumber(bucket.value), color: STATUS_COLOR.done }, ...(velocity ? [{ label: 'items', value: formatNumber(bucket.items) }] : [])]} />
         }} />
@@ -81,8 +82,9 @@ export function BurnupChart({ metrics, unit }: DeliveryProps) {
         <XAxis dataKey="day" type="number" scale="time" domain={['dataMin', 'dataMax']} tickFormatter={formatDay} minTickGap={28} {...AXIS} />
         <YAxis width={36} {...AXIS} axisLine={false} />
         <Tooltip cursor={{ stroke: COLOR.axis, strokeWidth: 1 }} content={(props: TooltipContentProps) => {
-          if (!props.active || !props.payload?.length) return null
-          const point = props.payload[0].payload as (typeof points)[number]
+          const firstEntry = props.payload?.[0]
+          if (!props.active || !firstEntry) return null
+          const point = firstEntry.payload as (typeof points)[number]
           return <TooltipCard title={formatDate(point.day)} rows={[
             { label: 'scope', value: formatNumber(point.scope), color: COLOR.neutral },
             { label: 'done', value: formatNumber(point.done), color: STATUS_COLOR.done },
@@ -135,11 +137,12 @@ export function ForecastChart({ metrics, className }: { metrics: DashboardMetric
     >
       <BarChart data={data} responsive style={{ width: '100%', height: CHART_HEIGHT }} margin={CHART_MARGIN} barCategoryGap="15%">
         <CartesianGrid vertical={false} stroke={COLOR.grid} />
-        <XAxis dataKey="week" type="category" tickFormatter={(week: number) => data[week - 1] ? formatDay(data[week - 1].end) : ''} minTickGap={16} {...AXIS} />
+        <XAxis dataKey="week" type="category" tickFormatter={(week: number) => { const entry = data[week - 1]; return entry ? formatDay(entry.end) : '' }} minTickGap={16} {...AXIS} />
         <YAxis width={40} tickFormatter={(value: number) => `${formatNumber(value)}%`} {...AXIS} axisLine={false} />
         <Tooltip cursor={{ fill: COLOR.grid, fillOpacity: 0.6 }} content={(props: TooltipContentProps) => {
-          if (!props.active || !props.payload?.length) return null
-          const bucket = props.payload[0].payload as (typeof data)[number]
+          const firstEntry = props.payload?.[0]
+          if (!props.active || !firstEntry) return null
+          const bucket = firstEntry.payload as (typeof data)[number]
           return <TooltipCard title={`Week ending ${formatDate(bucket.end)}`} rows={[
             { label: 'of simulations finish this week', value: `${formatNumber(bucket.percent)}%`, color: STATUS_COLOR.done },
             { label: 'done by then', value: `${formatNumber(bucket.cumulative)}%` },

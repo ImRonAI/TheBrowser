@@ -33,9 +33,9 @@ test('loads server rows, canonical versions and issue numbers with no seeded dat
   const { store, calls } = setup()
   assert.deepEqual(store.getState().projects, [])
   await store.getState().initialize()
-  assert.equal(store.getState().projects[0].version, 3)
-  assert.equal(store.getState().issues[0].number, 14)
-  assert.equal(store.getState().issues[0].version, 5)
+  assert.equal(store.getState().projects[0]?.version, 3)
+  assert.equal(store.getState().issues[0]?.number, 14)
+  assert.equal(store.getState().issues[0]?.version, 5)
   assert.equal(store.getState().isInitialized, true)
   assert.ok(calls.every((call) => call.user === 'alice'))
   assert.ok(calls.some((call) => call.path.startsWith('/links?')))
@@ -67,8 +67,8 @@ test('stale writes preserve confirmed state and are never silently retried', asy
   await store.getState().initialize()
   const result = await store.getState().updateIssue('i', { title: 'Lost update' })
   assert.match(result.error!, /reload/)
-  assert.equal(store.getState().issues[0].title, 'Server title')
-  assert.equal(store.getState().issues[0].version, 5)
+  assert.equal(store.getState().issues[0]?.title, 'Server title')
+  assert.equal(store.getState().issues[0]?.version, 5)
   assert.equal(calls.filter((call) => call.method === 'PATCH').length, 1)
 })
 
@@ -82,7 +82,7 @@ test('queued updates use each preceding server-confirmed version', async () => {
   await Promise.all([store.getState().updateIssue('i', { title: 'First' }),
     store.getState().updateIssue('i', { status: 'done' })])
   assert.deepEqual(calls.filter((call) => call.method === 'PATCH').map((call) => call.body.version), [5, 6])
-  assert.equal(store.getState().issues[0].version, 7)
+  assert.equal(store.getState().issues[0]?.version, 7)
 })
 
 test('switching accounts drops late writes and cancels queued writes, even after switching back', async () => {
@@ -133,7 +133,7 @@ test('failed review refresh reports failure and retains the confirmed snapshot',
   store.setState({ projects: loaded.getState().projects, issues: loaded.getState().issues })
   const result = await store.getState().refreshFromServer()
   assert.equal(result.error, 'Synthetic refresh failure')
-  assert.equal(store.getState().issues[0].title, 'Server title')
+  assert.equal(store.getState().issues[0]?.title, 'Server title')
   assert.equal(store.getState().isLoading, false)
 })
 
@@ -164,7 +164,7 @@ test('long-lived issue drafts cannot silently use a newer loaded version', async
   const result = await store.getState().updateIssue('i', { title: 'Draft from v4' }, 4)
   assert.match(result.error!, /draft is retained/)
   assert.equal(calls.filter((call) => call.method === 'PATCH').length, 0)
-  assert.equal(store.getState().issues[0].title, 'Server title')
+  assert.equal(store.getState().issues[0]?.title, 'Server title')
 })
 
 test('queued edits from the same issue version conflict rather than overwriting', async () => {
@@ -217,7 +217,7 @@ test('pagination follows all pages, including a final empty page', async () => {
 
 test('transport binds the current JWT to the expected account and never sends service credentials', async () => {
   const fetcher: typeof fetch = async (_url, init) => {
-    assert.equal((init?.headers as Record<string, string>).Authorization, 'Bearer user-token')
+    assert.equal((init?.headers as Record<string, string>)["Authorization"], 'Bearer user-token')
     assert.equal(init?.method, 'PATCH')
     return Response.json({ version: 6 })
   }

@@ -15,8 +15,8 @@ export interface DiscoveryStory {
   description: string
   source: string
   url: string
-  imageUrl?: string
-  publishedAt?: string
+  imageUrl?: string | undefined
+  publishedAt?: string | undefined
 }
 
 /** A specialist the user saved, or one the Context Agent recommends for this interest. */

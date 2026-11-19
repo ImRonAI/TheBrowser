@@ -12,10 +12,10 @@ import { EMBED_ALLOW, EMBED_SANDBOX } from './EmbedBlock'
  */
 export const RonImage = Image.extend({
   renderMarkdown: (node) => {
-    const src = String(node.attrs?.src ?? '')
-    const alt = String(node.attrs?.alt ?? '')
+    const src = String(node.attrs?.["src"] ?? '')
+    const alt = String(node.attrs?.["alt"] ?? '')
     if (isDataUrl(src)) return `![${alt || 'Image'}](uploaded image)`
-    return node.attrs?.title ? `![${alt}](${src} "${node.attrs.title}")` : `![${alt}](${src})`
+    return node.attrs?.["title"] ? `![${alt}](${src} "${node.attrs["title"]}")` : `![${alt}](${src})`
   },
 }).configure({
   allowBase64: true,

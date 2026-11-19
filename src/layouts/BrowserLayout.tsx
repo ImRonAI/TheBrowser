@@ -89,8 +89,8 @@ function BrowserLayoutContent({ children }: BrowserLayoutProps) {
     x: number
     y: number
     isOpen: boolean
-    selectedText?: string
-    pasteTarget?: HTMLElement | null
+    selectedText?: string | undefined
+    pasteTarget?: HTMLElement | null | undefined
   }>({
     x: 0,
     y: 0,
@@ -119,6 +119,7 @@ function BrowserLayoutContent({ children }: BrowserLayoutProps) {
         askRonCleanup()
       }
     }
+    return undefined
   }, [startAskRon])
 
   // Global shortcuts: ⌘J Ask Ron, ⌘K Search, ⌘\ sidebar, ⌘L address bar.
@@ -289,8 +290,8 @@ function BrowserLayoutContent({ children }: BrowserLayoutProps) {
         x={contextMenu.x}
         y={contextMenu.y}
         isOpen={contextMenu.isOpen}
-        selectedText={contextMenu.selectedText}
-        pasteTarget={contextMenu.pasteTarget}
+        {...(contextMenu.selectedText !== undefined ? { selectedText: contextMenu.selectedText } : {})}
+        {...(contextMenu.pasteTarget !== undefined ? { pasteTarget: contextMenu.pasteTarget } : {})}
         onClose={() => setContextMenu(prev => ({ ...prev, isOpen: false }))}
       />
     </div>

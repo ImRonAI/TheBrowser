@@ -218,7 +218,7 @@ export function CanonicalIssueWorkspace({ issue, project, onClose, onNavigate }:
   const overdue = !!draft.dueDate && draft.status !== 'done' && new Date(draft.dueDate).getTime() < Date.now()
   const customFields = (project.settings.fields ?? []).filter((f) => (!f.issueTypes?.length || f.issueTypes.includes(draft.type)) || Object.hasOwn(draft.customFields, f.key))
   const task: Task = {
-    id: issueKey, title: draft.title || issue.title, description: issue.description, status: issue.status, priority: issue.priority,
+    id: issueKey, title: draft.title || issue.title, ...(issue.description !== undefined ? { description: issue.description } : {}), status: issue.status, priority: issue.priority,
     createdAt: issue.createdAt, updatedAt: issue.updatedAt, projectId: project.id, projectName: project.name,
     assignees: [], labels: [], subtasks: [], hasNotification: false,
   }
@@ -390,7 +390,7 @@ export function CanonicalIssueWorkspace({ issue, project, onClose, onNavigate }:
   return <>
     <TaskDetailView task={task} onClose={() => void navigate(onClose)} workspace={{ banner, sidebar, description,
       context: <IssueContext entries={draft.context} disabled={disabled}
-        onRemove={(id) => edit({ context: draft.context.filter((entry) => entry.id !== id) })} />,
+        onRemove={(id) => edit({ context: draft.context.filter((entry) => entry["id"] !== id) })} />,
       ron: <IssueRonChat issueId={issue.id} issueKey={issueKey} issue={{ title: issue.title, description: issue.description }}
         hasUnsavedChanges={dirty || saving} />,
       comments: <IssueComments issueId={issue.id} projectOwnerId={project.ownerId} thread={comments}

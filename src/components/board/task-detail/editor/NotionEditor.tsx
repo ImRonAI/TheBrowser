@@ -33,19 +33,19 @@ const lowlight = createLowlight(common)
 interface NotionEditorProps {
   content: string
   onChange: (content: string) => void
-  onSave?: () => void
-  placeholder?: string
-  readOnly?: boolean
-  canonical?: boolean
-  onAskRon?: (goal: boolean) => void
+  onSave?: (() => void) | undefined
+  placeholder?: string | undefined
+  readOnly?: boolean | undefined
+  canonical?: boolean | undefined
+  onAskRon?: ((goal: boolean) => void) | undefined
   /** Extra blocks for this editor only (project documents add the workflow block). */
-  extensions?: Extensions
+  extensions?: Extensions | undefined
   /** Receives the editor instance, e.g. for a fixed formatting toolbar; null on unmount. */
-  onEditor?: (editor: Editor | null) => void
+  onEditor?: ((editor: Editor | null) => void) | undefined
   /** Replaces the default classes of the editable area. */
-  editorClassName?: string
+  editorClassName?: string | undefined
   /** A read-only rendering sized to its content: no minimum height and no editing hints. */
-  preview?: boolean
+  preview?: boolean | undefined
 }
 
 export function NotionEditor({ 
@@ -74,7 +74,7 @@ export function NotionEditor({
       Placeholder.configure({ 
         placeholder: ({ node }) => {
             if (node.type.name === 'heading') {
-                return `Heading ${node.attrs.level}`
+                return `Heading ${node.attrs["level"]}`
             }
             return placeholder
         }

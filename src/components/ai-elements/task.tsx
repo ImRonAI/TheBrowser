@@ -51,8 +51,8 @@ export const Task = ({
 
 export type TaskTriggerProps = ComponentProps<typeof CollapsibleTrigger> & {
   title: string;
-  description?: string;
-  status?: TaskStatus;
+  description?: string | undefined;
+  status?: TaskStatus | undefined;
 };
 
 export const TaskTrigger = ({

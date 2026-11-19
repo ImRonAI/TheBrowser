@@ -11,9 +11,9 @@ type ChangeType = "major" | "minor" | "patch" | "added" | "removed";
 
 interface PackageInfoContextType {
   name: string;
-  currentVersion?: string;
-  newVersion?: string;
-  changeType?: ChangeType;
+  currentVersion?: string | undefined;
+  newVersion?: string | undefined;
+  changeType?: ChangeType | undefined;
 }
 
 const PackageInfoContext = createContext<PackageInfoContextType>({
@@ -22,9 +22,9 @@ const PackageInfoContext = createContext<PackageInfoContextType>({
 
 export type PackageInfoProps = HTMLAttributes<HTMLDivElement> & {
   name: string;
-  currentVersion?: string;
-  newVersion?: string;
-  changeType?: ChangeType;
+  currentVersion?: string | undefined;
+  newVersion?: string | undefined;
+  changeType?: ChangeType | undefined;
 };
 
 export const PackageInfo = ({
@@ -211,7 +211,7 @@ export const PackageInfoDependencies = ({
 
 export type PackageInfoDependencyProps = HTMLAttributes<HTMLDivElement> & {
   name: string;
-  version?: string;
+  version?: string | undefined;
 };
 
 export const PackageInfoDependency = ({

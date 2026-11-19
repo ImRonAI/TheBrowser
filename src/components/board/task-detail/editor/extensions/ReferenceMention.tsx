@@ -188,22 +188,22 @@ export const ReferenceMention = Mention.extend({
       return { type: 'reference', raw: match.raw, attributes: { kind: match.kind, id: match.id, label: match.label } }
     },
   },
-  parseMarkdown: (token, helpers) => helpers.createNode('reference', { ...token.attributes, mentionSuggestionChar: '@' }),
+  parseMarkdown: (token, helpers) => helpers.createNode('reference', { ...token["attributes"], mentionSuggestionChar: '@' }),
   renderMarkdown: (node) => {
-    const kind = node.attrs?.kind
-    return isReferenceKind(kind) && node.attrs?.id
-      ? referenceMarkdown({ kind, id: String(node.attrs.id), label: node.attrs.label })
-      : `@${node.attrs?.label ?? node.attrs?.id ?? ''}`
+    const kind = node.attrs?.["kind"]
+    return isReferenceKind(kind) && node.attrs?.["id"]
+      ? referenceMarkdown({ kind, id: String(node.attrs["id"]), label: node.attrs["label"] })
+      : `@${node.attrs?.["label"] ?? node.attrs?.["id"] ?? ''}`
   },
 }).configure({
   HTMLAttributes: {
     class: 'reference-chip rounded-md bg-accent/10 px-1 py-0.5 font-medium text-accent no-underline dark:bg-accent-light/15 dark:text-accent-light',
   },
-  renderText: ({ node }) => `@${node.attrs.label ?? node.attrs.id}`,
+  renderText: ({ node }) => `@${node.attrs["label"] ?? node.attrs["id"]}`,
   renderHTML: ({ options, node }) => [
     'span',
-    mergeAttributes(options.HTMLAttributes, isReferenceKind(node.attrs.kind) ? { title: `${referenceKindTitle(node.attrs.kind)}: ${node.attrs.id}` } : {}),
-    `@${node.attrs.label ?? node.attrs.id}`,
+    mergeAttributes(options.HTMLAttributes, isReferenceKind(node.attrs["kind"]) ? { title: `${referenceKindTitle(node.attrs["kind"])}: ${node.attrs["id"]}` } : {}),
+    `@${node.attrs["label"] ?? node.attrs["id"]}`,
   ],
   suggestion: {
     char: '@',

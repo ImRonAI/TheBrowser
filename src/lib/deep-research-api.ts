@@ -44,15 +44,15 @@ export interface FormationTopologyNode {
   id: string
   label: string
   kind: FormationNodeKind
-  skill?: string
-  description?: string
-  children?: FormationTopologyNode[]
-  edges?: FormationTopologyEdge[]
+  skill?: string | undefined
+  description?: string | undefined
+  children?: FormationTopologyNode[] | undefined
+  edges?: FormationTopologyEdge[] | undefined
 }
 
 export interface FormationTopology {
   id: string
-  label?: string
+  label?: string | undefined
   kind: FormationNodeKind
   nodes: FormationTopologyNode[]
   edges: FormationTopologyEdge[]
@@ -301,6 +301,7 @@ export type DeepResearchActivityPart =
 /** One call of the built-in `subagent` tool and the sub-agent's work. */
 export interface DeepResearchSkillExecution {
   id: string
+  subagent_id?: string
   skill_name: string
   task: string
   node_path: string[]
@@ -394,22 +395,22 @@ export interface DeepResearchStatusResponse {
 
 export interface StartDeepResearchInput {
   query: string
-  user_id?: string
-  context?: string | null
-  depth?: ResearchDepth
-  provider?: string | null
-  model_id?: string | null
-  reasoning_effort?: string | null
+  user_id?: string | undefined
+  context?: string | null | undefined
+  depth?: ResearchDepth | undefined
+  provider?: string | null | undefined
+  model_id?: string | null | undefined
+  reasoning_effort?: string | null | undefined
 }
 
 export interface RequestOptions {
-  baseUrl?: string
-  fetcher?: typeof fetch
-  signal?: AbortSignal
+  baseUrl?: string | undefined
+  fetcher?: typeof fetch | undefined
+  signal?: AbortSignal | undefined
 }
 
 export interface StreamDeepResearchOptions extends RequestOptions {
-  after?: number
+  after?: number | undefined
   onEvent: (event: DeepResearchEvent) => void
 }
 
@@ -489,8 +490,8 @@ function blocksText(content: unknown): string {
   return asArray(content)
     .map((block) => {
       const obj = asRecord(block)
-      if (typeof obj.text === 'string') return obj.text
-      if (obj.json !== undefined) return JSON.stringify(obj.json)
+      if (typeof obj["text"] === 'string') return obj["text"]
+      if (obj["json"] !== undefined) return JSON.stringify(obj["json"])
       return ''
     })
     .filter(Boolean)
@@ -518,39 +519,39 @@ const NODE_KIND_VALUES: readonly FormationNodeKind[] = ['graph', 'swarm', 'agent
 function topologyEdges(raw: unknown): FormationTopologyEdge[] {
   return asArray(raw)
     .map(asRecord)
-    .map((edge) => ({ from: asString(edge.from), to: asString(edge.to) }))
+    .map((edge) => ({ from: asString(edge["from"]), to: asString(edge["to"]) }))
     .filter((edge) => edge.from && edge.to)
 }
 
 function topologyNode(raw: unknown): FormationTopologyNode | null {
   const obj = asRecord(raw)
-  const kind = NODE_KIND_VALUES.find((value) => value === obj.kind)
-  const id = asString(obj.id)
+  const kind = NODE_KIND_VALUES.find((value) => value === obj["kind"])
+  const id = asString(obj["id"])
   if (!id || !kind) return null
-  const skill = asString(obj.skill)
-  const description = asString(obj.description)
-  const children = asArray(obj.children).map(topologyNode).filter((node): node is FormationTopologyNode => node !== null)
+  const skill = asString(obj["skill"])
+  const description = asString(obj["description"])
+  const children = asArray(obj["children"]).map(topologyNode).filter((node): node is FormationTopologyNode => node !== null)
   return {
     id,
-    label: asString(obj.label) || humanizeIdentifier(id),
+    label: asString(obj["label"]) || humanizeIdentifier(id),
     kind,
     ...(skill ? { skill } : {}),
     ...(description ? { description } : {}),
-    ...(kind === 'agent' ? {} : { children, edges: topologyEdges(obj.edges) }),
+    ...(kind === 'agent' ? {} : { children, edges: topologyEdges(obj["edges"]) }),
   }
 }
 
 /** `/deep-research/status`'s topology, or the built-in one when it has none. */
 export function normalizeFormationTopology(raw: unknown): FormationTopology {
   const obj = asRecord(raw)
-  const nodes = asArray(obj.nodes).map(topologyNode).filter((node): node is FormationTopologyNode => node !== null)
+  const nodes = asArray(obj["nodes"]).map(topologyNode).filter((node): node is FormationTopologyNode => node !== null)
   if (nodes.length === 0) return DEFAULT_FORMATION_TOPOLOGY
   return {
-    id: asString(obj.id) || DEFAULT_FORMATION_TOPOLOGY.id,
-    label: asString(obj.label) || DEFAULT_FORMATION_TOPOLOGY.label,
+    id: asString(obj["id"]) || DEFAULT_FORMATION_TOPOLOGY.id,
+    label: asString(obj["label"]) || DEFAULT_FORMATION_TOPOLOGY.label,
     kind: 'graph',
     nodes,
-    edges: topologyEdges(obj.edges),
+    edges: topologyEdges(obj["edges"]),
   }
 }
 
@@ -621,30 +622,30 @@ const RUN_STATUSES: readonly DeepResearchRunStatus[] = ['running', 'completed', 
 
 /** The run's own fields (`RunMeta` in the backend) over `snapshot`. */
 function withMeta(snapshot: DeepResearchSnapshot, raw: Json): DeepResearchSnapshot {
-  const status = RUN_STATUSES.find((value) => value === raw.status) ?? snapshot.status
-  const selection = asRecord(raw.selection)
+  const status = RUN_STATUSES.find((value) => value === raw["status"]) ?? snapshot.status
+  const selection = asRecord(raw["selection"])
   return {
     ...snapshot,
-    user_id: asString(raw.user_id) || snapshot.user_id,
-    query: asString(raw.query) || snapshot.query,
-    context: asString(raw.context) || snapshot.context,
-    title: asString(raw.title) || snapshot.title,
-    depth: RESEARCH_DEPTHS.find((value) => value === raw.depth) ?? snapshot.depth,
+    user_id: asString(raw["user_id"]) || snapshot.user_id,
+    query: asString(raw["query"]) || snapshot.query,
+    context: asString(raw["context"]) || snapshot.context,
+    title: asString(raw["title"]) || snapshot.title,
+    depth: RESEARCH_DEPTHS.find((value) => value === raw["depth"]) ?? snapshot.depth,
     status,
-    active: typeof raw.active === 'boolean' ? raw.active : snapshot.active,
-    created_at: asString(raw.created_at) || snapshot.created_at,
-    updated_at: asString(raw.updated_at) || snapshot.updated_at,
-    completed_at: asString(raw.completed_at) || snapshot.completed_at,
-    selection: raw.selection
+    active: typeof raw["active"] === 'boolean' ? raw["active"] : snapshot.active,
+    created_at: asString(raw["created_at"]) || snapshot.created_at,
+    updated_at: asString(raw["updated_at"]) || snapshot.updated_at,
+    completed_at: asString(raw["completed_at"]) || snapshot.completed_at,
+    selection: raw["selection"]
       ? {
-          provider: asString(selection.provider) || null,
-          model_id: asString(selection.model_id) || null,
-          reasoning_effort: asString(selection.reasoning_effort) || null,
+          provider: asString(selection["provider"]) || null,
+          model_id: asString(selection["model_id"]) || null,
+          reasoning_effort: asString(selection["reasoning_effort"]) || null,
         }
       : snapshot.selection,
-    error: raw.error === undefined ? snapshot.error : asString(raw.error) || null,
+    error: raw["error"] === undefined ? snapshot.error : asString(raw["error"]) || null,
     active_node_path: status === 'running' ? snapshot.active_node_path : [],
-    document_id: raw.document_id === undefined ? snapshot.document_id : asString(raw.document_id) || null,
+    document_id: raw["document_id"] === undefined ? snapshot.document_id : asString(raw["document_id"]) || null,
   }
 }
 
@@ -654,11 +655,11 @@ function withMeta(snapshot: DeepResearchSnapshot, raw: Json): DeepResearchSnapsh
  */
 export function normalizeDeepResearchSnapshot(raw: unknown, previous?: DeepResearchSnapshot): DeepResearchSnapshot {
   const obj = asRecord(raw)
-  const sessionId = asString(obj.session_id) || previous?.session_id || 'research-session'
-  if (!Array.isArray(obj.events)) return withMeta(previous ?? emptyDeepResearchSnapshot(sessionId), obj)
-  const files = asArray(obj.files).map(asString).filter(Boolean)
+  const sessionId = asString(obj["session_id"]) || previous?.session_id || 'research-session'
+  if (!Array.isArray(obj["events"])) return withMeta(previous ?? emptyDeepResearchSnapshot(sessionId), obj)
+  const files = asArray(obj["files"]).map(asString).filter(Boolean)
   let snapshot = emptyDeepResearchSnapshot(sessionId)
-  obj.events.forEach((event, index) => {
+  obj["events"].forEach((event, index) => {
     snapshot = reduceDeepResearchEvent(snapshot, { sequence: index + 1, event: asRecord(event) })
   })
   return withMeta(
@@ -666,8 +667,8 @@ export function normalizeDeepResearchSnapshot(raw: unknown, previous?: DeepResea
       ...snapshot,
       files,
       artifacts: artifactsFor(sessionId, files),
-      report_markdown: asString(obj.report_markdown),
-      slidev_markdown: asString(obj.slidev_markdown),
+      report_markdown: asString(obj["report_markdown"]),
+      slidev_markdown: asString(obj["slidev_markdown"]),
     },
     obj,
   )
@@ -681,7 +682,7 @@ const NODE_STATUSES: readonly DeepResearchNodeStatus[] = ['completed', 'failed',
 
 function nodeEntry(snapshot: DeepResearchSnapshot, path: string[]): DeepResearchNodeSnapshot {
   const key = nodePathKey(path)
-  const nodeId = path[path.length - 1]
+  const nodeId = path[path.length - 1] ?? ''
   return (
     snapshot.nodes[key] ?? {
       node_id: nodeId,
@@ -742,10 +743,10 @@ function trace(snapshot: DeepResearchSnapshot, entry: Omit<DeepResearchTraceEntr
 
 /** A message's `toolUse` blocks and `toolResult` blocks. */
 function messageTools(message: Json): { uses: Json[]; results: Json[] } {
-  const blocks = asArray(message.content).map(asRecord)
+  const blocks = asArray(message["content"]).map(asRecord)
   return {
-    uses: blocks.map((block) => asRecord(block.toolUse)).filter((use) => use.toolUseId),
-    results: blocks.map((block) => asRecord(block.toolResult)).filter((result) => result.toolUseId),
+    uses: blocks.map((block) => asRecord(block["toolUse"])).filter((use) => use["toolUseId"]),
+    results: blocks.map((block) => asRecord(block["toolResult"])).filter((result) => result["toolUseId"]),
   }
 }
 
@@ -765,60 +766,115 @@ function parseBackgroundSettlement(content: unknown): {
 } | null {
   const arr = asArray(content)
   if (arr.length === 0) return null
-  const meta = asRecord(asRecord(arr[0]).json)
-  const taskId = asString(meta.task_id)
-  const toolUseId = asString(meta.tool_use_id)
-  const status = asString(meta.status)
+  const meta = asRecord(asRecord(arr[0])["json"])
+  const taskId = asString(meta["task_id"])
+  const toolUseId = asString(meta["tool_use_id"])
+  const status = asString(meta["status"])
   if (!taskId || !toolUseId || !status) return null
   const body = blocksText(arr.slice(1))
-  const errorMsg = asString(asRecord(meta.error).message)
+  const errorMsg = asString(asRecord(meta["error"])["message"])
   return { taskId, toolUseId, status, output: body || errorMsg }
 }
 
 function isSyntheticBackgroundGet(use: Json): boolean {
-  const input = asRecord(use.input)
-  return asString(use.name) === BACKGROUND_MANAGE_TOOL && input.mode === 'get' && asString(input.task_id) === asString(use.toolUseId)
+  const input = asRecord(use["input"])
+  return asString(use["name"]) === BACKGROUND_MANAGE_TOOL && input["mode"] === 'get' && asString(input["task_id"]) === asString(use["toolUseId"])
+}
+
+function parseSubagentControlResult(content: unknown): {
+  kind: 'spawn' | 'recover' | 'cancel'
+  subagentId: string
+  recoveredFrom?: string
+} | null {
+  const arr = asArray(content)
+  if (arr.length === 0) return null
+  const body = asRecord(asRecord(arr[0])["json"])
+  const subagentId = asString(body["subagent_id"])
+  if (subagentId && body["status"] === 'running') {
+    const recoveredFrom = asString(body["recovered_from"])
+    if (recoveredFrom) return { kind: 'recover', subagentId, recoveredFrom }
+    return { kind: 'spawn', subagentId }
+  }
+  const cancelled = asRecord(body["cancelled"])
+  const cancelledId = asString(cancelled["subagent_id"])
+  if (cancelledId) return { kind: 'cancel', subagentId: cancelledId }
+  return null
+}
+
+function parseSubagentResume(text: string): {
+  kind: 'completed' | 'hangup'
+  entries: Array<{ subagentId: string; status: string; output: string; hangupReason: string }>
+} | null {
+  const isCompleted = text.startsWith('[subagent-completed]')
+  const isHangup = text.startsWith('[subagent-hangup]')
+  if (!isCompleted && !isHangup) return null
+  const bracketIdx = text.indexOf('\n[')
+  if (bracketIdx < 0) return null
+  try {
+    const parsed = JSON.parse(text.slice(bracketIdx + 1))
+    if (!Array.isArray(parsed)) return null
+    const entries = parsed
+      .map(asRecord)
+      .filter((item) => asString(item["subagent_id"]))
+      .map((item) => ({
+        subagentId: asString(item["subagent_id"]),
+        status: asString(item["status"]) || 'completed',
+        output: asString(item["result"]) || asString(item["error"]),
+        hangupReason: asString(item["hangup_reason"]),
+      }))
+    return entries.length ? { kind: isCompleted ? 'completed' : 'hangup', entries } : null
+  } catch {
+    return null
+  }
+}
+
+function resolveSkillId(snapshot: DeepResearchSnapshot, path: string[], idOrSubagentId: string): string {
+  const key = nodePathKey(path)
+  const match = snapshot.skill_invocations.find(
+    (skill) => skill.node_key === key && (skill.id === idOrSubagentId || skill.subagent_id === idOrSubagentId),
+  )
+  return match?.id ?? idOrSubagentId
 }
 
 function foldSubagentEvent(snapshot: DeepResearchSnapshot, path: string[], id: string, event: Json, seq: number) {
   const stepId = `${id}:${seq}`
-  if (typeof event.data === 'string') {
-    const text = event.data
+  if (typeof event["data"] === 'string') {
+    const text = event["data"]
     return withSkill(snapshot, path, id, (skill) => ({
       steps: appendText(skill.steps, 'text', text, stepId),
       output_text: skill.output_text + text,
     }))
   }
-  if (typeof event.reasoningText === 'string') {
-    const text = event.reasoningText
+  if (typeof event["reasoningText"] === 'string') {
+    const text = event["reasoningText"]
     return withSkill(snapshot, path, id, (skill) => ({ steps: appendText(skill.steps, 'reasoning', text, stepId) }))
   }
-  const message = asRecord(event.message)
+  const message = asRecord(event["message"])
   const { uses, results } = messageTools(message)
-  if (message.role === 'assistant' && uses.length > 0) {
+  if (message["role"] === 'assistant' && uses.length > 0) {
     const visibleUses = uses.filter((use) => !isSyntheticBackgroundGet(use))
     if (visibleUses.length === 0) return snapshot
     return withSkill(snapshot, path, id, (skill) => ({
       tools: [
         ...skill.tools,
         ...visibleUses.map((use) => ({
-          id: asString(use.toolUseId),
-          tool_name: asString(use.name),
-          input: use.input,
-          input_preview: inputPreview(use.input),
+          id: asString(use["toolUseId"]),
+          tool_name: asString(use["name"]),
+          input: use["input"],
+          input_preview: inputPreview(use["input"]),
           status: 'running' as const,
           output: '',
           output_preview: '',
         })),
       ],
-      steps: [...skill.steps, ...visibleUses.map((use) => ({ id: `${stepId}:${asString(use.toolUseId)}`, kind: 'tool' as const, tool_id: asString(use.toolUseId) }))],
+      steps: [...skill.steps, ...visibleUses.map((use) => ({ id: `${stepId}:${asString(use["toolUseId"])}`, kind: 'tool' as const, tool_id: asString(use["toolUseId"]) }))],
     }))
   }
-  if (message.role === 'user' && results.length > 0) {
-    const byId = new Map(results.map((result) => [asString(result.toolUseId), result]))
+  if (message["role"] === 'user' && results.length > 0) {
+    const byId = new Map(results.map((result) => [asString(result["toolUseId"]), result]))
     const settlements = new Map<string, NonNullable<ReturnType<typeof parseBackgroundSettlement>>>()
     for (const result of results) {
-      const settled = parseBackgroundSettlement(result.content)
+      const settled = parseBackgroundSettlement(result["content"])
       if (settled && BACKGROUND_TERMINAL.has(settled.status)) {
         settlements.set(settled.toolUseId, settled)
       }
@@ -835,9 +891,9 @@ function foldSubagentEvent(snapshot: DeepResearchSnapshot, path: string[], id: s
           }
         }
         const result = byId.get(tool.id)
-        if (!result || isBackgroundDispatch(result.content)) return tool
-        const output = blocksText(result.content)
-        return { ...tool, status: result.status === 'error' ? 'failed' : 'completed', output, output_preview: output.slice(0, 300) }
+        if (!result || isBackgroundDispatch(result["content"])) return tool
+        const output = blocksText(result["content"])
+        return { ...tool, status: result["status"] === 'error' ? 'failed' : 'completed', output, output_preview: output.slice(0, 300) }
       }),
     }))
   }
@@ -847,21 +903,53 @@ function foldSubagentEvent(snapshot: DeepResearchSnapshot, path: string[], id: s
 function foldAgentMessage(snapshot: DeepResearchSnapshot, path: string[], message: Json, seq: number): DeepResearchSnapshot {
   const { uses, results } = messageTools(message)
   let next = snapshot
-  if (message.role === 'assistant') {
-    for (const use of uses.filter((item) => item.name === 'subagent')) {
-      const id = asString(use.toolUseId)
-      const input = asRecord(use.input)
-      const task = asString(input.task) || asString(input.prompt)
-      next = withSkill(next, path, id, () => ({ skill_name: asString(input.agent_type) || 'subagent', task }))
+  if (message["role"] === 'assistant') {
+    for (const use of uses.filter((item) => item["name"] === 'subagent')) {
+      const id = asString(use["toolUseId"])
+      const input = asRecord(use["input"])
+      const action = input["action"]
+      if (action !== undefined && action !== 'spawn') continue
+      const task = asString(input["task"]) || asString(input["prompt"])
+      next = withSkill(next, path, id, () => ({ skill_name: asString(input["agent_type"]) || 'subagent', task }))
       next = withNode(next, path, (node) => ({ activity: [...node.activity, { id: `skill:${id}`, kind: 'skill', skill_id: id }] }))
       next = { ...next, trace: trace(next, { sequence: seq, kind: 'skill', title: 'subagent', detail: task, node_path: path, status: 'running', skill_id: id }) }
     }
-    const text = blocksText(message.content)
+    const text = blocksText(message["content"])
     if (text) next = withNode(next, path, () => ({ output_preview: text.slice(0, 600) }))
   }
-  if (message.role === 'user') {
+  if (message["role"] === 'user') {
+    for (const rawBlock of asArray(message["content"])) {
+      const text = asString(asRecord(rawBlock)["text"])
+      if (!text) continue
+      const resume = parseSubagentResume(text)
+      if (!resume) continue
+      for (const entry of resume.entries) {
+        const targetId = resolveSkillId(next, path, entry.subagentId)
+        if (!next.skill_invocations.some((skill) => skill.id === targetId)) continue
+        if (resume.kind === 'completed') {
+          next = withSkill(next, path, targetId, (skill) => ({
+            status: entry.status === 'completed' ? 'completed' : 'failed',
+            summary: (entry.output || skill.output_text).slice(0, 600),
+            output_text: skill.output_text || entry.output,
+          }))
+        } else if (entry.hangupReason) {
+          next = {
+            ...next,
+            trace: trace(next, {
+              sequence: seq,
+              kind: 'skill',
+              title: 'subagent hangup',
+              detail: entry.hangupReason,
+              node_path: path,
+              status: 'running',
+              skill_id: targetId,
+            }),
+          }
+        }
+      }
+    }
     for (const result of results) {
-      const settled = parseBackgroundSettlement(result.content)
+      const settled = parseBackgroundSettlement(result["content"])
       if (settled && BACKGROUND_TERMINAL.has(settled.status) && next.skill_invocations.some((skill) => skill.id === settled.toolUseId)) {
         next = withSkill(next, path, settled.toolUseId, (skill) => ({
           status: settled.status === 'completed' ? 'completed' : 'failed',
@@ -870,12 +958,36 @@ function foldAgentMessage(snapshot: DeepResearchSnapshot, path: string[], messag
         }))
         continue
       }
-      if (isBackgroundDispatch(result.content)) continue
-      const id = asString(result.toolUseId)
+      if (isBackgroundDispatch(result["content"])) continue
+      const subControl = parseSubagentControlResult(result["content"])
+      const id = asString(result["toolUseId"])
+      if (subControl?.kind === 'spawn') {
+        if (next.skill_invocations.some((skill) => skill.id === id)) {
+          next = withSkill(next, path, id, () => ({ subagent_id: subControl.subagentId, status: 'running' }))
+        }
+        continue
+      }
+      if (subControl?.kind === 'recover' && subControl.recoveredFrom) {
+        const targetId = resolveSkillId(next, path, subControl.recoveredFrom)
+        if (next.skill_invocations.some((skill) => skill.id === targetId)) {
+          next = withSkill(next, path, targetId, () => ({ subagent_id: subControl.subagentId, status: 'running' }))
+        }
+        continue
+      }
+      if (subControl?.kind === 'cancel') {
+        const targetId = resolveSkillId(next, path, subControl.subagentId)
+        if (next.skill_invocations.some((skill) => skill.id === targetId)) {
+          next = withSkill(next, path, targetId, (skill) => ({
+            status: 'failed',
+            summary: skill.summary || 'Cancelled.',
+          }))
+        }
+        continue
+      }
       if (!next.skill_invocations.some((skill) => skill.id === id)) continue
-      const summary = blocksText(result.content)
+      const summary = blocksText(result["content"])
       next = withSkill(next, path, id, (skill) => ({
-        status: result.status === 'error' ? 'failed' : 'completed',
+        status: result["status"] === 'error' ? 'failed' : 'completed',
         summary: summary.slice(0, 600),
         output_text: skill.output_text || summary,
       }))
@@ -885,29 +997,32 @@ function foldAgentMessage(snapshot: DeepResearchSnapshot, path: string[], messag
 }
 
 function foldAgentEvent(snapshot: DeepResearchSnapshot, path: string[], event: Json, seq: number): DeepResearchSnapshot {
-  if (typeof event.data === 'string') {
-    const text = event.data
+  if (typeof event["data"] === 'string') {
+    const text = event["data"]
     return withNode(snapshot, path, (node) => ({
       activity: appendText(node.activity, 'text', text, `p${seq}`),
       streaming_text: node.streaming_text + text,
     }))
   }
-  if (typeof event.reasoningText === 'string') {
-    const text = event.reasoningText
+  if (typeof event["reasoningText"] === 'string') {
+    const text = event["reasoningText"]
     return withNode(snapshot, path, (node) => ({ activity: appendText(node.activity, 'reasoning', text, `p${seq}`) }))
   }
-  if (event.message) return foldAgentMessage(snapshot, path, asRecord(event.message), seq)
-  if (event.force_stop) return withNode(snapshot, path, () => ({ error: asString(event.force_stop_reason) || 'Stopped.' }))
-  const toolStream = asRecord(event.tool_stream_event)
-  const toolUse = asRecord(toolStream.tool_use)
-  if (toolUse.name === 'subagent' && toolStream.data && typeof toolStream.data === 'object') {
-    return foldSubagentEvent(snapshot, path, asString(toolUse.toolUseId), asRecord(toolStream.data), seq)
+  if (event["message"]) return foldAgentMessage(snapshot, path, asRecord(event["message"]), seq)
+  if (event["force_stop"]) return withNode(snapshot, path, () => ({ error: asString(event["force_stop_reason"]) || 'Stopped.' }))
+  const toolStream = asRecord(event["tool_stream_event"])
+  const toolUse = asRecord(toolStream["tool_use"])
+  if (toolUse["name"] === 'subagent' && toolStream["data"] && typeof toolStream["data"] === 'object') {
+    const input = asRecord(toolUse["input"])
+    const subId = asString(input["subagent_id"]) || asString(toolUse["toolUseId"])
+    const skillId = resolveSkillId(snapshot, path, subId)
+    return foldSubagentEvent(snapshot, path, skillId, asRecord(toolStream["data"]), seq)
   }
   return snapshot
 }
 
 function multiAgentResultError(result: Json): string | null {
-  for (const child of Object.values(asRecord(result.results))) {
+  for (const child of Object.values(asRecord(result["results"]))) {
     const found = nodeResultError(asRecord(child))
     if (found) return found
   }
@@ -915,19 +1030,19 @@ function multiAgentResultError(result: Json): string | null {
 }
 
 function nodeResultError(result: Json): string | null {
-  const inner = asRecord(result.result)
-  if (inner.type === 'exception') return asString(inner.message) || 'Failed.'
-  if (inner.type === 'multiagent_result' && result.status === 'failed') return multiAgentResultError(inner)
+  const inner = asRecord(result["result"])
+  if (inner["type"] === 'exception') return asString(inner["message"]) || 'Failed.'
+  if (inner["type"] === 'multiagent_result' && result["status"] === 'failed') return multiAgentResultError(inner)
   return null
 }
 
 function foldNodeStop(snapshot: DeepResearchSnapshot, path: string[], event: Json): DeepResearchSnapshot {
-  const result = asRecord(event.node_result)
-  const status = NODE_STATUSES.find((value) => value === result.status) ?? 'completed'
+  const result = asRecord(event["node_result"])
+  const status = NODE_STATUSES.find((value) => value === result["status"]) ?? 'completed'
   const key = nodePathKey(path)
   const next = withNode(snapshot, path, () => ({
     status,
-    execution_time_ms: asNumber(result.execution_time),
+    execution_time_ms: asNumber(result["execution_time"]),
     error: nodeResultError(result),
   }))
   return {
@@ -937,8 +1052,8 @@ function foldNodeStop(snapshot: DeepResearchSnapshot, path: string[], event: Jso
     trace: trace(next, {
       sequence: next.sequence,
       kind: 'node',
-      title: humanizeIdentifier(path[path.length - 1]),
-      detail: nodeResultError(result) ?? `${status} in ${Math.round(asNumber(result.execution_time) / 1000)} s`,
+      title: humanizeIdentifier(path[path.length - 1] ?? ''),
+      detail: nodeResultError(result) ?? `${status} in ${Math.round(asNumber(result["execution_time"]) / 1000)} s`,
       node_path: path,
       status,
     }),
@@ -946,11 +1061,11 @@ function foldNodeStop(snapshot: DeepResearchSnapshot, path: string[], event: Jso
 }
 
 function foldEvent(snapshot: DeepResearchSnapshot, path: string[], event: Json, seq: number): DeepResearchSnapshot {
-  const nodeId = asString(event.node_id)
+  const nodeId = asString(event["node_id"])
   const nodePath = [...path, nodeId]
-  switch (event.type) {
+  switch (event["type"]) {
     case 'multiagent_node_stream':
-      return foldEvent(snapshot, nodePath, asRecord(event.event), seq)
+      return foldEvent(snapshot, nodePath, asRecord(event["event"]), seq)
     case 'multiagent_node_start': {
       const key = nodePathKey(nodePath)
       const next = withNode(snapshot, nodePath, (node) => ({
@@ -972,11 +1087,11 @@ function foldEvent(snapshot: DeepResearchSnapshot, path: string[], event: Json, 
     case 'multiagent_node_stop':
       return foldNodeStop(snapshot, nodePath, event)
     case 'multiagent_node_cancel':
-      return withNode(snapshot, nodePath, () => ({ status: 'cancelled', error: asString(event.message) || null }))
+      return withNode(snapshot, nodePath, () => ({ status: 'cancelled', error: asString(event["message"]) || null }))
     case 'multiagent_handoff': {
-      const from = asArray(event.from_node_ids).map(asString)
-      const to = asArray(event.to_node_ids).map(asString)
-      const message = asString(event.message)
+      const from = asArray(event["from_node_ids"]).map(asString)
+      const to = asArray(event["to_node_ids"]).map(asString)
+      const message = asString(event["message"])
       const handoffs = from.flatMap((source) =>
         to.map((target) => ({ id: `h${seq}:${source}:${target}`, from_node: source, to_node: target, message, node_path: path })),
       )
@@ -996,16 +1111,16 @@ function foldEvent(snapshot: DeepResearchSnapshot, path: string[], event: Json, 
     }
     case 'multiagent_result': {
       if (path.length > 0) return snapshot
-      const result = asRecord(event.result)
-      const usage = asRecord(result.accumulated_usage)
-      const failed = result.status === 'failed'
+      const result = asRecord(event["result"])
+      const usage = asRecord(result["accumulated_usage"])
+      const failed = result["status"] === 'failed'
       return {
         ...snapshot,
         status: failed ? 'failed' : snapshot.status,
         error: failed ? multiAgentResultError(result) ?? snapshot.error ?? 'The formation failed.' : snapshot.error,
         active_node_path: [],
-        execution_time_ms: asNumber(result.execution_time),
-        usage: { inputTokens: asNumber(usage.inputTokens), outputTokens: asNumber(usage.outputTokens), totalTokens: asNumber(usage.totalTokens) },
+        execution_time_ms: asNumber(result["execution_time"]),
+        usage: { inputTokens: asNumber(usage["inputTokens"]), outputTokens: asNumber(usage["outputTokens"]), totalTokens: asNumber(usage["totalTokens"]) },
       }
     }
     default:
@@ -1089,7 +1204,7 @@ async function request(path: string, options: RequestOptions, init: RequestInit 
     const text = await response.text()
     let detail = text
     try {
-      detail = asString(asRecord(JSON.parse(text)).detail) || text
+      detail = asString(asRecord(JSON.parse(text))["detail"]) || text
     } catch {
       // not JSON
     }
@@ -1103,17 +1218,17 @@ const runPath = (sessionId: string, userId: string, suffix = '') =>
 
 export async function fetchDeepResearchStatus(options: RequestOptions = {}): Promise<DeepResearchStatusResponse> {
   const raw = asRecord(await request('/status', options))
-  const selection = asRecord(raw.default_selection)
-  const depths = asArray(raw.depths).filter((value): value is ResearchDepth => RESEARCH_DEPTHS.some((depth) => depth === value))
+  const selection = asRecord(raw["default_selection"])
+  const depths = asArray(raw["depths"]).filter((value): value is ResearchDepth => RESEARCH_DEPTHS.some((depth) => depth === value))
   return {
-    available: raw.available !== false,
+    available: raw["available"] !== false,
     default_selection: {
-      provider: asString(selection.provider) || null,
-      model_id: asString(selection.model_id) || null,
-      reasoning_effort: asString(selection.reasoning_effort) || null,
+      provider: asString(selection["provider"]) || null,
+      model_id: asString(selection["model_id"]) || null,
+      reasoning_effort: asString(selection["reasoning_effort"]) || null,
     },
     depths: depths.length > 0 ? depths : [...RESEARCH_DEPTHS],
-    topology: normalizeFormationTopology(raw.topology),
+    topology: normalizeFormationTopology(raw["topology"]),
   }
 }
 
@@ -1141,7 +1256,7 @@ export async function listDeepResearchRuns(
 ): Promise<DeepResearchSnapshot[]> {
   const params = new URLSearchParams({ user_id: userId || 'default', limit: String(options.limit ?? 50) })
   const raw = asRecord(await request(`/runs?${params}`, options))
-  return asArray(raw.runs).map((item) => normalizeDeepResearchSnapshot(item))
+  return asArray(raw["runs"]).map((item) => normalizeDeepResearchSnapshot(item))
 }
 
 export async function getDeepResearchRun(sessionId: string, userId = 'default', options: RequestOptions = {}): Promise<DeepResearchSnapshot> {
@@ -1167,7 +1282,7 @@ export interface ReportDocument {
 
 export async function fetchReportDocument(sessionId: string, userId = 'default', options: RequestOptions = {}): Promise<ReportDocument> {
   const raw = asRecord(await request(runPath(sessionId, userId, '/document'), options))
-  return { title: asString(raw.title), content: asString(raw.content), document_id: asString(raw.document_id) || null }
+  return { title: asString(raw["title"]), content: asString(raw["content"]), document_id: asString(raw["document_id"]) || null }
 }
 
 /** Record the Document the report was saved as on the run. */
@@ -1200,7 +1315,7 @@ export async function streamDeepResearchEvents(
   const params = new URLSearchParams({ user_id: userId || 'default', after: String(Math.max(0, options.after ?? 0)) })
   const response = await fetcher(
     `${resolveBase(options.baseUrl)}/deep-research/runs/${encodeURIComponent(sessionId)}/events?${params}`,
-    { headers: { Accept: 'text/event-stream' }, signal: options.signal },
+    { headers: { Accept: 'text/event-stream' }, ...(options.signal ? { signal: options.signal } : {}) },
   )
   if (!response.ok) throw new Error(`HTTP ${response.status}: ${await response.text()}`)
   if (!response.body) throw new Error('Deep Research SSE response has no body')

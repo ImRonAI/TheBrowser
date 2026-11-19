@@ -31,9 +31,9 @@ export const MediaBlock = Node.create({
 
   addAttributes() {
     return {
-      kind: { default: 'video', parseHTML: (element) => kindOf(element.getAttribute('data-kind')), renderHTML: (attributes) => ({ 'data-kind': kindOf(attributes.kind) }) },
-      src: { default: '', parseHTML: (element) => safeEmbedSrc(element.getAttribute('data-src')), renderHTML: (attributes) => ({ 'data-src': safeEmbedSrc(attributes.src) }) },
-      title: { default: '', parseHTML: (element) => element.getAttribute('data-title') ?? '', renderHTML: (attributes) => ({ 'data-title': String(attributes.title ?? '') }) },
+      kind: { default: 'video', parseHTML: (element) => kindOf(element.getAttribute('data-kind')), renderHTML: (attributes) => ({ 'data-kind': kindOf(attributes["kind"]) }) },
+      src: { default: '', parseHTML: (element) => safeEmbedSrc(element.getAttribute('data-src')), renderHTML: (attributes) => ({ 'data-src': safeEmbedSrc(attributes["src"]) }) },
+      title: { default: '', parseHTML: (element) => element.getAttribute('data-title') ?? '', renderHTML: (attributes) => ({ 'data-title': String(attributes["title"] ?? '') }) },
     }
   },
 
@@ -42,20 +42,20 @@ export const MediaBlock = Node.create({
   },
 
   renderHTML({ node, HTMLAttributes }) {
-    const src = safeEmbedSrc(node.attrs.src)
-    return ['div', mergeAttributes(HTMLAttributes, { 'data-type': 'media' }), ['a', { href: src, rel: 'noopener noreferrer' }, node.attrs.title || src]]
+    const src = safeEmbedSrc(node.attrs["src"])
+    return ['div', mergeAttributes(HTMLAttributes, { 'data-type': 'media' }), ['a', { href: src, rel: 'noopener noreferrer' }, node.attrs["title"] || src]]
   },
 
   renderMarkdown: (node) => {
-    const src = safeEmbedSrc(node.attrs?.src)
-    const label = kindOf(node.attrs?.kind) === 'audio' ? 'Audio' : 'Video'
-    return src ? `[${label}: ${node.attrs?.title || nameFromUrl(src)}](${src})` : ''
+    const src = safeEmbedSrc(node.attrs?.["src"])
+    const label = kindOf(node.attrs?.["kind"]) === 'audio' ? 'Audio' : 'Video'
+    return src ? `[${label}: ${node.attrs?.["title"] || nameFromUrl(src)}](${src})` : ''
   },
 
   addCommands() {
     return {
       insertMedia: (media) => placeBlock((schema) => safeEmbedSrc(media.src)
-        ? schema.nodes.media.create({ kind: kindOf(media.kind), src: media.src, title: media.title || nameFromUrl(media.src) })
+        ? schema.nodes["media"]?.create({ kind: kindOf(media.kind), src: media.src, title: media.title || nameFromUrl(media.src) }) ?? null
         : null),
     }
   },
@@ -66,9 +66,9 @@ export const MediaBlock = Node.create({
 })
 
 function MediaView({ node, editor, selected, deleteNode }: NodeViewProps) {
-  const kind = kindOf(node.attrs.kind)
-  const src = safeEmbedSrc(node.attrs.src)
-  const title = String(node.attrs.title || (src ? nameFromUrl(src) : kind === 'audio' ? 'Audio' : 'Video'))
+  const kind = kindOf(node.attrs["kind"])
+  const src = safeEmbedSrc(node.attrs["src"])
+  const title = String(node.attrs["title"] || (src ? nameFromUrl(src) : kind === 'audio' ? 'Audio' : 'Video'))
   let host = ''
   try { host = src ? new URL(src).hostname.replace(/^www\./, '') : '' } catch { host = '' }
   const Icon = kind === 'audio' ? Music : Clapperboard

@@ -70,7 +70,7 @@ const META_TONE: Record<string, string> = {
 
 /** One selectable row: favicon, status dot or type icon, name, description, meta badge and a check when chosen. */
 function ContextRow({ id, item, selected, active, label, onPick, onHover }: {
-  id: string; item: ContextItem; selected: boolean; active: boolean; label?: string; onPick: () => void; onHover: () => void
+  id: string; item: ContextItem; selected: boolean; active: boolean; label?: string | undefined; onPick: () => void; onHover: () => void
 }) {
   const TypeIcon = contextIcon(item.type)
   return (
@@ -113,17 +113,17 @@ function restoreFocus(trigger: HTMLElement | null, menu: HTMLElement | null) {
 interface ContextPickerProps {
   selectedContexts: ContextItem[]
   onContextsChange: (contexts: ContextItem[]) => void
-  className?: string
+  className?: string | undefined
   /** Where the dropdown anchors relative to the button. 'top' opens upward, 'bottom' opens downward. */
-  anchor?: 'top' | 'bottom'
+  anchor?: 'top' | 'bottom' | undefined
   /** The trigger stays in place but does not open (e.g. while a run is active). */
-  disabled?: boolean
+  disabled?: boolean | undefined
   /** Width of the dropdown in px. */
-  width?: number
+  width?: number | undefined
   /** The dropdown's right edge never passes this x (px); defaults to 8px inside the window. */
-  boundsRight?: number
+  boundsRight?: number | undefined
   /** Height cap of the scrolling list in px (default 320). */
-  maxListHeight?: number
+  maxListHeight?: number | undefined
 }
 
 export function ContextPicker({ selectedContexts, onContextsChange, className, anchor = 'top', disabled = false, width = 336, boundsRight, maxListHeight = 320 }: ContextPickerProps) {
@@ -212,7 +212,7 @@ export function ContextPicker({ selectedContexts, onContextsChange, className, a
       // A text file's own words go in the entry's Markdown (`text`, at most 20,000 characters on the server).
       const textual = file.type.startsWith('text/') || /\.(md|markdown|txt|csv|tsv|json|ya?ml|xml|html?|log|ini|toml)$/i.test(file.name)
       const text = textual ? (await file.text()).slice(0, 20_000) : undefined
-      const saved = await createContextClient(API_BASE_URL, userId).upload({ kind, blob: file, name: file.name, title: file.name, text })
+      const saved = await createContextClient(API_BASE_URL, userId).upload({ kind, blob: file, name: file.name, title: file.name, ...(text !== undefined ? { text } : {}) })
       onContextsChange([...selectedContexts, savedContextItem(saved)])
       setUpload({ busy: false })
       reload()

@@ -167,9 +167,8 @@ function TeachingWorkspace({ userId, agentId, apiBaseUrl = LIVE_API_BASE_URL, ch
   const request = useCallback(async <T,>(path: string, body?: unknown): Promise<T> => {
     const response = await fetch(`${apiBaseUrl}/teaching${path}`, {
       method: body === undefined ? 'GET' : 'POST',
-      headers: body === undefined ? undefined : { 'Content-Type': 'application/json' },
-      body: body === undefined ? undefined : JSON.stringify(body),
-      signal: controller.current?.signal,
+      ...(body !== undefined ? { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : {}),
+      ...(controller.current?.signal ? { signal: controller.current.signal } : {}),
     })
     if (!response.ok) {
       const data: unknown = await response.json().catch(() => null)

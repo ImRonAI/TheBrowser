@@ -27,7 +27,7 @@ export function TableMenu({ editor }: { editor: Editor }) {
     editor,
     selector: ({ editor }) => {
       const table = editor.isActive('table')
-      const color: unknown = table ? editor.getAttributes('table').headerColor : null
+      const color: unknown = table ? editor.getAttributes('table')["headerColor"] : null
       return {
         headerRow: table && isHeaderRow(editor),
         headerColumn: table && isHeaderColumn(editor),

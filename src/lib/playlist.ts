@@ -25,7 +25,12 @@ export function shuffled(ids: readonly string[], random: () => number = Math.ran
   const out = [...ids]
   for (let i = out.length - 1; i > 0; i--) {
     const j = Math.floor(random() * (i + 1))
-    ;[out[i], out[j]] = [out[j], out[i]]
+    const a = out[i]
+    const b = out[j]
+    if (a !== undefined && b !== undefined) {
+      out[i] = b
+      out[j] = a
+    }
   }
   if (first !== undefined) {
     const at = out.indexOf(first)
@@ -35,7 +40,10 @@ export function shuffled(ids: readonly string[], random: () => number = Math.ran
 }
 
 /** Build a queue from a song list; `startId` selects the first track (defaults to the first in order). */
-export function createQueue(ids: readonly string[], options: { mode?: PlayMode; repeat?: RepeatMode; startId?: string; random?: () => number } = {}): QueueState {
+export function createQueue(
+  ids: readonly string[],
+  options: { mode?: PlayMode | undefined; repeat?: RepeatMode | undefined; startId?: string | undefined; random?: (() => number) | undefined } = {},
+): QueueState {
   const mode = options.mode ?? 'sequential'
   const repeat = options.repeat ?? 'off'
   const list = [...ids]
@@ -69,7 +77,14 @@ export function next(queue: QueueState, reason: 'ended' | 'skip' = 'ended', rand
   if (queue.repeat === 'off') return { ...queue, cursor: -1 }
   const order = queue.mode === 'shuffle' ? shuffled(queue.ids, random) : queue.order
   // Avoid playing the same track twice in a row across the wrap when there is a choice.
-  if (queue.mode === 'shuffle' && order.length > 1 && order[0] === currentId(queue)) [order[0], order[1]] = [order[1], order[0]]
+  if (queue.mode === 'shuffle' && order.length > 1 && order[0] === currentId(queue)) {
+    const firstTrack = order[0]
+    const secondTrack = order[1]
+    if (firstTrack !== undefined && secondTrack !== undefined) {
+      order[0] = secondTrack
+      order[1] = firstTrack
+    }
+  }
   return { ...queue, order, cursor: 0 }
 }
 

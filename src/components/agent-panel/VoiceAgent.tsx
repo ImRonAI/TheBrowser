@@ -49,20 +49,20 @@ const WARNING_NOTE = 'rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs
 const DANGER_NOTE = 'rounded-xl border border-red-200 bg-red-50 p-3 text-xs leading-relaxed text-red-800 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-200'
 
 export interface VoiceAgentProps {
-  userId?: string
-  agentScope?: string
+  userId?: string | undefined
+  agentScope?: string | undefined
   /** The native thread (`session_id`) this Live session opens: the BidiAgent restores and writes it natively. */
   sessionId: string
   /** Issue scope: the saved issue, read-only context. */
-  issue?: { id: string; title?: string; description?: string }
+  issue?: { id: string; title?: string | undefined; description?: string | undefined } | undefined
   /** Pending external prompt (Ask Ron) is consumed through this surface when it is the visible mode. */
-  externalPrompt?: string | null
-  onExternalPromptConsumed?: () => void
+  externalPrompt?: string | null | undefined
+  onExternalPromptConsumed?: (() => void) | undefined
   /** Called by the parent before switching modes; resolves false when tools are still pending. */
-  registerHandOff?: (handOff: (() => Promise<boolean>) | null) => void
+  registerHandOff?: ((handOff: (() => Promise<boolean>) | null) => void) | undefined
   /** Which view owns this conversation's socket; a second view sees a blocker instead of a second session. */
-  owner?: string
-  compact?: boolean
+  owner?: string | undefined
+  compact?: boolean | undefined
 }
 
 export function VoiceAgent({ userId = 'default', agentScope = 'panel', sessionId, issue,
@@ -101,7 +101,13 @@ export function VoiceAgent({ userId = 'default', agentScope = 'panel', sessionId
   const musicStore = useLiveMusicStore
   useEffect(() => {
     if (agentScope !== 'panel') return
-    musicStore.getState().publish({ liveStatus: live.status, available: Boolean(live.musicAvailable), music: live.music, agentId: live.agentId, userId })
+    musicStore.getState().publish({
+      liveStatus: live.status,
+      available: Boolean(live.musicAvailable),
+      music: live.music,
+      ...(live.agentId !== undefined ? { agentId: live.agentId } : {}),
+      userId,
+    })
   }, [agentScope, live.status, live.musicAvailable, live.music, live.agentId, userId, musicStore])
 
   function stopVideo() {
@@ -148,9 +154,18 @@ export function VoiceAgent({ userId = 'default', agentScope = 'panel', sessionId
     musicSink.close()
     setStopping(false)
     useLiveSessionStore.getState().release(historyKey, owner)
-    commit({ ...EMPTY_LIVE_STATE, turns: state.current.turns, journalHtml: state.current.journalHtml, journalSaved: state.current.journalSaved,
-      model: state.current.model, voice: state.current.voice, effort: state.current.effort, unknownResults: state.current.unknownResults,
-      historySource: state.current.historySource })
+    const { turns, journalHtml, journalSaved, model, voice, effort, unknownResults, historySource } = state.current
+    commit({
+      ...EMPTY_LIVE_STATE,
+      turns,
+      ...(journalHtml !== undefined ? { journalHtml } : {}),
+      ...(journalSaved !== undefined ? { journalSaved } : {}),
+      ...(model !== undefined ? { model } : {}),
+      ...(voice !== undefined ? { voice } : {}),
+      ...(effort !== undefined ? { effort } : {}),
+      ...(unknownResults !== undefined ? { unknownResults } : {}),
+      ...(historySource !== undefined ? { historySource } : {}),
+    })
     stopResolvers.current.splice(0).forEach((resolve) => resolve(stopAcknowledged.current))
   }
 
@@ -162,7 +177,8 @@ export function VoiceAgent({ userId = 'default', agentScope = 'panel', sessionId
     const ws = socket.current
     if (state.current.unknownResults?.length && !ws) {
       if (!confirm('Some tool outcomes are unknown. Continue only after checking the affected files or pages. Have you checked them?')) return Promise.resolve(false)
-      commit({ ...state.current, unknownResults: undefined })
+      const { unknownResults: _unknownResults, ...restState } = state.current
+      commit(restState)
     }
     if (!ws || ws.readyState !== WebSocket.OPEN) { if (socket.current) disconnect(); return Promise.resolve(true) }
     stopVideo(); stopMic()
@@ -204,11 +220,19 @@ export function VoiceAgent({ userId = 'default', agentScope = 'panel', sessionId
     } catch { /* Optional. */ }
     finally { if (deadline) clearTimeout(deadline) }
     return {
-      page_url: typeof page.url === 'string' ? page.url : undefined,
-      page_title: typeof page.title === 'string' ? page.title : undefined,
-      selected_text: typeof page.selected_text === 'string' ? page.selected_text : undefined,
-      page_text: typeof page.text === 'string' ? page.text : undefined,
-      issue,
+      ...(typeof page["url"] === 'string' ? { page_url: page["url"] } : {}),
+      ...(typeof page["title"] === 'string' ? { page_title: page["title"] } : {}),
+      ...(typeof page["selected_text"] === 'string' ? { selected_text: page["selected_text"] } : {}),
+      ...(typeof page["text"] === 'string' ? { page_text: page["text"] } : {}),
+      ...(issue !== undefined
+        ? {
+            issue: {
+              id: issue.id,
+              ...(issue.title !== undefined ? { title: issue.title } : {}),
+              ...(issue.description !== undefined ? { description: issue.description } : {}),
+            },
+          }
+        : {}),
     }
   }, [issue])
 
@@ -237,7 +261,8 @@ export function VoiceAgent({ userId = 'default', agentScope = 'panel', sessionId
     }
     const epoch = generation.current
     setError('')
-    commit({ ...state.current, status: 'connecting', error: undefined, errorCode: undefined, restartNotice: undefined })
+    const { error: _error, errorCode: _errorCode, restartNotice: _restartNotice, ...restCurrent } = state.current
+    commit({ ...restCurrent, status: 'connecting' })
     stopAcknowledged.current = false
     if (!await sink.start()) { setError('Audio output could not start.'); disconnect(); return }
     if (!await musicSink.start()) { setError('Music output could not start.'); disconnect(); return }
@@ -366,7 +391,8 @@ export function VoiceAgent({ userId = 'default', agentScope = 'panel', sessionId
           stopVideo()
         }
       }
-      stream.getVideoTracks()[0].onended = stopVideo
+      const firstTrack = stream.getVideoTracks()[0]
+      if (firstTrack) firstTrack.onended = stopVideo
       if (video.current) video.current.srcObject = stream
       current.timer = window.setInterval(sendFrame, VIDEO_FRAME_INTERVAL_MS)
       setSource(kind)

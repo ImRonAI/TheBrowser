@@ -33,10 +33,10 @@ export const PdfBlock = Node.create({
 
   addAttributes() {
     return {
-      src: { default: '', parseHTML: (element) => pdfSource(element.getAttribute('data-src'))?.src ?? '', renderHTML: (attributes) => ({ 'data-src': pdfSource(attributes.src)?.src ?? '' }) },
-      name: { default: 'Document.pdf', parseHTML: (element) => element.getAttribute('data-name') || 'Document.pdf', renderHTML: (attributes) => ({ 'data-name': String(attributes.name || 'Document.pdf') }) },
-      size: { default: null, parseHTML: (element) => Number(element.getAttribute('data-size')) || null, renderHTML: (attributes) => (attributes.size ? { 'data-size': String(attributes.size) } : {}) },
-      height: { default: null, parseHTML: (element) => clampHeight(element.getAttribute('data-height'), PDF_HEIGHT), renderHTML: (attributes) => (attributes.height ? { 'data-height': String(attributes.height) } : {}) },
+      src: { default: '', parseHTML: (element) => pdfSource(element.getAttribute('data-src'))?.src ?? '', renderHTML: (attributes) => ({ 'data-src': pdfSource(attributes["src"])?.src ?? '' }) },
+      name: { default: 'Document.pdf', parseHTML: (element) => element.getAttribute('data-name') || 'Document.pdf', renderHTML: (attributes) => ({ 'data-name': String(attributes["name"] || 'Document.pdf') }) },
+      size: { default: null, parseHTML: (element) => Number(element.getAttribute('data-size')) || null, renderHTML: (attributes) => (attributes["size"] ? { 'data-size': String(attributes["size"]) } : {}) },
+      height: { default: null, parseHTML: (element) => clampHeight(element.getAttribute('data-height'), PDF_HEIGHT), renderHTML: (attributes) => (attributes["height"] ? { 'data-height': String(attributes["height"]) } : {}) },
     }
   },
 
@@ -45,23 +45,23 @@ export const PdfBlock = Node.create({
   },
 
   renderHTML({ node, HTMLAttributes }) {
-    const source = pdfSource(node.attrs.src)
-    const label = `PDF: ${node.attrs.name}`
+    const source = pdfSource(node.attrs["src"])
+    const label = `PDF: ${node.attrs["name"]}`
     return ['div', mergeAttributes(HTMLAttributes, { 'data-type': 'pdf' }),
       source?.kind === 'url' ? ['a', { href: source.src, rel: 'noopener noreferrer' }, label] : ['span', {}, label]]
   },
 
   renderMarkdown: (node) => {
-    const source = pdfSource(node.attrs?.src)
-    const name = String(node.attrs?.name || 'Document.pdf')
+    const source = pdfSource(node.attrs?.["src"])
+    const name = String(node.attrs?.["name"] || 'Document.pdf')
     if (!source) return ''
-    return source.kind === 'url' ? `[PDF: ${name}](${source.src})` : `PDF: ${name} (uploaded into this page${node.attrs?.size ? `, ${formatBytes(Number(node.attrs.size))}` : ''})`
+    return source.kind === 'url' ? `[PDF: ${name}](${source.src})` : `PDF: ${name} (uploaded into this page${node.attrs?.["size"] ? `, ${formatBytes(Number(node.attrs["size"]))}` : ''})`
   },
 
   addCommands() {
     return {
       insertPdf: (pdf) => placeBlock((schema) => pdfSource(pdf.src)
-        ? schema.nodes.pdf.create({ src: pdf.src, name: pdf.name || nameFromUrl(pdf.src), size: pdf.size ?? null, height: PDF_HEIGHT })
+        ? schema.nodes["pdf"]?.create({ src: pdf.src, name: pdf.name || nameFromUrl(pdf.src), size: pdf.size ?? null, height: PDF_HEIGHT }) ?? null
         : null),
     }
   },
@@ -76,7 +76,7 @@ function useUploadedPdf(src: string, upload: boolean): { url: string; error: str
   const decoded = useMemo(() => (upload ? decodeBase64DataUrl(src) : null), [src, upload])
   const [url, setUrl] = useState('')
   useEffect(() => {
-    if (!decoded || !isPdfBytes(decoded.bytes)) { setUrl(''); return }
+    if (!decoded || !isPdfBytes(decoded.bytes)) { setUrl(''); return undefined }
     const next = URL.createObjectURL(new Blob([decoded.bytes as BlobPart], { type: 'application/pdf' }))
     setUrl(next)
     return () => URL.revokeObjectURL(next)
@@ -85,16 +85,16 @@ function useUploadedPdf(src: string, upload: boolean): { url: string; error: str
 }
 
 function PdfView({ node, editor, selected, updateAttributes, deleteNode }: NodeViewProps) {
-  const source = pdfSource(node.attrs.src)
-  const name = String(node.attrs.name || 'Document.pdf')
+  const source = pdfSource(node.attrs["src"])
+  const name = String(node.attrs["name"] || 'Document.pdf')
   const upload = source?.kind === 'upload'
   const uploaded = useUploadedPdf(source?.src ?? '', upload)
   const viewer = upload ? uploaded.url : source?.src ?? ''
-  const { height, handle } = useResizableHeight(node.attrs.height, PDF_HEIGHT, (next) => updateAttributes({ height: next }))
+  const { height, handle } = useResizableHeight(node.attrs["height"], PDF_HEIGHT, (next) => updateAttributes({ height: next }))
   const editable = editor.isEditable
   let host = ''
   if (source?.kind === 'url') { try { host = new URL(source.src).hostname.replace(/^www\./, '') } catch { host = '' } }
-  const subtitle = upload ? `PDF${node.attrs.size ? ` · ${formatBytes(Number(node.attrs.size))}` : ''} · stored in this page` : `PDF · ${host}`
+  const subtitle = upload ? `PDF${node.attrs["size"] ? ` · ${formatBytes(Number(node.attrs["size"]))}` : ''} · stored in this page` : `PDF · ${host}`
 
   return <BlockFrame selected={selected} data-pdf-kind={source?.kind ?? 'invalid'}>
     <BlockHeader icon={<FileText className="size-4" />} title={name} subtitle={subtitle}>

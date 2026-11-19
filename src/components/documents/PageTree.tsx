@@ -19,7 +19,7 @@ export function PageTree({ documents, page, showDraft, collapsed, onToggle, onOp
   onToggle: (id: string) => void
   onOpen: (id: string) => void
   onAddChild: (parent: ProjectDocumentSummary) => void
-  matches?: ReadonlySet<string>
+  matches?: ReadonlySet<string> | undefined
 }) {
   const tree = useMemo(() => documentTree(documents), [documents])
   const hidden = useMemo(() => {

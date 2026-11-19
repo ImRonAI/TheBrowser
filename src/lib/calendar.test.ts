@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-process.env.TZ = 'America/New_York'
+process.env["TZ"] = 'America/New_York'
 
 const {
   addDays, dayLines, isCurrentPeriod, isMultiDay, issuesInRange, issuesOnDay, layoutOverlaps, monthWeeks, periodLabel, periodRange,
@@ -12,7 +12,11 @@ type Issue = import('../types/projects.ts').Issue
 
 const base: Issue = { id: 'i', projectId: 'p', number: 1, version: 1, type: 'task', title: 'Issue', status: 'backlog', priority: 'medium',
   rank: 1, createdAt: 0, updatedAt: 0, assignees: [], labels: [], customFields: {}, workProducts: [], context: [] }
-const at = (local: string) => fromLocalDateTime(local)
+const at = (local: string): string => {
+  const iso = fromLocalDateTime(local)
+  assert.ok(iso)
+  return iso
+}
 const issue = (id: string, dates: Partial<Pick<Issue, 'startDate' | 'endDate' | 'dueDate'>>): Issue => ({ ...base, id, ...dates })
 const ymd = (d: Date) => `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`
 
@@ -27,6 +31,7 @@ test('month grid uses only the weeks the month needs', () => {
   assert.equal(monthWeeks(new Date(2026, 10, 10)).length, 5) // Nov 2026
   assert.equal(monthWeeks(new Date(2026, 7, 10)).length, 6) // Aug 2026 starts Saturday
   const nov = monthWeeks(new Date(2026, 10, 10))
+  assert.ok(nov[0]?.[0] && nov[4]?.[6])
   assert.equal(ymd(nov[0][0]), '2026-11-1')
   assert.equal(ymd(nov[4][6]), '2026-12-5')
 })
@@ -113,13 +118,15 @@ test('multi-day issues become continuous bars in the lowest free lane of each we
     issue('later', { startDate: at('2026-11-09T09:00'), endDate: at('2026-11-10T10:00') }),
   ], week)
   const byId = Object.fromEntries(spans.map((s) => [s.issue.id, s]))
+  const { a, b, c, d, e } = byId
+  assert.ok(a && b && c && d && e)
   assert.deepEqual(spans.map((s) => s.issue.id), ['d', 'a', 'b', 'c', 'e'])
-  assert.deepEqual([byId.d.startCol, byId.d.endCol, byId.d.lane, byId.d.continuesBefore], [0, 1, 0, true])
-  assert.deepEqual([byId.a.startCol, byId.a.endCol, byId.a.lane], [1, 3, 1])
-  assert.deepEqual([byId.b.startCol, byId.b.endCol, byId.b.lane], [2, 4, 0])
-  assert.deepEqual([byId.c.startCol, byId.c.endCol, byId.c.lane], [4, 5, 1])
-  assert.deepEqual([byId.e.startCol, byId.e.endCol, byId.e.lane, byId.e.continuesAfter], [5, 6, 0, true])
-  assert.equal(isMultiDay(byId.a.issue), true)
+  assert.deepEqual([d.startCol, d.endCol, d.lane, d.continuesBefore], [0, 1, 0, true])
+  assert.deepEqual([a.startCol, a.endCol, a.lane], [1, 3, 1])
+  assert.deepEqual([b.startCol, b.endCol, b.lane], [2, 4, 0])
+  assert.deepEqual([c.startCol, c.endCol, c.lane], [4, 5, 1])
+  assert.deepEqual([e.startCol, e.endCol, e.lane, e.continuesAfter], [5, 6, 0, true])
+  assert.equal(isMultiDay(a.issue), true)
 })
 
 test('day lines hold every single-day entry by time, and a bar issue only for a due date outside its bar', () => {

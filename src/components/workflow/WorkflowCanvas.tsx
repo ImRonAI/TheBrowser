@@ -17,14 +17,14 @@ import { cn } from '@/lib/utils'
 
 export interface WorkflowNodeData extends Record<string, unknown> {
   label: string
-  description?: string
-  content?: string
-  footer?: string
+  description?: string | undefined
+  content?: string | undefined
+  footer?: string | undefined
   kind: WorkflowStepKind
   handles: { source: boolean; target: boolean }
   /** Present only in the builder: the AI Elements Toolbar shows Edit / Delete on the selected step. */
-  onEdit?: (id: string) => void
-  onDelete?: (id: string) => void
+  onEdit?: ((id: string) => void) | undefined
+  onDelete?: ((id: string) => void) | undefined
 }
 export type WorkflowFlowNode = FlowNode<WorkflowNodeData, 'workflow'>
 
@@ -118,8 +118,8 @@ export const workflowEdgeTypes: EdgeTypes = { animated: AnimatedEdge, temporary:
 /** Arrowhead at the target end; the colour follows the canvas's edge stroke. */
 export const WORKFLOW_ARROW = { type: MarkerType.ArrowClosed, width: 18, height: 18, color: 'var(--xy-edge-stroke)' } as const
 
-export function flowEdge(edge: { id: string; source: string; target: string; type: string; label?: string }): FlowEdge {
-  return { id: edge.id, source: edge.source, target: edge.target, type: edge.type, label: edge.label, markerEnd: WORKFLOW_ARROW }
+export function flowEdge(edge: { id: string; source: string; target: string; type: string; label?: string | undefined }): FlowEdge {
+  return { id: edge.id, source: edge.source, target: edge.target, type: edge.type, ...(edge.label !== undefined ? { label: edge.label } : {}), markerEnd: WORKFLOW_ARROW }
 }
 
 /** Graph → React Flow nodes/edges. A handle always exists where an arrow attaches, whatever the step's kind. */
@@ -132,7 +132,7 @@ export function toFlow(graph: WorkflowGraph): { nodes: WorkflowFlowNode[]; edges
       return {
         id: step.id,
         type: 'workflow',
-        position: positions[step.id],
+        position: positions[step.id] ?? { x: 0, y: 0 },
         data: {
           label: step.label, description: step.description, content: step.content, footer: step.footer, kind,
           handles: {

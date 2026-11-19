@@ -36,10 +36,20 @@ interface VideoSummaryEvent {
 }
 
 function metaFrom(result: ExtractResponse): ArticleMeta {
-  const text = (value: string | null | undefined) => value || undefined
+  const title = result.title || undefined
+  const description = result.description || undefined
+  const siteName = result.site_name || undefined
+  const published = result.published || undefined
+  const image = result.image || undefined
+  const language = result.language || undefined
   return {
-    title: text(result.title), description: text(result.description), authors: Array.isArray(result.authors) ? result.authors : [],
-    siteName: text(result.site_name), published: text(result.published), image: text(result.image), language: text(result.language),
+    ...(title !== undefined ? { title } : {}),
+    ...(description !== undefined ? { description } : {}),
+    authors: Array.isArray(result.authors) ? result.authors : [],
+    ...(siteName !== undefined ? { siteName } : {}),
+    ...(published !== undefined ? { published } : {}),
+    ...(image !== undefined ? { image } : {}),
+    ...(language !== undefined ? { language } : {}),
     truncated: result.truncated === true,
   }
 }
@@ -118,12 +128,15 @@ export function ArticleReaderPage({ href }: { href: string }) {
               const event = JSON.parse(jsonText) as VideoSummaryEvent
               if (controller.signal.aborted) return
               if (event.type === 'meta' && event.meta) {
+                const metaTitle = event.meta.title || undefined
+                const metaPublished = event.meta.published || undefined
+                const metaImage = event.meta.image || undefined
                 setMeta({
-                  title: event.meta.title || undefined,
+                  ...(metaTitle !== undefined ? { title: metaTitle } : {}),
                   authors: Array.isArray(event.meta.authors) ? event.meta.authors : [],
                   siteName: event.meta.site_name || 'YouTube',
-                  published: event.meta.published || undefined,
-                  image: event.meta.image || undefined,
+                  ...(metaPublished !== undefined ? { published: metaPublished } : {}),
+                  ...(metaImage !== undefined ? { image: metaImage } : {}),
                   truncated: false,
                 })
               } else if (event.type === 'delta' && event.text) {
@@ -193,8 +206,15 @@ export function ArticleReaderPage({ href }: { href: string }) {
   }
 
   // Ask Ren sends the article as it is now; it waits for the full text while that is still being retrieved.
-  const askRen = { article, headline: cleanTitle(story.title, [story.source, story.hostname, meta?.siteName]),
-    favicon: story.favicon || undefined, image: meta?.image || story.heroImage, ready: !loading }
+  const favicon = story.favicon || undefined
+  const image = meta?.image || story.heroImage
+  const askRen = {
+    article,
+    headline: cleanTitle(story.title, [story.source, story.hostname, meta?.siteName]),
+    ...(favicon !== undefined ? { favicon } : {}),
+    ...(image !== undefined ? { image } : {}),
+    ready: !loading,
+  }
 
   return <main ref={mainRef} onScroll={onScroll} className="h-full overflow-auto bg-surface-0 font-normal text-ink dark:bg-surface-900 dark:text-ink-inverse">
     {/* Exact surface tokens: opaque paper/ink in Light and Dark, the frosted blue content tint in Glass. */}

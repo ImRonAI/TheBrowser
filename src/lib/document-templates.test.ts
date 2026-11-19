@@ -23,7 +23,10 @@ test('templates are real structure built only from blocks the page editor loads'
     'table', 'tbody', 'tr', 'th', 'td', 'workflow-block'])
   for (const template of DOCUMENT_TEMPLATES.filter((item) => item.id !== 'blank')) {
     const { content } = instantiateTemplate(template, NOW, ids)
-    const tags = [...content.matchAll(/<([a-z][a-z0-9-]*)\b/g)].map((match) => match[1])
+    const tags = [...content.matchAll(/<([a-z][a-z0-9-]*)\b/g)].map((match) => {
+      assert.ok(match[1])
+      return match[1]
+    })
     assert.ok(tags.length > 10, `${template.id} has structure`)
     for (const tag of tags) assert.ok(allowed.has(tag), `${template.id} uses <${tag}>`)
     assert.ok((content.match(/<h2>/g) ?? []).length >= 3, `${template.id} has sections`)
@@ -48,7 +51,7 @@ test('titles carry the date where the page is about a day, week or quarter', () 
 test('the design doc’s workflow block carries a valid graph and a fresh id', () => {
   const { content } = instantiateTemplate(findTemplate('design-doc')!, NOW, () => 'wf-1')
   const match = content.match(/<workflow-block data-id="wf-1" data-title="System context" data-graph="([^"]+)">/)
-  assert.ok(match)
+  assert.ok(match && match[1])
   const graph = normalizeWorkflow(JSON.parse(match[1].replace(/&quot;/g, '"').replace(/&amp;/g, '&')))
   assert.deepEqual(graph.steps.map((step) => step.label), ['Client', 'New service', 'Data store', 'Response'])
   assert.equal(graph.connections.length, 3)

@@ -32,7 +32,7 @@ const RELATION_ICONS: Record<IssueLinkType, LucideIcon> = {
   relates: Link2, blocks: Ban, enables: LockOpen, implements: Hammer, fixes: Wrench, discovers: Telescope, duplicates: Copy,
 }
 
-export function RelationIcon({ kind, className }: { kind: RelationKind; className?: string }) {
+export function RelationIcon({ kind, className }: { kind: RelationKind; className?: string | undefined }) {
   const Icon = RELATION_ICONS[RELATION_KINDS[kind].type]
   return <Icon aria-hidden className={cn('size-3.5 shrink-0', className)} />
 }
@@ -46,7 +46,7 @@ export function RelationIcon({ kind, className }: { kind: RelationKind; classNam
  */
 export function IssueRelationshipsField({ issue, disabled, onOpen, write }: {
   issue: Issue
-  disabled?: boolean
+  disabled?: boolean | undefined
   /** Opens a related issue in this workspace (the workspace saves the draft first). */
   onOpen: (issueId: string) => void
   write: RelationshipWrite
@@ -101,7 +101,7 @@ function RelationRow({ relation, issue, projectsById, blocking, disabled, removi
   issue: Issue
   projectsById: Map<string, Project>
   blocking: IssueBlocking | null
-  disabled?: boolean
+  disabled?: boolean | undefined
   removing: boolean
   onOpen: (issueId: string) => void
   onRemove: () => void
@@ -144,7 +144,7 @@ function RelationRow({ relation, issue, projectsById, blocking, disabled, removi
  */
 function AddRelationship({ issue, disabled, onAdd }: {
   issue: Issue
-  disabled?: boolean
+  disabled?: boolean | undefined
   /** Creates the link; resolves to the error to show, or null once it is saved. */
   onAdd: (kind: RelationKind, other: Issue) => Promise<string | null>
 }) {
@@ -274,10 +274,11 @@ function KindPicker({ value, onChoose, onBack }: { value: RelationKind; onChoose
   const order = RELATION_KIND_ROWS.flat()
   const move = (event: KeyboardEvent<HTMLDivElement>) => {
     const row = RELATION_KIND_ROWS.findIndex((kinds) => kinds.includes(focused))
-    const column = RELATION_KIND_ROWS[row].indexOf(focused)
+    const currentRow = RELATION_KIND_ROWS[row]
+    const column = currentRow ? currentRow.indexOf(focused) : 0
     const inRow = (index: number) => {
       const kinds = RELATION_KIND_ROWS[Math.max(0, Math.min(index, RELATION_KIND_ROWS.length - 1))]
-      return kinds[Math.min(column, kinds.length - 1)]
+      return kinds ? kinds[Math.min(column, kinds.length - 1)] : undefined
     }
     const at = order.indexOf(focused)
     const next = ({

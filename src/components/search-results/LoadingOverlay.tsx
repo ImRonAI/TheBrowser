@@ -111,13 +111,13 @@ interface LoadingOverlayProps {
   /** Whether the overlay is visible */
   isVisible: boolean
   /** Optional query to display */
-  query?: string
+  query?: string | undefined
   /** How often to rotate messages (ms) */
-  messageInterval?: number
+  messageInterval?: number | undefined
   /** How often to rotate illustrations (ms) */
-  illustrationInterval?: number
+  illustrationInterval?: number | undefined
   /** Optional custom class name */
-  className?: string
+  className?: string | undefined
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -131,10 +131,10 @@ export function LoadingOverlay({
   className = '',
 }: LoadingOverlayProps) {
   const [currentMessage, setCurrentMessage] = useState(() => 
-    QUIRKY_MESSAGES[Math.floor(Math.random() * QUIRKY_MESSAGES.length)]
+    QUIRKY_MESSAGES[Math.floor(Math.random() * QUIRKY_MESSAGES.length)] ?? 'Herding digital cats...'
   )
   const [currentIllustration, setCurrentIllustration] = useState(() =>
-    ILLUSTRATIONS[Math.floor(Math.random() * ILLUSTRATIONS.length)]
+    ILLUSTRATIONS[Math.floor(Math.random() * ILLUSTRATIONS.length)] ?? 'chat-ui.svg'
   )
   const [isExiting, setIsExiting] = useState(false)
   const [shouldRender, setShouldRender] = useState(isVisible)
@@ -142,12 +142,12 @@ export function LoadingOverlay({
   // Get random item from array (avoiding repeats)
   const getRandomItem = useCallback(<T,>(arr: T[], current: T): T => {
     const filtered = arr.filter(item => item !== current)
-    return filtered[Math.floor(Math.random() * filtered.length)]
+    return filtered[Math.floor(Math.random() * filtered.length)] ?? current
   }, [])
 
   // Rotate messages
   useEffect(() => {
-    if (!isVisible) return
+    if (!isVisible) return undefined
     
     const interval = setInterval(() => {
       setCurrentMessage(prev => getRandomItem(QUIRKY_MESSAGES, prev))
@@ -158,7 +158,7 @@ export function LoadingOverlay({
 
   // Rotate illustrations
   useEffect(() => {
-    if (!isVisible) return
+    if (!isVisible) return undefined
     
     const interval = setInterval(() => {
       setCurrentIllustration(prev => getRandomItem(ILLUSTRATIONS, prev))
@@ -172,6 +172,7 @@ export function LoadingOverlay({
     if (isVisible) {
       setShouldRender(true)
       setIsExiting(false)
+      return undefined
     } else {
       setIsExiting(true)
       const timer = setTimeout(() => setShouldRender(false), 500)

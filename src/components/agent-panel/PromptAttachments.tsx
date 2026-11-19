@@ -43,7 +43,7 @@ function useEditorPalette() {
 }
 
 /** The square at the start of a card: the volt mark of a paste, a tab's favicon, or the context kind's icon. */
-function AttachmentTile({ attachment, favicon, dot, size = 'md' }: { attachment: PromptAttachment; favicon?: string; dot?: string; size?: 'md' | 'lg' }) {
+function AttachmentTile({ attachment, favicon, dot, size = 'md' }: { attachment: PromptAttachment; favicon?: string | undefined; dot?: string | undefined; size?: 'md' | 'lg' | undefined }) {
   const box = size === 'lg' ? 'size-9 rounded-[11px]' : 'size-8 rounded-[10px]'
   if (attachment.kind === 'pasted') {
     return <span aria-hidden className={cn(box, 'relative flex shrink-0 items-center justify-center overflow-hidden text-white',
@@ -63,12 +63,12 @@ function AttachmentTile({ attachment, favicon, dot, size = 'md' }: { attachment:
 export interface AttachmentEditorProps {
   attachment: PromptAttachment
   editable: boolean
-  onTextChange?: (text: string) => void
+  onTextChange?: ((text: string) => void) | undefined
   onClose: () => void
-  favicon?: string
-  dot?: string
+  favicon?: string | undefined
+  dot?: string | undefined
   /** A paste longer than one attachment carries: its full length. */
-  clippedFrom?: number
+  clippedFrom?: number | undefined
 }
 
 /** The hover editor: header (name, size, copy, close), search with match navigation, then the sandboxed text editor. */
@@ -190,7 +190,7 @@ export function AttachmentEditor({ attachment, editable, onTextChange, onClose, 
 }
 
 /** The preview's frame while a context item's text is read for the first time. */
-function AttachmentEditorLoading({ attachment, favicon, dot }: { attachment: PromptAttachment; favicon?: string; dot?: string }) {
+function AttachmentEditorLoading({ attachment, favicon, dot }: { attachment: PromptAttachment; favicon?: string | undefined; dot?: string | undefined }) {
   return <div role="status" aria-label={`Reading ${attachment.title}`}
     className="flex h-[18rem] w-[min(25rem,calc(100vw-2rem))] flex-col overflow-hidden rounded-2xl border border-black/[0.08] bg-white/[0.93] shadow-[0_32px_80px_-30px_rgb(11_12_23/0.5)] backdrop-blur-2xl dark:border-white/[0.09] dark:bg-[#111113]/[0.93]">
     <div className="flex items-center gap-2.5 border-b border-black/[0.06] px-3 py-2.5 dark:border-white/[0.07]">
@@ -210,22 +210,22 @@ export interface PromptAttachmentCardProps {
   attachment: PromptAttachment
   /** In the composer: removable and editable. On a sent message: read only. */
   editable: boolean
-  onRemove?: () => void
-  onTextChange?: (text: string) => void
+  onRemove?: (() => void) | undefined
+  onTextChange?: ((text: string) => void) | undefined
   /** Called each time the preview opens (a context item reads its text then). */
-  onOpen?: () => void
+  onOpen?: (() => void) | undefined
   /** A context item's text is still being read for the first time. */
-  loading?: boolean
+  loading?: boolean | undefined
   /** Changes when a re-read brings new text: the open editor restarts with it. */
-  version?: number
+  version?: number | undefined
   /** The title model is still naming a paste. */
-  naming?: boolean
-  edited?: boolean
-  clippedFrom?: number
-  favicon?: string
+  naming?: boolean | undefined
+  edited?: boolean | undefined
+  clippedFrom?: number | undefined
+  favicon?: string | undefined
   /** A context item's status colour (Tailwind background class). */
-  dot?: string
-  align?: 'start' | 'end'
+  dot?: string | undefined
+  align?: 'start' | 'end' | undefined
 }
 
 /** One attachment card with its hover editor (hover opens it; a click pins it until Close, Esc or a click outside). */
@@ -314,7 +314,7 @@ export function PromptAttachmentCard({ attachment, editable, onRemove, onTextCha
       </Attachment>
     </AttachmentHoverCardTrigger>
     <AttachmentHoverCardContent ref={contentRef} side="top" sideOffset={10} align={align} collisionPadding={8}
-      collisionBoundary={boundary ?? undefined}
+      {...(boundary ? { collisionBoundary: boundary } : {})}
       className="w-auto border-0 bg-transparent p-0 shadow-none outline-none"
       onFocusCapture={() => { focusInside.current = true; pinned.current = true; show(true) }}
       onPointerDown={() => { pinned.current = true }}
@@ -330,7 +330,7 @@ export function PromptAttachmentCard({ attachment, editable, onRemove, onTextCha
 }
 
 /** The composer's attachments: pastes first, then what was opened in Ren, then the picked context items (all editable, removable). */
-export function ComposerAttachmentTray({ attachments, className }: { attachments: ComposerAttachmentsState; className?: string }) {
+export function ComposerAttachmentTray({ attachments, className }: { attachments: ComposerAttachmentsState; className?: string | undefined }) {
   const { pasted, contexts, given, previews, edits, naming, notice } = attachments
   if (!pasted.length && !contexts.length && !given.length && !notice) return null
   return <div className={className}>
@@ -342,8 +342,10 @@ export function ComposerAttachmentTray({ attachments, className }: { attachments
       {contexts.map((item) => {
         const preview = previews[item.id]
         const edited = edits[item.id]
+        const { url: itemUrl, ...restItem } = item
+        const source = item.type === 'tab' && itemUrl !== undefined ? { ...restItem, url: itemUrl } : restItem
         return <PromptAttachmentCard key={item.id} editable version={preview?.version}
-          attachment={contextAttachment({ ...item, url: item.type === 'tab' ? item.url : undefined }, edited ?? preview?.text ?? '')}
+          attachment={contextAttachment(source, edited ?? preview?.text ?? '')}
           favicon={item.favicon} dot={item.color?.startsWith('bg-') ? item.color : undefined} edited={edited !== undefined}
           loading={edited === undefined && preview === undefined} onOpen={() => attachments.loadPreview(item)}
           onRemove={() => attachments.removeContext(item.id)} onTextChange={(text) => attachments.editContext(item.id, text)} />

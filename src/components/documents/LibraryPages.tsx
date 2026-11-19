@@ -204,7 +204,7 @@ export function LibraryPages({ documents, projects, listState, listError, signed
         )}
         {listState === 'ready' && (search ? results : (
           <>
-            {sectionBlock(sections[0])}
+            {sections[0] ? sectionBlock(sections[0]) : null}
             <p className="px-2 pb-1 pt-4 font-mono text-[11px] font-medium uppercase leading-none tracking-[0.08em] text-ink-secondary dark:text-ink-inverse-muted">Projects</p>
             {projectsNote}
             {sections.slice(1).map(sectionBlock)}

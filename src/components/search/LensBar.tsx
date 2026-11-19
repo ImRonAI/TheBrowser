@@ -38,7 +38,9 @@ export function LensBar({ active, onChange, lenses }: LensBarProps) {
     else if (event.key === 'End') next = SEARCH_TABS.length - 1
     else return
     event.preventDefault()
-    const id = SEARCH_TABS[next].id
+    const targetTab = SEARCH_TABS[next]
+    if (!targetTab) return
+    const id = targetTab.id
     onChange(id)
     refs.current[id]?.focus()
   }

@@ -50,9 +50,9 @@ export interface PromptAttachment {
   /** Exactly what the agent reads. */
   text: string
   /** A tab's address. */
-  url?: string
+  url?: string | undefined
   /** Where the text came from, in a few words (a context item's description). */
-  source?: string
+  source?: string | undefined
 }
 
 export interface TextMatch {
@@ -130,7 +130,7 @@ export async function requestPasteTitle(apiBase: string, text: string, signal?: 
       body: JSON.stringify({ text }),
       headers: { 'Content-Type': 'application/json' },
       method: 'POST',
-      signal,
+      ...(signal ? { signal } : {}),
     })
     if (!response.ok) return null
     const { title }: { title?: unknown } = await response.json()
@@ -199,9 +199,9 @@ export function clipWithNote(text: string, max: number): string {
 
 /** The fields of an open tab's context (`tabs:get-context`) that become its attachment text. */
 export interface TabContext {
-  url?: string
-  title?: string
-  dom?: { text?: string; metas?: { name: string; content: string }[] }
+  url?: string | undefined
+  title?: string | undefined
+  dom?: { text?: string | undefined; metas?: { name: string; content: string }[] | undefined } | undefined
 }
 
 /** An open tab as text: its description, then the page's readable text (no markup), clipped. */
@@ -217,9 +217,9 @@ export interface ContextSource {
   id: string
   type: ContextAttachmentKind
   name: string
-  description?: string
-  meta?: string
-  url?: string
+  description?: string | undefined
+  meta?: string | undefined
+  url?: string | undefined
 }
 
 /** A context-menu item as an attachment carrying `text` (read at send, or as the user edited it). */
@@ -293,14 +293,16 @@ const ATTRIBUTE = /\s+([a-z]+)="([^"]*)"/g
 /** The attachment a user-message text block carries, or null for any other text. */
 export function parseAttachmentBlock(text: string): PromptAttachment | null {
   const match = BLOCK.exec(text)
-  if (!match) return null
+  if (!match || match[1] === undefined || match[2] === undefined) return null
   const fields: Record<string, string> = {}
-  for (const [, name, value] of match[1].matchAll(ATTRIBUTE)) fields[name] = unescapeAttribute(value)
-  const kind = fields.kind as AttachmentKind
-  if (!fields.id || !fields.title || !ATTACHMENT_KINDS.includes(kind)) return null
+  for (const [, name, value] of match[1].matchAll(ATTRIBUTE)) {
+    if (name !== undefined && value !== undefined) fields[name] = unescapeAttribute(value)
+  }
+  const kind = fields["kind"] as AttachmentKind
+  if (!fields["id"] || !fields["title"] || !ATTACHMENT_KINDS.includes(kind)) return null
   return {
-    id: fields.id, kind, title: fields.title, text: match[2].replace(ESCAPED_CLOSING, (tag) => `</${tag.slice(3)}`),
-    ...(fields.url ? { url: fields.url } : {}), ...(fields.source ? { source: fields.source } : {}),
+    id: fields["id"], kind, title: fields["title"], text: match[2].replace(ESCAPED_CLOSING, (tag) => `</${tag.slice(3)}`),
+    ...(fields["url"] ? { url: fields["url"] } : {}), ...(fields["source"] ? { source: fields["source"] } : {}),
   }
 }
 
@@ -315,7 +317,7 @@ export function messageTitle(texts: string[]): string {
     const pasted = texts.map(parseAttachmentBlock).find((attachment) => attachment?.kind === 'pasted')
     if (pasted) return pasted.title.slice(0, 200)
   }
-  return first.split(/\r?\n/)[0].slice(0, 200)
+  return (first.split(/\r?\n/)[0] ?? '').slice(0, 200)
 }
 
 // ── The editor shown on hover (a sandboxed document in WebPreviewBody) ───────

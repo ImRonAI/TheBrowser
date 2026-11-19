@@ -6,8 +6,8 @@ import { cn } from '@/utils/cn'
 
 export interface AgentModelOption {
   id: string
-  owned_by?: string
-  provider?: string
+  owned_by?: string | undefined
+  provider?: string | undefined
 }
 
 export interface AgentModelSelection {
@@ -49,10 +49,10 @@ function readableModelName(id: string): string {
   const words = rawName.split('-')
   const formatted: string[] = []
   for (let index = 0; index < words.length; index += 1) {
-    const word = words[index]
+    const word = words[index] ?? ''
     if (/^\d+$/.test(word) && /^\d+$/.test(words[index + 1] ?? '')) {
       const numericParts = [word]
-      while (/^\d+$/.test(words[index + 1] ?? '')) numericParts.push(words[++index])
+      while (/^\d+$/.test(words[index + 1] ?? '')) numericParts.push(words[++index] ?? '')
       formatted.push(numericParts.join('.'))
     } else if (['gpt', 'glm'].includes(word.toLowerCase())) formatted.push(word.toUpperCase())
     else formatted.push(word.charAt(0).toUpperCase() + word.slice(1))
@@ -70,13 +70,13 @@ function normalizeModels(raw: unknown): AgentModelOption[] {
   const models: AgentModelOption[] = []
   for (const item of raw) {
     const entry = record(item)
-    const id = typeof item === 'string' ? item : entry.id
+    const id = typeof item === 'string' ? item : entry["id"]
     if (typeof id !== 'string' || !id.trim()) continue
-    const provider = typeof entry.provider === 'string' ? entry.provider : undefined
+    const provider = typeof entry["provider"] === 'string' ? entry["provider"] : undefined
     const identity = modelOptionValue({ id, provider })
     if (seen.has(identity)) continue
     seen.add(identity)
-    models.push({ id, provider, owned_by: typeof entry.owned_by === 'string' ? entry.owned_by : undefined })
+    models.push({ id, provider, owned_by: typeof entry["owned_by"] === 'string' ? entry["owned_by"] : undefined })
   }
   return models
 }
@@ -84,29 +84,29 @@ function normalizeModels(raw: unknown): AgentModelOption[] {
 function parseCatalogue(raw: unknown) {
   const data = record(raw)
   return {
-    models: normalizeModels(data.data),
-    defaultModel: typeof data.default_model === 'string' ? data.default_model : '',
-    defaultProvider: typeof data.default_provider === 'string' ? data.default_provider : '',
-    providerErrors: Object.fromEntries(Object.entries(record(data.errors)).filter((entry): entry is [string, string] => typeof entry[1] === 'string')),
+    models: normalizeModels(data["data"]),
+    defaultModel: typeof data["default_model"] === 'string' ? data["default_model"] : '',
+    defaultProvider: typeof data["default_provider"] === 'string' ? data["default_provider"] : '',
+    providerErrors: Object.fromEntries(Object.entries(record(data["errors"])).filter((entry): entry is [string, string] => typeof entry[1] === 'string')),
   }
 }
 
 function parseProviders(raw: unknown): Record<string, boolean> {
   const data = record(raw)
-  if (!data.providers || typeof data.providers !== 'object' || Array.isArray(data.providers)) {
+  if (!data["providers"] || typeof data["providers"] !== 'object' || Array.isArray(data["providers"])) {
     throw new Error('Provider configuration returned an invalid response.')
   }
-  const providers = record(data.providers)
+  const providers = record(data["providers"])
   // The backend lists only the providers it offers for chat (RON_CHAT_PROVIDERS); true/false is key presence.
   return Object.fromEntries(PROVIDERS.filter(({ id }) => id in providers).map(({ id }) => [id, providers[id] === true]))
 }
 
 function parseEfforts(raw: unknown): string[] {
   const data = record(raw)
-  if (!Array.isArray(data.efforts) || data.efforts.some((effort) => typeof effort !== 'string' || !effort)) {
+  if (!Array.isArray(data["efforts"]) || data["efforts"].some((effort) => typeof effort !== 'string' || !effort)) {
     throw new Error('Reasoning capabilities returned an invalid response.')
   }
-  return [...new Set(data.efforts as string[])]
+  return [...new Set(data["efforts"] as string[])]
 }
 
 // Results are keyed by both URL and retry generation. A previous model's
@@ -178,19 +178,19 @@ const capitalize = (text: string) => text.charAt(0).toUpperCase() + text.slice(1
 
 interface ModelSelectorProps {
   value: string
-  provider?: string
-  effort?: string
+  provider?: string | undefined
+  effort?: string | undefined
   models: AgentModelOption[]
-  providers?: Record<string, boolean>
-  providersLoading?: boolean
-  providersError?: string
-  modelsLoading?: boolean
-  modelsError?: string
-  providerErrors?: Record<string, string>
-  disabled?: boolean
-  className?: string
+  providers?: Record<string, boolean> | undefined
+  providersLoading?: boolean | undefined
+  providersError?: string | undefined
+  modelsLoading?: boolean | undefined
+  modelsError?: string | undefined
+  providerErrors?: Record<string, string> | undefined
+  disabled?: boolean | undefined
+  className?: string | undefined
   onChange: (modelId: string, provider: string, effort: string) => void
-  onOpen?: () => void
+  onOpen?: (() => void) | undefined
 }
 
 /**
@@ -316,7 +316,7 @@ export function ModelSelector({ value, provider = '', effort = '', models, provi
   </Popover>
 }
 
-function RequestError({ message, onRetry }: { message: string; onRetry?: () => void }) {
+function RequestError({ message, onRetry }: { message: string; onRetry?: (() => void) | undefined }) {
   return <div className="m-1 rounded-lg bg-amber-50 px-2.5 py-2 text-[11px] text-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
     <p role="alert" className="break-words">{message}</p>
     {onRetry && <button type="button" onClick={onRetry} className={cn('mt-1 rounded font-semibold underline underline-offset-2', focus)}>Retry</button>}

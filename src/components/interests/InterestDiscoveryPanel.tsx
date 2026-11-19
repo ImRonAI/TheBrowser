@@ -107,12 +107,11 @@ export function InterestDiscoveryPanel() {
           {/* Draggable Panel - no blocking backdrop */}
           <motion.div
             drag={!inNativeSurface}
-            dragControls={inNativeSurface ? undefined : dragControls}
             // Only the header drags the panel; selecting text or scrolling inside it must not move it.
             dragListener={false}
             dragMomentum={false}
             dragElastic={0.1}
-            dragConstraints={inNativeSurface ? undefined : constraintsRef}
+            {...(inNativeSurface ? {} : { dragControls, dragConstraints: constraintsRef })}
             initial={{ opacity: 0, scale: 0.95, x: 0, y: 0 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.95 }}

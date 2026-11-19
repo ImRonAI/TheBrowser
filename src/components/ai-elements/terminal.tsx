@@ -22,7 +22,7 @@ interface TerminalContextType {
   output: string;
   isStreaming: boolean;
   autoScroll: boolean;
-  onClear?: () => void;
+  onClear?: (() => void) | undefined;
 }
 
 const TerminalContext = createContext<TerminalContextType>({
@@ -33,9 +33,9 @@ const TerminalContext = createContext<TerminalContextType>({
 
 export type TerminalProps = HTMLAttributes<HTMLDivElement> & {
   output: string;
-  isStreaming?: boolean;
-  autoScroll?: boolean;
-  onClear?: () => void;
+  isStreaming?: boolean | undefined;
+  autoScroll?: boolean | undefined;
+  onClear?: (() => void) | undefined;
 };
 
 export const Terminal = ({

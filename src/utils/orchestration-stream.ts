@@ -138,7 +138,7 @@ function applyVisualizationSnapshot(event: OrchestrationStreamEvent) {
 
   if (event.activeAgents && event.activeAgents.length > 0) {
     const ids = event.activeAgents
-      .map((agent) => String(agent.id || agent.name || ""))
+      .map((agent) => String(agent["id"] || agent["name"] || ""))
       .filter(Boolean);
     if (ids.length > 0) {
       store.setActiveAgents(ids);
@@ -147,7 +147,7 @@ function applyVisualizationSnapshot(event: OrchestrationStreamEvent) {
 
   if (event.activeAgents) {
     event.activeAgents.forEach((agent) => {
-      const agentId = String(agent.id || agent.name || "");
+      const agentId = String(agent["id"] || agent["name"] || "");
       // Cast to expected structure with chainOfThought
       const agentData = agent as { chainOfThought?: { steps?: AIChainOfThoughtStep[] } };
       const steps = agentData.chainOfThought?.steps;
@@ -180,7 +180,7 @@ function handleNodeStream(event: OrchestrationStreamEvent) {
   const existing = store.agentStreamingData.get(nodeId);
   const update: AgentStreamingData = {};
 
-  const reasoningText = streamEvent.reasoningText as string | undefined;
+  const reasoningText = streamEvent["reasoningText"] as string | undefined;
   if (reasoningText) {
     const current = existing?.reasoning?.content || "";
     const content = `${current}${reasoningText}`;
@@ -192,13 +192,13 @@ function handleNodeStream(event: OrchestrationStreamEvent) {
     );
   }
 
-  const dataText = streamEvent.data as string | undefined;
+  const dataText = streamEvent["data"] as string | undefined;
   if (dataText) {
     const current = existing?.output || "";
     update.output = `${current}${dataText}`;
   }
 
-  const toolUse = (streamEvent.current_tool_use || streamEvent.currentToolUse) as
+  const toolUse = (streamEvent["current_tool_use"] || streamEvent["currentToolUse"]) as
     | Record<string, unknown>
     | undefined;
   if (toolUse) {
@@ -208,7 +208,7 @@ function handleNodeStream(event: OrchestrationStreamEvent) {
     }
   }
 
-  const toolStream = streamEvent.tool_stream_event as Record<string, unknown> | undefined;
+  const toolStream = streamEvent["tool_stream_event"] as Record<string, unknown> | undefined;
   if (toolStream) {
     const toolUpdate = buildToolStreamUpdate(toolStream);
     if (toolUpdate) {
@@ -216,7 +216,7 @@ function handleNodeStream(event: OrchestrationStreamEvent) {
     }
   }
 
-  const toolResult = streamEvent.tool_result as Record<string, unknown> | undefined;
+  const toolResult = streamEvent["tool_result"] as Record<string, unknown> | undefined;
   if (toolResult) {
     const toolUpdate = buildToolResultUpdate(toolResult);
     if (toolUpdate) {
@@ -301,23 +301,23 @@ function parseInput(input: unknown): Record<string, unknown> | null {
 }
 
 function buildWorkflowState(input: Record<string, unknown>): WorkflowState | null {
-  const tasks = Array.isArray(input.tasks) ? (input.tasks as WorkflowTask[]) : [];
+  const tasks = Array.isArray(input["tasks"]) ? (input["tasks"] as WorkflowTask[]) : [];
   if (tasks.length === 0) return null;
 
-  const workflowId = String(input.workflow_id || input.workflowId || `workflow-${Date.now()}`);
+  const workflowId = String(input["workflow_id"] || input["workflowId"] || `workflow-${Date.now()}`);
   const normalizedTasks = tasks.map((task, index) => {
     // Cast task to Record<string, unknown> to access potential snake_case properties from backend
     const rawTask = task as unknown as Record<string, unknown>;
     return {
-      taskId: String(rawTask.task_id || rawTask.taskId || `task-${index + 1}`),
-      description: String(rawTask.description || rawTask.task_prompt || "Task"),
-      dependencies: Array.isArray(rawTask.dependencies) ? rawTask.dependencies : [],
-      tools: Array.isArray(rawTask.tools) ? rawTask.tools : undefined,
-      modelProvider: rawTask.model_provider || rawTask.modelProvider,
-      modelSettings: rawTask.model_settings || rawTask.modelSettings,
-      systemPrompt: rawTask.system_prompt || rawTask.systemPrompt,
-      priority: rawTask.priority,
-      timeout: rawTask.timeout,
+      taskId: String(rawTask["task_id"] || rawTask["taskId"] || `task-${index + 1}`),
+      description: String(rawTask["description"] || rawTask["task_prompt"] || "Task"),
+      dependencies: Array.isArray(rawTask["dependencies"]) ? rawTask["dependencies"] : [],
+      tools: Array.isArray(rawTask["tools"]) ? rawTask["tools"] : undefined,
+      modelProvider: rawTask["model_provider"] || rawTask["modelProvider"],
+      modelSettings: rawTask["model_settings"] || rawTask["modelSettings"],
+      systemPrompt: rawTask["system_prompt"] || rawTask["systemPrompt"],
+      priority: rawTask["priority"],
+      timeout: rawTask["timeout"],
       status: "pending",
     };
   }) as WorkflowTask[];
@@ -332,21 +332,28 @@ function buildWorkflowState(input: Record<string, unknown>): WorkflowState | nul
 }
 
 function buildSwarmState(input: Record<string, unknown>): SwarmState | null {
-  const agents = Array.isArray(input.agents) ? (input.agents as Record<string, unknown>[]) : [];
+  const agents = Array.isArray(input["agents"]) ? (input["agents"] as Record<string, unknown>[]) : [];
   if (agents.length === 0) return null;
 
   const nodes = agents.map((agent, index) => {
-    const agentId = String(agent.name || agent.id || `agent-${index + 1}`);
+    const agentId = String(agent["name"] || agent["id"] || `agent-${index + 1}`);
+    const description = agent["description"] as string | undefined;
+    const systemPrompt = agent["system_prompt"] as string | undefined;
+    const modelProvider = agent["model_provider"] as AgentConfig["modelProvider"] | undefined;
+    const modelId = (agent["model_settings"] as Record<string, unknown> | undefined)?.["model_id"] as string | undefined;
+    const tools = Array.isArray(agent["tools"]) ? (agent["tools"] as string[]) : undefined;
+    const priority = agent["priority"] as AgentConfig["priority"] | undefined;
+    const timeout = agent["timeout"] as number | undefined;
     const agentConfig: AgentConfig = {
       id: agentId,
       name: agentId,
-      description: agent.description as string | undefined,
-      systemPrompt: agent.system_prompt as string | undefined,
-      modelProvider: agent.model_provider as AgentConfig["modelProvider"],
-      modelId: (agent.model_settings as Record<string, unknown> | undefined)?.model_id as string | undefined,
-      tools: Array.isArray(agent.tools) ? (agent.tools as string[]) : undefined,
-      priority: agent.priority as AgentConfig["priority"],
-      timeout: agent.timeout as number | undefined,
+      ...(description !== undefined ? { description } : {}),
+      ...(systemPrompt !== undefined ? { systemPrompt } : {}),
+      ...(modelProvider !== undefined ? { modelProvider } : {}),
+      ...(modelId !== undefined ? { modelId } : {}),
+      ...(tools !== undefined ? { tools } : {}),
+      ...(priority !== undefined ? { priority } : {}),
+      ...(timeout !== undefined ? { timeout } : {}),
     };
 
     return {
@@ -358,13 +365,13 @@ function buildSwarmState(input: Record<string, unknown>): SwarmState | null {
         agent: agentConfig,
         status: "idle",
         isEntryPoint: index === 0,
-        canHandoffTo: agents.map((a) => String(a.name || a.id)).filter((id) => id !== agentId),
+        canHandoffTo: agents.map((a) => String(a["name"] || a["id"])).filter((id) => id !== agentId),
       },
     } as StrandsSwarmNode;
   });
 
   return {
-    id: String(input.swarm_id || input.swarmId || `swarm-${Date.now()}`),
+    id: String(input["swarm_id"] || input["swarmId"] || `swarm-${Date.now()}`),
     status: "created",
     currentNode: null,
     nodes,
@@ -372,44 +379,50 @@ function buildSwarmState(input: Record<string, unknown>): SwarmState | null {
     nodeHistory: [],
     handoffs: [],
     sharedContext: {},
-    maxHandoffs: Number(input.max_handoffs || input.maxHandoffs || 20),
+    maxHandoffs: Number(input["max_handoffs"] || input["maxHandoffs"] || 20),
     handoffCount: 0,
-    startedAt: undefined,
   };
 }
 
 function buildGraphState(input: Record<string, unknown>): GraphState | null {
-  const topology = input.topology as Record<string, unknown> | undefined;
-  if (!topology || !Array.isArray(topology.nodes)) return null;
+  const topology = input["topology"] as Record<string, unknown> | undefined;
+  if (!topology || !Array.isArray(topology["nodes"])) return null;
 
-  const nodeSpecs = topology.nodes as Record<string, unknown>[];
-  const edgeSpecs = Array.isArray(topology.edges) ? (topology.edges as Record<string, unknown>[]) : [];
-  const entryPoints = Array.isArray(topology.entry_points)
-    ? (topology.entry_points as string[])
+  const nodeSpecs = topology["nodes"] as Record<string, unknown>[];
+  const edgeSpecs = Array.isArray(topology["edges"]) ? (topology["edges"] as Record<string, unknown>[]) : [];
+  const entryPoints = Array.isArray(topology["entry_points"])
+    ? (topology["entry_points"] as string[])
     : [];
 
   const dependenciesByNode = new Map<string, string[]>();
   edgeSpecs.forEach((edge) => {
-    const from = String(edge.from || "");
-    const to = String(edge.to || "");
+    const from = String(edge["from"] || "");
+    const to = String(edge["to"] || "");
     if (!from || !to) return;
     const current = dependenciesByNode.get(to) || [];
     dependenciesByNode.set(to, [...current, from]);
   });
 
   const nodes = nodeSpecs.map((node, index) => {
-    const nodeId = String(node.id || node.node_id || `node-${index + 1}`);
-    const role = String(node.role || node.name || nodeId);
+    const nodeId = String(node["id"] || node["node_id"] || `node-${index + 1}`);
+    const role = String(node["role"] || node["name"] || nodeId);
+    const description = node["description"] as string | undefined;
+    const systemPrompt = node["system_prompt"] as string | undefined;
+    const modelProvider = node["model_provider"] as AgentConfig["modelProvider"] | undefined;
+    const modelId = (node["model_settings"] as Record<string, unknown> | undefined)?.["model_id"] as string | undefined;
+    const tools = Array.isArray(node["tools"]) ? (node["tools"] as string[]) : undefined;
+    const priority = node["priority"] as AgentConfig["priority"] | undefined;
+    const timeout = node["timeout"] as number | undefined;
     const agentConfig: AgentConfig = {
       id: nodeId,
       name: role,
-      description: node.description as string | undefined,
-      systemPrompt: node.system_prompt as string | undefined,
-      modelProvider: node.model_provider as AgentConfig["modelProvider"],
-      modelId: (node.model_settings as Record<string, unknown> | undefined)?.model_id as string | undefined,
-      tools: Array.isArray(node.tools) ? (node.tools as string[]) : undefined,
-      priority: node.priority as AgentConfig["priority"],
-      timeout: node.timeout as number | undefined,
+      ...(description !== undefined ? { description } : {}),
+      ...(systemPrompt !== undefined ? { systemPrompt } : {}),
+      ...(modelProvider !== undefined ? { modelProvider } : {}),
+      ...(modelId !== undefined ? { modelId } : {}),
+      ...(tools !== undefined ? { tools } : {}),
+      ...(priority !== undefined ? { priority } : {}),
+      ...(timeout !== undefined ? { timeout } : {}),
     };
 
     return {
@@ -427,8 +440,8 @@ function buildGraphState(input: Record<string, unknown>): GraphState | null {
   });
 
   const edges = edgeSpecs.map((edge) => {
-    const from = String(edge.from || "");
-    const to = String(edge.to || "");
+    const from = String(edge["from"] || "");
+    const to = String(edge["to"] || "");
     return {
       id: `${from}-${to}`,
       source: from,
@@ -443,7 +456,7 @@ function buildGraphState(input: Record<string, unknown>): GraphState | null {
   });
 
   return {
-    id: String(input.graph_id || input.graphId || `graph-${Date.now()}`),
+    id: String(input["graph_id"] || input["graphId"] || `graph-${Date.now()}`),
     status: "created",
     nodes,
     edges,
@@ -458,12 +471,12 @@ function buildWorkflowStateFromVisualization(event: OrchestrationStreamEvent): W
   if (!event.nodes || event.nodes.length === 0) return null;
 
   const tasks = event.nodes.map((node, index) => {
-    const data = (node.data || {}) as Record<string, unknown>;
+    const data = (node["data"] || {}) as Record<string, unknown>;
     return {
-      taskId: String(node.id || `task-${index + 1}`),
-      description: String(data.label || data.description || "Task"),
+      taskId: String(node["id"] || `task-${index + 1}`),
+      description: String(data["label"] || data["description"] || "Task"),
       dependencies: [],
-      status: mapStatus(String(data.status || "pending")) as WorkflowTask["status"],
+      status: mapStatus(String(data["status"] || "pending")) as WorkflowTask["status"],
     };
   }) as WorkflowTask[];
 
@@ -479,20 +492,20 @@ function buildWorkflowStateFromVisualization(event: OrchestrationStreamEvent): W
 function buildSwarmStateFromVisualization(event: OrchestrationStreamEvent): SwarmState | null {
   if (!event.nodes || event.nodes.length === 0) return null;
   const nodes = event.nodes.map((node) => {
-    const data = (node.data || {}) as Record<string, unknown>;
-    const agentId = String(node.id);
+    const data = (node["data"] || {}) as Record<string, unknown>;
+    const agentId = String(node["id"]);
     const agent: AgentConfig = {
       id: agentId,
-      name: String(data.label || agentId),
+      name: String(data["label"] || agentId),
     };
     return {
       id: agentId,
       type: "swarm-node",
-      position: node.position as { x: number; y: number },
+      position: node["position"] as { x: number; y: number },
       data: {
         type: "swarm-node",
         agent,
-        status: mapStatus(String(data.status || "pending")) as AgentStatus,
+        status: mapStatus(String(data["status"] || "pending")) as AgentStatus,
       },
     } as StrandsSwarmNode;
   });
@@ -515,34 +528,34 @@ function buildGraphStateFromVisualization(event: OrchestrationStreamEvent): Grap
   if (!event.nodes || event.nodes.length === 0) return null;
 
   const nodes = event.nodes.map((node) => {
-    const data = (node.data || {}) as Record<string, unknown>;
-    const agentId = String(node.id);
+    const data = (node["data"] || {}) as Record<string, unknown>;
+    const agentId = String(node["id"]);
     const agent: AgentConfig = {
       id: agentId,
-      name: String(data.label || agentId),
+      name: String(data["label"] || agentId),
     };
     return {
       id: agentId,
       type: "graph-node",
-      position: node.position as { x: number; y: number },
+      position: node["position"] as { x: number; y: number },
       data: {
         type: "graph-node",
         agent,
-        status: mapStatus(String(data.status || "pending")) as AgentStatus,
+        status: mapStatus(String(data["status"] || "pending")) as AgentStatus,
         dependencies: [],
       },
     } as StrandsGraphNode;
   });
 
   const edges = (event.edges || []).map((edge) => ({
-    id: String(edge.id || `${edge.source}-${edge.target}`),
-    source: String(edge.source || ""),
-    target: String(edge.target || ""),
+    id: String(edge["id"] || `${edge["source"]}-${edge["target"]}`),
+    source: String(edge["source"] || ""),
+    target: String(edge["target"] || ""),
     type: "graph-edge",
     data: {
       type: "graph-edge",
       isConditional: false,
-      isActive: Boolean(edge.animated),
+      isActive: Boolean(edge["animated"]),
     },
   })) as StrandsGraphEdge[];
 
@@ -579,30 +592,30 @@ function normalizeToolName(toolName: string): string {
 }
 
 function buildToolUpdate(toolUse: Record<string, unknown>, status: AIToolExecution["status"]) {
-  const id = String(toolUse.toolUseId || toolUse.id || toolUse.tool_use_id || "");
+  const id = String(toolUse["toolUseId"] || toolUse["id"] || toolUse["tool_use_id"] || "");
   if (!id) return null;
   return {
     id,
-    name: String(toolUse.name || toolUse.tool_name || "tool"),
+    name: String(toolUse["name"] || toolUse["tool_name"] || "tool"),
     status,
-    input: toolUse.input as Record<string, unknown> | undefined,
+    input: toolUse["input"] as Record<string, unknown> | undefined,
     timestamp: Date.now(),
   } satisfies AIToolExecution;
 }
 
 function buildToolStreamUpdate(toolStream: Record<string, unknown>) {
-  const toolUse = toolStream.tool_use as Record<string, unknown> | undefined;
+  const toolUse = toolStream["tool_use"] as Record<string, unknown> | undefined;
   if (!toolUse) return null;
-  const id = String(toolUse.toolUseId || toolUse.id || toolUse.tool_use_id || "");
+  const id = String(toolUse["toolUseId"] || toolUse["id"] || toolUse["tool_use_id"] || "");
   if (!id) return null;
   const outputPayload =
-    toolStream.data ??
-    toolStream.output ??
-    toolStream.result ??
-    toolStream.content;
+    toolStream["data"] ??
+    toolStream["output"] ??
+    toolStream["result"] ??
+    toolStream["content"];
   return {
     id,
-    name: String(toolUse.name || toolUse.tool_name || "tool"),
+    name: String(toolUse["name"] || toolUse["tool_name"] || "tool"),
     status: "running",
     output: stringifyToolOutput(outputPayload),
     timestamp: Date.now(),
@@ -610,20 +623,20 @@ function buildToolStreamUpdate(toolStream: Record<string, unknown>) {
 }
 
 function buildToolResultUpdate(toolResult: Record<string, unknown>) {
-  const id = String(toolResult.toolUseId || toolResult.id || toolResult.tool_use_id || "");
+  const id = String(toolResult["toolUseId"] || toolResult["id"] || toolResult["tool_use_id"] || "");
   if (!id) return null;
-  const status = toolResult.status === "error" ? "error" : "success";
+  const status = toolResult["status"] === "error" ? "error" : "success";
   const outputPayload =
-    toolResult.content ??
-    toolResult.output ??
-    toolResult.result ??
-    toolResult.data;
+    toolResult["content"] ??
+    toolResult["output"] ??
+    toolResult["result"] ??
+    toolResult["data"];
   return {
     id,
-    name: String(toolResult.name || toolResult.tool_name || "tool"),
+    name: String(toolResult["name"] || toolResult["tool_name"] || "tool"),
     status,
     output: stringifyToolOutput(outputPayload),
-    error: toolResult.error as string | undefined,
+    error: toolResult["error"] as string | undefined,
     timestamp: Date.now(),
   } satisfies AIToolExecution;
 }
@@ -641,10 +654,10 @@ function stringifyToolOutput(output: unknown): string | undefined {
   }
   if (typeof output === "object") {
     const record = output as Record<string, unknown>;
-    if (typeof record.text === "string") return record.text;
-    if (typeof record.output === "string") return record.output;
-    if (typeof record.result === "string") return record.result;
-    if (typeof record.data === "string") return record.data;
+    if (typeof record["text"] === "string") return record["text"];
+    if (typeof record["output"] === "string") return record["output"];
+    if (typeof record["result"] === "string") return record["result"];
+    if (typeof record["data"] === "string") return record["data"];
   }
   try {
     return JSON.stringify(output, null, 2);
@@ -656,41 +669,44 @@ function stringifyToolOutput(output: unknown): string | undefined {
 function normalizeNodeResult(result: Record<string, unknown> | undefined): AgentResult | null {
   if (!result) return null;
   const status =
-    result.status === "error" ||
-    result.status === "failed" ||
-    result.status === "FAILED"
+    result["status"] === "error" ||
+    result["status"] === "failed" ||
+    result["status"] === "FAILED"
       ? "error"
       : "success";
   const content = extractResultText(result);
+  const startedAt = result["startedAt"] as number | undefined;
+  const completedAt = result["completedAt"] as number | undefined;
+  const metrics = result["metrics"] as AgentResult["metrics"] | undefined;
   return {
     status,
     content,
-    startedAt: result.startedAt as number | undefined,
-    completedAt: result.completedAt as number | undefined,
-    metrics: result.metrics as AgentResult["metrics"] | undefined,
+    ...(startedAt !== undefined ? { startedAt } : {}),
+    ...(completedAt !== undefined ? { completedAt } : {}),
+    ...(metrics !== undefined ? { metrics } : {}),
   };
 }
 
 function extractResultText(result: Record<string, unknown>): string {
-  const nestedResult = result.result as Record<string, unknown> | undefined;
+  const nestedResult = result["result"] as Record<string, unknown> | undefined;
   if (nestedResult) {
-    const message = nestedResult.message as Record<string, unknown> | undefined;
-    const messageContent = message?.content as Array<Record<string, unknown>> | undefined;
+    const message = nestedResult["message"] as Record<string, unknown> | undefined;
+    const messageContent = message?.["content"] as Array<Record<string, unknown>> | undefined;
     if (messageContent && messageContent.length > 0) {
       const first = messageContent[0];
-      if (typeof first.text === "string") return first.text;
       if (typeof first === "string") return first;
+      if (first && typeof first["text"] === "string") return first["text"];
     }
-    if (typeof nestedResult.text === "string") return nestedResult.text;
+    if (typeof nestedResult["text"] === "string") return nestedResult["text"];
   }
 
-  const content = result.content as Array<Record<string, unknown>> | undefined;
+  const content = result["content"] as Array<Record<string, unknown>> | undefined;
   if (content && content.length > 0) {
     const first = content[0];
-    if (typeof first.text === "string") return first.text;
     if (typeof first === "string") return first;
+    if (first && typeof first["text"] === "string") return first["text"];
   }
-  if (typeof result.text === "string") return result.text;
+  if (typeof result["text"] === "string") return result["text"];
   try {
     return JSON.stringify(result, null, 2);
   } catch {

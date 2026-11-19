@@ -21,11 +21,11 @@ export type WorkflowStepKind =
 export interface WorkflowStep {
   id: string
   label: string
-  description?: string
-  content?: string
-  footer?: string
-  kind?: WorkflowStepKind
-  position?: { x: number; y: number }
+  description?: string | undefined
+  content?: string | undefined
+  footer?: string | undefined
+  kind?: WorkflowStepKind | undefined
+  position?: { x: number; y: number } | undefined
 }
 
 export interface WorkflowConnection {
@@ -179,17 +179,17 @@ export function normalizeWorkflow(input: unknown): WorkflowGraph {
   for (const raw of Array.isArray(source.steps) ? source.steps : []) {
     if (!raw || typeof raw !== 'object') continue
     const value = raw as Record<string, unknown>
-    const id = typeof value.id === 'string' ? value.id.trim().slice(0, 64) : ''
+    const id = typeof value["id"] === 'string' ? value["id"].trim().slice(0, 64) : ''
     if (!id || seen.has(id)) continue
     seen.add(id)
-    const position = value.position as { x?: unknown; y?: unknown } | undefined
+    const position = value["position"] as { x?: unknown; y?: unknown } | undefined
     steps.push({
       id,
-      label: text(value.label, 120) ?? 'Untitled step',
-      description: text(value.description, 300),
-      content: text(value.content, 2000),
-      footer: text(value.footer, 300),
-      kind: workflowKind(value.kind),
+      label: text(value["label"], 120) ?? 'Untitled step',
+      description: text(value["description"], 300),
+      content: text(value["content"], 2000),
+      footer: text(value["footer"], 300),
+      kind: workflowKind(value["kind"]),
       position: position && Number.isFinite(position.x) && Number.isFinite(position.y)
         ? { x: Number(position.x), y: Number(position.y) } : undefined,
     })
@@ -199,15 +199,15 @@ export function normalizeWorkflow(input: unknown): WorkflowGraph {
   for (const raw of Array.isArray(source.connections) ? source.connections : []) {
     if (!raw || typeof raw !== 'object') continue
     const value = raw as Record<string, unknown>
-    const from = String(value.source ?? ''), to = String(value.target ?? '')
+    const from = String(value["source"] ?? ''), to = String(value["target"] ?? '')
     if (!seen.has(from) || !seen.has(to) || from === to || pairs.has(`${from}->${to}`)) continue
     pairs.add(`${from}->${to}`)
-    const label = text(value.label, 40)
+    const label = text(value["label"], 40)
     connections.push({
-      id: typeof value.id === 'string' && value.id ? value.id : `${from}->${to}`,
+      id: typeof value["id"] === 'string' && value["id"] ? value["id"] : `${from}->${to}`,
       source: from,
       target: to,
-      type: EDGE_TYPES.has(value.type as WorkflowEdgeType) ? value.type as WorkflowEdgeType : 'animated',
+      type: EDGE_TYPES.has(value["type"] as WorkflowEdgeType) ? value["type"] as WorkflowEdgeType : 'animated',
       ...(label ? { label } : {}),
     })
   }
@@ -218,7 +218,11 @@ export function normalizeWorkflow(input: unknown): WorkflowGraph {
 export function workflowOutline(graph: WorkflowGraph): string[] {
   const positions = layoutWorkflow(graph)
   return [...graph.steps]
-    .sort((a, b) => positions[a.id].x - positions[b.id].x || positions[a.id].y - positions[b.id].y)
+    .sort((a, b) => {
+      const pa = positions[a.id] ?? { x: 0, y: 0 }
+      const pb = positions[b.id] ?? { x: 0, y: 0 }
+      return pa.x - pb.x || pa.y - pb.y
+    })
     .map((step) => step.label)
 }
 

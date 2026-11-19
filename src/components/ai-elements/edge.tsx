@@ -31,7 +31,7 @@ const Temporary = ({
     <BaseEdge
       className="stroke-1 stroke-ring"
       id={id}
-      markerEnd={markerEnd}
+      {...(markerEnd !== undefined ? { markerEnd } : {})}
       path={edgePath}
       style={{
         strokeDasharray: "5, 5",
@@ -132,7 +132,12 @@ const Animated = ({ id, source, target, markerEnd, style }: EdgeProps) => {
 
   return (
     <>
-      <BaseEdge id={id} markerEnd={markerEnd} path={edgePath} style={style} />
+      <BaseEdge
+        id={id}
+        {...(markerEnd !== undefined ? { markerEnd } : {})}
+        path={edgePath}
+        {...(style !== undefined ? { style } : {})}
+      />
       <circle fill="var(--primary)" r="4">
         <animateMotion dur="2s" path={edgePath} repeatCount="indefinite" />
       </circle>
