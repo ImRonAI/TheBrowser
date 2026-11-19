@@ -14,9 +14,9 @@
     <key>RON_VPS_HOST</key>
     <string>__RON_VPS_HOST__</string>
     <key>RON_VPS_USER</key>
-    <string>ron</string>
+    <string>__RON_VPS_USER__</string>
     <key>RON_SSH_KEY</key>
-    <string>__HOME__/.ssh/ronbrowser_upcloud_ed25519</string>
+    <string>__RON_SSH_KEY__</string>
     <key>PATH</key>
     <string>/usr/bin:/bin:/usr/sbin:/sbin</string>
   </dict>

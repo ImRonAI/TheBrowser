@@ -10,7 +10,7 @@ if [ -z "${RON_VPS_HOST:-}" ]; then
   echo "usage: RON_VPS_HOST=<host> [RON_VPS_USER=ron] [RON_SSH_KEY=path] $0" >&2
   exit 2
 fi
-RON_SSH_KEY="${RON_SSH_KEY:-$HOME/.ssh/ronbrowser_upcloud_ed25519}"
+RON_SSH_KEY="${RON_SSH_KEY:-$HOME/.ssh/ronbrowser_ionos_ed25519}"
 RON_VPS_USER="${RON_VPS_USER:-ron}"
 SSH_OPTS=(-i "$RON_SSH_KEY" -o ConnectTimeout=15 -o StrictHostKeyChecking=accept-new)
 

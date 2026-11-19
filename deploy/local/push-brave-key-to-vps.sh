@@ -3,7 +3,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 RON_VPS_HOST="${RON_VPS_HOST:?set RON_VPS_HOST}"
-RON_SSH_KEY="${RON_SSH_KEY:-$HOME/.ssh/ronbrowser_upcloud_ed25519}"
+RON_SSH_KEY="${RON_SSH_KEY:-$HOME/.ssh/ronbrowser_ionos_ed25519}"
 RON_VPS_USER="${RON_VPS_USER:-ron}"
 
 line="$(grep -E '^BRAVE_SEARCH_API_KEY=' .env | head -1 || true)"
