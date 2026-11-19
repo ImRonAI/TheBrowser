@@ -304,7 +304,7 @@ class RuntimeOptions(BaseModel):
     context: Literal["auto", "agentic", "sliding"] = "auto"
     tool_execution: Literal["concurrent", "sequential"] = "concurrent"
     checkpointing: bool = False
-    background: bool = False
+    background: bool = True
     goal: str = Field(default="", max_length=10000)
 
 
@@ -460,7 +460,8 @@ async def _create_runtime_agent(*, user_id, session_id, selection, options, runt
         runtime_options = {**runtime_options, "hooks": [*runtime_options.get("hooks", []), service.trigger(browser=browser)]}
     if target.get("kind") == "specialist":
         return await _create_specialist_agent(user_id=user_id, session_id=session_id, agent_id=target["id"],
-                                              selection=selection, runtime_options=runtime_options, browser=browser)
+                                              selection=selection, options=options,
+                                              runtime_options=runtime_options, browser=browser)
     agent_prompt, agent_tools = "", []
     if target.get("kind") == "project":
         from agent.api.core.project_agent import project_agent_prompt, project_agent_tools
@@ -497,7 +498,7 @@ async def _create_runtime_agent(*, user_id, session_id, selection, options, runt
     )
 
 
-async def _create_specialist_agent(*, user_id, session_id, agent_id, selection, runtime_options, browser):
+async def _create_specialist_agent(*, user_id, session_id, agent_id, selection, options, runtime_options, browser):
     """A saved specialist as this panel session's agent: its stored harness config, the session's model.
 
     ``create_harness`` passes ``agent_id``/``session_manager``/``callback_handler`` straight to ``Agent`` (an
@@ -514,6 +515,8 @@ async def _create_specialist_agent(*, user_id, session_id, agent_id, selection, 
     if not rows:
         raise RuntimeConflict("That specialist agent no longer exists")
     runtime = dict(runtime_options)
+    if not (options or {}).get("background", True):
+        runtime["background_tasks"] = False
     hooks = [*runtime.pop("hooks", []), ThreadProjection(user_id=user_id, session_id=session_id, destination="panel",
                                                           agent="chat", browser=browser)]
     plugins = runtime.pop("plugins", [])

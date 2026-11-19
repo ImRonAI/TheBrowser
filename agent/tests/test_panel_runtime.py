@@ -774,9 +774,12 @@ def test_provider_failure_preserves_history_and_error_across_reload(failure_call
 @pytest.mark.parametrize("provider", ["mistral", "openai", "perplexity"])
 @pytest.mark.parametrize("tool_count", [1, 2])
 def test_browser_context_and_steering_survive_native_tool_roundtrip(monkeypatch, provider, tool_count):
+    from agent.api.core import config as app_config
     from agent.api.core.panel_agent import build_model
 
     monkeypatch.setenv(f"{provider.upper()}_API_KEY", "offline-test-key")
+    monkeypatch.setattr(app_config, f"{provider.upper()}_API_KEY", "offline-test-key", raising=False)
+    monkeypatch.setattr(app_config, "perplexity_agent_api_enabled", lambda: True)
     model_ids = {"mistral": "mistral-large-latest", "openai": "gpt-5", "perplexity": "xai/grok-4.5"}
     native_model = build_model(provider, model_ids[provider])
 
@@ -1512,6 +1515,119 @@ def test_no_recovery_while_events_flow_or_tool_in_flight():
         assert len(agents) == 1 and session.recovery_required is False
         events = [event async for event in session.events(0)]
         assert not [e for e in events if e["type"] == "error"]
+        await manager.shutdown()
+
+    asyncio.run(scenario())
+
+
+def test_agent_polls_and_cancels_hung_background_tool_and_persists_through_runtime():
+    """Through PanelRuntimeManager, an agent launches an async background tool that hangs, polls it via native
+    strands_manage_background_task(mode='list'|'get'), cancels it via mode='cancel', and persists to completion."""
+    import re
+    from strands.types.tools import ToolContext
+
+    async def scenario():
+        started = asyncio.Event()
+        cancelled = asyncio.Event()
+
+        @tool(context=True)
+        async def hung_scrape(url: str, tool_context: ToolContext) -> str:
+            """Simulate a hanging external tool."""
+            del url
+            started.set()
+            try:
+                while not tool_context.cancel_signal.is_set():
+                    await asyncio.sleep(0.01)
+            finally:
+                cancelled.set()
+            return "never"
+
+        @tool
+        def fallback_lookup() -> str:
+            """Reliable fallback tool."""
+            return "recovered-fact"
+
+        class PollingPersistenceModel(Model):
+            def get_config(self):
+                return {"model_id": "offline", "stateful": False}
+
+            def update_config(self, **kwargs):
+                pass
+
+            async def structured_output(self, *args, **kwargs):
+                raise NotImplementedError
+                yield
+
+            async def stream(self, messages, tool_specs=None, system_prompt=None, **kwargs):
+                uses = [
+                    b["toolUse"]
+                    for m in messages
+                    if m.get("role") == "assistant"
+                    for b in m.get("content") or ()
+                    if "toolUse" in b
+                ]
+                called = [u["name"] for u in uses]
+                task_id = ""
+                for m in messages:
+                    for b in m.get("content") or ():
+                        for item in (b.get("toolResult") or {}).get("content") or ():
+                            match = re.search(r"Task ID:\s*([0-9a-fA-F-]+)", item.get("text", ""))
+                            if match:
+                                task_id = match.group(1)
+
+                next_use = None
+                if not called:
+                    next_use = ("u-scrape", "hung_scrape", {"url": "https://dead.example", "_background_execution": True})
+                else:
+                    assert task_id
+                    await asyncio.wait_for(started.wait(), timeout=2.0)
+                    explicit_modes = [
+                        u["input"].get("mode")
+                        for u in uses
+                        if u["name"] == "strands_manage_background_task" and u["toolUseId"] != task_id
+                    ]
+                    if "list" not in explicit_modes:
+                        next_use = ("u-list", "strands_manage_background_task", {"mode": "list"})
+                    elif "get" not in explicit_modes:
+                        next_use = ("u-get", "strands_manage_background_task", {"mode": "get", "task_id": task_id})
+                    elif "cancel" not in explicit_modes:
+                        next_use = ("u-cancel", "strands_manage_background_task", {"mode": "cancel", "task_id": task_id})
+                    elif "fallback_lookup" not in called:
+                        next_use = ("u-fallback", "fallback_lookup", {})
+                    elif not any(u["name"] == "strands_manage_background_task" and u["toolUseId"] == task_id for u in uses):
+                        next_use = None
+
+                yield {"messageStart": {"role": "assistant"}}
+                if next_use is not None:
+                    uid, name, inp = next_use
+                    yield {"contentBlockStart": {"contentBlockIndex": 0, "start": {"toolUse": {"toolUseId": uid, "name": name}}}}
+                    yield {"contentBlockDelta": {"contentBlockIndex": 0, "delta": {"toolUse": {"input": json.dumps(inp)}}}}
+                    yield {"contentBlockStop": {"contentBlockIndex": 0}}
+                    yield {"messageStop": {"stopReason": "tool_use"}}
+                else:
+                    text = "Persisted with recovered-fact" if "fallback_lookup" in called else "Waiting for cancellation"
+                    yield {"contentBlockDelta": {"contentBlockIndex": 0, "delta": {"text": text}}}
+                    yield {"contentBlockStop": {"contentBlockIndex": 0}}
+                    yield {"messageStop": {"stopReason": "end_turn"}}
+                yield {"metadata": {"usage": {"inputTokens": 1, "outputTokens": 1, "totalTokens": 2}, "metrics": {"latencyMs": 1}}}
+
+        manager = manager_for(
+            factory_for(
+                PollingPersistenceModel(),
+                tools=[hung_scrape, fallback_lookup],
+                background_tasks={"agentic": ["*"], "wait_for_completion": True},
+            ),
+            stall_seconds=1.0,
+            tool_stall_seconds=5.0,
+        )
+        session = await manager.start("u", "persist-session", "scrape or recover")
+        events = await finished(session)
+        assert session.status == "completed", events
+        assert cancelled.is_set()
+        assert any(e["type"] == "text_delta" and "Persisted with recovered-fact" in e["data"] for e in events)
+        snap = await manager.snapshot("u", "persist-session")
+        assert "cancelled" in json.dumps(snap["messages"])
+        assert "recovered-fact" in json.dumps(snap["messages"])
         await manager.shutdown()
 
     asyncio.run(scenario())

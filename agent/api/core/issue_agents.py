@@ -294,13 +294,20 @@ class IssueAccessGuard(HookProvider):
 def _issue_chat_background(options: dict[str, Any]) -> bool | BackgroundTasksConfig:
     """``background_tasks`` for the ``background`` option, as ``create_panel_agent`` does.
 
-    Off by default (the harness default would let the model background any tool, agent.py:221-246). On: the panel
-    runtime requires native ``wait_for_completion=True`` (panel_runtime.py docstring); ``use_skill`` runs child agents
-    and stays in the foreground like the panel's delegating tools.
+    Enabled by default: native ``wait_for_completion=True`` (panel_runtime.py docstring), ``use_skill`` runs child
+    agents asynchronously in ``always``, and every compatible tool gets ``_background_execution`` +
+    ``strands_manage_background_task``.
     """
-    if not options.get("background"):
+    if not options.get("background", True):
         return False
-    return {"agentic": ["*"], "wait_for_completion": True, "never": ["use_skill"]}
+    from agent.api.core.deep_research_tools import DEEP_RESEARCH_TOOL_NAMES
+
+    return {
+        "agentic": ["*"],
+        "always": ["use_skill"],
+        "never": sorted(DEEP_RESEARCH_TOOL_NAMES),
+        "wait_for_completion": True,
+    }
 
 
 def create_issue_chat_agent(*, user_id: str, session_id: str, issue_id: str, project_id: str, owner_id: str,
@@ -550,7 +557,7 @@ class IssueAgentRuntime:
                 from agent.api.core.a2a_tools import a2a_tools
                 from agent.api.core.brave_tools import brave_tools
                 from agent.api.core.web_tools import web_tools
-                from agent.api.core.deep_research_tools import deep_research_tools
+                from agent.api.core.deep_research_tools import DEEP_RESEARCH_TOOL_NAMES, deep_research_tools
                 from agent.api.core.media_understanding import media_tools
                 from agent.api.core.panel_tools import installed_http_request
                 # Context intake as the caller (their JWT, refreshed by polling): links with http_request; media seen
@@ -564,6 +571,7 @@ class IssueAgentRuntime:
                     memory_manager={"stores": [get_teaching_service().get_memory_store(service.identity.user_id, agent_scope),
                                                *agent_memory(service.identity.user_id, agent_scope)],
                                     "search_tool_config": True, "injection": True},
+                    background_tasks={"agentic": ["*"], "always": ["use_skill"], "never": sorted(DEEP_RESEARCH_TOOL_NAMES), "wait_for_completion": True},
                     agent_id=agent_record["id"], session_manager=session, callback_handler=None,
                     checkpointing=False, load_tools_from_directory=False, plugins=plugins, hooks=[activity])
                 agents.append(agent)

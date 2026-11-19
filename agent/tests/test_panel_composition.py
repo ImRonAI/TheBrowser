@@ -151,9 +151,14 @@ def test_real_constructor_defaults_stream_and_complete_cleanup(offline):
     assert summarizer._session_manager is None
     assert any(isinstance(plugin, ContextOffloader) for plugin in kwargs["plugins"])
     assert isinstance(kwargs["tool_executor"], ConcurrentToolExecutor)
-    assert kwargs["background_tasks"] is False
+    assert kwargs["background_tasks"]["agentic"] == ["*"]
+    assert kwargs["background_tasks"]["wait_for_completion"] is True
+    assert {"think", "run_skill", "use_skill", "research_review", "reasoning_swarm", "nested_research_review"} <= set(
+        kwargs["background_tasks"]["always"]
+    )
     assert kwargs["retry_strategy"]._max_attempts == 6
     names = set(agent.tool_registry.registry)
+    assert "strands_manage_background_task" in names
     # User-mandated core set is always registered, Brave's while RON_BRAVE_TOOLS=1 (off here); think is Perplexity-only.
     from agent.api.core.brave_tools import BRAVE_TOOL_NAMES
     from agent.api.core.panel_tools import CORE_TOOL_NAMES
@@ -242,7 +247,8 @@ def test_sync_extra_adapted_and_think_child_inherits_parent_tools(offline, monke
     result = asyncio.run(agent.invoke_async("use tools"))
     assert result.stop_reason == "end_turn"
     results = [b["toolResult"] for m in agent.messages for b in m["content"] if "toolResult" in b]
-    assert len(results) == 2 and all(r["status"] == "success" for r in results)
+    # blocking runs foreground (1 result); think runs in `always` (dispatch ack + strands_manage_background_task settlement).
+    assert len(results) == 3 and all(r["status"] == "success" for r in results)
     assert len(models) == 1  # think.py reuses the parent's model instance
     child_calls = [specs for messages, specs in models[0].tool_spec_history
                    if "Thought to process:\nreason offline" in json.dumps(messages[0]["content"]).replace("\\n", "\n")]
@@ -263,7 +269,7 @@ def test_default_native_formations_execute_and_release_children(offline, monkeyp
 
     async def create(*args, **kwargs):
         child = await original(*args, **kwargs)
-        assert set(child.tool_registry.registry) == {"search_memory", "journal"}  # the parent's second brain
+        assert set(child.tool_registry.registry) == {"search_memory", "journal", "strands_manage_background_task"}
         cleanup = Mock(wraps=child.cleanup)
         child.cleanup = cleanup
         cleanups.append(cleanup)
@@ -349,8 +355,10 @@ def test_goal_judge_fresh_and_background_delegation_foreground_only(offline):
     assert len(models) == 2  # parent + fresh judge
     background = kwargs["background_tasks"]
     assert background["agentic"] == ["*"] and background["wait_for_completion"] is True
-    assert {"think", "run_skill", "research_review", "reasoning_swarm", "nested_research_review",
-            "editor", "tool_catalog", "mcp_client", "ask_user"} <= set(background["never"])
+    assert {"editor", "tool_catalog", "mcp_client", "ask_user", "programmatic_tool_caller"} <= set(background["never"])
+    assert {"think", "run_skill", "use_skill", "research_review", "reasoning_swarm", "nested_research_review"} <= set(
+        background["always"]
+    )
 
 
 @pytest.mark.parametrize("checkpoint", [False, True])
@@ -506,7 +514,7 @@ def test_assigned_read_tool_cannot_invoke_write_and_consumers_are_independent(of
         first = await create_child_agent(ChildSpec("reader", "Read", assignments), model_factory=lambda _: model)
         second = await create_child_agent(ChildSpec("reader2", "Read", assignments), model_factory=lambda _: OfflineModel())
         try:
-            assert set(first.tool_registry.registry) == {"read_file"}
+            assert set(first.tool_registry.registry) == {"read_file", "strands_manage_background_task"}
             assert len(client._consumers) == 3
             await first.invoke_async("Try both read and write")
             results = [b["toolResult"] for m in first.messages for b in m["content"] if "toolResult" in b]
@@ -606,19 +614,21 @@ def test_unassigned_skill_never_inherits_parent_tools(offline, monkeypatch, tmp_
     models[-1].uses = [("run_skill", {"skill_name": "example", "prompt": "task"})]
     asyncio.run(agent.invoke_async("run skill"))
     results = [b["toolResult"] for m in agent.messages for b in m["content"] if "toolResult" in b]
-    assert results[0]["status"] == "error"
-    assert "explicit tool assignment" in json.dumps(results)
+    assert len(results) == 2
+    assert results[1]["content"][0]["json"]["status"] == "failed"
+    assert "explicit tool assignment" in json.dumps(results[1])
     assert len(models) == 1  # No child model was even constructed.
 
 
 def test_runtime_background_config_cannot_detach_or_background_children(offline):
     build, _, _, constructed, _ = offline
-    background = {"wait_for_completion": False, "never": ["custom"]}
+    background = {"wait_for_completion": False, "never": ["custom", "think"]}
     build(runtime_options={"background_tasks": background})
     actual = constructed[-1][1]["background_tasks"]
     assert actual["wait_for_completion"] is True
-    assert {"custom", "think", "nested_research_review", "tool_catalog"} <= set(actual["never"])
-    assert background == {"wait_for_completion": False, "never": ["custom"]}
+    assert {"custom", "think", "tool_catalog", "mcp_client", "editor", "ask_user"} <= set(actual["never"])
+    assert "think" not in actual["always"] and "nested_research_review" in actual["always"]
+    assert background == {"wait_for_completion": False, "never": ["custom", "think"]}
 
 
 def test_formation_unknown_fields_and_unowned_mcp_rejected(offline):
@@ -643,7 +653,7 @@ def test_configured_graph_actual_topology_and_explicit_child_tools(offline, monk
     monkeypatch.setenv("PANEL_FORMATIONS_FILE", str(file))
     agent = build(options={"background": True})
     assert "research_review" not in agent.tool_registry.registry
-    assert "custom_graph" in constructed[-1][1]["background_tasks"]["never"]
+    assert "custom_graph" in constructed[-1][1]["background_tasks"]["always"]
     models[-1].uses = [("custom_graph", {"prompt": "task"})]
     result = asyncio.run(agent.invoke_async("run graph"))
     assert result.stop_reason == "end_turn"

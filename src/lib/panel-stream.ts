@@ -37,6 +37,7 @@ export interface ToolPart {
   status?: string
   output?: unknown
   finished: boolean
+  taskId?: string
 }
 /**
  * A Perplexity Agent API server-side tool event (`native_tool` envelope). Output items
@@ -320,6 +321,167 @@ function record(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {}
 }
 
+const BACKGROUND_MANAGE_TOOL = 'strands_manage_background_task'
+const BACKGROUND_TERMINAL = new Set(['completed', 'failed', 'cancelled'])
+
+/** Parse native Strands `_BackgroundTasks` dispatch acknowledgement (`Task ID: <uuid>`). */
+function parseBackgroundDispatchTaskId(content: unknown): string | null {
+  if (!Array.isArray(content)) return null
+  const text = content.map((block) => record(block).text).filter((t): t is string => typeof t === 'string').join('\n')
+  if (!text.startsWith('Background task dispatched.')) return null
+  const match = /^Task ID:\s*(\S+)/m.exec(text)
+  return match ? match[1] : null
+}
+
+interface BackgroundSettlement {
+  taskId: string
+  toolUseId: string
+  status: string
+  content: unknown[]
+  errorMessage?: string
+}
+
+/** Parse native Strands `_task_result_content` metadata block (`content[0].json`). */
+function parseBackgroundSettlement(content: unknown): BackgroundSettlement | null {
+  if (!Array.isArray(content) || content.length === 0) return null
+  const meta = record(record(content[0]).json)
+  if (typeof meta.task_id !== 'string' || typeof meta.tool_use_id !== 'string' || typeof meta.status !== 'string') {
+    return null
+  }
+  const errorMsg = record(meta.error).message
+  return {
+    taskId: meta.task_id,
+    toolUseId: meta.tool_use_id,
+    status: meta.status,
+    content: content.slice(1),
+    errorMessage: typeof errorMsg === 'string' && errorMsg ? errorMsg : undefined,
+  }
+}
+
+function isSyntheticBackgroundGet(name: unknown, id: unknown, input: unknown): boolean {
+  const fields = record(input)
+  return name === BACKGROUND_MANAGE_TOOL && fields.mode === 'get' && typeof id === 'string' && fields.task_id === id
+}
+
+function foldBackgroundChildEvent(
+  parts: PanelPart[],
+  runId: string,
+  childPath: unknown[],
+  rawData: Record<string, unknown>,
+  sequence: number,
+): void {
+  const scopeLabel = typeof rawData.formation === 'string' ? rawData.formation : typeof rawData.skill === 'string' ? rawData.skill : null
+  if (scopeLabel && rawData.event && typeof rawData.event === 'object' && !Array.isArray(rawData.event)) {
+    foldBackgroundChildEvent(parts, runId, [...childPath, scopeLabel], record(rawData.event), sequence)
+    return
+  }
+  const eventType = typeof rawData.type === 'string' ? rawData.type : ''
+  if (eventType === 'multiagent_node_stream' && rawData.event && typeof rawData.event === 'object' && !Array.isArray(rawData.event)) {
+    foldBackgroundChildEvent(parts, runId, [...childPath, String(rawData.node_id ?? '')], record(rawData.event), sequence)
+    return
+  }
+  const childPathKey = JSON.stringify(childPath)
+  const childKey = `${runId}-${sequence}-${childPathKey}`
+  if (eventType.startsWith('multiagent_')) {
+    parts.push({ kind: 'activity', key: childKey, path: childPath, text: `Node · ${displayValue(rawData)}` })
+    return
+  }
+  if (rawData.tool_stream_event && typeof rawData.tool_stream_event === 'object') {
+    const stream = record(rawData.tool_stream_event)
+    const use = record(stream.tool_use)
+    const nestedId = typeof use.toolUseId === 'string' ? use.toolUseId : ''
+    const nestedData = stream.data
+    if (nestedId && nestedData && typeof nestedData === 'object' && !Array.isArray(nestedData)) {
+      foldBackgroundChildEvent(parts, runId, [...childPath, nestedId], record(nestedData), sequence)
+      return
+    }
+  }
+  if (typeof rawData.data === 'string') {
+    const last = parts[parts.length - 1]
+    if (last?.kind === 'text' && !last.discarded && JSON.stringify(last.path) === childPathKey) {
+      parts[parts.length - 1] = { ...last, text: last.text + rawData.data }
+    } else {
+      parts.push({ kind: 'text', key: childKey, path: childPath, text: rawData.data })
+    }
+  }
+  if (typeof rawData.reasoningText === 'string' && rawData.reasoningText.trim()) {
+    const last = parts[parts.length - 1]
+    if (last?.kind === 'reasoning' && !last.discarded && JSON.stringify(last.path) === childPathKey) {
+      parts[parts.length - 1] = { ...last, text: last.text + rawData.reasoningText }
+    } else {
+      parts.push({ kind: 'reasoning', key: childKey, path: childPath, text: rawData.reasoningText })
+    }
+  }
+  const upsertChildTool = (id: string, name: string | undefined, input: unknown, result?: Record<string, unknown>) => {
+    const identity = toolIdentity(runId, childPath, id)
+    const pos = parts.findIndex((p) => p.kind === 'tool' && p.key === identity)
+    const prev = pos >= 0 ? (parts[pos] as ToolPart) : undefined
+    const nextTool: ToolPart = {
+      kind: 'tool',
+      key: identity,
+      id,
+      name: name || prev?.name || id,
+      path: childPath,
+      input: input ?? prev?.input ?? {},
+      progress: prev?.progress ?? [],
+      finished: prev?.finished ?? false,
+      status: prev?.status,
+      output: prev?.output,
+      taskId: prev?.taskId,
+    }
+    if (result) {
+      const dispatched = parseBackgroundDispatchTaskId(result.content)
+      const settled = parseBackgroundSettlement(result.content)
+      if (settled && BACKGROUND_TERMINAL.has(settled.status)) {
+        const targetPos = parts.findIndex((p) => p.kind === 'tool' && JSON.stringify(p.path) === childPathKey && p.id === settled.toolUseId)
+        if (targetPos >= 0) {
+          const target = parts[targetPos] as ToolPart
+          parts[targetPos] = {
+            ...target,
+            finished: true,
+            status: settled.status === 'completed' ? 'success' : 'error',
+            output: settled.content.length ? settled.content : (settled.errorMessage ? [{ text: settled.errorMessage }] : target.output),
+          }
+        }
+        if (id === settled.taskId) return
+      }
+      if (dispatched && !prev?.finished) {
+        nextTool.taskId = dispatched
+      } else {
+        nextTool.output = result.content
+        nextTool.status = typeof result.status === 'string' ? result.status : 'success'
+        nextTool.finished = true
+      }
+    }
+    if (pos >= 0) parts[pos] = nextTool
+    else parts.push(nextTool)
+  }
+  if (rawData.current_tool_use) {
+    const use = record(rawData.current_tool_use)
+    if (typeof use.toolUseId === 'string' && !isSyntheticBackgroundGet(use.name, use.toolUseId, use.input)) {
+      upsertChildTool(use.toolUseId, typeof use.name === 'string' ? use.name : undefined, use.input)
+    }
+  }
+  if (rawData.tool_result) {
+    const res = record(rawData.tool_result)
+    if (typeof res.toolUseId === 'string') upsertChildTool(res.toolUseId, undefined, undefined, res)
+  }
+  const msgBlocks = Array.isArray(record(rawData.message).content) ? (record(rawData.message).content as unknown[]) : []
+  for (const rawBlock of msgBlocks) {
+    const block = record(rawBlock)
+    if (block.toolUse) {
+      const use = record(block.toolUse)
+      if (typeof use.toolUseId === 'string' && !isSyntheticBackgroundGet(use.name, use.toolUseId, use.input)) {
+        upsertChildTool(use.toolUseId, typeof use.name === 'string' ? use.name : undefined, use.input)
+      }
+    }
+    if (block.toolResult) {
+      const res = record(block.toolResult)
+      if (typeof res.toolUseId === 'string') upsertChildTool(res.toolUseId, undefined, undefined, res)
+    }
+  }
+}
+
 function repairProposalFrom(event: PanelEvent): RepairProposal | undefined {
   if (typeof event.id !== 'string' || typeof event.tool !== 'string') return undefined
   const kind = event.kind === 'mcp' || event.kind === 'core' || event.kind === 'other' ? event.kind : 'library'
@@ -547,6 +709,29 @@ export function reducePanelEvent(state: PanelState, event: PanelEvent): PanelSta
   const key = `${event.run_id}-${event.sequence}`
   if (event.type.startsWith('tool_') && !event.type.startsWith('tool_repair_')) {
     if (typeof event.id !== 'string') throw new Error(`${event.type} is missing its tool ID`)
+    if (event.type === 'tool_input' && isSyntheticBackgroundGet(event.name, event.id, event.input)) {
+      messages[index] = { ...messages[index], parts }
+      return { ...next, messages }
+    }
+    if (event.type === 'tool_result') {
+      const settled = parseBackgroundSettlement(event.content)
+      if (settled && BACKGROUND_TERMINAL.has(settled.status)) {
+        const targetPos = parts.findIndex((part) => part.kind === 'tool' && JSON.stringify(part.path) === pathKey && part.id === settled.toolUseId)
+        if (targetPos >= 0) {
+          const target = parts[targetPos] as ToolPart
+          parts[targetPos] = {
+            ...target,
+            finished: true,
+            status: settled.status === 'completed' ? 'success' : 'error',
+            output: settled.content.length ? settled.content : (settled.errorMessage ? [{ text: settled.errorMessage }] : target.output),
+          }
+        }
+        if (event.id === settled.taskId) {
+          messages[index] = { ...messages[index], parts }
+          return { ...next, messages }
+        }
+      }
+    }
     const identity = toolIdentity(event.run_id, event.node_path, event.id)
     const position = parts.findIndex((part) => part.kind === 'tool' && part.key === identity)
     const existing = position >= 0 ? parts[position] as ToolPart : undefined
@@ -558,12 +743,75 @@ export function reducePanelEvent(state: PanelState, event: PanelEvent): PanelSta
     if (event.type === 'tool_progress' && !tool.finished) tool.progress = [...tool.progress, displayValue(event.data)]
     // Identical results are harmless; transformed/corrected results remain authoritative.
     if (event.type === 'tool_result') {
-      tool.output = event.content
-      tool.status = typeof event.status === 'string' ? event.status : 'success'
-      tool.finished = true
+      const dispatchedTaskId = parseBackgroundDispatchTaskId(event.content)
+      if (dispatchedTaskId && !existing?.finished) {
+        tool.taskId = dispatchedTaskId
+      } else {
+        tool.output = event.content
+        tool.status = typeof event.status === 'string' ? event.status : 'success'
+        tool.finished = true
+      }
     }
     if (position >= 0) parts[position] = tool
     else parts.push(tool)
+  } else if (event.type === 'background_event') {
+    const payload = record(event.event)
+    const taskId = typeof event.task_id === 'string' ? event.task_id : typeof payload.task_id === 'string' ? payload.task_id : ''
+    if (payload.tool_result) {
+      const toolResult = record(payload.tool_result)
+      const toolUse = record(payload.tool_use)
+      const toolUseId = typeof toolUse.toolUseId === 'string' ? toolUse.toolUseId : typeof toolResult.toolUseId === 'string' ? toolResult.toolUseId : ''
+      const pos = parts.findIndex((part) => part.kind === 'tool' && JSON.stringify(part.path) === pathKey &&
+        ((toolUseId && part.id === toolUseId) || (taskId && part.taskId === taskId)))
+      if (pos >= 0) {
+        const target = parts[pos] as ToolPart
+        parts[pos] = {
+          ...target,
+          output: toolResult.content ?? target.output,
+          status: typeof toolResult.status === 'string' ? toolResult.status : 'success',
+          finished: true,
+        }
+      }
+    } else if (payload.tool_stream_event) {
+      const stream = record(payload.tool_stream_event)
+      const use = record(stream.tool_use)
+      const toolUseId = typeof use.toolUseId === 'string' ? use.toolUseId : ''
+      const data = stream.data
+      if (toolUseId) {
+        const identity = toolIdentity(event.run_id, event.node_path, toolUseId)
+        let pos = parts.findIndex((part) => part.kind === 'tool' && part.key === identity)
+        if (pos < 0) {
+          pos = parts.length
+          parts.push({
+            kind: 'tool',
+            key: identity,
+            id: toolUseId,
+            name: typeof use.name === 'string' ? use.name : toolUseId,
+            path: event.node_path,
+            input: use.input ?? {},
+            progress: [],
+            finished: false,
+            taskId: taskId || undefined,
+          })
+        }
+        const dataRec = record(data)
+        const isNestedAgentEvent = data && typeof data === 'object' && !Array.isArray(data) && (
+          ['event', 'tool_stream_event', 'current_tool_use', 'message', 'result', 'delta', 'tool_result', 'tool_interrupt_event', 'data', 'reasoningText'].some((k) => k in dataRec) ||
+          String(dataRec.type ?? '').startsWith('multiagent_')
+        )
+        if (isNestedAgentEvent) {
+          const scopeLabel = typeof dataRec.formation === 'string' ? dataRec.formation : typeof dataRec.skill === 'string' ? dataRec.skill : null
+          const innerEvent = scopeLabel && dataRec.event && typeof dataRec.event === 'object' ? record(dataRec.event) : dataRec
+          const childPath = scopeLabel ? [...event.node_path, toolUseId, scopeLabel] : [...event.node_path, toolUseId]
+          foldBackgroundChildEvent(parts, event.run_id, childPath, innerEvent, event.sequence)
+        } else if (data !== undefined) {
+          const current = parts[pos] as ToolPart
+          if (!current.finished) {
+            parts[pos] = { ...current, progress: [...current.progress, displayValue(data)] }
+          }
+        }
+      }
+    }
   } else if (event.type === 'native_tool') {
     const payload = (event.payload && typeof event.payload === 'object' ? event.payload : {}) as Record<string, unknown>
     const item = payload.item && typeof payload.item === 'object' ? payload.item as Record<string, unknown> : undefined
@@ -618,7 +866,6 @@ export function reducePanelEvent(state: PanelState, event: PanelEvent): PanelSta
       text = `Retry${event.attempt === undefined ? '' : ` ${displayValue(event.attempt)}`}: ${displayValue(event.reason) || 'Trying again'}`
       if (event.delay !== undefined) text += ` · delay ${displayValue(event.delay)}s`
     } else if (event.type === 'interrupt') text = `Input requested · ${displayValue(event.interrupts)}`
-    else if (event.type === 'background_event') text = `Background · ${text}`
     else if (event.type === 'node_event') text = `Node · ${text}`
     else if (event.type === 'steering_accepted') text = `Steering accepted · ${text}`
     else if (event.type === 'steering_applied') text = `Steering applied · ${text}`
@@ -681,24 +928,44 @@ export function hydratePanelSession(sessionId: string, value: unknown): PanelSta
       const block = record(rawBlock)
       if (block.toolResult) {
         const result = record(block.toolResult)
+        const settled = parseBackgroundSettlement(result.content)
+        if (settled && BACKGROUND_TERMINAL.has(settled.status)) {
+          for (const msg of state.messages) {
+            if (msg.role !== 'assistant') continue
+            for (const part of msg.parts) {
+              if (part.kind === 'tool' && part.id === settled.toolUseId) {
+                part.finished = true
+                part.status = settled.status === 'completed' ? 'success' : 'error'
+                part.output = settled.content.length ? settled.content : (settled.errorMessage ? [{ text: settled.errorMessage }] : part.output)
+              }
+            }
+          }
+          if (String(result.toolUseId) === settled.taskId) return
+        }
+        const dispatchedTaskId = parseBackgroundDispatchTaskId(result.content)
         for (const part of assistant?.parts ?? []) {
           if (part.kind === 'tool' && part.id === result.toolUseId && !part.finished) {
-            part.finished = true; part.output = result.content; part.status = String(result.status || 'success')
+            if (dispatchedTaskId) {
+              part.taskId = dispatchedTaskId
+            } else {
+              part.finished = true; part.output = result.content; part.status = String(result.status || 'success')
+            }
           }
         }
         return
       }
       if (message.role !== 'assistant') return
+      const toolBlock = block.toolUse ? record(block.toolUse) : null
+      if (toolBlock && isSyntheticBackgroundGet(toolBlock.name, toolBlock.toolUseId, toolBlock.input)) return
       if (!assistant) {
         assistant = { id: `history-assistant-${messageIndex}`, role: 'assistant', parts: [] }
         state.messages.push(assistant)
       }
       const key = `history-${messageIndex}-${blockIndex}`
       if (typeof block.text === 'string') assistant.parts.push({ kind: 'text', key, path: [], text: block.text })
-      else if (block.toolUse) {
-        const tool = record(block.toolUse)
-        assistant.parts.push({ kind: 'tool', key, id: String(tool.toolUseId), name: String(tool.name),
-          path: [], input: tool.input ?? {}, progress: [], finished: false })
+      else if (toolBlock) {
+        assistant.parts.push({ kind: 'tool', key, id: String(toolBlock.toolUseId), name: String(toolBlock.name),
+          path: [], input: toolBlock.input ?? {}, progress: [], finished: false })
       } else if (block.reasoningContent) {
         const reasoning = record(record(block.reasoningContent).reasoningText)
         if (typeof reasoning.text === 'string' && reasoning.text.trim()) assistant.parts.push({ kind: 'reasoning', key, path: [], text: reasoning.text })
@@ -829,7 +1096,7 @@ export type ThinkStep =
  * `repair:<rev>` fed by the repair service), whose events arrive under
  * node_path=[<its toolUseId>].
  */
-export const CHAIN_TOOLS: ReadonlySet<string> = new Set(['think', 'repair'])
+export const CHAIN_TOOLS: ReadonlySet<string> = new Set(['think', 'repair', 'subagent', 'run_skill', 'use_skill'])
 
 /** The agents' private notebook (`core/dreaming.py`): its calls are never drawn in a conversation. */
 export const JOURNAL_TOOL = 'journal'

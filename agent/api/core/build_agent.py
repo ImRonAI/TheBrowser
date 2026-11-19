@@ -190,12 +190,12 @@ def _context_kwargs(context: str, side_model_factory: Any) -> dict[str, Any]:
 
 
 def _background(options: dict[str, Any]) -> Any:
-    """Off unless the ``background`` option is on; then native ``wait_for_completion`` as the panel runtime requires."""
-    if not options.get("background"):
+    """Enabled by default with native ``wait_for_completion`` as the panel runtime requires; ``False`` only when turned off."""
+    if not options.get("background", True):
         return False
     from agent.api.core.deep_research_tools import DEEP_RESEARCH_TOOL_NAMES
 
-    return {"agentic": ["*"], "wait_for_completion": True, "never": ["editor", *DEEP_RESEARCH_TOOL_NAMES]}
+    return {"agentic": ["*"], "wait_for_completion": True, "never": ["editor", *sorted(DEEP_RESEARCH_TOOL_NAMES)]}
 
 
 def create_build_agent(*, user_id: str, session_id: str, model: Any, side_model_factory: Any, browser: str,

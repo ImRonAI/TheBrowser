@@ -312,3 +312,99 @@ test('resolveResearchArtifactUrl adds the user and the download flag; the topolo
   assert.deepEqual(custom.nodes.map((node) => [node.id, node.label]), [['only_agent', 'Only Agent']])
   assert.deepEqual(custom.edges, [])
 })
+
+test('backgrounded subagent and tool calls stay running on dispatch, stream live child events, and settle cleanly', () => {
+  const path = ['research_swarm', 'researcher']
+  const state = run([
+    { type: 'multiagent_node_start', node_id: 'research_swarm', node_type: 'multiagent' },
+    at(['research_swarm'], { type: 'multiagent_node_start', node_id: 'researcher', node_type: 'agent' }),
+    // Researcher dispatches subagent in background
+    at(path, {
+      message: {
+        role: 'assistant',
+        content: [{ toolUse: { toolUseId: 'sub-1', name: 'subagent', input: { task: 'Fetch benchmark numbers' } } }],
+      },
+    }),
+    at(path, {
+      message: {
+        role: 'user',
+        content: [{ toolResult: { toolUseId: 'sub-1', status: 'success', content: [{ text: 'Background task dispatched.\n\nTask ID: bg-sub-1\nTool: subagent\nStatus: working' }] } }],
+      },
+    }),
+    // Inside sub-1, child dispatches a background olostep_scrape_website, which stays running on dispatch ack, then is cancelled
+    at(path, {
+      tool_stream_event: {
+        tool_use: { toolUseId: 'sub-1', name: 'subagent', input: { task: 'Fetch benchmark numbers' } },
+        data: {
+          message: {
+            role: 'assistant',
+            content: [{ toolUse: { toolUseId: 'scr-1', name: 'olostep_scrape_website', input: { url_to_scrape: 'https://hung.example', _background_execution: true } } }],
+          },
+        },
+      },
+    }),
+    at(path, {
+      tool_stream_event: {
+        tool_use: { toolUseId: 'sub-1', name: 'subagent', input: { task: 'Fetch benchmark numbers' } },
+        data: {
+          message: {
+            role: 'user',
+            content: [{ toolResult: { toolUseId: 'scr-1', status: 'success', content: [{ text: 'Background task dispatched.\n\nTask ID: bg-scr-1\nTool: olostep_scrape_website\nStatus: working' }] } }],
+          },
+        },
+      },
+    }),
+    at(path, {
+      tool_stream_event: {
+        tool_use: { toolUseId: 'sub-1', name: 'subagent', input: { task: 'Fetch benchmark numbers' } },
+        data: {
+          message: {
+            role: 'assistant',
+            content: [{ toolUse: { toolUseId: 'bg-scr-1', name: 'strands_manage_background_task', input: { mode: 'get', task_id: 'bg-scr-1' } } }],
+          },
+        },
+      },
+    }),
+    at(path, {
+      tool_stream_event: {
+        tool_use: { toolUseId: 'sub-1', name: 'subagent', input: { task: 'Fetch benchmark numbers' } },
+        data: {
+          message: {
+            role: 'user',
+            content: [{ toolResult: { toolUseId: 'bg-scr-1', status: 'success', content: [{ json: { task_id: 'bg-scr-1', tool_use_id: 'scr-1', status: 'cancelled', error: { type: 'cancelled', message: 'Cancelled hung scrape' } } }] } }],
+          },
+        },
+      },
+    }),
+    at(path, {
+      tool_stream_event: {
+        tool_use: { toolUseId: 'sub-1', name: 'subagent', input: { task: 'Fetch benchmark numbers' } },
+        data: { data: 'Threshold is 1.0%.' },
+      },
+    }),
+    // Parent Researcher receives sub-1 synthetic settlement
+    at(path, {
+      message: {
+        role: 'assistant',
+        content: [{ toolUse: { toolUseId: 'bg-sub-1', name: 'strands_manage_background_task', input: { mode: 'get', task_id: 'bg-sub-1' } } }],
+      },
+    }),
+    at(path, {
+      message: {
+        role: 'user',
+        content: [{ toolResult: { toolUseId: 'bg-sub-1', status: 'success', content: [{ json: { task_id: 'bg-sub-1', tool_use_id: 'sub-1', status: 'completed' } }, { text: 'Threshold is 1.0%.' }] } }],
+      },
+    }),
+  ])
+
+  const researcher = state.nodes['research_swarm/researcher']
+  assert.ok(researcher)
+  assert.equal(researcher.skill_invocations.length, 1)
+  const sub = researcher.skill_invocations[0]
+  assert.equal(sub.id, 'sub-1')
+  assert.equal(sub.status, 'completed')
+  assert.equal(sub.output_text, 'Threshold is 1.0%.')
+  assert.deepEqual(sub.tools.map((tc) => [tc.id, tc.status, tc.output]), [
+    ['scr-1', 'failed', 'Cancelled hung scrape'],
+  ])
+})

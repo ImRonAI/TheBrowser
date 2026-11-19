@@ -1039,6 +1039,7 @@ async def create_child_agent(
             system_prompt=spec.system_prompt + (JOURNAL_DIRECTIVE if inherited else ""),
             tools=[*spec.tools, *inherited],
             plugins=list(plugins),
+            background_tasks={"agentic": ["*"], "wait_for_completion": True},
             callback_handler=None,
             session_manager=None,
             checkpointing=False,

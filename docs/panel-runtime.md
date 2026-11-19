@@ -227,7 +227,7 @@ issue workspace.
     "context": "auto",
     "tool_execution": "concurrent",
     "checkpointing": false,
-    "background": false,
+    "background": true,
     "goal": ""
   }
 }
@@ -238,7 +238,7 @@ issue workspace.
 | `context` | `auto` (default): `ContextOffloader` on the session storage (`retrieve_offloaded_content`) and `SummarizingConversationManager` with proactive compression. Summaries are produced by a fresh `Agent` on the panel model and written back into this thread's session. `agentic`: native context-manager tools (`summarize_context`, `truncate_context`, `pin_context`, `retrieve_context`). `sliding`: `SlidingWindowConversationManager`, still with `ContextOffloader`. |
 | `tool_execution` | Native `concurrent` (default) or `sequential` executor. |
 | `checkpointing` | Root native checkpoints; default false. Resume through the runtime. |
-| `background` | Native background execution; default false. Always waits for completion. Discovery/loading, editor, questions, skills, subagents and formations stay foreground-only. |
+| `background` | Native Strands `background_tasks` (`wait_for_completion=True`, `agentic=["*"]`); default `true`. Delegated subagents, skills and formations (`think`, `run_skill`, `use_skill`, `research_review`, `reasoning_swarm`, `nested_research_review`) run asynchronously in `always`, and every agent receives native `strands_manage_background_task(mode="list"\|"get"\|"cancel")` to poll or cancel in-flight tool calls and persist when tools fail or stall. Registry-mutating/interactive/handle tools (`tool_catalog`, `mcp_client`, `editor`, `ask_user`, `programmatic_tool_caller`, `deep_research_*`) stay in `never`. |
 | `goal` | Nonempty text enables native GoalLoop with a fresh judge model, no attempt/time cutoff and preserved history. User cancellation remains available. |
 
 `ask_user(question)` uses native `ToolContext.interrupt`; there is no custom

@@ -824,3 +824,152 @@ test('journal calls are never drawn in a conversation', () => {
   const items = groupThinkParts(state.messages[0].parts, false)
   assert.deepEqual(items.map((i) => (i.kind === 'part' ? i.part.kind : i.kind)), ['text'])
 })
+
+test('native background tasks stay running on dispatch, stream nested child events, and settle on completion or cancellation', () => {
+  let state = emptyPanelState('session')
+  const seq = [
+    event(1, 'run_started', { model_id: 'm', provider: 'mistral' }),
+    // 1) Backgrounded subagent: dispatch ack keeps finished=false, child events stream via background_event, settles completed.
+    event(2, 'tool_input', { id: 'sub-1', name: 'subagent', input: { task: 'Audit links' } }),
+    event(3, 'tool_result', {
+      id: 'sub-1',
+      status: 'success',
+      content: [{ text: 'Background task dispatched.\n\nTask ID: task-sub-1\nTool: subagent\nStatus: working' }],
+    }),
+    // 2) Hung scrape dispatched in background, explicitly polled & cancelled via strands_manage_background_task.
+    event(4, 'tool_input', { id: 'scr-1', name: 'olostep_scrape_website', input: { url_to_scrape: 'https://slow.example', _background_execution: true } }),
+    event(5, 'tool_result', {
+      id: 'scr-1',
+      status: 'success',
+      content: [{ text: 'Background task dispatched.\n\nTask ID: task-scr-1\nTool: olostep_scrape_website\nStatus: working' }],
+    }),
+    // Live subagent child tool + text via background_event
+    event(6, 'background_event', {
+      event: {
+        task_id: 'task-sub-1',
+        tool_stream_event: {
+          tool_use: { toolUseId: 'sub-1', name: 'subagent', input: { task: 'Audit links' } },
+          data: { current_tool_use: { toolUseId: 'child-web-1', name: 'http_request', input: { url: 'https://ok.example' } } },
+        },
+      },
+    }),
+    event(7, 'background_event', {
+      event: {
+        task_id: 'task-sub-1',
+        tool_stream_event: {
+          tool_use: { toolUseId: 'sub-1', name: 'subagent', input: { task: 'Audit links' } },
+          data: { tool_result: { toolUseId: 'child-web-1', status: 'success', content: [{ text: '200 OK' }] } },
+        },
+      },
+    }),
+    event(8, 'background_event', {
+      event: {
+        task_id: 'task-sub-1',
+        tool_stream_event: {
+          tool_use: { toolUseId: 'sub-1', name: 'subagent', input: { task: 'Audit links' } },
+          data: { data: 'Link verified.' },
+        },
+      },
+    }),
+  ]
+  for (const e of seq) state = reducePanelEvent(state, e)
+
+  let tools = state.messages[0].parts.filter((p) => p.kind === 'tool' && p.path.length === 0)
+  assert.equal(tools.length, 2)
+  assert.equal(tools[0].kind === 'tool' && tools[0].finished, false)
+  assert.equal(tools[0].kind === 'tool' && tools[0].taskId, 'task-sub-1')
+  assert.equal(tools[1].kind === 'tool' && tools[1].finished, false)
+  assert.equal(tools[1].kind === 'tool' && tools[1].taskId, 'task-scr-1')
+
+  // Subagent groups into a ChainOfThought item with its child tool and text while streaming.
+  const liveItems = groupThinkParts(state.messages[0].parts, true)
+  const subChain = liveItems.find((i) => i.kind === 'think' && i.tool.id === 'sub-1')
+  assert.ok(subChain && subChain.kind === 'think')
+  assert.deepEqual(subChain.steps.map((s) => s.kind), ['tool', 'text'])
+
+  // Explicit agent cancel call + synthetic settlements for sub-1 (completed) and scr-1 (cancelled).
+  for (const e of [
+    event(9, 'tool_input', { id: 'explicit-cancel', name: 'strands_manage_background_task', input: { mode: 'cancel', task_id: 'task-scr-1' } }),
+    event(10, 'tool_result', {
+      id: 'explicit-cancel',
+      name: 'strands_manage_background_task',
+      status: 'success',
+      content: [{ json: { task_id: 'task-scr-1', tool_use_id: 'scr-1', tool_name: 'olostep_scrape_website', status: 'cancelled' } }],
+    }),
+    // Synthetic continuation settlements (id === task_id) must update original tools without creating duplicate cards.
+    event(11, 'tool_input', { id: 'task-sub-1', name: 'strands_manage_background_task', input: { mode: 'get', task_id: 'task-sub-1' } }),
+    event(12, 'tool_result', {
+      id: 'task-sub-1',
+      status: 'success',
+      content: [
+        { json: { task_id: 'task-sub-1', tool_use_id: 'sub-1', tool_name: 'subagent', status: 'completed' } },
+        { text: 'Audit complete: 1 valid link.' },
+      ],
+    }),
+    event(13, 'tool_input', { id: 'task-scr-1', name: 'strands_manage_background_task', input: { mode: 'get', task_id: 'task-scr-1' } }),
+    event(14, 'tool_result', {
+      id: 'task-scr-1',
+      status: 'success',
+      content: [
+        { json: { task_id: 'task-scr-1', tool_use_id: 'scr-1', tool_name: 'olostep_scrape_website', status: 'cancelled', error: { type: 'cancelled', message: 'Cancelled by agent' } } },
+      ],
+    }),
+    event(15, 'text_delta', { data: 'Persisted using verified link.' }),
+    event(16, 'run_finished', { status: 'completed', stop_reason: 'end_turn', result: {} }),
+  ]) state = reducePanelEvent(state, e)
+
+  tools = state.messages[0].parts.filter((p) => p.kind === 'tool' && p.path.length === 0)
+  // Root tools are sub-1, scr-1, and explicit-cancel (no synthetic task-sub-1 or task-scr-1 cards).
+  assert.deepEqual(tools.map((t) => t.kind === 'tool' ? [t.id, t.finished, t.status] : []), [
+    ['sub-1', true, 'success'],
+    ['scr-1', true, 'error'],
+    ['explicit-cancel', true, 'success'],
+  ])
+
+  // Hydrating from durable SDK messages reproduces the settled statuses without synthetic get cards.
+  const hydrated = hydratePanelSession('session', {
+    run_id: 'r1',
+    sequence: 16,
+    status: 'completed',
+    messages: [
+      { role: 'user', content: [{ text: 'Check links' }] },
+      {
+        role: 'assistant',
+        content: [
+          { toolUse: { toolUseId: 'sub-1', name: 'subagent', input: { task: 'Audit links' } } },
+          { toolUse: { toolUseId: 'scr-1', name: 'olostep_scrape_website', input: { url_to_scrape: 'https://slow.example', _background_execution: true } } },
+        ],
+      },
+      {
+        role: 'user',
+        content: [
+          { toolResult: { toolUseId: 'sub-1', status: 'success', content: [{ text: 'Background task dispatched.\n\nTask ID: task-sub-1\nTool: subagent\nStatus: working' }] } },
+          { toolResult: { toolUseId: 'scr-1', status: 'success', content: [{ text: 'Background task dispatched.\n\nTask ID: task-scr-1\nTool: olostep_scrape_website\nStatus: working' }] } },
+        ],
+      },
+      {
+        role: 'assistant',
+        content: [
+          { toolUse: { toolUseId: 'task-sub-1', name: 'strands_manage_background_task', input: { mode: 'get', task_id: 'task-sub-1' } } },
+          { toolUse: { toolUseId: 'task-scr-1', name: 'strands_manage_background_task', input: { mode: 'get', task_id: 'task-scr-1' } } },
+        ],
+      },
+      {
+        role: 'user',
+        content: [
+          { toolResult: { toolUseId: 'task-sub-1', status: 'success', content: [{ json: { task_id: 'task-sub-1', tool_use_id: 'sub-1', status: 'completed' } }, { text: 'Audit complete.' }] } },
+          { toolResult: { toolUseId: 'task-scr-1', status: 'success', content: [{ json: { task_id: 'task-scr-1', tool_use_id: 'scr-1', status: 'failed', error: { type: 'timeout', message: 'Timed out' } } }] } },
+        ],
+      },
+      { role: 'assistant', content: [{ text: 'Persisted using verified link.' }] },
+    ],
+  })
+  const hydratedTools = hydrated.messages
+    .filter((m) => m.role === 'assistant')
+    .flatMap((m) => m.parts)
+    .filter((p) => p.kind === 'tool')
+  assert.deepEqual(hydratedTools.map((t) => t.kind === 'tool' ? [t.id, t.finished, t.status] : []), [
+    ['sub-1', true, 'success'],
+    ['scr-1', true, 'error'],
+  ])
+})

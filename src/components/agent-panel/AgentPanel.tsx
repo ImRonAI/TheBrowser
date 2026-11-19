@@ -948,35 +948,62 @@ export function MessageBubble({ message, status, onUiAction, superseded }: { mes
   </Message>
 }
 
-/** Chain-tool labels: the `think` child reasons over a thought; `repair` is the tool fixer's run. */
+/** Chain-tool labels: `think`, `repair`, and delegated subagents (`subagent`, `run_skill`, `use_skill`). */
 const CHAIN_LABELS: Record<string, { streaming: string; title: string; input: string; output: string }> = {
   think: { streaming: 'Thinking…', title: 'Chain of Thought', input: 'Thought', output: 'Conclusion' },
   repair: { streaming: 'Repairing…', title: 'Repair', input: 'Tool', output: 'Result' },
+  subagent: { streaming: 'Subagent working…', title: 'Subagent', input: 'Task', output: 'Result' },
+  run_skill: { streaming: 'Running skill…', title: 'Skill', input: 'Task', output: 'Result' },
+  use_skill: { streaming: 'Running skill…', title: 'Skill', input: 'Task', output: 'Result' },
 }
 
-/** Interleaved reasoning + tool use from a chain tool's child agent (`think`, `repair`), as AI Elements chain of thought. */
+/** Interleaved reasoning + tool use from a chain tool's child agent, rendered with AI Elements components. */
 function ThinkChain({ tool, steps, running }: { tool: ToolPart; steps: ThinkStep[]; running: boolean }) {
   const labels = CHAIN_LABELS[tool.name] ?? CHAIN_LABELS.think
   const streaming = running && !tool.finished
-  const input = tool.input as { thought?: unknown; tool?: unknown } | undefined
-  const thought = displayValue(tool.name === 'repair' ? input?.tool : input?.thought)
+  const input = tool.input as { thought?: unknown; tool?: unknown; task?: unknown; prompt?: unknown; request?: unknown } | undefined
+  const thought = displayValue(
+    tool.name === 'repair'
+      ? input?.tool
+      : input?.thought ?? input?.task ?? input?.prompt ?? input?.request,
+  )
   const conclusion = tool.finished ? displayValue(Array.isArray(tool.output) ? (tool.output as { text?: unknown }[]).map((b) => b.text ?? '').join('') : tool.output) : ''
   const failed = tool.status === 'error' || tool.status === 'failed'
   return <ChainOfThought className="my-3 space-y-2 text-xs" defaultOpen={streaming} isStreaming={streaming}>
     <ChainOfThoughtHeader>{streaming ? labels.streaming : failed ? `${labels.title} · failed` : labels.title}</ChainOfThoughtHeader>
     <ChainOfThoughtContent>
       {thought && <ChainOfThoughtStep label={labels.input} status="complete"><p className="whitespace-pre-wrap break-words text-xs text-ink-muted dark:text-ink-inverse-muted">{thought}</p></ChainOfThoughtStep>}
-      {steps.map((step) => step.kind === 'tool'
-        ? <ChainOfThoughtStep key={step.key} label={`Using ${step.tool.name}`} status={step.active ? 'active' : 'complete'}
-            description={step.tool.finished ? (step.tool.status === 'error' ? 'failed' : 'done') : step.active ? 'running…' : undefined}>
-            <details className="text-xs"><summary className="cursor-pointer text-ink-muted dark:text-ink-inverse-muted">input / output</summary>
-              <pre className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap break-words">{displayValue(step.tool.input)}</pre>
-              {step.tool.finished && <pre className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap break-words opacity-80">{displayValue(step.tool.output)}</pre>}
-            </details>
-          </ChainOfThoughtStep>
-        : <ChainOfThoughtStep key={step.key} label={step.kind === 'reasoning' ? 'Thinking' : 'Reasoning'} status={step.active ? 'active' : 'complete'}>
+      {steps.map((step) => {
+        if (step.kind === 'tool') {
+          const stepFailed = step.tool.status === 'error' || step.tool.status === 'failed'
+          const stepState = step.tool.finished ? (stepFailed ? 'output-error' : 'output-available') : (step.active || streaming ? 'input-available' : 'input-streaming')
+          return (
+            <ChainOfThoughtStep
+              key={step.key}
+              label={`Tool: ${step.tool.name}`}
+              status={step.active ? 'active' : 'complete'}
+            >
+              <Tool>
+                <ToolHeader type="dynamic-tool" toolName={step.tool.name} state={stepState} />
+                <ToolContent>
+                  <ToolInput input={step.tool.input} />
+                  {step.tool.finished && (
+                    <ToolOutput
+                      output={stepFailed ? null : (step.tool.output ?? '(empty result)')}
+                      errorText={stepFailed ? (displayValue(step.tool.output) || 'Tool failed') : undefined}
+                    />
+                  )}
+                </ToolContent>
+              </Tool>
+            </ChainOfThoughtStep>
+          )
+        }
+        return (
+          <ChainOfThoughtStep key={step.key} label={step.kind === 'reasoning' ? 'Thinking' : 'Reasoning'} status={step.active ? 'active' : 'complete'}>
             <p className="whitespace-pre-wrap break-words text-xs text-ink-muted dark:text-ink-inverse-muted">{step.text}</p>
-          </ChainOfThoughtStep>)}
+          </ChainOfThoughtStep>
+        )
+      })}
       {tool.finished && <ChainOfThoughtStep label={failed ? 'Failed' : labels.output} status="complete">
         <p className="whitespace-pre-wrap break-words text-xs">{conclusion || '(no conclusion)'}</p>
       </ChainOfThoughtStep>}

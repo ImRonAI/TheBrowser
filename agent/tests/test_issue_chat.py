@@ -185,7 +185,12 @@ def test_issue_chat_streams_its_own_harness_agent_with_the_callers_access(monkey
             assert call["builtin_tools"] == [] and call["builtin_plugins"] == ["todos"]
             assert call["skills"] is False and call["session"] is False and call["mcp_servers"] is None
             assert isinstance(call["memory"], MemoryManager) and call["interventions"] is None
-            assert call["background_tasks"] is False and call["checkpointing"] is False
+            assert call["background_tasks"] == {
+                "agentic": ["*"],
+                "wait_for_completion": True,
+                "always": ["use_skill"],
+                "never": ["deep_research_cancel", "deep_research_start", "deep_research_status"],
+            } and call["checkpointing"] is False
             session = await manager.get(user, "issue-chat")
             assert session is not None and session.agent is not None
             agent = session.agent
@@ -195,7 +200,7 @@ def test_issue_chat_streams_its_own_harness_agent_with_the_callers_access(monkey
                     "save_work_product", "add_workflow_to_description", "read_comments", "add_comment",
                     "http_request", "understand_media",
                     "render_ui", "render_workflow", "list_learned_skills",
-                    "use_skill", "search_memory", "todo_write"} <= registered
+                    "use_skill", "search_memory", "todo_write", "strands_manage_background_task"} <= registered
             assert not registered & FORBIDDEN_TOOLS, registered & FORBIDDEN_TOOLS
             from strands_harness import HARNESS_CONTRACT
 
@@ -239,8 +244,19 @@ def test_options_reach_the_harness_agent(harness_calls):
     call = harness_calls[0]
     assert isinstance(call["tool_executor"], SequentialToolExecutor) and isinstance(agent.tool_executor, SequentialToolExecutor)
     assert call["checkpointing"] is True and call["context_manager"] is False
-    assert call["background_tasks"] == {"agentic": ["*"], "wait_for_completion": True, "never": ["use_skill"]}
+    assert call["background_tasks"] == {
+        "agentic": ["*"],
+        "wait_for_completion": True,
+        "always": ["use_skill"],
+        "never": ["deep_research_cancel", "deep_research_start", "deep_research_status"],
+    }
     assert any(isinstance(plugin, GoalLoop) for plugin in call["plugins"])
+    create_issue_chat_agent(
+        user_id="options-user", session_id="options-off", issue_id=str(uuid.uuid4()), project_id=str(uuid.uuid4()),
+        owner_id="options-user", provider="openai", model_id="offline", model=model, side_model_factory=lambda _: model,
+        options={"background": False}, agent_id="options-agent-off", callback_handler=None,
+    )
+    assert harness_calls[-1]["background_tasks"] is False
     with pytest.raises(ValueError):
         create_issue_chat_agent(user_id="u", session_id="bad", issue_id=str(uuid.uuid4()), project_id=str(uuid.uuid4()),
                                 owner_id="u", provider="openai", model_id="offline", model=model,

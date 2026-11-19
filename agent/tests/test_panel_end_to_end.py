@@ -436,21 +436,39 @@ def test_live_native_formation_results_serialize_through_http(offline, formation
     script, connect = offline
     script.uses = [(formation, {"prompt": "analyze offline"})]
 
+    def _collect_formation_deltas(value):
+        found = []
+        if isinstance(value, dict):
+            if value.get("data") == "child answer":
+                found.append(value["data"])
+            for v in value.values():
+                found.extend(_collect_formation_deltas(v))
+        elif isinstance(value, list):
+            for item in value:
+                found.extend(_collect_formation_deltas(item))
+        return found
+
     async def scenario():
         async with connect() as (client, _):
             events = sse(await client.post("/chat", json=request()))
-            result, = [e for e in of_type(events, "tool_result") if not e["node_path"]]
-            assert result["name"] == formation and result["status"] == "success", result
-            payload = result["content"][0]["json"]
+            bg_events = of_type(events, "background_event")
+            assert bg_events
+            completions = [e["event"] for e in bg_events if "tool_result" in e["event"]]
+            assert len(completions) == 1
+            assert completions[0]["tool_use"]["name"] == formation
+            assert completions[0]["tool_result"]["status"] == "success"
+            payload = completions[0]["tool_result"]["content"][0]["json"]
             assert payload["error"] is None
             assert payload["result"]["type"] == "multiagent_result"
-            assert of_type(events, "node_event")
-            child_text = [e for e in of_type(events, "text_delta") if e["node_path"]]
-            assert len(child_text) == children
-            assert all(e["node_path"][:2] == ["use-1", formation] for e in child_text)
-            assert all(e["data"] == "child answer" for e in child_text)
-            assert not of_type(events, "error") and not of_type(events, "background_event")
-            assert sum(len(model.calls) for model in script.models) == 2 + children
+            streamed = [
+                e["event"]["tool_stream_event"]["data"]
+                for e in bg_events
+                if "tool_stream_event" in e["event"]
+            ]
+            assert any(isinstance(d, dict) and d.get("formation") == formation for d in streamed)
+            child_deltas = _collect_formation_deltas(streamed)
+            assert len(child_deltas) == children
+            assert not of_type(events, "error")
             saved = await snapshot(client)
             assert saved["result"] == events[-1]["result"]
             assert "multiagent_result" in json.dumps(saved["messages"])

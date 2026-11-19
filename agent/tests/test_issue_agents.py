@@ -194,7 +194,7 @@ def test_native_a2a_durable_restart_task_and_user_isolation(monkeypatch):
         # Every Ron agent also carries the web tools whose keys are set (none here), async Deep Research tools, and
         # A2A client tools; the Brave tools are off unless RON_BRAVE_TOOLS=1.
         assert {t['name'] for t in models[0].calls[0]['tools']} == (
-            ISSUE_AGENT_TOOLS | set(DEEP_RESEARCH_TOOL_NAMES) | set(A2A_TOOL_NAMES) | {"journal"}
+            ISSUE_AGENT_TOOLS | set(DEEP_RESEARCH_TOOL_NAMES) | set(A2A_TOOL_NAMES) | {"journal", "strands_manage_background_task"}
         )
         await runtime.shutdown()
 

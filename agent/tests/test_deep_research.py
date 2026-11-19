@@ -26,6 +26,7 @@ from strands.multiagent.base import MultiAgentResult, NodeResult
 from strands.multiagent.graph import Graph
 from strands.storage import InMemoryStorage
 from strands.types.streaming import StreamEvent
+from strands.types.tools import ToolContext
 from strands.vended_plugins.context_injector import ContextInjector
 
 from agent.api.core import config as app_config
@@ -97,16 +98,28 @@ class ScriptedModel(Model):
             await self.gate.wait()
         role = _ROLE_RE.search(system_prompt or "")
         label = role.group(1) if role else ""
-        done = _tool_results(list(messages))
-        steps: list[tuple[str, dict[str, Any]]] = []
-        if label == "Researcher" and "subagent" in {spec["name"] for spec in tool_specs or ()}:
-            steps.append(("subagent", {"task": "Find the surface code threshold."}))
+        msg_list = list(messages)
+        done = _tool_results(msg_list)
+        called = {
+            block["toolUse"]["name"]
+            for message in msg_list
+            if message.get("role") == "assistant"
+            for block in message.get("content") or ()
+            if "toolUse" in block
+        }
+        has_subagent = label == "Researcher" and "subagent" in {spec["name"] for spec in tool_specs or ()}
         handoff = _DONE_HANDOFF_RE.search(system_prompt or "")
-        if handoff:
-            steps.append(("handoff_to_agent", {"agent_name": handoff.group(1), "message": f"{label} is done."}))
-        if role and done == 0:
+        if role and not called:
             self.roles.append(label)
-        events = _tool_use(f"{label or 'sub'}-{done}", *steps[done]) if done < len(steps) else _text(f"{label} done.")
+        next_call: tuple[str, dict[str, Any]] | None = None
+        if has_subagent and "subagent" not in called:
+            next_call = ("subagent", {"task": "Find the surface code threshold."})
+        elif has_subagent and "strands_manage_background_task" not in called:
+            # Wait for the backgrounded subagent to settle before calling handoff_to_agent.
+            next_call = None
+        elif handoff and "handoff_to_agent" not in called:
+            next_call = ("handoff_to_agent", {"agent_name": handoff.group(1), "message": f"{label} is done."})
+        events = _tool_use(f"{label or 'sub'}-{done}", *next_call) if next_call is not None else _text(f"{label} done.")
         for event in events:
             yield event
 
@@ -635,3 +648,228 @@ async def test_transient_timeout_retries_and_model_router_fails_over_across_form
     assert run_failover["status"] == "completed", run_failover["error"]
     assert len(healthy_mistral.roles) == 19
     assert dead_nim.attempts >= 2
+
+
+@pytest.mark.asyncio
+async def test_hung_or_failing_background_tool_is_polled_cancelled_and_formation_persists(
+    isolated: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A formation agent launches a hung background tool + a failing tool, polls via native
+    ``strands_manage_background_task(mode='list'|'get')``, cancels the hung task with ``mode='cancel'``,
+    and persists across the entire formation to completion."""
+    from strands import tool
+    from strands.types.tools import ToolContext
+
+    hung_started = asyncio.Event()
+    hung_cancelled = asyncio.Event()
+
+    @tool(context=True)
+    async def olostep_scrape_website(url_to_scrape: str, tool_context: ToolContext) -> str:
+        """Simulate a remote scrape tool that hangs until cancelled."""
+        del url_to_scrape
+        hung_started.set()
+        try:
+            while not tool_context.cancel_signal.is_set():
+                await asyncio.sleep(0.01)
+        finally:
+            hung_cancelled.set()
+        return "unreachable"
+
+    @tool
+    async def flaky_source(query: str) -> str:
+        """Simulate a tool that raises an error immediately."""
+        del query
+        raise RuntimeError("Upstream 502 Bad Gateway")
+
+    monkeypatch.setattr(
+        deep_research,
+        "research_tools",
+        lambda: [olostep_scrape_website, flaky_source],
+    )
+
+    polled_modes: list[str] = []
+
+    class PersistPastHangModel(ScriptedModel):
+        async def stream(
+            self, messages: Any, tool_specs: list[Any] | None = None, system_prompt: str | None = None, **kwargs: Any
+        ) -> AsyncIterator[StreamEvent]:
+            role = _ROLE_RE.search(system_prompt or "")
+            label = role.group(1) if role else ""
+            spec_names = {spec["name"] for spec in tool_specs or ()}
+            if label == "Researcher" and "subagent" in spec_names:
+                assert "strands_manage_background_task" in spec_names
+                scrape_spec = next(spec for spec in (tool_specs or ()) if spec["name"] == "olostep_scrape_website")
+                assert "_background_execution" in scrape_spec["inputSchema"]["json"]["properties"]
+                assert "handoff_to_agent" in spec_names
+                handoff_spec = next(spec for spec in (tool_specs or ()) if spec["name"] == "handoff_to_agent")
+                assert "_background_execution" not in handoff_spec["inputSchema"]["json"]["properties"]
+
+                msg_list = list(messages)
+                done = _tool_results(msg_list)
+                uses = [
+                    block["toolUse"]
+                    for m in msg_list
+                    if m.get("role") == "assistant"
+                    for block in m.get("content") or ()
+                    if "toolUse" in block
+                ]
+                called_names = [u["name"] for u in uses]
+                if not called_names:
+                    self.roles.append(label)
+                    for ev in _tool_use(
+                        "res-scrape",
+                        "olostep_scrape_website",
+                        {"url_to_scrape": "https://slow.example", "_background_execution": True},
+                    ):
+                        yield ev
+                    return
+                # Extract dispatched task_id from the initial Background task dispatched acknowledgement.
+                task_id = ""
+                for m in msg_list:
+                    for block in m.get("content") or ():
+                        tr = block.get("toolResult") or {}
+                        for item in tr.get("content") or ():
+                            txt = item.get("text", "")
+                            match = re.search(r"Task ID:\s*([0-9a-fA-F-]+)", txt)
+                            if match:
+                                task_id = match.group(1)
+                assert task_id, "Expected native BackgroundTasks dispatch Task ID"
+                if "flaky_source" not in called_names:
+                    await asyncio.wait_for(hung_started.wait(), timeout=2.0)
+                    for ev in _tool_use("res-flaky", "flaky_source", {"query": "backup"}):
+                        yield ev
+                    return
+                explicit_modes = [
+                    u["input"].get("mode")
+                    for u in uses
+                    if u["name"] == "strands_manage_background_task" and u["toolUseId"] != task_id
+                ]
+                if "list" not in explicit_modes:
+                    polled_modes.append("list")
+                    for ev in _tool_use("res-list", "strands_manage_background_task", {"mode": "list"}):
+                        yield ev
+                    return
+                if "get" not in explicit_modes:
+                    polled_modes.append("get")
+                    for ev in _tool_use(
+                        "res-get", "strands_manage_background_task", {"mode": "get", "task_id": task_id}
+                    ):
+                        yield ev
+                    return
+                if "cancel" not in explicit_modes:
+                    polled_modes.append("cancel")
+                    for ev in _tool_use(
+                        "res-cancel", "strands_manage_background_task", {"mode": "cancel", "task_id": task_id}
+                    ):
+                        yield ev
+                    return
+                # Wait for the cancelled task settlement before handing off to Fact Checker.
+                settled = any(u["name"] == "strands_manage_background_task" and u["toolUseId"] == task_id for u in uses)
+                if not settled:
+                    for ev in _text("Waiting for cancelled task cleanup."):
+                        yield ev
+                    return
+                if "handoff_to_agent" not in called_names:
+                    handoff = _DONE_HANDOFF_RE.search(system_prompt or "")
+                    assert handoff is not None
+                    for ev in _tool_use(
+                        f"res-handoff-{done}",
+                        "handoff_to_agent",
+                        {"agent_name": handoff.group(1), "message": "Persisted past hung scrape and failed source."},
+                    ):
+                        yield ev
+                    return
+                for ev in _text("Researcher done."):
+                    yield ev
+                return
+
+            async for ev in super().stream(messages, tool_specs=tool_specs, system_prompt=system_prompt, **kwargs):
+                yield ev
+
+    model = PersistPastHangModel()
+    monkeypatch.setattr(deep_research, "build_research_model", lambda *args, **kwargs: model)
+    monkeypatch.setattr(deep_research, "resolve_selection", lambda *args: ("mistral", "mistral-large-latest"))
+
+    meta = await deep_research.start_run(user_id="u1", query="Persist past hung scrape")
+    run = await _wait_until_done("u1", meta["session_id"])
+    assert run["status"] == "completed", run["error"]
+    assert polled_modes == ["list", "get", "cancel"]
+    assert hung_cancelled.is_set()
+    assert len(model.roles) == 19
+
+
+def test_hosted_mcp_sets_native_tasks_config_and_request_timeout_and_recovers_dead_session(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """HostedMCP configures native ``DEFAULT_TASK_CONFIG``, bounds non-task ``MCPAgentTool.timeout`` so SSE hangs
+    cannot deadlock forever, and recreates dropped remote MCP sessions."""
+    from mcp.types import TASK_OPTIONAL, Tool as MCPTool, ToolExecution
+    from strands.tools.mcp import MCPClient as RealMCPClient
+    from strands.tools.mcp.mcp_agent_tool import MCPAgentTool
+    from strands.tools.mcp.mcp_tasks import DEFAULT_TASK_CONFIG, DEFAULT_TASK_REQUEST_TIMEOUT
+    from agent.api.core import hosted_mcp
+
+    constructed_clients: list[Any] = []
+
+    class OfflineMCPClient(RealMCPClient):
+        def __init__(self, **kwargs: Any) -> None:
+            super().__init__(**kwargs)
+            self.active = True
+            self.started = 0
+            self.stopped = 0
+            self._tool_task_support_cache["create_crawl"] = TASK_OPTIONAL
+            self._tools = [
+                MCPAgentTool(
+                    MCPTool(name="scrape_website", inputSchema={"type": "object"}),
+                    self,
+                    name_override=f"{self._prefix}_scrape_website" if self._prefix else None,
+                ),
+                MCPAgentTool(
+                    MCPTool(
+                        name="create_crawl",
+                        inputSchema={"type": "object"},
+                        execution=ToolExecution(taskSupport="optional"),
+                    ),
+                    self,
+                    name_override=f"{self._prefix}_create_crawl" if self._prefix else None,
+                ),
+            ]
+            constructed_clients.append(self)
+
+        def _is_session_active(self) -> bool:
+            return self.active
+
+        def _has_server_task_support(self) -> bool:
+            return True
+
+        def start(self) -> Any:
+            self.started += 1
+            return self
+
+        def stop(self, *args: Any) -> None:
+            del args
+            self.stopped += 1
+            self.active = False
+
+        def list_tools_sync(self, *args: Any, **kwargs: Any) -> list[MCPAgentTool]:
+            del args, kwargs
+            return list(self._tools)
+
+    monkeypatch.setattr(hosted_mcp, "MCPClient", OfflineMCPClient)
+    provider = hosted_mcp.HostedMCP("olostep")
+
+    tools_first = provider.tools("https://mcp.olostep.com/mcp", "tok")
+    assert len(constructed_clients) == 1
+    assert constructed_clients[0]._tasks_config == DEFAULT_TASK_CONFIG
+    by_name = {t.tool_name: t for t in tools_first}
+    # Non-task tool gets bounded native request timeout instead of None; task-capable tool uses TasksConfig polling.
+    assert by_name["olostep_scrape_website"].timeout == DEFAULT_TASK_REQUEST_TIMEOUT
+    assert by_name["olostep_create_crawl"].timeout is None
+
+    # Simulate remote session drop; next tools() stops the dead client and starts a fresh one.
+    constructed_clients[0].active = False
+    tools_second = provider.tools("https://mcp.olostep.com/mcp", "tok")
+    assert len(constructed_clients) == 2
+    assert constructed_clients[0].stopped == 1
+    assert constructed_clients[1].started == 1
+    assert len(tools_second) == 2
