@@ -13,8 +13,8 @@ import { API_BASE_URL } from '@/lib/api-base'
 import { guestWorkspace } from '@/lib/project-workspace'
 import { cancelRon, ronSessionId, runRon } from '@/lib/ron-run'
 import {
-  APPLICATIONS_CHANGED, approveAgentTurn, browsingDue, browsingTurn, cadenceLabel, contextAddedTurn, contextResults, createContextClient, dataUrlBlob, latestReply,
-  notificationTurn, phoneTurn, recordVisit, reviewDue, reviewTurn, sendReplyTurn, whenLabel,
+  APPLICATIONS_CHANGED, approveAgentTurn, browsingDue, browsingTurn, cadenceLabel, contextAddedTurn, contextResults, createContextClient, dataUrlBlob,
+  hasPhoneActivity, latestReply, notificationTurn, phoneTurn, recordVisit, reviewDue, reviewTurn, sendReplyTurn, whenLabel,
   type AgentCadence, type AgentRecommendation, type AgentRun, type ChatObservation, type ContextItem, type Dream, type NewContextFile, type NewContextItem,
   type PhoneActivity, type PhoneNotification, type ReplyDraft, type SearchObservation, type SpecialistAgent, type TopicReview, type Visit,
 } from '@/lib/context-api'
@@ -27,13 +27,6 @@ export type ContextTab = 'interests' | 'context' | 'agents' | 'ask'
 export interface AskTurn { id: string; question: string; answer: string; error?: string }
 /** `activity` while one of the user's own Ask questions is the running turn (background turns use other labels). */
 export const ASK_ACTIVITY = 'Thinking'
-
-export type PhoneReplySender = (draft: ReplyDraft, text: string) => Promise<{ ok: boolean; error?: string }>
-let phoneReplySender: PhoneReplySender | null = null
-/** ren mobile registers its RenHost bridge here so Send asks for approval on the phone and sends directly. */
-export function setPhoneReplySender(sender: PhoneReplySender | null) {
-  phoneReplySender = sender
-}
 
 async function workspaceAuthHeaders(): Promise<Record<string, string>> {
   const session = await getSession().catch(() => null)
@@ -329,7 +322,7 @@ export const useContextAgentStore = create<ContextAgentState>()(persist((set, ge
     },
 
     reportPhone: async (activity) => {
-      if (!activity.apps.length && !activity.actions.length) return
+      if (!hasPhoneActivity(activity)) return
       set({ hasNewNotes: true })
       try {
         await run(phoneTurn(activity, graph()), 'Reading what you did on your phone')
@@ -353,17 +346,6 @@ export const useContextAgentStore = create<ContextAgentState>()(persist((set, ge
       if (!text) return
       set({ sendingReply: draft.id, error: '', notice: '' })
       try {
-        if (phoneReplySender) {
-          const result = await phoneReplySender(draft, text)
-          if (!result.ok) throw new Error(result.error || 'Reply was not sent.')
-          get().observeChat(draft.app, draft.incoming, text)
-          set({
-            handled: [...get().handled, draft.id],
-            replyDrafts: get().replyDrafts.filter((item) => item.id !== draft.id),
-            notice: `Sent reply to ${draft.sender} in ${draft.app}.`,
-          })
-          return
-        }
         const reply = await run(sendReplyTurn(draft, text), `Sending reply to ${draft.sender}`)
         get().observeChat(draft.app, draft.incoming, text)
         set({

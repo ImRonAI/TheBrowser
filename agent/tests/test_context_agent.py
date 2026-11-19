@@ -321,3 +321,63 @@ def test_a_dream_notifies_once_and_its_review_reaches_the_dreaming_journal(clien
     assert "- memory/brain/panel/travel.md: wrong. Ogden\n- memory/brain/panel/old.md: right" in notes
     assert client.post("/context/dream/latest", json=review).status_code == 422
     assert client.post(f"/context/dream/{version}", json={"topics": [{"key": "../x", "right": True}]}).status_code == 422
+
+
+def test_context_agent_documents_phone_logs_in_the_background_via_native_harness_sdk_journal(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Context Agent uses harness-sdk BackgroundTasksConfig(always=['journal']) + MemoryStore.get_tools() directly."""
+    from agent.api.core import dreaming, panel_agent
+
+    class JournalInBackgroundModel(Model):
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def get_config(self) -> dict[str, Any]:
+            return {"model_id": "scripted", "stateful": False}
+
+        def update_config(self, **_: Any) -> None:
+            pass
+
+        async def structured_output(self, *args: Any, **kwargs: Any):  # type: ignore[override]
+            raise NotImplementedError
+            yield {}
+
+        async def stream(self, messages: list[dict[str, Any]], *_: Any, **__: Any):
+            self.calls += 1
+            yield {"messageStart": {"role": "assistant"}}
+            if self.calls == 1:
+                entry = {"entry": "Phone logs: WhatsApp 38s (3 opens), call with Dana Kim (195s), SMS about 7am run."}
+                yield {"contentBlockStart": {"contentBlockIndex": 0, "start": {"toolUse": {"toolUseId": "j1", "name": "journal"}}}}
+                yield {"contentBlockDelta": {"contentBlockIndex": 0, "delta": {"toolUse": {"input": json.dumps(entry)}}}}
+                yield {"contentBlockStop": {"contentBlockIndex": 0}}
+                yield {"messageStop": {"stopReason": "tool_use"}}
+                return
+            yield {"contentBlockDelta": {"contentBlockIndex": 0, "delta": {"text": "Logged."}}}
+            yield {"contentBlockStop": {"contentBlockIndex": 0}}
+            yield {"messageStop": {"stopReason": "end_turn"}}
+
+    monkeypatch.setattr(dreaming, "_timers", {})
+    monkeypatch.setattr(panel_agent, "build_model", lambda *_a, **_kw: JournalInBackgroundModel())
+    monkeypatch.setattr(panel_agent, "provider_api_key", lambda *_: "offline")
+
+    async def run() -> None:
+        agent = panel_agent.create_panel_agent(
+            provider="mistral", model_id="offline", session_id="ctx-bg", user_id="u1",
+            system_prompt=ctx.context_agent_prompt("u1"), extra_tools=ctx.context_agent_tools("u1"),
+            runtime_options={"background_tasks": {"always": ["journal"], "agentic": ["*"], "wait_for_completion": True}},
+            agent_scope="context",
+        )
+        try:
+            assert agent._background_tasks is not None
+            assert agent._background_tasks._policy.get("journal") == "always"
+            await agent.invoke_async("[phone] WhatsApp 38s, call with Dana Kim")
+            dispatched = json.dumps(agent.messages)
+            assert "Background task dispatched." in dispatched
+            assert "strands_manage_background_task" in dispatched
+            notes = await dreaming.Journal("u1", "context").notes()
+            assert "WhatsApp 38s (3 opens), call with Dana Kim (195s)" in notes
+        finally:
+            agent.cleanup()
+
+    asyncio.run(run())

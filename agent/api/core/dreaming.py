@@ -251,7 +251,7 @@ class Journal(FileMemoryStore):
                 entry: What to jot down. Leave empty to read the journal back.
             """
             if entry.strip():
-                _background(self.add(entry.strip()))
+                await self.add(entry.strip())
                 return "Noted."
             try:
                 return await self.notes() or "Nothing jotted yet."
