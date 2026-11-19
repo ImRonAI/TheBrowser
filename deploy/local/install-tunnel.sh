@@ -1,12 +1,15 @@
 #!/usr/bin/env bash
 # Render com.ronbrowser.tunnel.plist for this machine and load it as a launchd user agent.
-# Usage: RON_VPS_HOST=<host> deploy/local/install-tunnel.sh [--render-only <out.plist>]
+# Usage: RON_VPS_HOST=<host> [RON_VPS_USER=ron] [RON_SSH_KEY=~/.ssh/ronbrowser_ionos_ed25519] deploy/local/install-tunnel.sh [--render-only <out.plist>]
 set -Eeuo pipefail
 
 if [ -z "${RON_VPS_HOST:-}" ]; then
-  echo "usage: RON_VPS_HOST=<host> $0 [--render-only <out.plist>]" >&2
+  echo "usage: RON_VPS_HOST=<host> [RON_VPS_USER=ron] [RON_SSH_KEY=path] $0 [--render-only <out.plist>]" >&2
   exit 2
 fi
+
+RON_VPS_USER="${RON_VPS_USER:-ron}"
+RON_SSH_KEY="${RON_SSH_KEY:-$HOME/.ssh/ronbrowser_ionos_ed25519}"
 
 REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 LABEL=com.ronbrowser.tunnel
@@ -15,6 +18,8 @@ TEMPLATE="$REPO_ROOT/deploy/local/$LABEL.plist"
 render() {
   sed -e "s|__REPO_ROOT__|$REPO_ROOT|g" \
       -e "s|__RON_VPS_HOST__|$RON_VPS_HOST|g" \
+      -e "s|__RON_VPS_USER__|$RON_VPS_USER|g" \
+      -e "s|__RON_SSH_KEY__|$RON_SSH_KEY|g" \
       -e "s|__HOME__|$HOME|g" "$TEMPLATE" > "$1"
   plutil -lint "$1"
 }

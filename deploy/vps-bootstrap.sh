@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Idempotent root bootstrap for the Ron VPS (Ubuntu 26.04 LTS; also usable as UpCloud user-data).
+# Idempotent root bootstrap for the Ron IONOS VPS (Ubuntu 24.04/26.04 LTS; usable as cloud-init user-data).
 # Every step is a no-op on re-run. Opens only SSH on the firewall. Contains no secrets:
 # /etc/ronbrowser/ron.env is seeded from placeholder values identical to deploy/ron.env.example.
 set -Eeuo pipefail

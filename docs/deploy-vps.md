@@ -14,13 +14,13 @@ an SSH `-L` forward, so the renderer's `http://localhost:8765` is unchanged.
 
 ## Prerequisites
 
-* An Ubuntu LTS server (verified on 26.04 with Python 3.14, and on 24.04 with Python 3.12
-  — the GCP `strands` VM; the scripts use the distro `python3` and distro or NodeSource
-  Node 22) with root login by SSH key. On GCP (no root SSH) log in as a `google-sudoers`
-  user and run the bootstrap with `ssh ron@$RON_VPS_HOST 'sudo bash -s' < deploy/vps-bootstrap.sh`.
+* An IONOS Ubuntu LTS VPS (verified on 26.04 with Python 3.14 and 24.04 with Python 3.12;
+  the scripts use the distro `python3` and distro or NodeSource Node 22) with SSH key login.
+  If root SSH is disabled, log in as a sudoer and run the bootstrap with
+  `ssh ron@$RON_VPS_HOST 'sudo bash -s' < deploy/vps-bootstrap.sh`.
   Other workloads that bind only loopback ports other than 3000/8931/9222/8765/13000/18931/19222
-  (e.g. OpenClaw's docker on 18789/18790) can coexist; note the bootstrap enables `ufw`.
-* The Mac key at `~/.ssh/ronbrowser_upcloud_ed25519` (override with `RON_SSH_KEY`).
+  can coexist; note the bootstrap enables `ufw`.
+* The Mac key at `~/.ssh/ronbrowser_ionos_ed25519` (override with `RON_SSH_KEY`).
 * The sibling `../electron-playwright-mcp` checkout next to this repo (it is rsynced too).
 * A Hugging Face account/org that can own a private bucket, and a write token.
 * Provider API keys you want the server to use (Perplexity, xAI, Mistral, OpenAI, Anthropic, Gemini).
@@ -36,9 +36,9 @@ no IP or token is committed anywhere in this repository.
    `/etc/ronbrowser/ron.env` with placeholders, writes the two-command sudoers
    drop-in for the Electron sandbox, and sets sshd keepalives.
    ```bash
-   ssh -i ~/.ssh/ronbrowser_upcloud_ed25519 root@$RON_VPS_HOST 'bash -s' < deploy/vps-bootstrap.sh
+   ssh -i ~/.ssh/ronbrowser_ionos_ed25519 root@$RON_VPS_HOST 'bash -s' < deploy/vps-bootstrap.sh
    # run it twice: the second run must print BOOTSTRAP OK with no apt changes
-   ssh root@$RON_VPS_HOST 'install -d -m700 -o ron -g ron /home/ron/.ssh && cp /root/.ssh/authorized_keys /home/ron/.ssh/ && chown ron:ron /home/ron/.ssh/authorized_keys && chmod 600 /home/ron/.ssh/authorized_keys'
+   ssh -i ~/.ssh/ronbrowser_ionos_ed25519 root@$RON_VPS_HOST 'install -d -m700 -o ron -g ron /home/ron/.ssh && cp /root/.ssh/authorized_keys /home/ron/.ssh/ && chown ron:ron /home/ron/.ssh/authorized_keys && chmod 600 /home/ron/.ssh/authorized_keys'
    ```
 2. **Sync** the source of Ron and `electron-playwright-mcp` (never `.env`, `node_modules`, `venv`, `dist`, `.omo`, local runtime dirs):
    ```bash
@@ -52,8 +52,9 @@ no IP or token is committed anywhere in this repository.
     ```
 
    `vps-install.sh` runs `deploy/prepare-strands.sh` before pip. It reconstructs
-   `agent/api/core/harness-sdk` directly from GitHub at the recorded SHA and applies
-   `deploy/strands-bidi.patch`; the nested checkout is excluded from rsync.
+   `agent/api/core/harness-sdk` directly from GitHub at the recorded SHA (`strands-py`
+   and `harness-py`) and applies `deploy/strands-bidi.patch` and
+   `deploy/strands-subagent-async.patch`; the nested checkout is excluded from rsync.
    Existing source with a different origin/revision is rejected, never reset.
    For a new SDK pin or changed native patch, stop the API, inspect the existing
    checkout's `git status`/`git diff`, then **move the directory aside to a unique
@@ -160,7 +161,7 @@ a new chat. Idle sessions restore fully.
 ## Secrets
 
 Real tokens live **only** in `/etc/ronbrowser/ron.env` on the server (`root:ron`, `640`).
-Never commit `.env`, `ron.env`, or anything containing a Hugging Face or UpCloud token
+Never commit `.env`, `ron.env`, or anything containing a Hugging Face or IONOS token
 prefix; run the repo's secret scan from todo 30 / `docs/panel-runtime.md` (a `git grep`
 for those two prefixes) and require an empty result before every commit. If a token was
 ever pasted into a chat, terminal log or ticket, rotate it.

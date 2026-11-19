@@ -9,7 +9,7 @@ if [ -z "${RON_VPS_HOST:-}" ]; then
   exit 2
 fi
 RON_VPS_USER="${RON_VPS_USER:-ron}"
-RON_SSH_KEY="${RON_SSH_KEY:-$HOME/.ssh/ronbrowser_upcloud_ed25519}"
+RON_SSH_KEY="${RON_SSH_KEY:-$HOME/.ssh/ronbrowser_ionos_ed25519}"
 
 cd "$(dirname "$0")/.."
 
