@@ -100,64 +100,81 @@ def _store(storage: Storage, name: str, description: str) -> FileMemoryStore:
     return FileMemoryStore(name=name, description=description, storage=storage)
 
 
-def people_store(user_id: str, storage: Storage | None = None) -> FileMemoryStore:
-    """The user's ``people`` store: one Markdown file per person, merged by heading via ``FileMemoryStore.add``."""
-    return _store(storage or get_user_session_storage(user_id), PEOPLE_STORE, PEOPLE_DESCRIPTION)
+class People(FileMemoryStore):
+    """The user's ``people`` store: one Markdown file per person, merged by heading via ``FileMemoryStore.add``.
+
+    Exposes ``remember_person`` through the SDK's native ``MemoryStore.get_tools()`` hook when writable, so
+    ``MemoryManager`` registers it automatically alongside ``search_memory``, ``add_memory`` and ``journal``.
+    """
+
+    def __init__(self, user_id: str, storage: Storage | None = None, *, writable: bool = True) -> None:
+        super().__init__(name=PEOPLE_STORE, description=PEOPLE_DESCRIPTION,
+                         storage=storage or get_user_session_storage(user_id), writable=writable)
+
+    async def remember(self, *, name: str, relationship: str = "", contact: str = "",
+                       notes: str = "", applies_to: str = "") -> tuple[str, str]:
+        clean = " ".join((name or "").split())
+        if not 1 <= len(clean) <= 120:
+            raise ValueError("name must be 1-120 characters")
+        fields = [
+            ("relationship", relationship),
+            ("contact", contact),
+            ("notes", notes),
+            ("applies to", applies_to),
+        ]
+        lines = [f"# {clean}", *(f"- {label}: {' '.join(value.split())}" for label, value in fields if value and value.strip())]
+        if len(lines) == 1:
+            raise ValueError("Give at least one of relationship, contact, notes or applies_to.")
+        key = await self.add("\n".join(lines))
+        return clean, key
+
+    def get_tools(self) -> list[AgentTool]:
+        if not self.writable:
+            return []
+
+        @tool
+        async def remember_person(name: str, relationship: str = "", contact: str = "",
+                                  notes: str = "", applies_to: str = "") -> dict[str, Any]:
+            """Remember or update a person in the user's life: friendship/relationship, contact info, and what they apply to.
+
+            Calling this again for the same name appends the new facts to that person's file.
+
+            Args:
+                name: The person's name (e.g. "Dana Kim").
+                relationship: How they relate to the user and how close they are (e.g. "Close friend and running partner").
+                contact: Phone number, email, handle or organization (e.g. "+1 801-555-0100, dana@example.com").
+                notes: Lasting context from conversations or messages (preferences, history, plans).
+                applies_to: Interests, projects, groups or upcoming plans this person connects to.
+            """
+            clean, key = await self.remember(name=name, relationship=relationship, contact=contact,
+                                             notes=notes, applies_to=applies_to)
+            return {"status": "success", "content": [
+                {"json": {"person": {"name": clean, "key": key}}},
+                {"text": f"Remembered {clean}."},
+            ]}
+
+        return [remember_person]
+
+
+def people_store(user_id: str, storage: Storage | None = None, *, writable: bool = True) -> People:
+    """The user's ``people`` store: writable by default, or read-only when ``writable=False``."""
+    return People(user_id, storage, writable=writable)
 
 
 async def save_person(user_id: str, *, name: str, relationship: str = "", contact: str = "",
                       notes: str = "", applies_to: str = "", storage: Storage | None = None) -> tuple[str, str]:
     """Write or append facts about one person under ``# <name>`` in the native ``people`` ``FileMemoryStore``."""
-    clean = " ".join((name or "").split())
-    if not 1 <= len(clean) <= 120:
-        raise ValueError("name must be 1-120 characters")
-    fields = [
-        ("relationship", relationship),
-        ("contact", contact),
-        ("notes", notes),
-        ("applies to", applies_to),
-    ]
-    lines = [f"# {clean}", *(f"- {label}: {' '.join(value.split())}" for label, value in fields if value and value.strip())]
-    if len(lines) == 1:
-        raise ValueError("Give at least one of relationship, contact, notes or applies_to.")
-    key = await people_store(user_id, storage).add("\n".join(lines))
-    return clean, key
-
-
-def remember_person_tool(user_id: str) -> AgentTool:
-    """``remember_person`` bound to one user's native ``people`` ``FileMemoryStore``."""
-
-    @tool
-    async def remember_person(name: str, relationship: str = "", contact: str = "",
-                              notes: str = "", applies_to: str = "") -> dict[str, Any]:
-        """Remember or update a person in the user's life: friendship/relationship, contact info, and what they apply to.
-
-        Calling this again for the same name appends the new facts to that person's file.
-
-        Args:
-            name: The person's name (e.g. "Dana Kim").
-            relationship: How they relate to the user and how close they are (e.g. "Close friend and running partner").
-            contact: Phone number, email, handle or organization (e.g. "+1 801-555-0100, dana@example.com").
-            notes: Lasting context from conversations or messages (preferences, history, plans).
-            applies_to: Interests, projects, groups or upcoming plans this person connects to.
-        """
-        clean, key = await save_person(user_id, name=name, relationship=relationship, contact=contact,
-                                       notes=notes, applies_to=applies_to)
-        return {"status": "success", "content": [
-            {"json": {"person": {"name": clean, "key": key}}},
-            {"text": f"Remembered {clean}."},
-        ]}
-
-    return remember_person
+    return await people_store(user_id, storage).remember(
+        name=name, relationship=relationship, contact=contact, notes=notes, applies_to=applies_to)
 
 
 def user_stores(user_id: str, scope: MemoryScope | None = None) -> list[FileMemoryStore]:
     """The user's memory stores, ``tasks`` last."""
     storage = get_user_session_storage(user_id)
-    stores = [
+    stores: list[FileMemoryStore] = [
         _store(storage, "facts", DESCRIPTIONS["facts"]),
         _store(storage, "remember", DESCRIPTIONS["remember"]),
-        _store(storage, PEOPLE_STORE, PEOPLE_DESCRIPTION),
+        People(user_id, storage),
         _store(storage, "feedback", DESCRIPTIONS["feedback"]),
     ]
     if scope is not None and scope.project_id:
@@ -213,4 +230,4 @@ def live_memory_tools(user_id: str, scope: MemoryScope | None = None, *, agent: 
     config = memory_manager_config(user_id, scope, agent=agent, extra_stores=extra_stores)
     manager = MemoryManager(stores=config["stores"], search_tool_config=True,
                             add_tool_config=config["add_tool_config"], injection=False)
-    return [*manager.tools, remember_person_tool(user_id)]
+    return manager.tools

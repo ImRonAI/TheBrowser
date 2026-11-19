@@ -344,20 +344,86 @@ export function browsingTurn(
   return sections.join('\n\n')
 }
 
-/** What the user did on their phone between two reports (ren mobile): the apps they used and what Ren did there. */
-export interface PhoneApp { name: string; minutes: number }
-export interface PhoneAction { text: string; at: number }
-export interface PhoneActivity { since: number; until: number; apps: PhoneApp[]; actions: PhoneAction[] }
+/** All phone logs and app data since the last report (ren mobile): every app session, runtime/MCP logs, calls, SMS, notifications, calendar, reminders and device state. */
+export interface PhoneApp { name: string; minutes: number; package?: string; seconds?: number; opens?: number }
+export interface PhoneAction { text: string; at: number; kind?: string }
+export interface PhoneCall { kind: string; number: string; name?: string | null; seconds: number; at: string }
+export interface PhoneSms { from: string; number: string; contact?: string | null; text: string; at: string; unread?: boolean }
+export interface PhoneEvent { title: string; start: string; end: string; location?: string; all_day?: boolean; calendar?: string }
+export interface PhoneReminder { id: string; text: string; at: string }
+export interface PhoneDeviceStatus {
+  battery_percent?: number; charging?: boolean; network?: string; notifications?: boolean; app_operator?: boolean
+}
+export interface PhoneActivity {
+  since: number
+  until: number
+  apps: PhoneApp[]
+  actions: PhoneAction[]
+  calls?: PhoneCall[]
+  sms?: PhoneSms[]
+  notifications?: PhoneNotification[]
+  events?: PhoneEvent[]
+  reminders?: PhoneReminder[]
+  device?: PhoneDeviceStatus | null
+}
 
 const moment = (at: number) => new Date(at).toISOString().slice(0, 16).replace('T', ' ')
 
-/** Pages visited in the phone's browser are browsing turns; this is the rest of the phone. */
+export function hasPhoneActivity(activity: PhoneActivity): boolean {
+  return Boolean(
+    activity.apps.length || activity.actions.length || activity.calls?.length || activity.sms?.length
+    || activity.notifications?.length || activity.events?.length || activity.reminders?.length,
+  )
+}
+
+function appSpan(app: PhoneApp): string {
+  const pkg = app.package?.trim() ? ` (${app.package.trim()})` : ''
+  const span = typeof app.seconds === 'number'
+    ? (app.seconds >= 60 ? `${Math.floor(app.seconds / 60)}m ${app.seconds % 60}s (${app.seconds}s)` : `${app.seconds}s`)
+    : `${app.minutes} min`
+  const opens = typeof app.opens === 'number' && app.opens > 0 ? `, ${app.opens} open${app.opens === 1 ? '' : 's'}` : ''
+  return `- ${app.name.trim() || '(unnamed app)'}${pkg} — ${span}${opens}`
+}
+
+/** Pages visited in the phone's browser are browsing turns; this carries all phone logs and app data. */
 export function phoneTurn(activity: PhoneActivity, graph: { label: string; weight: number }[]): string {
-  const apps = activity.apps.map((app) => `- ${app.name.trim() || '(unnamed app)'} — ${app.minutes} min`)
-  const actions = activity.actions.map((action) => `- ${moment(action.at)} ${action.text.trim()}`)
-  return `[phone]\nThe user's phone from ${moment(activity.since)} to ${moment(activity.until)} UTC.\n`
-    + `Apps they used (time on screen):\n${apps.join('\n') || '(none)'}\n\n`
-    + `What Ren did on the phone for them:\n${actions.join('\n') || '(nothing)'}\n\nCurrent interest graph: ${graphLine(graph)}`
+  const apps = activity.apps.map(appSpan)
+  const actions = activity.actions.map((action) =>
+    `- ${moment(action.at)}${action.kind ? ` [${action.kind}]` : ''} ${action.text.trim()}`)
+  const sections = [
+    `[phone]\nThe user's phone from ${moment(activity.since)} to ${moment(activity.until)} UTC.`,
+  ]
+  if (activity.device && typeof activity.device.battery_percent === 'number' && activity.device.battery_percent >= 0) {
+    const charging = activity.device.charging ? ' (charging)' : ''
+    const net = activity.device.network ? `, network: ${activity.device.network}` : ''
+    sections.push(`Device status: battery ${activity.device.battery_percent}%${charging}${net}`)
+  }
+  sections.push(`Apps used (all foreground sessions):\n${apps.join('\n') || '(none)'}`)
+  sections.push(`Phone runtime & tool logs:\n${actions.join('\n') || '(nothing)'}`)
+  if (activity.calls?.length) {
+    const calls = activity.calls.map((call) =>
+      `- ${call.at} [${call.kind}] ${call.name ? `${call.name} (${call.number})` : call.number || '(unknown)'} — ${call.seconds}s`)
+    sections.push(`Call log:\n${calls.join('\n')}`)
+  }
+  if (activity.sms?.length) {
+    const sms = activity.sms.map((msg) =>
+      `- ${msg.at} ${msg.from === 'me' ? `me -> ${msg.contact ? `${msg.contact} (${msg.number})` : msg.number}` : `${msg.from} (${msg.number})`}: ${msg.text.trim().slice(0, 500)}`)
+    sections.push(`SMS / text messages:\n${sms.join('\n')}`)
+  }
+  if (activity.notifications?.length) {
+    const notes = activity.notifications.map((n) =>
+      `- ${n.at} [${n.app} / ${n.package}] ${n.title || '(no title)'}: ${n.text.trim().slice(0, 400)}`)
+    sections.push(`App notifications:\n${notes.join('\n')}`)
+  }
+  if (activity.events?.length || activity.reminders?.length) {
+    const items = [
+      ...(activity.events ?? []).map((ev) => `- [calendar] ${ev.start} – ${ev.end} ${ev.title}${ev.location ? ` @ ${ev.location}` : ''}`),
+      ...(activity.reminders ?? []).map((rem) => `- [reminder ${rem.id}] ${rem.at} ${rem.text}`),
+    ]
+    sections.push(`Calendar & reminders:\n${items.join('\n')}`)
+  }
+  sections.push(`Current interest graph: ${graphLine(graph)}`)
+  return sections.join('\n\n')
 }
 
 export function contextAddedTurn(item: ContextItem, graph: { label: string; weight: number }[]): string {
