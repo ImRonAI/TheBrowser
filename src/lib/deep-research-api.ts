@@ -1198,7 +1198,7 @@ async function request(path: string, options: RequestOptions, init: RequestInit 
   const fetcher = options.fetcher ?? fetch
   const response = await fetcher(`${resolveBase(options.baseUrl)}/deep-research${path}`, {
     ...init,
-    signal: options.signal ?? AbortSignal.timeout(30000),
+    ...(options.signal ? { signal: options.signal } : {}),
   })
   if (!response.ok) {
     const text = await response.text()

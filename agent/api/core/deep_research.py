@@ -398,7 +398,7 @@ ROLE_NOTES: Final[dict[str, str]] = {
         "`routerMode: hash` in the headmatter, Vue components in components/ (three.js scenes run in onMounted on a "
         "canvas and stop in onUnmounted), layouts in layouts/, styles in styles/, charts copied to public/. Build with "
         "`pnpm exec slidev build --out slides --base ./` and export with `pnpm exec slidev export --output slides.pdf "
-        "--timeout 120000`. A build that fails is fixed and run again until it passes.\n"
+        "--timeout 0`. A build that fails is fixed and run again until it passes.\n"
     ),
     "deck_build_qa": (
         "Load your Slidev skills with the `skills` tool. Export every slide as an image "
@@ -808,7 +808,7 @@ def build_deep_research_graph(
                 "read": True,
                 "write": True,
                 "edit": True,
-                "programmatic_tool_caller": {"hot_reload": True},
+                "programmatic_tool_caller": {"hot_reload": True, "timeout": None},
                 "subagent": {"background": True, "stall_timeout": 60.0, "max_consecutive_errors": 3},
             },
             builtin_plugins=["todos"],

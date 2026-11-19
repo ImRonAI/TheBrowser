@@ -489,3 +489,20 @@ test('deep research folds native _SubagentTool(background=True) spawn, subagent_
   assert.equal(sub.status, 'completed')
   assert.equal(sub.output_text, '10-K located. Revenue verified.')
 })
+
+test('Deep Research HTTP requests attach no default timeout AbortSignal', async () => {
+  const capturedInits: Array<RequestInit | undefined> = []
+  const fetcher: typeof fetch = async (_input, init) => {
+    capturedInits.push(init)
+    return jsonResponse({ enabled: true, configured: true, topology: DEFAULT_FORMATION_TOPOLOGY })
+  }
+
+  await fetchDeepResearchStatus({ baseUrl: 'http://127.0.0.1:8765', fetcher })
+  assert.equal(capturedInits.length, 1)
+  assert.equal(capturedInits[0]?.signal, undefined)
+
+  const controller = new AbortController()
+  await fetchDeepResearchStatus({ baseUrl: 'http://127.0.0.1:8765', fetcher, signal: controller.signal })
+  assert.equal(capturedInits.length, 2)
+  assert.equal(capturedInits[1]?.signal, controller.signal)
+})

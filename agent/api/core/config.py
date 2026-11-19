@@ -353,7 +353,7 @@ RON_DEEP_RESEARCH_NODE_TIMEOUT: float | None = (
     float(_RAW_DEEP_RESEARCH_NODE_TIMEOUT) if _RAW_DEEP_RESEARCH_NODE_TIMEOUT else None
 )
 #: Seconds a NIM chat-completions stream in Deep Research may go silent before failing over (`0` = unbounded).
-RON_DEEP_RESEARCH_NIM_READ_TIMEOUT: float = float(os.getenv("RON_DEEP_RESEARCH_NIM_READ_TIMEOUT", "120.0"))
+RON_DEEP_RESEARCH_NIM_READ_TIMEOUT: float = float(os.getenv("RON_DEEP_RESEARCH_NIM_READ_TIMEOUT", "0"))
 #: Per-run Deep Research artifacts directory (`report.pdf`, `slides.md`, `slides/index.html`, `slides.pdf`).
 RON_DEEP_RESEARCH_ARTIFACTS_DIR: Path = Path(
     os.getenv("RON_DEEP_RESEARCH_ARTIFACTS_DIR", "").strip()

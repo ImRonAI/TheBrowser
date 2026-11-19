@@ -883,3 +883,48 @@ def test_hosted_mcp_sets_native_tasks_config_and_request_timeout_and_recovers_de
     assert constructed_clients[0].stopped == 1
     assert constructed_clients[1].started == 1
     assert len(tools_second) == 2
+
+
+def test_deep_research_defaults_have_no_timeout_dependencies(
+    isolated: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Deep Research formations, NIM read defaults, programmatic_tool_caller, and Slidev export impose no timeouts."""
+    import math
+
+    from strands.multiagent.graph import Graph
+    from strands.multiagent.swarm import Swarm
+
+    assert math.isinf(app_config.RON_DEEP_RESEARCH_EXECUTION_TIMEOUT)
+    assert app_config.RON_DEEP_RESEARCH_NODE_TIMEOUT is None
+    assert app_config.RON_DEEP_RESEARCH_NIM_READ_TIMEOUT == 0.0
+    assert "--timeout 0" in deep_research.ROLE_NOTES["deck_producer"]
+    assert "--timeout 120000" not in deep_research.ROLE_NOTES["deck_producer"]
+
+    captured_ptc_configs: list[Any] = []
+    real_create_harness = deep_research.create_harness
+
+    def spy_create_harness(*args: Any, **kwargs: Any) -> Any:
+        builtin = kwargs.get("builtin_tools")
+        if isinstance(builtin, dict) and "programmatic_tool_caller" in builtin:
+            captured_ptc_configs.append(builtin["programmatic_tool_caller"])
+        return real_create_harness(*args, **kwargs)
+
+    monkeypatch.setattr(deep_research, "create_harness", spy_create_harness)
+    graph = deep_research.build_deep_research_graph(
+        session_id="no-timeout-check",
+        user_id="u1",
+        model=ScriptedModel(),
+        depth="medium",
+    )
+    assert graph.execution_timeout is None
+    assert graph.node_timeout is None
+    assert len(captured_ptc_configs) == 19
+    assert all(cfg == {"hot_reload": True, "timeout": None} for cfg in captured_ptc_configs)
+    for node in graph.nodes.values():
+        executor = node.executor
+        if isinstance(executor, Swarm):
+            assert math.isinf(executor.execution_timeout)
+            assert executor.node_timeout is None
+        elif isinstance(executor, Graph):
+            assert executor.execution_timeout is None
+            assert executor.node_timeout is None
