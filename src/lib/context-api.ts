@@ -70,8 +70,9 @@ export interface TopicReview { key: string; right: boolean; comment: string }
 export type InterestCategory = 'technology' | 'design' | 'ai' | 'privacy' | 'productivity' | 'learning' | 'entertainment' | 'news' | 'other'
 export interface AgentInterest { label: string; weight: number; category: InterestCategory; reason: string }
 /** What a recommendation builds: a specialist agent (`recommend_agent`) or an app OpenCode makes (`recommend_app`). */
-export type RecommendationKind = 'agent' | 'web' | 'android'
-export interface AgentRecommendation { id: string; kind: RecommendationKind; name: string; description: string; interest: string; rationale: string; tools: string[]; skills: string[] }
+/** An agent or app to build, a project to create, or a reply the Context Agent drafted (`draft_reply`: the reply is `description`, the message `rationale`, the app `interest`, the notification key or number `target`). */
+export type RecommendationKind = 'agent' | 'web' | 'android' | 'project' | 'reply'
+export interface AgentRecommendation { id: string; kind: RecommendationKind; name: string; description: string; interest: string; rationale: string; tools: string[]; skills: string[]; target?: string }
 
 /** An app OpenCode built for the account (`register_application`, `GET /context/applications`). */
 export interface Application {
@@ -261,7 +262,15 @@ export type ContextClient = ReturnType<typeof createContextClient>
 
 // ---------------------------------------------------------------- browsing
 
-export interface Visit { url: string; title: string; at: number }
+/** A page the user visited, a search they ran (`title` is the query) or what they said to Ren in a chat (`title`). */
+export interface Visit { url: string; title: string; at: number; kind?: 'search' | 'chat' }
+/** `usePanelChat` announces every message the user sends to a Ren agent, so the Context Agent hears it. */
+export const CHAT_SENT = 'ren:chat-sent'
+
+/** The query of a search results page (`ron://search?q=` on the desktop, `ren://search?q=` on the phone). */
+function searchQuery(url: string): string {
+  return /^r[eo]n:\/\/search\?/.test(url) ? new URLSearchParams(url.slice(url.indexOf('?'))).get('q')?.trim() ?? '' : ''
+}
 
 /** Pages worth telling the Context Agent about: public web pages, not Ron's own or local ones. */
 export function isObservable(url: string): boolean {
@@ -276,10 +285,13 @@ export function isObservable(url: string): boolean {
 
 /** Add a visit unless it repeats the previous page (same URL without hash) or is not observable. */
 export function recordVisit(queue: Visit[], visit: Visit, limit = 40): Visit[] {
+  const query = searchQuery(visit.url)
+  const last = queue[queue.length - 1]
+  if (query) return last?.kind === 'search' && last.title === query ? queue : [...queue, { ...visit, title: query, kind: 'search' as const }].slice(-limit)
+  if (visit.kind === 'chat') return visit.title.trim() ? [...queue, visit].slice(-limit) : queue
   if (!isObservable(visit.url)) return queue
   const key = visit.url.split('#')[0]
-  const last = queue[queue.length - 1]
-  if (last && last.url.split('#')[0] === key) {
+  if (last && !last.kind && last.url.split('#')[0] === key) {
     return visit.title && visit.title !== last.title ? [...queue.slice(0, -1), { ...last, title: visit.title }] : queue
   }
   return [...queue, { ...visit, url: key }].slice(-limit)
@@ -297,14 +309,18 @@ const graphLine = (graph: { label: string; weight: number }[]) => graph.length
   : '(empty)'
 
 export function browsingTurn(visits: Visit[], graph: { label: string; weight: number }[]): string {
-  const lines = visits.map((visit) => `- ${clock(visit.at)} ${visit.title.trim() || '(untitled)'} — ${visit.url}`)
-  return `[browsing]\nPages the user visited:\n${lines.join('\n')}\n\nCurrent interest graph: ${graphLine(graph)}`
+  const lines = visits.map((visit) => visit.kind === 'search' ? `- ${clock(visit.at)} searched: ${visit.title}`
+    : visit.kind === 'chat' ? `- ${clock(visit.at)} said to Ren: ${visit.title.trim().slice(0, 1000)}`
+    : `- ${clock(visit.at)} ${visit.title.trim() || '(untitled)'} — ${visit.url}`)
+  return `[browsing]\nPages the user visited, searches they ran and what they said to Ren:\n${lines.join('\n')}\n\nCurrent interest graph: ${graphLine(graph)}`
 }
 
 /** What the user did on their phone between two reports (ren mobile): the apps they used and what Ren did there. */
 export interface PhoneApp { name: string; minutes: number }
 export interface PhoneAction { text: string; at: number }
-export interface PhoneActivity { since: number; until: number; apps: PhoneApp[]; actions: PhoneAction[] }
+/** A notification the phone received: `key` replies to it (`phone_notification_reply`) while it is still there. */
+export interface PhoneNotification { app: string; title: string; text: string; key: string; canReply: boolean; at: number }
+export interface PhoneActivity { since: number; until: number; apps: PhoneApp[]; actions: PhoneAction[]; notifications?: PhoneNotification[] }
 
 const moment = (at: number) => new Date(at).toISOString().slice(0, 16).replace('T', ' ')
 
@@ -312,9 +328,13 @@ const moment = (at: number) => new Date(at).toISOString().slice(0, 16).replace('
 export function phoneTurn(activity: PhoneActivity, graph: { label: string; weight: number }[]): string {
   const apps = activity.apps.map((app) => `- ${app.name.trim() || '(unnamed app)'} — ${app.minutes} min`)
   const actions = activity.actions.map((action) => `- ${moment(action.at)} ${action.text.trim()}`)
+  const notifications = (activity.notifications ?? []).map((note) => `- ${moment(note.at)} ${note.app}: ${note.title.trim()}: `
+    + `${note.text.trim().slice(0, 1000)} (key ${note.key}${note.canReply ? ', can reply' : ''})`)
   return `[phone]\nThe user's phone from ${moment(activity.since)} to ${moment(activity.until)} UTC.\n`
     + `Apps they used (time on screen):\n${apps.join('\n') || '(none)'}\n\n`
-    + `What Ren did on the phone for them:\n${actions.join('\n') || '(nothing)'}\n\nCurrent interest graph: ${graphLine(graph)}`
+    + `What they said to Ren, their calls and what Ren did on the phone for them:\n${actions.join('\n') || '(nothing)'}\n\n`
+    + (notifications.length ? `Notifications the phone received:\n${notifications.join('\n')}\n\n` : '')
+    + `Current interest graph: ${graphLine(graph)}`
 }
 
 export function contextAddedTurn(item: ContextItem, graph: { label: string; weight: number }[]): string {
@@ -323,7 +343,18 @@ export function contextAddedTurn(item: ContextItem, graph: { label: string; weig
   return `[context added] ${item.kind}: ${item.title}${source}${preview}\n(id ${item.id}; read it in full with search_memory)\n\nCurrent interest graph: ${graphLine(graph)}`
 }
 
+/** Twice a day the Context Agent goes over its journal and memory for projects, apps and agents to propose. */
+export const REVIEW_EVERY_MS = 12 * 60 * 60_000
+export const REVIEW_TURN = '[review] Go over your journal and long-term memory and recommend what Ren should take on.'
+
 export function approveAgentTurn(recommendation: AgentRecommendation): string {
+  if (recommendation.kind === 'reply') {
+    return `[approve_reply ${recommendation.id}] Send this reply to ${recommendation.name.replace(/^Reply to /, '')} in ${recommendation.interest}, exactly as written, `
+      + `to target ${recommendation.target ?? ''}:\n${recommendation.description}`
+  }
+  if (recommendation.kind === 'project') {
+    return `[approve_project ${recommendation.id}] Create the project "${recommendation.name}" now.\nRecommendation: ${JSON.stringify(recommendation)}`
+  }
   // Recommendations saved before apps existed carry no kind: they are agents.
   if (recommendation.kind === 'web' || recommendation.kind === 'android') {
     return `[approve_app ${recommendation.id}] Build the ${recommendation.kind === 'web' ? 'web' : 'Android'} app "${recommendation.name}" now.\nRecommendation: ${JSON.stringify(recommendation)}`
@@ -357,14 +388,18 @@ export function interestsFromOutput(output: unknown): AgentInterest[] | null {
   })
 }
 
+const KINDS: RecommendationKind[] = ['agent', 'web', 'android', 'project', 'reply']
+const isKind = (value: unknown): value is RecommendationKind => KINDS.some((kind) => kind === value)
+
 export function recommendationFromOutput(output: unknown): AgentRecommendation | null {
   const entry = record(jsonBlock(output, 'agent_recommendation'))
   const strings = (value: unknown) => Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : []
   if (typeof entry.id !== 'string' || typeof entry.name !== 'string') return null
-  const kind: RecommendationKind = entry.kind === 'web' || entry.kind === 'android' ? entry.kind : 'agent'
+  const kind: RecommendationKind = isKind(entry.kind) ? entry.kind : 'agent'
   return {
     id: entry.id, kind, name: entry.name, description: String(entry.description ?? ''), interest: String(entry.interest ?? ''),
     rationale: String(entry.rationale ?? ''), tools: strings(entry.tools), skills: strings(entry.skills),
+    ...(typeof entry.target === 'string' ? { target: entry.target } : {}),
   }
 }
 
@@ -385,7 +420,7 @@ export function contextResults(messages: PanelMessage[]): ContextRunResults {
   const created: string[] = []
   for (const part of finishedTools(messages)) {
     if (part.name === 'update_interest_graph') interests = interestsFromOutput(part.output) ?? interests
-    else if (part.name === 'recommend_agent' || part.name === 'recommend_app') {
+    else if (part.name === 'recommend_agent' || part.name === 'recommend_app' || part.name === 'recommend_project' || part.name === 'draft_reply') {
       const recommendation = recommendationFromOutput(part.output)
       if (recommendation) recommendations.push(recommendation)
     } else if (part.name === 'create_harness') {

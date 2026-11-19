@@ -12,11 +12,12 @@ import { API_BASE_URL } from '@/lib/api-base'
 import { cancelRon, ronSessionId, runRon } from '@/lib/ron-run'
 import {
   APPLICATIONS_CHANGED, approveAgentTurn, browsingDue, browsingTurn, cadenceLabel, contextAddedTurn, contextResults, createContextClient, dataUrlBlob, latestReply,
-  phoneTurn, recordVisit, whenLabel, type AgentCadence, type AgentRecommendation, type AgentRun, type ContextItem, type Dream, type TopicReview, type NewContextFile, type NewContextItem,
+  phoneTurn, recordVisit, REVIEW_EVERY_MS, REVIEW_TURN, whenLabel, type AgentCadence, type AgentRecommendation, type AgentRun, type ContextItem, type Dream, type TopicReview, type NewContextFile, type NewContextItem,
   type PhoneActivity, type SpecialistAgent, type Visit,
 } from '@/lib/context-api'
 import { startScreenRecording, type ScreenRecording } from '@/lib/screen-recorder'
 import { isGuestUserId } from '@/lib/sign-in'
+import { projectAuthHeaders } from '@/lib/project-auth'
 import { useInterestsStore } from './interestsStore'
 
 export type ContextTab = 'interests' | 'context' | 'agents' | 'ask'
@@ -38,6 +39,8 @@ interface ContextAgentState {
   asks: AskTurn[]
   /** Unseen recommendation (orb badge). */
   unseen: boolean
+  /** When this device last asked the Context Agent for a `[review]`. */
+  reviewedAt: number
   // not persisted
   status: 'idle' | 'running'
   activity: string
@@ -68,6 +71,10 @@ interface ContextAgentState {
   /** After handing work to the Agent Panel: collapse to the orb (unless pinned) so the panel is visible. */
   yieldToPanel: () => void
   observeVisit: (url: string, title: string) => void
+  /** What the user said to a Ren agent in a chat. */
+  observeChat: (text: string) => void
+  /** Every `REVIEW_EVERY_MS`: the Context Agent goes over its journal and memory and recommends what to take on. */
+  reviewIfDue: () => Promise<void>
   flushBrowsing: (force?: boolean) => Promise<void>
   /** ren mobile: the apps the user used on the phone and what Ren did there, as one Context Agent turn. */
   reportPhone: (activity: PhoneActivity) => Promise<void>
@@ -110,7 +117,8 @@ export const useContextAgentStore = create<ContextAgentState>()(persist((set, ge
       const userId = get().userId
       set({ status: 'running', activity, error: '' })
       try {
-        const state = await runRon({ apiBase: API_BASE_URL, destination: 'context', sessionId: sessionFor(userId), userId, message })
+        const headers = await projectAuthHeaders()
+        const state = await runRon({ apiBase: API_BASE_URL, destination: 'context', sessionId: sessionFor(userId), userId, message, headers })
         if (get().userId !== userId) return ''
         const results = contextResults(state.messages)
         if (results.interests) useInterestsStore.getState().applyAgentGraph(results.interests)
@@ -159,6 +167,20 @@ export const useContextAgentStore = create<ContextAgentState>()(persist((set, ge
     }
   }
 
+  /** An approved project or reply draft: the Context Agent creates the project, or sends exactly the reply through the phone. */
+  const act = async (recommendation: AgentRecommendation) => {
+    set({ building: recommendation.id, error: '', notice: '' })
+    try {
+      const reply = await run(approveAgentTurn(recommendation), recommendation.kind === 'reply' ? `Sending ${recommendation.name.toLowerCase()}` : `Creating ${recommendation.name}`)
+      set({ handled: [...get().handled, recommendation.id], recommendations: get().recommendations.filter((item) => item.id !== recommendation.id),
+        notice: reply || `${recommendation.name}: done.` })
+    } catch (error) {
+      set({ error: `${recommendation.name}: ${messageOf(error)}` })
+    } finally {
+      set({ building: null })
+    }
+  }
+
   /**
    * A failed add, upload or capture opens the panel on Context, as a success does, so the error is
    * seen even when it was started from Home, Search or a page menu with the widget closed.
@@ -169,7 +191,7 @@ export const useContextAgentStore = create<ContextAgentState>()(persist((set, ge
   }
 
   return {
-    userId: 'default', watchBrowsing: true, visits: [], recommendations: [], handled: [], agentInterests: {}, tab: 'interests', pinned: false, asks: [], unseen: false,
+    userId: 'default', watchBrowsing: true, visits: [], recommendations: [], handled: [], agentInterests: {}, tab: 'interests', pinned: false, asks: [], unseen: false, reviewedAt: 0,
     status: 'idle', activity: '', error: '', notice: '', items: [], itemsLoaded: false, agents: [], agentsSignInRequired: false,
     building: null, recordingSince: null, busy: null, runs: [], dream: null, reviewingDream: false, scheduling: null, starting: null,
 
@@ -193,6 +215,23 @@ export const useContextAgentStore = create<ContextAgentState>()(persist((set, ge
       if (visits !== get().visits) set({ visits })
     },
 
+    observeChat: (text) => {
+      if (get().watchBrowsing) set({ visits: recordVisit(get().visits, { url: '', title: text, at: Date.now(), kind: 'chat' }) })
+    },
+
+    reviewIfDue: async () => {
+      const { reviewedAt, status } = get()
+      if (status === 'running' || Date.now() - reviewedAt < REVIEW_EVERY_MS) return
+      set({ reviewedAt: Date.now() })
+      // The first check starts the clock: a review needs something learned to go over.
+      if (!reviewedAt) return
+      try {
+        await run(REVIEW_TURN, 'Looking for what Ren could take on')
+      } catch (error) {
+        set({ error: `Context Agent could not review what it learned: ${messageOf(error)}` })
+      }
+    },
+
     flushBrowsing: async (force = false) => {
       const { visits, status } = get()
       if (!visits.length || status === 'running' || (!force && !browsingDue(visits, Date.now()))) return
@@ -205,7 +244,7 @@ export const useContextAgentStore = create<ContextAgentState>()(persist((set, ge
     },
 
     reportPhone: async (activity) => {
-      if (!activity.apps.length && !activity.actions.length) return
+      if (!activity.apps.length && !activity.actions.length && !activity.notifications?.length) return
       try {
         await run(phoneTurn(activity, graph()), 'Reading what you did on your phone')
       } catch (error) {
@@ -323,6 +362,7 @@ export const useContextAgentStore = create<ContextAgentState>()(persist((set, ge
 
     approve: async (recommendation) => {
       if (recommendation.kind === 'web' || recommendation.kind === 'android') return buildApp(recommendation)
+      if (recommendation.kind === 'project' || recommendation.kind === 'reply') return act(recommendation)
       if (isGuestUserId(get().userId)) { set({ error: 'Sign in to save agents.' }); return }
       set({ building: recommendation.id, error: '', notice: '' })
       // create_harness upserts by name: a rebuilt agent keeps its id and gets a new updated_at.
@@ -440,6 +480,6 @@ export const useContextAgentStore = create<ContextAgentState>()(persist((set, ge
   version: 1,
   partialize: (state) => ({
     watchBrowsing: state.watchBrowsing, visits: state.visits, recommendations: state.recommendations, handled: state.handled.slice(-200), agentInterests: state.agentInterests,
-    tab: state.tab, pinned: state.pinned, asks: state.asks, unseen: state.unseen,
+    tab: state.tab, pinned: state.pinned, asks: state.asks, unseen: state.unseen, reviewedAt: state.reviewedAt,
   }),
 }))

@@ -132,7 +132,8 @@ def test_opencode_and_the_computer_join_only_when_the_computer_is_configured(mon
     monkeypatch.setattr(ctx.app_config, "COMPUTER_MCP_TOKEN", "")
     assert "opencode run" not in ctx.context_agent_prompt("u1")
     names = [t.tool_name for t in ctx.context_agent_tools("default")]
-    assert names == ["update_interest_graph", "recommend_agent", "schedule_agent"]
+    assert names == ["update_interest_graph", "recommend_agent", "recommend_project", "draft_reply", "remember_person",
+                     "schedule_agent"]
     monkeypatch.setattr(ctx.app_config, "COMPUTER_MCP_URL", "https://computer.example.com/mcp")
     monkeypatch.setattr(ctx.app_config, "COMPUTER_MCP_TOKEN", "token")
     assert "REN_USER_ID=u1 opencode run --standalone --auto" in ctx.context_agent_prompt("u1")
@@ -148,6 +149,29 @@ def test_recommend_app_is_a_recommendation_with_its_kind() -> None:
                                            rationale="Checks tides daily."))
     payload = result["content"][0]["json"]["agent_recommendation"]
     assert payload["id"].startswith("rec-") and payload["kind"] == "android" and payload["name"] == "Tide Log"
+
+
+def test_a_draft_reply_and_a_project_are_recommendations_the_user_approves() -> None:
+    draft = asyncio.run(ctx.draft_reply(app="WhatsApp", sender="Dana", message="Dinner Friday?", reply="Yes! 7?",
+                                        target="0|com.whatsapp|1|dana"))
+    payload = draft["content"][0]["json"]["agent_recommendation"]
+    assert (payload["kind"], payload["name"], payload["description"], payload["rationale"], payload["target"]) == (
+        "reply", "Reply to Dana", "Yes! 7?", "Dinner Friday?", "0|com.whatsapp|1|dana")
+    project = asyncio.run(ctx.recommend_project(name="Mom's care", description="Appointments and meds.",
+                                                interest="Family", rationale="Three clinic texts this week."))
+    assert project["content"][0]["json"]["agent_recommendation"]["kind"] == "project"
+    assert "[approve_reply <id>]" in ctx.context_agent_prompt("u1") and "[review]" in ctx.context_agent_prompt("u1")
+
+
+def test_remember_person_keeps_one_record_per_person_in_the_brain(storage: InMemoryStorage) -> None:
+    remember = ctx.remember_person_tool("u1")
+    asyncio.run(remember(name="Dana Reyes", relationship="college friend", story="Met at BYU. Planning a hike.",
+                         phones=["+1 801 555 0100"], linked=["Hiking"]))
+    asyncio.run(remember(name="Dana Reyes", relationship="close friend", story="Hiked Timp together in October.",
+                         phones=["+1 801 555 0100"], emails=["dana@example.com"], linked=["Hiking"]))
+    text = asyncio.run(panel_storage.get_user_session_storage("u1").read(f"{ctx.PEOPLE}/dana-reyes.md")).decode()
+    assert text.startswith("# Dana Reyes\n- relationship: close friend\n- phone: +1 801 555 0100\n- email: dana@example.com")
+    assert "Hiked Timp" in text and "Met at BYU" not in text
 
 
 def test_an_android_app_s_apk_is_served_from_the_apps_dir(client: TestClient, monkeypatch: pytest.MonkeyPatch,

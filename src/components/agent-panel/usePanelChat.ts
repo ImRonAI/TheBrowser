@@ -11,8 +11,8 @@ import { notePanelTools } from '@/stores/agentPresenceStore'
 import { API_BASE_URL } from '@/lib/api-base'
 import { agentTarget, RON_AGENT, type AgentChoice } from '@/lib/panel-agents'
 import { chatScopeFields, panelSessionKey, sendsProjectCredential, type PanelConnection } from '@/lib/panel-chat'
-import { getSession } from '@/api/supabase'
-import { guestWorkspace } from '@/lib/project-workspace'
+import { projectAuthHeaders } from '@/lib/project-auth'
+import { CHAT_SENT } from '@/lib/context-api'
 import { useRepairStore } from '@/stores/repairStore'
 import { repairDecisionRequest } from '@/lib/repair-api'
 
@@ -27,11 +27,6 @@ const waitForFollow = (signal: AbortSignal, delay: number) => new Promise<void>(
 })
 function savedSession(key: string): string {
   try { return localStorage.getItem(key) || newSessionId() } catch { return newSessionId() }
-}
-/** A project agent and an issue chat act with the user's own project access: the same credential the Projects API uses. */
-async function projectAuthHeaders(): Promise<Record<string, string>> {
-  const session = await getSession()
-  return session ? { Authorization: `Bearer ${session.access_token}` } : { 'X-Ron-Workspace': guestWorkspace().token }
 }
 /** `GET /sessions/{id}` snapshot → `selection.browser`, or null when absent/invalid. */
 function snapshotBrowser(snapshot: unknown): BrowserSelection | null {
@@ -352,6 +347,7 @@ export function usePanelChat(selection: Selection) {
       }
       accepted = true
       onAccepted?.()
+      if (action === 'message') window.dispatchEvent(new CustomEvent(CHAT_SENT, { detail: text.trim() }))
       if (token !== generation.current) return false
       const terminal = await readPanelStream(response, (event) => {
         if (abort.signal.aborted || token !== generation.current || event.session_id !== id || event.sequence <= current.current.sequence) return false

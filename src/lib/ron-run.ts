@@ -30,6 +30,8 @@ export interface RonRunRequest {
   signal?: AbortSignal
   onState?: (state: PanelState) => void
   fetcher?: typeof fetch
+  /** Extra request headers, e.g. the user's project credential for an agent with Ren's workspace tools. */
+  headers?: Record<string, string>
 }
 
 const FOLLOW_ATTEMPTS = 5
@@ -40,7 +42,7 @@ export function ronSessionId(prefix: string, key: string): string {
 }
 
 export async function runRon({
-  apiBase, destination, sessionId, userId, message, goal, promptAttachments, screenFrame, signal, onState, fetcher = fetch,
+  apiBase, destination, sessionId, userId, message, goal, promptAttachments, screenFrame, signal, onState, fetcher = fetch, headers,
 }: RonRunRequest): Promise<PanelState> {
   let state = emptyPanelState(sessionId)
   const accept = (event: PanelEvent) => {
@@ -49,7 +51,7 @@ export async function runRon({
     onState?.(state)
   }
   const response = await fetcher(`${apiBase}/chat`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' }, signal,
+    method: 'POST', headers: { 'Content-Type': 'application/json', ...headers }, signal,
     body: JSON.stringify({
       session_id: sessionId,
       user_id: userId,

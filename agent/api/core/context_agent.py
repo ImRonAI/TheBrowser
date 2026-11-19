@@ -8,7 +8,16 @@ drives it with prompt turns:
   :func:`update_interest_graph` and, when an interest is strong and recurring, proposes one specialist
   agent with :func:`recommend_agent`.
 * ``[context added]`` — an item the user collected (see below).
-* ``[phone]`` — from ren mobile: the apps the user used on the phone and what Ren did there.
+* ``[browsing]`` also carries the searches the user ran and what they said to Ren in chats.
+* ``[phone]`` — from ren mobile: the apps the user used on the phone, what they said to Ren, their calls, what Ren
+  did there and every notification the phone received. For each message from a person the agent drafts a reply with
+  :func:`draft_reply`; nothing is sent until the user taps Send (``[approve_reply <id>]``).
+* ``[review]`` — the widget asks the agent, twice a day (``contextAgentStore``), to go over its journal and long-term
+  memory and propose projects (:func:`recommend_project`, built on ``[approve_project <id>]`` with Ren's workspace
+  tools), apps and agents, with OpenCode's view when Ren's workspace computer is configured.
+* People: :func:`remember_person_tool` keeps one record per person in the user's life under ``memory/brain/people/``,
+  so every agent finds them with ``search_memory``; the agent also saves them to the phone's own contacts through the
+  hub (``phone_contact_save``). A record's id is its file name, which is what events will point at.
 * ``[approve_agent <id>]`` — the user approved a recommendation: the agent writes the specialist's
   system prompt (``instructions``), assigns tools and Agent Skills, and saves it with the existing
   ``create_harness`` tool (strands_harness portable agent config, stored in Supabase ``harness_agents``).
@@ -48,6 +57,7 @@ from strands import tool
 from strands.storage import Storage
 from strands.types.tools import AgentTool
 from strands.vended_memory_stores.file_memory_store import FileMemoryStore
+from strands.vended_memory_stores.file_memory_store.store import _slugify
 
 from agent.api.core import config as app_config
 from agent.api.core.hosted_mcp import HostedMCP
@@ -83,18 +93,43 @@ You are Context Agent. You are Ren living in the Context widget (the Ren orb at 
 page), not in the Agent Panel. You keep a picture of what the user cares about and turn it into help.
 
 Turns you receive:
-- "[browsing]" lists pages the user just visited (title and URL) and the current interest graph. Revise the
+Every turn, first journal what the user did that is worth remembering (the journal tool): each search, page, chat
+message, notification and message, one line each, with who, what and why it may matter. This is how you learn them.
+
+- "[browsing]" lists pages the user just visited (title and URL), searches they ran and what they said to Ren in chats,
+  and the current interest graph. Revise the
   graph with update_interest_graph: send the COMPLETE revised graph (at most 10 interests), keep stable
   labels for interests that persist, raise the weight of interests the pages reinforce, add an interest only
   when several pages or a clearly deliberate visit support it, let one-off visits fade, and give each interest
   a one-line reason. Labels are short topics a news search understands ("Formula 1", "Home espresso",
   "Rust programming"), never site names or page titles. The Discover feed is built from these labels.
 - "[context added]" describes an item the user saved to their context. Fold it into the graph the same way.
-- "[phone]" comes from Ren on the user's phone: the apps they used there (with time on screen) and what Ren did on
-  the phone for them. Fold it into the graph the same way: an app used often or for long supports the interest it
-  clearly serves (a running app supports "Running"), while everyday utilities (launcher, settings, phone, messages,
-  camera, browser) say nothing about interests on their own. Pages visited in the phone's browser arrive as
-  "[browsing]".
+- "[phone]" comes from Ren on the user's phone: the apps they used there (with time on screen), what they said to
+  Ren, their calls (incoming, outgoing and missed, with who) and what Ren did on the phone for them. Fold it into
+  the graph the same way: an app used often or for long supports the interest it clearly serves (a running app
+  supports "Running"), while everyday utilities (launcher, settings, phone, messages, camera, browser) say nothing
+  about interests on their own. Pages visited in the phone's browser arrive as "[browsing]". It also lists the
+  notifications the phone received, each with its app, sender, text and key.
+- Messages: for every message a person sent the user (a text, or a message in any app among the notifications), call
+  draft_reply once with the reply you would send for the user: short, in the conversation's language and tone, from
+  what you know about the user and that person (search_memory first). Skip automated messages (codes, deliveries,
+  marketing). Never send anything yourself: the user sees the draft with Send and decides.
+- "[approve_reply <id>]" means the user tapped Send on that draft. Send exactly the text it gives, nothing else: load
+  the phone's tools with tool_catalog (name "phone"), then phone_notification_reply with the draft's target (the
+  notification key). When that notification is gone and it was a text, find the number with phone_contacts_search
+  (or use the target when it is a number) and phone_sms_send. Say in one sentence that it was sent, or why not.
+- People: you keep a record of every person in the user's life. When a message, notification, chat or page tells you
+  about someone (who they are to the user, how to reach them, what they share), read their record with search_memory
+  and call remember_person with the whole updated record: how they know each other, how the friendship stands, and
+  what they are part of (projects, interests, places, plans). When you learn a person's number or email, also save
+  them in the phone's own contacts: phone_contacts_search first, then phone_contact_save with what is new.
+- "[review]" asks you to step back: read your journal (journal with no entry) and long-term memory (search_memory: the
+  user's projects, people and recurring needs). Find work that recurs or matters to the user and decide, for each,
+  whether and how Ren can take it on: a specialist agent on a schedule (recommend_agent), an app (recommend_app, when
+  you have it), or a project that organises it (recommend_project). Recommend at most three things per review, never
+  one you recommended before, and reply with one sentence for each, or "Nothing new."
+- "[approve_project <id>]" means the user approved that project. Create it with create_project and its first issues
+  with create_issue, then report the project key and what you created in one sentence.
 - When an interest is strong (weight >= 0.6) and recurring, and the user has no agent for it yet (check
   list_harness_agents and your earlier recommendations), call recommend_agent ONCE for a specialist that
   would do real recurring work for that interest. At most one recommendation per turn; never repeat one.
@@ -128,6 +163,10 @@ saved context) shows a recurring need that an app would serve better than a spec
 calculator, a dashboard for something they check often), call recommend_app ONCE: kind "web" for an app their
 browser opens, "android" for an app on their phone. At most one recommendation per turn, agent or app; never repeat
 one.
+- In a "[review]", before you recommend an app or an automation, ask OpenCode once what it would build:
+  computer_start_process with `cd /config/workspace && REN_USER_ID={user_id} opencode run --standalone "<the needs you found, one per line; for
+  each, can it be automated or built as a small app, how, and what it would take; do not write any files>"`, read its
+  answer with computer_read_process_output, and let it shape what you recommend.
 - "[approve_app <id>]" means the user approved that app. Build it now with OpenCode as below, register it, and
   report in two sentences what it does and where it is (a web app: Applications in the sidebar and on the phone's
   home; an Android app: Applications on the home page of Ren on their phone, where a tap installs it).
@@ -236,6 +275,51 @@ async def recommend_agent(name: str, description: str, interest: str, rationale:
 
 
 @tool
+async def recommend_project(name: str, description: str, interest: str, rationale: str) -> dict[str, Any]:
+    """Recommend one Ren project that would organise recurring or important work in the user's life.
+
+    The widget shows it with Create and Dismiss buttons; approval arrives as "[approve_project <id>]".
+
+    Args:
+        name: Project name, 1-6 words (e.g. "Mom's care plan").
+        description: One sentence: what the project tracks or gets done.
+        interest: The interest, person or need it serves.
+        rationale: One sentence: why now, from what the user did.
+    """
+    return _recommendation("project", name, description, interest, rationale)
+
+
+@tool
+async def draft_reply(app: str, sender: str, message: str, reply: str, target: str) -> dict[str, Any]:
+    """Draft a reply to a message a person sent the user. Nothing is sent: the widget shows it with Send.
+
+    Sending arrives as "[approve_reply <id>]" with the text the user approved (they may have edited it).
+
+    Args:
+        app: The app the message came in (e.g. "Messages", "WhatsApp").
+        sender: Who sent it, as the notification names them.
+        message: The message being answered, as received.
+        reply: The reply, in the user's voice.
+        target: The notification's key; for a text that is no longer a notification, the sender's number.
+    """
+    draft = _recommendation("reply", f"Reply to {sender.strip()}", reply, app, message)
+    draft["content"][0]["json"]["agent_recommendation"]["target"] = target.strip()
+    return draft
+
+
+def _recommendation(kind: str, name: str, description: str, interest: str, rationale: str) -> dict[str, Any]:
+    clean = {"name": name.strip(), "description": description.strip(), "interest": interest.strip(),
+             "rationale": rationale.strip()}
+    if not 1 <= len(clean["name"]) <= 80 or not clean["description"]:
+        raise ValueError("A recommendation needs a name (1-80 characters) and a description.")
+    recommendation = {"id": "rec-" + secrets.token_hex(5), "kind": kind, **clean, "tools": [], "skills": []}
+    return {"status": "success", "content": [
+        {"json": {"agent_recommendation": recommendation}},
+        {"text": f"Recommended the {kind} {recommendation['name']} ({recommendation['id']}); the user decides."},
+    ]}
+
+
+@tool
 async def recommend_app(name: str, kind: Literal["web", "android"], description: str, interest: str,
                         rationale: str) -> dict[str, Any]:
     """Recommend one app OpenCode could build for the user, a web app or an Android app.
@@ -249,15 +333,7 @@ async def recommend_app(name: str, kind: Literal["web", "android"], description:
         interest: The interest label or need it serves.
         rationale: One sentence: why now, from what the user did.
     """
-    clean = {"name": name.strip(), "description": description.strip(), "interest": interest.strip(),
-             "rationale": rationale.strip()}
-    if not 1 <= len(clean["name"]) <= 80 or not clean["description"]:
-        raise ValueError("An app recommendation needs a name (1-80 characters) and a description.")
-    recommendation = {"id": "rec-" + secrets.token_hex(5), "kind": kind, **clean, "tools": [], "skills": []}
-    return {"status": "success", "content": [
-        {"json": {"agent_recommendation": recommendation}},
-        {"text": f"Recommended the {kind} app {recommendation['name']} ({recommendation['id']}); the user decides."},
-    ]}
+    return _recommendation(kind, name, description, interest, rationale)
 
 
 def schedule_agent_tool(user_id: str) -> AgentTool:
@@ -368,8 +444,47 @@ def computer_tools() -> list[AgentTool]:
     return _computer.tools(app_config.COMPUTER_MCP_URL, app_config.COMPUTER_MCP_TOKEN)
 
 
+PEOPLE: Final = "memory/brain/people"
+
+
+def remember_person_tool(user_id: str) -> AgentTool:
+    """``remember_person`` bound to one user: one Markdown record per person under :data:`PEOPLE` in the brain."""
+
+    @tool
+    async def remember_person(name: str, relationship: str, story: str, phones: list[str] | None = None,
+                              emails: list[str] | None = None, linked: list[str] | None = None) -> dict[str, Any]:
+        """Keep the record of one person in the user's life; it replaces their record, so send all of it.
+
+        Every agent reads it with search_memory. Read the person's record first and keep what is still true.
+
+        Args:
+            name: Their name as the user knows them.
+            relationship: Who they are to the user, in a few words ("college friend", "Mom", "landlord").
+            story: The friendship as it stands: how they know each other, what they share, recent news, open threads.
+            phones: Their phone numbers.
+            emails: Their email addresses.
+            linked: What they are part of: projects, interests, places, plans.
+        """
+        clean = name.strip()
+        person_id = _slugify(clean)
+        if not person_id:
+            raise ValueError("A person needs a name.")
+        lines = [f"# {clean}", f"- relationship: {_one_line(relationship, 200)}"]
+        lines += [f"- {label}: {', '.join(value.strip() for value in values if value.strip())}"
+                  for label, values in (("phone", phones), ("email", emails), ("linked to", linked)) if values]
+        lines += [f"- updated: {datetime.now(UTC).date().isoformat()}", "", story.strip()]
+        await get_user_session_storage(user_id).write(f"{PEOPLE}/{person_id}.md", "\n".join(lines).encode("utf-8"))
+        return {"status": "success", "content": [
+            {"json": {"person": {"id": person_id, "name": clean, "relationship": relationship.strip()}}},
+            {"text": f"Remembered {clean}."},
+        ]}
+
+    return remember_person
+
+
 def context_agent_tools(user_id: str) -> list[AgentTool]:
-    tools = [update_interest_graph, recommend_agent, schedule_agent_tool(user_id)]
+    tools = [update_interest_graph, recommend_agent, recommend_project, draft_reply, remember_person_tool(user_id),
+             schedule_agent_tool(user_id)]
     computer = computer_tools()
     return [*tools, recommend_app, *computer, register_application_tool(user_id)] if computer else tools
 
@@ -542,5 +657,6 @@ def interest_graph_from_result(content: list[dict[str, Any]]) -> list[dict[str, 
 __all__ = ["CONTEXT_AGENT_PROMPT", "CONTEXT_KINDS", "CONTEXT_STORE", "CONTEXT_STORE_DESCRIPTION", "Interest",
            "add_item", "agent_tools_mcp_url", "context_agent_prompt", "context_agent_tools", "context_store",
            "delete_item", "interest_graph_from_result", "item_markdown", "list_items", "new_item_id", "parse_item",
-           "read_file", "read_item", "recommend_agent", "recommend_app", "thread_markdown", "update_interest_graph"]
+           "read_file", "read_item", "recommend_agent", "recommend_app", "recommend_project", "draft_reply",
+           "remember_person_tool", "thread_markdown", "update_interest_graph"]
 

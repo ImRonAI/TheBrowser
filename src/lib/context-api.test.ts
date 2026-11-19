@@ -27,6 +27,16 @@ test('recordVisit drops repeats and hash changes but keeps the newest title', ()
   assert.equal(full[0].url, 'https://s.com/5')
 })
 
+test('a search page is a search and a chat message is what the user said to Ren', () => {
+  let queue = recordVisit([], { url: 'ron://search?q=espresso%20grinders&level=fast', title: 'Search', at: Date.UTC(2026, 10, 6, 9, 0) })
+  queue = recordVisit(queue, { url: 'ren://search?q=espresso+grinders&level=low', title: '', at: 2 })
+  queue = recordVisit(queue, { url: '', title: 'Which grinder for a Linea Mini?', at: Date.UTC(2026, 10, 6, 9, 2), kind: 'chat' })
+  assert.deepEqual(queue.map((visit) => [visit.kind, visit.title]), [['search', 'espresso grinders'], ['chat', 'Which grinder for a Linea Mini?']])
+  const turn = browsingTurn(queue, [])
+  assert.match(turn, /- 09:00 searched: espresso grinders/)
+  assert.match(turn, /- 09:02 said to Ren: Which grinder for a Linea Mini\?/)
+})
+
 test('browsingDue fires at five pages or after the oldest page waited three minutes', () => {
   const visits = (n: number, at = 0) => Array.from({ length: n }, (_, i) => ({ url: `https://x.com/${i}`, title: '', at }))
   assert.equal(browsingDue([], 10 ** 9), false)
@@ -45,6 +55,9 @@ test('turns name the pages, the item and the current graph', () => {
   const added = contextAddedTurn(item, graph)
   assert.match(added, /^\[context added\] link: Tokio\nSource: https:\/\/tokio\.rs\/\nExcerpt: Async runtime/)
   assert.match(approveAgentTurn({ id: 'rec-1', kind: 'agent', name: 'Briefer', description: '', interest: 'F1', rationale: '', tools: [], skills: [] }), /^\[approve_agent rec-1\] Build "Briefer" now\./)
+  assert.match(approveAgentTurn({ id: 'rec-3', kind: 'reply', name: 'Reply to Dana', description: 'Yes, 7?', interest: 'WhatsApp', rationale: 'Dinner?', tools: [], skills: [], target: 'k1' }),
+    /^\[approve_reply rec-3\] Send this reply to Dana in WhatsApp, exactly as written, to target k1:\nYes, 7\?$/)
+  assert.match(approveAgentTurn({ id: 'rec-4', kind: 'project', name: 'Care', description: '', interest: '', rationale: '', tools: [], skills: [] }), /^\[approve_project rec-4\] Create the project "Care" now\./)
   assert.match(approveAgentTurn({ id: 'rec-2', kind: 'web', name: 'Tides', description: '', interest: 'Surf', rationale: '', tools: [], skills: [] }), /^\[approve_app rec-2\] Build the web app "Tides" now\./)
 })
 
@@ -190,6 +203,9 @@ test('phoneTurn names the apps, what Ren did and the current graph', () => {
   assert.match(turn, /- 2026-11-15 09:05 Set a reminder: stretch/)
   assert.match(turn, /Current interest graph: Running \(0\.50\)/)
   assert.match(phoneTurn({ since: 0, until: 0, apps: [], actions: [] }, []), /\(none\)[\s\S]*\(nothing\)/)
+  const notified = phoneTurn({ since: 0, until: 0, apps: [], actions: [], notifications: [
+    { app: 'WhatsApp', title: 'Dana', text: 'Dinner Friday?', key: '0|com.whatsapp|1', canReply: true, at: Date.UTC(2026, 10, 15, 9, 7) }] }, [])
+  assert.match(notified, /Notifications the phone received:\n- 2026-11-15 09:07 WhatsApp: Dana: Dinner Friday\? \(key 0\|com\.whatsapp\|1, can reply\)/)
 })
 
 test('a dream notice names each topic by its heading and the agent whose folder it is in, and sends the checklist', async () => {

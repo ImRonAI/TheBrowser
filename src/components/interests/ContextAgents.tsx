@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { AppWindow, Clock, Smartphone } from 'lucide-react'
+import { AppWindow, Clock, FolderKanban, MessageSquareReply, Smartphone } from 'lucide-react'
 import { useAgentUi } from '@/context/AgentUiContext'
 import { openSignIn } from '@/lib/sign-in'
 import { useContextAgentStore } from '@/stores/contextAgentStore'
@@ -20,7 +20,11 @@ export function chatWithSpecialist(agent: SpecialistAgent, task: string, send: (
   useContextAgentStore.getState().yieldToPanel()
 }
 
-/** Recommendations from the Context Agent (Build = approve → it writes the specialist and saves it, or OpenCode builds the app), saved specialists and their runs. */
+/**
+ * Recommendations from the Context Agent (Build = approve → it writes the specialist and saves it, OpenCode builds the
+ * app, or it creates the project; a reply it drafted is sent only with Send, as the user left it), saved specialists
+ * and their runs.
+ */
 export function ContextAgents() {
   const recommendations = useContextAgentStore((state) => state.recommendations)
   const agents = useContextAgentStore((state) => state.agents)
@@ -28,6 +32,7 @@ export function ContextAgents() {
   const building = useContextAgentStore((state) => state.building)
   const { approve, dismiss, refreshAgents, refreshRuns } = useContextAgentStore.getState()
   const { sendToAgentPanel } = useAgentUi()
+  const [edits, setEdits] = useState<Record<string, string>>({})
 
   useEffect(() => { void refreshAgents(); void refreshRuns() }, [refreshAgents, refreshRuns])
 
@@ -40,14 +45,23 @@ export function ContextAgents() {
       {recommendations.map((recommendation) => <article key={recommendation.id} data-testid="agent-recommendation" className="rounded-xl border border-surface-200 p-3 dark:border-surface-800">
         <RecommendationKindLabel kind={recommendation.kind} />
         <p className="text-[13px] font-semibold text-ink dark:text-ink-inverse">{recommendation.name}</p>
-        <p className={mutedText}>{recommendation.description}</p>
-        <p className="mt-1 text-[11px] text-ink-muted dark:text-ink-inverse-muted">{recommendation.rationale}</p>
+        {recommendation.kind === 'reply'
+          ? <>
+            <p className={mutedText}>{recommendation.rationale}</p>
+            <textarea aria-label="Reply" rows={3} value={edits[recommendation.id] ?? recommendation.description}
+              onChange={(event) => setEdits({ ...edits, [recommendation.id]: event.target.value })} className={cn(field, 'mt-2 w-full resize-y')} />
+          </>
+          : <>
+            <p className={mutedText}>{recommendation.description}</p>
+            <p className="mt-1 text-[11px] text-ink-muted dark:text-ink-inverse-muted">{recommendation.rationale}</p>
+          </>}
         <div className="mt-2 flex justify-end gap-1">
           <button type="button" disabled={Boolean(building)} onClick={() => dismiss(recommendation.id)} className={ghostButton}>Not now</button>
-          {signInRequired
+          {signInRequired && recommendation.kind !== 'reply' && recommendation.kind !== 'project'
             ? <button type="button" onClick={() => openSignIn()} className={primaryButton}>Sign in to build</button>
-            : <button type="button" disabled={Boolean(building)} onClick={() => void approve(recommendation)} className={primaryButton}>
-              {building === recommendation.id ? 'Building…' : 'Build'}</button>}
+            : <button type="button" disabled={Boolean(building) || (recommendation.kind === 'reply' && !(edits[recommendation.id] ?? recommendation.description).trim())}
+              onClick={() => void approve({ ...recommendation, description: (edits[recommendation.id] ?? recommendation.description).trim() })} className={primaryButton}>
+              {ACTION[recommendation.kind][building === recommendation.id ? 1 : 0]}</button>}
         </div>
       </article>)}
     </section>
@@ -61,12 +75,21 @@ export function ContextAgents() {
   </div>
 }
 
-/** An app recommendation says which kind of app it is; an agent's needs no label (recommendations saved before apps carry no kind). */
+/** Each kind's button, idle and while the Context Agent works on it. */
+const ACTION: Record<AgentRecommendation['kind'], [string, string]> = {
+  agent: ['Build', 'Building…'], web: ['Build', 'Building…'], android: ['Build', 'Building…'],
+  project: ['Create', 'Creating…'], reply: ['Send', 'Sending…'],
+}
+const LABEL = {
+  web: [AppWindow, 'Web app'], android: [Smartphone, 'Android app'], project: [FolderKanban, 'Project'], reply: [MessageSquareReply, 'Draft reply'],
+} as const
+
+/** Apps, projects and drafts say what they are; an agent's needs no label (recommendations saved before apps carry no kind). */
 function RecommendationKindLabel({ kind }: { kind: AgentRecommendation['kind'] | undefined }) {
-  if (kind !== 'web' && kind !== 'android') return null
-  const Icon = kind === 'web' ? AppWindow : Smartphone
+  if (!kind || kind === 'agent') return null
+  const [Icon, text] = LABEL[kind]
   return <p className="mb-1 flex items-center gap-1 font-mono text-[10px] font-medium uppercase tracking-[0.08em] text-volt">
-    <Icon className="h-3 w-3" strokeWidth={2} aria-hidden />{kind === 'web' ? 'Web app' : 'Android app'}
+    <Icon className="h-3 w-3" strokeWidth={2} aria-hidden />{text}
   </p>
 }
 
