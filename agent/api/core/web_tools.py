@@ -10,7 +10,9 @@ the rest). Firecrawl's hosted MCP server (https://mcp.firecrawl.dev/v2/mcp-oauth
 provider joins only where its key (for Firecrawl, ``RON_FIRECRAWL_MCP=1`` and a sign-in) is set.
 the rest). ``olostep_api`` is a native ``@tool`` over the Olostep REST API (https://api.olostep.com, the key as its bearer)
 for the endpoints that MCP server has no tool for (get by id, retrieve, files, schedules, batch metadata), restricted to
-the documented endpoints in ``OLOSTEP_ENDPOINTS``. Each provider joins only where its key is set.
+the documented endpoints in ``OLOSTEP_ENDPOINTS``. Apify's hosted MCP server (``APIFY_MCP_URL``, ``APIFY_TOKEN`` as its
+bearer) is another process-wide ``MCPClient``, its tools prefixed ``apify_`` (``apify_search-actors``, ``apify_call-actor``,
+one tool per Actor in the URL). Each provider joins only where its key is set.
 """
 
 from __future__ import annotations
@@ -36,6 +38,10 @@ EXA_TOOL_NAMES: tuple[str, ...] = ("exa_search", "exa_get_contents")
 BRIGHT_DATA_TOOL_NAMES: tuple[str, ...] = ("bright_data",)
 APIFY_TOOL_NAMES: tuple[str, ...] = ("places_search",)
 OLOSTEP_PREFIX = "olostep"
+APIFY_PREFIX = "apify"
+
+_olostep = HostedMCP(OLOSTEP_PREFIX)
+_apify = HostedMCP(APIFY_PREFIX)
 FIRECRAWL_PREFIX = "firecrawl"
 
 _olostep = HostedMCP(OLOSTEP_PREFIX)
@@ -77,6 +83,7 @@ def is_web_tool(name: str) -> bool:
     """True for a tool ``web_tools()`` gives."""
     return (
         name in TAVILY_TOOL_NAMES or name in EXA_TOOL_NAMES or name in BRIGHT_DATA_TOOL_NAMES or name in APIFY_TOOL_NAMES
+        or name.startswith((f"{OLOSTEP_PREFIX}_", f"{APIFY_PREFIX}_"))
         or name.startswith((f"{OLOSTEP_PREFIX}_", f"{FIRECRAWL_PREFIX}_"))
     )
 
@@ -212,6 +219,7 @@ def firecrawl_tools() -> list[AgentTool]:
 
 
 def web_tools() -> list[AgentTool]:
+    """Tavily, Exa, Bright Data, Apify (``places_search`` and its MCP server) and Olostep, each where its key is set."""
     """Tavily, Exa, Bright Data, Apify's ``places_search``, Olostep and Firecrawl, each where its key is set."""
     tools: list[AgentTool] = []
     if app_config.TAVILY_API_KEY:
@@ -228,6 +236,8 @@ def web_tools() -> list[AgentTool]:
         tools.append(bright_data.bright_data)
     if app_config.APIFY_TOKEN:
         tools.append(places_search)
+        if app_config.APIFY_MCP_URL:
+            tools.extend(_apify.tools(app_config.APIFY_MCP_URL, app_config.APIFY_TOKEN))
     tools.extend(olostep_tools())
     tools.extend(firecrawl_tools())
     return tools
