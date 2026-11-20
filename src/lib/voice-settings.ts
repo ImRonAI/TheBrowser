@@ -9,16 +9,14 @@
  * can run the colocated test.
  */
 
-export type LiveModelId = 'gemini-3.8-live-extended-thinking' | 'gemini-3.8-live'
-export const EXTENDED_LIVE_MODEL: LiveModelId = 'gemini-3.8-live-extended-thinking'
+export type LiveModelId = 'gemini-3.8-live'
 export const REGULAR_LIVE_MODEL: LiveModelId = 'gemini-3.8-live'
-// Regular Live is the default: Extended Thinking usually skips the browser toolCall and reports a
-// "system error" instead (see agent/api/endpoints/bidi.py DEFAULT_MODEL).
+// The only Live model: the server runs the plain Strands GoogleGeminiLiveModel, which cannot declare
+// the NON_BLOCKING tools Extended Thinking needs (agent/api/endpoints/bidi.py MODELS).
 export const DEFAULT_LIVE_MODEL: LiveModelId = REGULAR_LIVE_MODEL
 
-/** Mirrors `LIVE_MODEL_IDS` in agent/api/core/bidi_agent.py. */
+/** Mirrors `MODELS` in agent/api/endpoints/bidi.py. */
 export const LIVE_MODELS: readonly { id: LiveModelId; label: string; description: string; thinking: boolean }[] = [
-  { id: EXTENDED_LIVE_MODEL, label: 'Gemini 3.8 Live · Extended Thinking', description: 'Deeper reasoning with a selectable effort; tools run non-blocking.', thinking: true },
   { id: REGULAR_LIVE_MODEL, label: 'Gemini 3.8 Live', description: 'Lowest latency. No thinking configuration.', thinking: false },
 ]
 

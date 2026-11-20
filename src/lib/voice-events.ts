@@ -9,7 +9,7 @@
  */
 
 import type { GeminiVoiceId, ReasoningEffort } from './voice-settings.ts'
-import { EXTENDED_LIVE_MODEL, type LiveModelId } from './voice-settings.ts'
+import type { LiveModelId } from './voice-settings.ts'
 
 // ─── Connection ──────────────────────────────────────────────────────────────
 
@@ -24,7 +24,7 @@ export interface LiveConnectionParams {
   conversationId: string
 }
 
-/** `effort` is only meaningful for extended thinking; the regular model has no thinking config. */
+/** `effort` is not sent: the one Live model (`gemini-3.8-live`) has no thinking configuration. */
 export function liveQuery(params: LiveConnectionParams): URLSearchParams {
   const query = new URLSearchParams({
     agent_scope: params.agentScope,
@@ -36,7 +36,6 @@ export function liveQuery(params: LiveConnectionParams): URLSearchParams {
     conversation_id: params.conversationId,
   })
   if (!isIssueScope(params.agentScope)) query.set('user_id', params.userId)
-  if (params.model === EXTENDED_LIVE_MODEL) query.set('effort', params.effort)
   return query
 }
 

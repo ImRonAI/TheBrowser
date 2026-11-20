@@ -1,13 +1,11 @@
-"""WebSocket I/O for the native ``strands.bidi.BidiAgent``.
+"""WebSocket I/O for the native ``strands.bidi.BidiAgent``, as the Strands docs' Custom I/O section describes.
 
-The SDK ships ``InputStream``/``OutputStream`` protocols (``strands.bidi.types.io``) and
-local ``AudioIO``/``TextIO`` implementations only. These two classes are the WebSocket
-implementations of those protocols, used with ``BidiAgent.run(inputs=[...], outputs=[...])``.
-
-Client -> server frames are native ``BidiAgentInput`` JSON: ``{"text": ...}``,
-``{"audio_delta": {"format": "pcm", "source": {"bytes": <base64>}}}`` and
-``{"realtime_input": {...}}`` (``video.source.bytes`` is base64 JPEG). Server -> client
-frames are the native output events serialized as JSON.
+https://strandsagents.com/docs/user-guide/sdk/bidi/io/ (Custom I/O): an input stream returns one
+``BidiAgentInput`` per call and an output stream receives every ``BidiOutputEvent``. Inputs are the
+documented forms only (https://strandsagents.com/docs/user-guide/sdk/bidi/content/): ``TextBlock``,
+``ImageBlock`` and ``AudioDelta``. Strands has no live video input: an image is one complete user turn.
+So a shared screen reaches the model as an ``ImageBlock`` when sharing starts and with each typed
+message, never as a stream. Frames the renderer sends that are not model input stay here.
 """
 from __future__ import annotations
 
@@ -18,10 +16,9 @@ from typing import Any
 from urllib.parse import urlparse
 
 from fastapi import WebSocket, WebSocketDisconnect
-
-# Frames the renderer sends that are not model input. Passing them to BidiAgent.send
-# raises "invalid input" and the socket dies before the UI ever sees `ready`.
-CONTROL_FRAME_TYPES = frozenset({"auth", "context", "video_start", "video_stop", "stop"})
+from strands.bidi.types import AudioDelta, BidiAgentInput
+from strands.types.content import TextBlock
+from strands.types.media import ImageBlock
 
 
 def local_origin(websocket: WebSocket) -> bool:
@@ -30,15 +27,9 @@ def local_origin(websocket: WebSocket) -> bool:
     return origin in (None, "", "null", "file://") or urlparse(origin).hostname in ("localhost", "127.0.0.1", "::1")
 
 
-def decode_client_frame(frame: Any) -> Any:
-    """Decode base64 media bytes on a native model-input frame."""
-    if isinstance(frame, dict) and "audio_delta" in frame:
-        source = frame["audio_delta"]["source"]
-        source["bytes"] = base64.b64decode(source["bytes"])
-    video = frame.get("realtime_input", {}).get("video") if isinstance(frame, dict) else None
-    if video:
-        video["source"]["bytes"] = base64.b64decode(video["source"]["bytes"])
-    return frame
+def jpeg(data: str) -> ImageBlock:
+    """A base64 JPEG screen or camera frame as the documented image input."""
+    return ImageBlock(format="jpeg", source={"bytes": base64.b64decode(data)})
 
 
 def context_text(context: dict[str, Any] | None) -> str:
@@ -71,36 +62,19 @@ def context_text(context: dict[str, Any] | None) -> str:
     )
 
 
-class WebSocketInput:
-    """``InputStream``: one client JSON frame per call, with base64 media bytes decoded."""
-
-    def __init__(self, websocket: WebSocket) -> None:
-        self._websocket = websocket
-
-    async def start(self, agent: Any) -> None:
-        return
-
-    async def stop(self) -> None:
-        return
-
-    async def __call__(self) -> Any:
-        return decode_client_frame(json.loads(await self._websocket.receive_text()))
-
-
 class LiveSocketInput:
-    """Renderer socket: control frames stay here; text and audio go to the model."""
+    """Renderer socket: text, audio and screen frames go to the model; control frames stay here."""
 
-    def __init__(self, websocket: WebSocket, pending: list[dict[str, Any]] | None = None, context: str = "") -> None:
+    def __init__(self, websocket: WebSocket, pending: list[dict[str, Any]] | None = None) -> None:
         self._websocket = websocket
         self._pending = list(pending or [])
-        self._context = context
         self._agent: Any = None
+        self._frame: ImageBlock | None = None  # newest screen/camera frame
+        self._sharing_started = False
         self._binary_warning_sent = False
 
     async def start(self, agent: Any) -> None:
         self._agent = agent
-        if self._context:
-            await agent.send({"realtime_input": {"text": self._context}})
 
     async def stop(self) -> None:
         return
@@ -114,7 +88,7 @@ class LiveSocketInput:
                 raise WebSocketDisconnect(message.get("code", 1000), message.get("reason", ""))
             if message.get("text") is not None:
                 return json.loads(message["text"])
-            # An older renderer sends WebM chunks. They are not Gemini image frames; keep voice alive.
+            # An older renderer sends WebM chunks. They are not images; keep voice alive.
             if not self._binary_warning_sent:
                 self._binary_warning_sent = True
                 await self._websocket.send_text(json.dumps({
@@ -122,16 +96,22 @@ class LiveSocketInput:
                     "message": "Binary video is not supported. Reload the app to share JPEG frames; voice can continue.",
                 }))
 
-    async def __call__(self) -> Any:
+    async def __call__(self) -> BidiAgentInput:
         while True:
             frame = await self._next_frame()
-            kind = frame.get("type") if isinstance(frame, dict) else None
+            if not isinstance(frame, dict):
+                continue
+            kind = frame.get("type")
             if kind == "context":
                 text = context_text(frame.get("context") if isinstance(frame.get("context"), dict) else None)
-                if text and self._agent is not None:
-                    await self._agent.send({"realtime_input": {"text": text}})
+                if text:
+                    return TextBlock(text)
                 continue
-            if kind in ("auth", "video_start", "video_stop"):
+            if kind == "video_start":
+                self._frame, self._sharing_started = None, True
+                continue
+            if kind == "video_stop":
+                self._frame, self._sharing_started = None, False
                 continue
             if kind == "stop":
                 if self._agent is not None:
@@ -139,7 +119,20 @@ class LiveSocketInput:
                 await self._websocket.send_text(json.dumps({"type": "stopped", "pending_tools": []}))
                 await self._websocket.close(code=1000)
                 await asyncio.Event().wait()
-            return decode_client_frame(frame)
+            if kind is not None:
+                continue  # auth and other renderer control frames
+            if "audio_delta" in frame:
+                return AudioDelta(format="pcm", source={"bytes": base64.b64decode(frame["audio_delta"]["source"]["bytes"])})
+            if "text" in frame:
+                text = TextBlock(str(frame["text"]))
+                return [text, self._frame] if self._frame is not None else text
+            video = (frame.get("realtime_input") or {}).get("video")
+            if video:
+                self._frame = jpeg(video["source"]["bytes"])
+                if self._sharing_started:
+                    self._sharing_started = False
+                    return self._frame
+            # Other realtime_input (audio_stream_end): Gemini's own voice activity detection ends the turn.
 
 
 class LessonStopped(Exception):
@@ -171,26 +164,24 @@ STOP_REQUEST = (
 
 
 class TeachingObserveInput:
-    """Teach Ron studio frames as native ``BidiAgent`` inputs.
+    """Teach Ren studio frames as documented ``BidiAgent`` inputs.
 
     The studio sends ``frame``, ``note``, ``audio``, ``audio_stream_end``, ``finish_demo`` and
-    ``stop``. ``BidiAgent.send`` accepts realtime video, a text turn, an audio delta, or
-    ``audio_stream_end``. A note is a text turn so the observer can call ``journal``.
-
-    Frames, voice and notes are forwarded as-is: the bidirectional model watches the shared
-    screen itself and decides when to journal or speak; nothing here injects synthetic turns.
+    ``stop``. A screen frame is an ``ImageBlock``, which Strands sends as a complete user turn, so the
+    observer gets the first frame and then the newest one with each note and with ``finish_demo``.
+    ``audio_stream_end`` has no Strands input: Gemini's voice activity detection ends the turn.
     ``finish_demo`` (the user pressed "Finish demonstration") ends screen sharing and sends
-    ``DEBRIEF_REQUEST`` once: the same Live session continues as a spoken conversation
-    (understanding, corrections, questions, implementation plan) with no time limit; frames
-    that still arrive are dropped. ``BidiAgent.cancel()`` only acts after a tool group, so
-    ``stop`` asks the observer to call ``finish_observation`` (whose ``cancel()`` ends the run
-    natively) and raises ``LessonStopped`` after ``stop_grace_seconds`` if it has not.
+    ``DEBRIEF_REQUEST`` once: the same Live session continues as a spoken conversation with no time
+    limit. ``BidiAgent.cancel()`` only acts after a tool group, so ``stop`` asks the observer to call
+    ``finish_observation`` (whose ``cancel()`` ends the run natively) and raises ``LessonStopped``
+    after ``stop_grace_seconds`` if it has not.
     """
 
     def __init__(self, websocket: WebSocket, *, stop_grace_seconds: float = 20.0) -> None:
         self._websocket = websocket
         self._agent: Any = None
         self._stop_grace_seconds = stop_grace_seconds
+        self._frame: ImageBlock | None = None
         self.stop_requested = False
         self.debriefing = False
         self.counts = {"frames": 0, "audio": 0, "notes": 0}
@@ -199,10 +190,13 @@ class TeachingObserveInput:
         self._agent = agent
         await self._websocket.send_text(json.dumps({"type": "ready", "audio": True}))
 
+    def _with_frame(self, text: str) -> BidiAgentInput:
+        return [TextBlock(text), self._frame] if self._frame is not None else TextBlock(text)
+
     async def stop(self) -> None:
         return
 
-    async def __call__(self) -> Any:
+    async def __call__(self) -> BidiAgentInput:
         if self.stop_requested:
             await asyncio.sleep(self._stop_grace_seconds)
             raise LessonStopped("observer did not call finish_observation within the stop grace period")
@@ -214,135 +208,29 @@ class TeachingObserveInput:
             if kind == "frame" and isinstance(frame.get("data"), str) and frame["data"]:
                 if self.debriefing:
                     continue  # sharing has ended; a frame still in flight is not evidence
+                first = self._frame is None
+                self._frame = jpeg(frame["data"])
                 self.counts["frames"] += 1
-                return {"realtime_input": {"video": {"format": "jpeg", "source": {"bytes": base64.b64decode(frame["data"])}}}}
+                if first:
+                    return self._frame
+                continue
             if kind == "finish_demo":
                 if self.debriefing:
                     continue
                 self.debriefing = True
                 await self._websocket.send_text(json.dumps({"type": "debrief"}))
-                return {"text": DEBRIEF_REQUEST}
+                message = self._with_frame(DEBRIEF_REQUEST)
+                self._frame = None
+                return message
             if kind == "note" and isinstance(frame.get("text"), str) and frame["text"].strip():
                 self.counts["notes"] += 1
-                return {"text": frame["text"].strip()}
+                return self._with_frame(frame["text"].strip())
             if kind == "audio" and isinstance(frame.get("data"), str) and frame["data"]:
                 self.counts["audio"] += 1
-                return {"audio_delta": {"format": "pcm", "source": {"bytes": base64.b64decode(frame["data"])}}}
-            if kind == "audio_stream_end":
-                return {"realtime_input": {"audio_stream_end": True}}
+                return AudioDelta(format="pcm", source={"bytes": base64.b64decode(frame["data"])})
             if kind == "stop":
                 self.stop_requested = True
-                return {"text": STOP_REQUEST}
-
-
-#: Spoken by gemini-3.8-live-extended-thinking when it drops a tool call server-side (python-genai#3015).
-TOOL_DROP_PHRASES = ("system error", "error occurred")
-#: The community workaround from python-genai#3015: a short text nudge after the model goes idle.
-TOOL_NUDGE = (
-    "[system] Your previous tool call was never sent and did not run; there was no real system error. "
-    "Call the tool now, then verify the actual result."
-)
-
-
-class ToolCallRecovery:
-    """``OutputStream`` that re-prompts extended-thinking when it drops a tool call (NOT NATIVE).
-
-    ``gemini-3.8-live-extended-thinking`` intermittently announces a tool call, never emits the
-    ``toolCall`` frame, and then either speaks "a system error occurred" and goes ``IDLE`` or stalls
-    ``IN_PROGRESS`` forever (googleapis/python-genai#3015; reproduced on the raw WebSocket with
-    Google's own sample, so nothing client-side prevents it). The SDK has no hook for this, so this
-    stream watches the agent's own output events and, at most ``max_per_turn`` times per user turn,
-    sends one native ``RealtimeInput(text=TOOL_NUDGE)`` via ``agent.send`` when either:
-
-    * the assistant transcript of a turn that produced no tool call contains a ``TOOL_DROP_PHRASES``
-      match and the interaction goes ``idle``; or
-    * the interaction has been ``in_progress`` for ``stall_seconds`` after ``turn_complete`` with
-      neither a tool call nor further speech.
-
-    A turn that emitted ``bidi_tool_use_blocks`` is never nudged. ``report`` receives one
-    ``{"type": "warning", "code": "tool_call_recovered", ...}`` frame per nudge so the renderer can
-    show what happened. Only attach it for the extended model.
-    """
-
-    def __init__(self, report: Any = None, *, stall_seconds: float = 12.0, max_per_turn: int = 2,
-                 clock: Any = None) -> None:
-        self._report = report
-        self._stall_seconds = stall_seconds
-        self._max_per_turn = max_per_turn
-        self._clock = clock
-        self._agent: Any = None
-        self._tool_seen = False
-        self._assistant_text: list[str] = []
-        self._nudges_this_turn = 0
-        self._stall_task: asyncio.Task[None] | None = None
-        self.nudges = 0
-
-    def _now(self) -> float:
-        return self._clock() if self._clock is not None else asyncio.get_running_loop().time()
-
-    async def start(self, agent: Any) -> None:
-        self._agent = agent
-
-    async def stop(self) -> None:
-        self._cancel_stall()
-
-    def _cancel_stall(self) -> None:
-        if self._stall_task is not None:
-            self._stall_task.cancel()
-            self._stall_task = None
-
-    def _reset_turn(self) -> None:
-        self._tool_seen = False
-        self._assistant_text.clear()
-        self._nudges_this_turn = 0
-        self._cancel_stall()
-
-    async def __call__(self, event: Any) -> None:
-        kind = event.get("type") if isinstance(event, dict) else None
-        if kind == "bidi_tool_use_blocks":
-            self._tool_seen = True
-            self._cancel_stall()
-        elif kind == "bidi_transcript_delta" and event.get("role") == "user":
-            self._reset_turn()
-        elif kind == "bidi_transcript_delta" and event.get("role") == "assistant":
-            self._assistant_text.append(str(event.get("delta") or ""))
-            self._cancel_stall()
-        elif kind == "bidi_interaction_status":
-            await self._on_status(event)
-
-    async def _on_status(self, event: dict[str, Any]) -> None:
-        status = event.get("status")
-        if status == "idle":
-            self._cancel_stall()
-            if not self._tool_seen and self._dropped_phrase():
-                await self._nudge("apology")
-            else:
-                self._reset_turn()
-        elif status == "in_progress" and event.get("turn_complete") and not self._tool_seen:
-            self._cancel_stall()
-            self._stall_task = asyncio.get_running_loop().create_task(self._stall_watch())
-
-    def _dropped_phrase(self) -> bool:
-        text = "".join(self._assistant_text).lower()
-        return any(phrase in text for phrase in TOOL_DROP_PHRASES)
-
-    async def _stall_watch(self) -> None:
-        await asyncio.sleep(self._stall_seconds)
-        self._stall_task = None
-        if not self._tool_seen:
-            await self._nudge("stall")
-
-    async def _nudge(self, reason: str) -> None:
-        if self._agent is None or self._nudges_this_turn >= self._max_per_turn:
-            return
-        self._nudges_this_turn += 1
-        self.nudges += 1
-        self._assistant_text.clear()
-        await self._agent.send({"realtime_input": {"text": TOOL_NUDGE}})
-        if self._report is not None:
-            await self._report({"type": "warning", "code": "tool_call_recovered", "reason": reason,
-                                "attempt": self._nudges_this_turn,
-                                "message": "Extended Thinking dropped a tool call; asked it to retry."})
+                return TextBlock(STOP_REQUEST)
 
 
 class WebSocketOutput:

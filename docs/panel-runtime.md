@@ -5,8 +5,8 @@
 Use the project `venv/` and `agent/api/requirements.txt`. The native integration
 uses the complete Python Strands (`strands-py`) and Strands Harness (`harness-py`)
 packages from GitHub commit `563f57d7a387931760a2c3106014cd7c0db4c9bc`, plus the
-recorded native patches (`deploy/strands-bidi.patch` and
-`deploy/strands-subagent-async.patch`), and **`huggingface_hub==1.20.1`**.
+recorded native patch `deploy/strands-subagent-async.patch` (the bidi package
+is unpatched), and **`huggingface_hub==1.20.1`**.
 `requirements-full.txt` is not the authoritative dependency list.
 
 ```bash
@@ -28,15 +28,15 @@ Run installation commands from the repository root. The SDK checkout lives at
 `strands-py/src/strands/experimental/bidi` (upstream import shims) and
 `strands-py/src/strands/bidi` (implementation) are preserved.
 The checkout is ignored by Git/rsync and reconstructed from the pinned remote
-plus `deploy/strands-bidi.patch`. Preparation refuses mismatched revisions/origins
+plus `deploy/strands-subagent-async.patch`. Preparation refuses mismatched revisions/origins
 and never resets an existing checkout. Local modifications to native SDK source
 must be recorded in that patch before deployment.
 
 The panel Live agent and Teach Ron import `strands.bidi.BidiAgent` and
 `strands.bidi.models.google.GoogleGeminiLiveModel` from that editable checkout.
 `experimental/bidi` is only the upstream deprecation shim; Ron does not import it.
-There is no tracked `live_bidi` duplicate. Do not edit the clone by hand: record
-SDK changes in `deploy/strands-bidi.patch`. The text panel, issue agents and
+There is no tracked `live_bidi` duplicate. Do not edit the clone by hand; the bidi
+package is used exactly as pinned upstream. The text panel, issue agents and
 `panel_runtime.py` keep the SDK's `strands.session.SnapshotSessionManager`, which
 matches `strands.bidi.BidiAgent`.
 
@@ -50,9 +50,7 @@ RON_TEST_LIVE_BIDI=1 ./venv/bin/python -m pytest agent/tests/test_bidi_live.py -
 ```
 
 The ordinary `agent/tests` run skips these tests. Regular Live must deliver native
-speech and exactly one completed tool call. Extended Thinking must additionally
-deliver audio while the tool is pending and report `interaction_status=IDLE` after
-completion. Passing mocked protocol tests or establishing a WebSocket connection
+speech and exactly one completed tool call. Passing mocked protocol tests or establishing a WebSocket connection
 alone does not prove these live behaviors. Connection/account/provider failures
 are failures of acceptance, not skipped or substituted model results.
 
@@ -556,7 +554,7 @@ A2A contexts do not inherit panel sessions, skills or durable checkpoint resume.
 
 The external AgentSkills and `async-agentic-tools` samples were previously
 inspected at pinned commits, not installed. Native background tasks own text-panel
-execution. Live function calls are `NON_BLOCKING` declarations on `GoogleGeminiLiveModel`. See
+execution. Live function calls use `GoogleGeminiLiveModel`'s own declarations. See
 [the recorded sample review](panel-tools.md#native-background-ownership-and-pinned-external-references).
 
 ## Live (Gemini Bidi) sessions
@@ -583,141 +581,49 @@ spoken "system error"; transport acceptance does not establish full workflow/too
 acceptance.
 
 `WebSocket /bidi` (`agent/api/endpoints/bidi.py`, `core/live_tools.py`,
-`core/live_io.py`) runs one native `strands.bidi.BidiAgent` per socket on the
-native `GoogleGeminiLiveModel` from `strands.bidi.models.google`; there is no provider subclass. Settings are query
-parameters and every one is validated, never ignored: `model`
-(`gemini-3.8-live` default | `gemini-3.8-live-extended-thinking`; the renderer's
-`DEFAULT_LIVE_MODEL` matches. Extended Thinking usually announces a browser action, never
-emits the `toolCall`, and then says "a system error occurred" — reproduced on the raw Live
-WebSocket with the official doc declaration, so it is provider-side, not Ron's composition),
-`voice`
-(prebuilt Gemini voices), `effort` (`low|medium|high`, default `high`, **rejected**
-with `invalid_settings` on the regular model), `agent_scope`
-(`panel|search|build|issue:<uuid>`), `browser` (`user|cloud`), `conversation_id`,
-`user_id`, `search` (`1|true` opts into the provider-executed `google_search` tool via the
-native `hosted_tools` seam, appended beside the function declarations). `GET /bidi/settings`
-advertises the catalogue.
+`core/live_io.py`) runs one documented `strands.bidi.BidiAgent` per socket on
+`GoogleGeminiLiveModel(model_id, voice, client_args)` from the pinned, **unpatched** SDK
+(owner 2026-11-20: Strands only; https://strandsagents.com/docs/user-guide/sdk/bidi/models/google/).
+Settings are query parameters and every one is validated: `model` (`gemini-3.8-live` only:
+Extended Thinking needs `NON_BLOCKING` declarations, which Strands never sets), `voice`
+(prebuilt Gemini voices), `agent_scope` (`panel|search|build|issue:<uuid>`), `browser`
+(`user|cloud`), `conversation_id`/`session_id`, `user_id`. `GET /bidi/settings` advertises them.
 
-- **Origin / ownership.** The socket is refused (1008, before accept) unless the `Origin` is
-  loopback (`localhost`, `127.0.0.1`, `[::1]`), Electron's `null`/`file://`, or absent. One
-  process-local lease per `(user, scope, conversation)` (`LiveLeases`): a second socket gets
-  `{type:'error', code:'busy'}`; the lease is released in `finally`.
+- **Origin.** The socket is refused (1008, before accept) unless the `Origin` is loopback,
+  Electron's `null`/`file://`, or absent.
 - **Handshake.** The client sends `auth` (issue scope) and then a `context` frame (possibly
-  empty) in `onopen`; the server waits at most `HANDSHAKE_TIMEOUT_S` (15 s) per frame
-  (`handshake_timeout` otherwise) and only then composes/starts the agent and emits `ready`.
-- **Frame schema.** `validate_frame` allows exactly the documented keys per kind; input frames
-  are exactly one of `text` (non-empty, ≤16 KiB), `audio_delta` (`format:'pcm'`,
-  base64-validated, even byte count, ≤64 KiB) or `realtime_input:{audio_stream_end:true}`
-  (also `{type:'audio_stream_end'}`). `toolResult`, `image`, raw message dicts and unknown
-  fields never reach `BidiAgent.send`.
+  empty); the server waits at most 15 s per frame, appends the context (labelled untrusted)
+  to the system prompt, builds the agent and emits `ready`.
+- **Inputs** are the documented forms only (https://strandsagents.com/docs/user-guide/sdk/bidi/content/),
+  returned by the Custom I/O input stream `LiveSocketInput`
+  (https://strandsagents.com/docs/user-guide/sdk/bidi/io/): `{text}` → `TextBlock`, `{audio_delta}` →
+  `AudioDelta`, a later `context` frame → `TextBlock`. Strands has no live video input and every
+  image is a complete user turn, so the renderer's 1 fps `realtime_input.video` JPEG frames are kept
+  server-side and the newest reaches the model as an `ImageBlock` when sharing starts and with each
+  typed message (`[TextBlock, ImageBlock]`). `realtime_input.audio_stream_end` has no Strands input and
+  is dropped: Gemini's own voice activity detection ends turns. Binary packets from an older
+  renderer get one `unsupported_video` warning.
+- **System prompt** is the text agent's prompt (`chat.live_system_prompt(browser)`, pinned by
+  `test_panel_prompt.py::test_live_prompt_is_the_text_prompt_plus_live_deltas`).
+- **Tools** are the text agent's tools except those `BidiAgent` cannot run (`think`, `ask_user`,
+  `tool_catalog`, `mcp_client`) and those Gemini Live cannot declare: Strands'
+  `GoogleGeminiLiveModel._format_tools_for_live_api` (pinned and upstream main) validates schemas
+  as a genai `Schema`, so `$schema`/`$ref`/`$defs` fail and `additionalProperties` is refused by
+  the Live API with 1007. `gemini_live_declarable` filters host tools and, as a callable in the
+  browser `MCPClient`'s native `tool_filters`, browser tools. The browser client also rejects
+  `playwright_browser_take_screenshot` (image results end the session) and `request_approval`.
+  `ready.tools` lists exactly what was declared.
+- **Stop.** `{type:'stop'}` calls native `cancel()`, reports `{type:'stopped'}` and closes.
+- **Persistence / takeover.** With a thread id the agent uses the user's `thread_agent_id` and
+  `ThreadSessionManager`, so the SDK restores and saves the thread (see *Session ownership*).
 
-- **Identity / scope.** Panel scopes use `user_id` like `/chat`. `issue:<uuid>` requires
-  a first frame `{type:'auth', token?|workspace?}` resolved through the Projects
-  `project_identity` path (bearer or 64-hex guest workspace); the verified
-  `identity.user_id` replaces the query value, issue access is checked via
-  `ProjectService.issue`, `conversation_id` must equal the issue id, and the toolset
-  is `issue_tools` + that issue's learned skills only. Missing/invalid credential →
-  `unauthorized`; inaccessible issue → `forbidden`.
-  Panel `user_id` is a trusted-local namespace, not authenticated multi-tenant isolation:
-  another trusted local client can choose it. Never expose this host-execution API publicly.
-  Issue credentials travel only in the auth frame, not the URL.
-- **The system prompt is the text agent's prompt.** `chat.live_system_prompt(browser)`
-  returns `system_prompt_for`'s composition for the pinned browser target (task completion,
-  core tools, browser automation, persistent workspace) + `SKILLS_AND_SPECIALISTS_DIRECTIVE`
-  + `MEMORY_JOURNAL_DIRECTIVE` + `LIVE_ADDENDUM`; the addendum is the only Live-specific text
-  (tools pre-declared, no `tool_catalog`/`mcp_client`/`think`/`recall`/`ask_user`/screenshot,
-  explain and recover from tool errors). `core/live_tools.py` composes through that function
-  — never a second hand-written prompt — and
-  `test_panel_prompt.py::test_live_prompt_is_the_text_prompt_plus_live_deltas` pins it.
-- **Tools are the text agent's tools except those `BidiAgent` cannot run**
-  (`core/live_tools.py`). `BidiAgent` declares tools to the model once per connection
-  (`bidi/agent/loop.py` `start`/`_restart_model`) and rejects tool interrupts, so Live
-  has no `think`, `ask_user` (interrupt), `tool_catalog` or `mcp_client` (both register
-  tools after the declaration). Host tools are the native `strands_tools`/vendored
-  `@tool` objects, unwrapped. The browser is the Electron MCP server
-  (`electron-playwright-mcp`) for the selected target: a native `MCPClient` passed in
-  `BidiAgent(tools=[…])`, connected when the socket starts, whose native `tool_filters`
-  drop `playwright_browser_take_screenshot` (its image result is rejected by
-  `GoogleGeminiLiveModel._format_tool_result`, which would end the session) and
-  `request_approval` (FastMCP's Approval app: it returns a UI card and tells the model
-  to stop until an "I selected:" message that Ron never sends). An empty
-  tool list from that server sends
-  `{type:'warning', code:'browser_tools_unavailable'}`. `ready.tools` lists exactly
-  what was declared. `GoogleGeminiLiveModel` declares them `NON_BLOCKING`. The bidi
-  loop sends the function response when the tool stream finishes.
-- **Input routes.** `{text}` is a `clientContent` user turn: it always interrupts and is
-  recorded. `{audio_delta}` and video frames stream through the send gate and are
-  not recorded. Live screen/camera capture samples the local preview at 1 fps,
-  scales its longest edge to at most 1600 px, and sends JPEG as a JSON text frame:
-  `{"realtime_input":{"video":{"format":"jpeg","source":{"bytes":"<base64>"}}}}`.
-  `LiveSocketInput` decodes the bytes and the native Google model calls
-  `send_realtime_input(video=Blob(data=..., mime_type="image/jpeg"))`. There is no
-  WebM recorder or server-side ffmpeg decoder in this path. Binary packets from
-  an older renderer are discarded with one `unsupported_video` warning per socket
-  rather than crashing voice. Tests: `agent/tests/test_live_io.py` and
-  `src/lib/bidi-recording.test.ts`.
-  Real-device verification (2026-10-07): one session sent 21 shared-window frames
-  followed by 30 MacBook Pro camera frames; Gemini confirmed the browser tab strip
-  and then the change to a room. Both tracks ended on Stop sharing. Separate runs
-  still encountered upstream Google `1011` internal-error/service-unavailable
-  closures; this transport fix does not resolve those provider failures. A native
-  screen acquisition also timed out once before succeeding on retry.
-  The handshake `context` seeds text-only history (`history_source: 'client'`; restored
-  native history reports `'snapshot'` and receives new handoff text with native-state
-  digest deduplication) with page/issue data appended as a trailing **user**
-  message wrapped in `<reference source="browser" trust="untrusted">`; nothing client-supplied
-  ever enters the system instruction. Later `context` frames are sent as
-  `RealtimeInput(text=…)` when the interaction is idle, otherwise queued until idle
-  (`context_applied.mode`: `initial|realtime|queued`). Realtime text is session context, not ephemeral, and has no
-  ordering guarantee relative to audio. `turn_complete=false` clientContent is never used.
-  Current scope system instructions replace the old snapshot's prompt after restore.
-- **Completion.** `InteractionTracker` treats native `bidi_interaction_status` as
-  authoritative; on extended thinking `bidi_response_stop` alone never means idle.
-- **Stop.** `{type:'stop'}` with no pending tool group stops immediately; with tools
-  running it calls native `cancel()` (which only takes effect after the group) and waits
-  up to 10 s, then reports `{type:'stopped', pending_tools:[…]}` for results that are
-  unknown. A `bidi_tool_cancel` from the server does not clear a pending host tool: it stays
-  pending until the native executor reports its outcome. Unknown outcomes are persisted as
-  a recovery record (`live-recovery/<scope>/<conversation>.json`); the next session for that
-  conversation reports them once (`ready.recovery` + `warning code:'recovery_required'`),
-  clears the record, and replays nothing.
-  Provider-cancelled results also emit an explicit warning: the host action may finish
-  even though Gemini no longer accepts its reply. The receive loop remains active while
-  draining native tool results; a renderer timeout never acknowledges a successful stop.
-- **Persistence.** `SnapshotSessionManager(conversation_id, bidi_agent_save_latest_on="message")`
-  over `panel/users/<sha(user)>/live/` (its own prefix, so it never shares an index/alias
-  writer with the text panel's manager) with agent id `live-<sha256(user\0scope)[:32]>`;
-  the text panel keeps its `panel-…` agent under the same conversation id, so both agents
-  share a conversation identity without sharing a native agent, storage writer, or tool
-  blocks. The voice journal is keyed by scope + conversation.
-
-Teach Ron (`endpoints/teaching_observe.py`, `core/teaching_journal.py`) is one native
-`BidiAgent` per lesson with optional `model`/`voice`/`effort` query settings and the same
-Origin policy. Its tools: Teach Ron's **own copy** of the `journal` tool
-(`create_lesson_journal`: same `write/read/list/add_task` semantics and Markdown as
-`agent/tools/strands_tools/devops/journal.py`, bound by closure to the lesson workspace
-`<teaching root>/<scope>/workspaces/<session>/` instead of `cwd`/env, `YYYY-MM-DD`
-validated, async file IO); `copy_into_lesson` (copies an existing file into the
-workspace, never writes outside it, never overwrites); `finish_observation`; the scope's
-learned skills; and, when the composition owner installs `set_scope_tool_supplier`, the
-parent scope's tools under `LessonWorkspacePolicy` — a native `BeforeToolCallEvent`
-`cancel_tool` hook that limits mutating `editor` commands to the workspace and denies
-`shell`/`environment`/`mcp_client` outright because the native sandbox is
-`NotASandboxLocalEnvironment` and cannot confine them (existing tools and skills are
-therefore copy-only by construction). Every journal `write`/`add_task`/copy is mirrored
-into `TeachingService.append_journal`, and user/assistant transcript blocks are journaled
-automatically (`user_speech`/`assistant_speech`), so the service journal stays the single
-evidence source for the review digest; the workspace Markdown is the agent-facing mirror.
-The brief and prior journal are initial seed messages, frames go through `RealtimeInput`
-video, notes and renderer `{type:'event', name, detail}` hints through `RealtimeInput`
-text (journaled as `ui_event`, explicitly unverified: the model sees ~1 fps and must not
-claim exact clicks), mic commentary (`{type:'audio'}`, `ready.audio: true`) through
-`audio_delta`, `{type:'audio_stream_end'}` through the native signal, and Ron's spoken
-replies (`bidi_audio_*`, `bidi_barge_in`, `bidi_interaction_status`, transcripts) are
-relayed verbatim. `ready` lists `tools` and `workspace`. `STOP_DEMONSTRATION` is the only
-interrupting turn, and the lesson is `recorded` only when `finish_observation` saved a
-summary, the interaction is `idle` and no tools are pending. The review/approval digest
-chain and SOP compilation in `core/teaching.py` are unchanged.
+Teach Ron (`endpoints/teaching_observe.py`, `core/teaching_journal.py`) is one documented
+`BidiAgent` per lesson seeded with `messages=` (SOP, brief, prior journal). Its input stream
+`TeachingObserveInput` returns the same documented forms: mic audio as `AudioDelta`; the first
+screen frame as an `ImageBlock`, then the newest frame with each note and with `finish_demo`
+(`[TextBlock, ImageBlock]`), since every image is a user turn; `stop` as a `TextBlock`. Its tools
+are its own `journal`, `copy_into_lesson`, `finish_observation`, the scope's learned skills and
+memory search, under `LessonWorkspacePolicy` (native `BeforeToolCallEvent` `cancel_tool`).
 
 ### Live Music (Lyria RealTime)
 

@@ -10,6 +10,11 @@ fixed when the socket starts, and it holds only tools the bidi loop can run:
   ``playwright_browser_take_screenshot``: that tool returns an image block, which
   ``GoogleGeminiLiveModel._format_tool_result`` rejects, and the bidi loop turns the
   rejection into an error that ends the session.
+* Only tools Gemini Live can declare (``gemini_live_declarable``). Strands'
+  ``GoogleGeminiLiveModel._format_tools_for_live_api`` (pinned and current upstream main) validates each
+  input schema as a genai ``Schema``: ``$schema``/``$ref``/``$defs`` fail that validation and
+  ``additionalProperties`` reaches the Live API as ``additional_properties``, which it refuses with
+  1007. Either ends the session, so such a tool stays off voice.
 * The text agent's host tools, memory tools, learned skills and formations, minus four
   tools that cannot work on ``BidiAgent``. ``think`` is text-only. ``ask_user`` is a tool
   interrupt, and the bidi loop raises "tool interrupts are not supported in bidi".
@@ -58,6 +63,18 @@ from agent.api.core.panel_tools import (
 #: which GoogleGeminiLiveModel rejects. request_approval is FastMCP's Approval app: it returns a UI card
 #: and tells the model to stop until an "I selected:" message arrives, but Ron renders no MCP Apps UI.
 LIVE_REJECTED_BROWSER_TOOLS = ("playwright_browser_take_screenshot", "request_approval")
+
+#: JSON Schema keys ``GoogleGeminiLiveModel`` cannot declare (see the module docstring).
+UNDECLARABLE_SCHEMA_KEYS = frozenset({"additionalProperties", "$schema", "$ref", "$defs"})
+
+
+def gemini_live_declarable(tool: Any) -> bool:
+    """Whether Strands' ``GoogleGeminiLiveModel`` can declare this tool's input schema to Gemini Live."""
+    def clean(value: Any) -> bool:
+        if isinstance(value, dict):
+            return not UNDECLARABLE_SCHEMA_KEYS & value.keys() and all(clean(item) for item in value.values())
+        return all(clean(item) for item in value) if isinstance(value, list) else True
+    return clean(tool.tool_spec["inputSchema"]["json"])
 
 #: Installed ``strands_tools`` host tools the text agent also registers (``mcp_client`` excluded).
 LIVE_HOST_TOOLS = ("editor", "shell", "environment", "http_request")
@@ -148,7 +165,7 @@ def build_live_tools(
     from agent.api.core.harness_agents import create_harness_tools
     from agent.api.core.music_generation import music_generation_tools
 
-    return [
+    tools = [
         *host,
         *learned,
         *user_memory_tools(user_id, agent_scope),
@@ -157,6 +174,7 @@ def build_live_tools(
         *music_generation_tools(user_id),
         *deep_research_tools(user_id=user_id),
     ]
+    return [value for value in tools if gemini_live_declarable(value)]
 
 
 def live_music_tools(emit: Callable[[dict[str, Any]], Awaitable[None]] | None, user_id: str = "default") -> tuple[list[AgentTool], str, Any]:
@@ -179,6 +197,7 @@ def create_live_agent(
     model: Any, user_id: str, agent_scope: str, browser: str, *,
     emit: Callable[[dict[str, Any]], Awaitable[None]] | None = None,
     session_id: str | None = None,
+    context: str = "",
 ) -> tuple[BidiAgent, str]:
     """``BidiAgent(tools=[browser MCPClient, *tools])``; the registry owns the client's lifecycle.
 
@@ -200,7 +219,8 @@ def create_live_agent(
     created: dict[str, Any] = {}
     tools = build_live_tools(user_id, agent_scope, resolve_agent=lambda: created.get("agent"))
     music_tools, music_addendum, music = live_music_tools(emit, user_id)
-    client = browser_client_factory(browser, tool_filters={"rejected": list(LIVE_REJECTED_BROWSER_TOOLS)})()
+    client = browser_client_factory(browser, tool_filters={
+        "rejected": [*LIVE_REJECTED_BROWSER_TOOLS, lambda value: not gemini_live_declarable(value)]})()
     live_id = f"live-{uuid.uuid4().hex}"
     session_kwargs: dict[str, Any] = {}
     hooks: list[Any] = []
@@ -229,7 +249,8 @@ def create_live_agent(
         session_kwargs["hooks"] = hooks
     try:
         agent = BidiAgent(model=model, tools=[client, *tools, *music_tools],
-                          system_prompt=live_system_prompt(browser) + music_addendum, **session_kwargs)
+                          system_prompt=live_system_prompt(browser) + music_addendum + (f"\n\n{context}" if context else ""),
+                          **session_kwargs)
     except BaseException:
         client.stop(None, None, None)
         raise

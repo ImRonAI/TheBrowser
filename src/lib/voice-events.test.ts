@@ -7,16 +7,13 @@ import {
 
 const base = { userId: 'u1', agentScope: 'panel', browser: 'user' as const, voice: 'Kore' as const, effort: 'low' as const, conversationId: 'agent-abc' }
 
-test('liveQuery sends model, voice and conversation id; effort only for extended thinking', () => {
-  const extended = liveQuery({ ...base, model: 'gemini-3.8-live-extended-thinking' })
-  assert.equal(extended.get('model'), 'gemini-3.8-live-extended-thinking')
-  assert.equal(extended.get('voice'), 'Kore')
-  assert.equal(extended.get('effort'), 'low')
-  assert.equal(extended.get('conversation_id'), 'agent-abc')
-  assert.equal(extended.get('agent_scope'), 'panel')
-  assert.equal(extended.get('browser'), 'user')
+test('liveQuery sends model, voice and conversation id; never an effort', () => {
   const regular = liveQuery({ ...base, model: 'gemini-3.8-live' })
   assert.equal(regular.get('model'), 'gemini-3.8-live')
+  assert.equal(regular.get('voice'), 'Kore')
+  assert.equal(regular.get('conversation_id'), 'agent-abc')
+  assert.equal(regular.get('agent_scope'), 'panel')
+  assert.equal(regular.get('browser'), 'user')
   assert.equal(regular.has('effort'), false)
   assert.equal(regular.has('token'), false)
   const guestIssue = liveQuery({ ...base, userId: `guest:${'a'.repeat(64)}`, agentScope: 'issue:42', model: 'gemini-3.8-live' })
