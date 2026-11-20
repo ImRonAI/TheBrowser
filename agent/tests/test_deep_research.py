@@ -13,7 +13,7 @@ import io
 import json
 from pathlib import Path
 import re
-from typing import Any
+from typing import Any, override
 
 from fastapi import FastAPI
 import httpx
@@ -26,6 +26,7 @@ from strands.multiagent import Status, Swarm
 from strands.multiagent.base import MultiAgentResult, NodeResult
 from strands.multiagent.graph import Graph
 from strands.storage import InMemoryStorage
+from strands.types.exceptions import StorageError
 from strands.types.streaming import StreamEvent
 from strands.types.tools import ToolContext
 from strands.vended_plugins.context_injector import ContextInjector
@@ -484,6 +485,64 @@ async def test_a_run_streams_the_sdk_events_and_reopens_from_storage(
 
     assert await deep_research.delete_run(user_id="u1", session_id=session_id)
     assert await deep_research.get_run(user_id="u1", session_id=session_id) is None
+
+
+class RefusingStorage(InMemoryStorage):
+    """The bucket refusing a run's save, as Hugging Face's 429 did: while ``refusing``, a write of a run file waits
+    for ``gate`` and then fails once."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.gate = asyncio.Event()
+        self.refusing = False
+        self.refused = 0
+
+    @override
+    async def write(self, key: str, data: bytes) -> None:
+        if self.refusing and "deep_research/runs/" in key:
+            _ = await self.gate.wait()
+            self.refusing = False
+            self.refused += 1
+            raise StorageError(f"HF Bucket write failed for {key!r}")
+        await super().write(key, data)
+
+
+@pytest.mark.asyncio
+async def test_a_refused_save_neither_holds_the_events_nor_fails_the_run(
+    isolated: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    storage = RefusingStorage()
+    monkeypatch.setattr(panel_storage, "_storage", storage)
+    monkeypatch.setattr(deep_research, "_SAVE_INTERVAL_SECONDS", 0.0)
+    model = ScriptedModel()
+
+    def scripted(*_args: object, **_kwargs: object) -> ScriptedModel:
+        return model
+
+    def selection(*_args: object) -> tuple[str, str]:
+        return ("gemini", "scripted")
+
+    monkeypatch.setattr(deep_research, "build_model", scripted)
+    monkeypatch.setattr(deep_research, "resolve_selection", selection)
+
+    meta = await deep_research.start_run(user_id="u1", query="Surface codes vs qLDPC", depth="fast")
+    session_id = meta["session_id"]
+    storage.refusing = True
+    seen = 0
+    async with asyncio.timeout(10):
+        async for _frame in deep_research.stream_events(user_id="u1", session_id=session_id):
+            seen += 1
+            if seen > 20:
+                break
+    assert storage.refused == 0
+
+    storage.gate.set()
+    run = await _wait_until_done("u1", session_id)
+    assert storage.refused and run["status"] == "completed", run["error"]
+
+    monkeypatch.setattr(deep_research, "_RUNS", {})
+    reopened = await deep_research.get_run(user_id="u1", session_id=session_id)
+    assert reopened is not None and reopened["status"] == "completed"
 
 
 @pytest.mark.asyncio
