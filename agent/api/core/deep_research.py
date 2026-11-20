@@ -57,6 +57,7 @@ from strands.hooks import BeforeToolCallEvent, MessageAddedEvent
 from strands.injection.types import InjectionContext
 from strands.plugins import Plugin
 from strands.session import SnapshotSessionManager
+from strands.types.exceptions import StorageError
 from strands.types.session import encode_bytes_values
 from strands.types.tools import AgentTool
 from strands.vended_plugins.context_injector import ContextInjector
@@ -1012,8 +1013,18 @@ def _failure_message(result: MultiAgentResult) -> str:
     return "The formation failed."
 
 
+async def _checkpoint(run: _Run) -> None:
+    """Save the run while it goes on; a refused write (the bucket's 429) is logged and the next save carries it."""
+    try:
+        await _save(run)
+    except StorageError:
+        logger.warning("session_id=<%s> | deep research checkpoint not saved", run.meta["session_id"], exc_info=True)
+
+
 async def _execute(run: _Run, graph: Graph, task: str) -> None:
     saved_at = time.monotonic()
+    # The save runs beside the stream, one at a time, so a slow bucket never holds the run's events.
+    checkpoint: asyncio.Task[None] | None = None
     try:
         async for event in graph.stream_async(task):
             kept = filter_event(event)
@@ -1028,8 +1039,8 @@ async def _execute(run: _Run, graph: Graph, task: str) -> None:
                     "failed" if failed else "completed",
                     _failure_message(result) if isinstance(result, MultiAgentResult) and failed else None,
                 )
-            if time.monotonic() - saved_at > _SAVE_INTERVAL_SECONDS:
-                await _save(run)
+            if (checkpoint is None or checkpoint.done()) and time.monotonic() - saved_at > _SAVE_INTERVAL_SECONDS:
+                checkpoint = asyncio.create_task(_checkpoint(run))
                 saved_at = time.monotonic()
         if run.meta["active"]:
             _finish(run, "completed", None)
@@ -1039,6 +1050,8 @@ async def _execute(run: _Run, graph: Graph, task: str) -> None:
         logger.exception("session_id=<%s> | deep research run failed", run.meta["session_id"])
         _finish(run, "failed", str(error) or type(error).__name__)
     finally:
+        if checkpoint is not None:
+            await checkpoint
         await _save(run)
 
 
