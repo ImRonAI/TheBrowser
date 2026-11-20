@@ -517,8 +517,8 @@ _EXTENDED_PROMPT: Final[str] = _RESEARCH_PROMPT + """
 ## Sandbox
 - The shell and Python in the workspace are your sandbox: download data files, parse them, compute and check every \
 number there, never in your head.
-- Long tool results are offloaded and your context is managed for you, so keep going until each part of the inquiry \
-is answered from primary sources.
+- Tool results come back whole and older turns are summarized for you as your context fills, so keep going until \
+each part of the inquiry is answered from primary sources.
 """
 
 _ULTRA_PROMPT: Final[str] = _EXTENDED_PROMPT + """- This is the most complete level and a long run is expected: \
@@ -564,8 +564,9 @@ def level_prompt(depth: ResearchDepth, today: str) -> str:
         "the result to bring back.\n"
         "- `subagent` runs non-blocking in the background (`action`: `\"spawn\"` default, `\"status\"`, `\"steer\"`, "
         "`\"recover\"`, `\"cancel\"`), injecting live progress and waking you on completion or hangup so you can steer "
-        "or salvage progress via `recover`. Every other execution tool also runs asynchronously in the background "
-        "(`strands_manage_background_task` with `mode`: `\"list\"`, `\"get\"`, `\"cancel\"`).\n"
+        "or salvage progress via `recover`. Every other tool returns its result to you directly; pass "
+        "`_background_execution: true` only for a call that will run for minutes, and manage it with "
+        "`strands_manage_background_task` (`mode`: `\"list\"`, `\"get\"`, `\"cancel\"`).\n"
         "- If any scraper or tool fails or stalls, cancel it if hung, pivot to another tool, or author a replacement "
         "`@tool` Python file in `./tools/<name>.py` (auto-reloaded by `ToolWatcher`) or load it with `load_tool` and "
         "orchestrate calls in `programmatic_tool_caller`. Never call `handoff_to_agent` while background tasks or "
@@ -576,12 +577,12 @@ def level_prompt(depth: ResearchDepth, today: str) -> str:
 
 
 class TurnBudget(Plugin):
-    """Ends an agent's invocation when its turns are spent, before the model is called again.
+    """Ends a subagent's invocation when its turns are spent, before the model is called again; reminds every agent.
 
-    A Swarm or Graph node is called without ``limits`` (``Swarm`` streams ``node.executor.stream_async(node_input,
-    invocation_state=...)``), so the budget is the hooks guide's model-call cancel: ``BeforeModelCallEvent.cancel``
-    ends the loop with that text as the reply. The harness rebuilds every subagent with its parent's plugins, so a
-    subagent has the same budget.
+    A subagent's budget is the hooks guide's model-call cancel: ``BeforeModelCallEvent.cancel`` ends the loop with that
+    text as the reply (the harness rebuilds every subagent with its parent's plugins). A Swarm or Graph node is never
+    cancelled: a Swarm agent that replies without ``handoff_to_agent`` ends its Swarm (``Swarm._execute_swarm``), so a
+    cancel would end the research before the next agent runs. Nodes get the wrap-up reminder only.
     """
 
     name = "deep-research:turn-budget"
@@ -601,13 +602,16 @@ class TurnBudget(Plugin):
         agent.add_hook(self.spend, BeforeModelCallEvent)
 
     def spend(self, event: BeforeModelCallEvent) -> None:
-        if self.turn(event.agent) > self.turns:
+        if event.agent.name not in self.node_ids and self.turn(event.agent) > self.turns:
             event.cancel = f"My {self.turns} turns are spent."
 
     def reminder(self, context: InjectionContext) -> str | None:
         """The ``<system-reminder>`` for each of the last turns (the harness's convention for injected text)."""
         turn = self.turn(context.agent)
         left = self.turns - turn
+        if turn > self.turns and context.agent.name in self.node_ids:
+            return (f"<system-reminder>Your {self.turns} turns are spent. Finish your file now, then hand off or "
+                    "finish as your role says.</system-reminder>")
         if left >= WRAP_UP_TURNS or turn > self.turns:
             return None
         if context.agent.name in self.node_ids:
@@ -746,6 +750,7 @@ def build_deep_research_graph(
         f"- Python: {sys.executable}"
     )
     node_ids = frozenset(child["id"] for formation in FORMATION_TOPOLOGY["nodes"] for child in formation["children"])
+    from agent.api.core.build_agent import _context_kwargs
 
     def make_agent(spec: AgentSpec, formation_id: str) -> Agent:
         skill = skills[spec["skill"]]
@@ -815,11 +820,15 @@ def build_deep_research_graph(
             caching=False,
             session=False,
             memory=MemoryManager(stores=agent_memory(user_id, "deep-research")),
-            background_tasks={
-                "always": ["*"],
-                "never": ["handoff_to_agent", "load_tool", "subagent", "todo_write"],
-                "wait_for_completion": True,
-            },
+            # The SDK's own policy (background_tasks/_types.py): the model picks background execution per call
+            # (``agentic``), so a search returns its result inline unless the model asks otherwise; ``subagent``
+            # is backgrounded by the harness itself. ``handoff_to_agent`` never runs in the background, so the
+            # Swarm sees the handoff in the turn that makes it.
+            background_tasks={"agentic": ["*"], "never": ["handoff_to_agent"]},
+            # Tool results stay whole in the conversation (no offload stash, no ``retrieve_context``); the
+            # conversation itself is summarized near the model's window, as the panel and Build agents do
+            # (https://strandsagents.com/docs/user-guide/sdk/agents/conversation-management/index.md).
+            **_context_kwargs("auto", lambda _role: model),
             load_tools_from_directory=True,
             callback_handler=node_callback if on_node_event is not None else None,
             retry_strategy=TimeoutRetryStrategy(max_attempts=2, initial_delay=2),
