@@ -69,12 +69,13 @@ def brave_tools_enabled() -> bool:
 
 # Web search and reading tools for every agent (``core/web_tools.py``), each on when its key is set. strands_tools'
 # Tavily, Exa and Bright Data tools read their keys themselves (Bright Data also ``BRIGHTDATA_ZONE``, default
-# ``web_unlocker1``); Olostep is its hosted MCP server (github.com/olostep/olostep-mcp-server), the key as its bearer.
+# ``web_unlocker1``); Olostep is its hosted MCP server (github.com/olostep/olostep-mcp-server) and its REST API, the key as the bearer.
 TAVILY_API_KEY = os.getenv("TAVILY_API_KEY")
 EXA_API_KEY = os.getenv("EXA_API_KEY")
 BRIGHTDATA_API_KEY = os.getenv("BRIGHTDATA_API_KEY")
 OLOSTEP_API_KEY = os.getenv("OLOSTEP_API_KEY")
 OLOSTEP_MCP_URL = "https://mcp.olostep.com/mcp"
+OLOSTEP_API_URL = "https://api.olostep.com"
 # Apify: Google Maps places for the Search page, Discover and the agents' ``places_search``, from the Actor
 # RON_APIFY_PLACES_ACTOR (default Apify's Google Maps Scraper).
 APIFY_TOKEN = os.getenv("APIFY_TOKEN")

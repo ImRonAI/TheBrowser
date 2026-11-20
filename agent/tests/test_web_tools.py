@@ -54,3 +54,14 @@ def test_http_request_is_strands_vended_tool() -> None:
 
 def test_olostep_names() -> None:
     assert web.is_web_tool("olostep_answers") and web.is_web_tool("tavily_search") and web.is_web_tool("places_search") and not web.is_web_tool("brave_answer")
+
+
+
+def test_olostep_api_calls_only_documented_endpoints(keys: pytest.MonkeyPatch) -> None:
+    import asyncio
+
+    assert web.olostep_tools() == []
+    refused = asyncio.run(web.olostep_api("POST", "/v1/monitors"))
+    assert refused["status"] == "error" and "not a documented Olostep endpoint" in refused["content"][0]["text"]
+    assert asyncio.run(web.olostep_api("PATCH", "/v1/scrapes/x"))["status"] == "error"
+    assert web.is_web_tool("olostep_api")
