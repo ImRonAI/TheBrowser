@@ -80,6 +80,9 @@ OLOSTEP_API_URL = "https://api.olostep.com"
 # RON_APIFY_PLACES_ACTOR (default Apify's Google Maps Scraper).
 APIFY_TOKEN = os.getenv("APIFY_TOKEN")
 APIFY_PLACES_ACTOR = os.getenv("RON_APIFY_PLACES_ACTOR", "compass~crawler-google-places")
+# Apify's hosted MCP server (docs.apify.com/platform/integrations/mcp), APIFY_TOKEN as the bearer; the query string picks
+# its tools and Actors. RON_APIFY_MCP_URL="" leaves it out.
+APIFY_MCP_URL = os.getenv("RON_APIFY_MCP_URL", "https://mcp.apify.com/?tools=actors,docs,runs,storage,tasks,schedules,builds,versions,api,tomato_lakebed/my-actor,compass/crawler-google-places,streamers/youtube-scraper,clockworks/tiktok-scraper,apify/website-content-crawler,apify/instagram-reel-scraper,dev_fusion/Linkedin-Profile-Scraper,code_crafter/leads-finder,apify/instagram-profile-scraper,apify/google-search-scraper,compass/google-maps-extractor,apify/web-scraper,curious_coder/linkedin-jobs-scraper,apify/instagram-post-scraper,apify/facebook-posts-scraper,vdrmota/contact-info-scraper,apidojo/tweet-scraper,curious_coder/facebook-ads-library-scraper,clockworks/free-tiktok-scraper,lukaskrivka/google-maps-with-contact-details")
 
 # Ren's workspace computer: Desktop Commander over MCP (the VM's emrys-computer, https://<vm>/computer/mcp, its token as
 # the bearer), where OpenCode runs. The Context Agent hands app and agent builds to OpenCode there (core/context_agent.py).
