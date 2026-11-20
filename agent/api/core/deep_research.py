@@ -52,7 +52,7 @@ from strands.models.routing import FallbackStrategy, RoutingCandidate
 from strands.multiagent import GraphBuilder, Swarm
 from strands.multiagent.base import MultiAgentResult, NodeResult, Status
 from strands.multiagent.graph import Graph, GraphState
-from strands.hooks import BeforeModelCallEvent, MessageAddedEvent
+from strands.hooks import BeforeToolCallEvent, MessageAddedEvent
 from strands.injection.types import InjectionContext
 from strands.plugins import Plugin
 from strands.session import SnapshotSessionManager
@@ -557,32 +557,37 @@ def level_prompt(depth: ResearchDepth, today: str) -> str:
         f"{level['figures']} figures or more and at least {level['sources']} distinct, good sources cited in it.\n"
         f"- The deck: {level['slides']} slides.\n\n"
         "## How you work\n"
-        f"- You have {level['turns']} turns; a turn is one reply of yours and the tools it calls. Each subagent you "
-        "start has the same.\n"
-        f"- In every turn but your last {WRAP_UP_TURNS}, work through `subagent`: spawn several calls in parallel for "
-        "the independent parts (a question, a source, a chart, a section each), each told the exact files to read and "
-        "the result to bring back.\n"
-        "- `subagent` runs non-blocking in the background (`action`: `\"spawn\"` default, `\"status\"`, `\"steer\"`, "
-        "`\"recover\"`, `\"cancel\"`), injecting live progress and waking you on completion or hangup so you can steer "
-        "or salvage progress via `recover`. Every other tool returns its result to you directly; pass "
-        "`_background_execution: true` only for a call that will run for minutes, and manage it with "
-        "`strands_manage_background_task` (`mode`: `\"list\"`, `\"get\"`, `\"cancel\"`).\n"
-        "- If any scraper or tool fails or stalls, cancel it if hung, pivot to another tool, or author a replacement "
-        "`@tool` Python file in `./tools/<name>.py` (auto-reloaded by `ToolWatcher`) or load it with `load_tool` and "
-        "orchestrate calls in `programmatic_tool_caller`. Never call `handoff_to_agent` while background tasks or "
-        "subagents are still running — wait for settled results first.\n"
-        f"- Your last {WRAP_UP_TURNS} turns are for bringing it together: gather what your subagents returned, write "
-        "it into your file, check it against your role, then hand off or finish. A reminder says when they start.\n"
+        "- Use `subagent` for the independent parts (a question, a source, a chart, a section each), several in "
+        "parallel, each told the exact files to read and the result to bring back. Each one's full findings come back "
+        "to you when it finishes.\n"
+        "- Read and write the workspace with `read`, `write`, `edit` and `shell`. `programmatic_tool_caller` has no "
+        "file access; use it only to orchestrate other tool calls.\n"
+        "- If a tool fails or stalls, pivot to another tool or write a replacement `@tool` in `./tools/<name>.py` (loaded "
+        "automatically). Never call `handoff_to_agent` while subagents are still "
+        "running: wait for their findings first.\n"
+        "- A reminder tells you when you are down to your last few calls. Then gather what your subagents returned, "
+        "write your file, check it against your role, and hand off or finish.\n"
     )
 
 
-class TurnBudget(Plugin):
-    """Ends a subagent's invocation when its turns are spent, before the model is called again; reminds every agent.
+#: What a node may still call once its turns are spent: enough to write its artifact (the production agents build it
+#: with ``shell``), collect background results and hand off.
+NODE_WRAP_UP_TOOLS: Final[frozenset[str]] = frozenset(
+    {"read", "write", "edit", "shell", "handoff_to_agent", "strands_manage_background_task", "todo_write"}
+)
 
-    A subagent's budget is the hooks guide's model-call cancel: ``BeforeModelCallEvent.cancel`` ends the loop with that
-    text as the reply (the harness rebuilds every subagent with its parent's plugins). A Swarm or Graph node is never
-    cancelled: a Swarm agent that replies without ``handoff_to_agent`` ends its Swarm (``Swarm._execute_swarm``), so a
-    cancel would end the research before the next agent runs. Nodes get the wrap-up reminder only.
+
+class TurnBudget(Plugin):
+    """The wrap-up nudge: a reminder over the last turns, then only wrap-up tool calls. Nothing is ever cut off.
+
+    From ``WRAP_UP_TURNS`` before the budget, Strands' ``ContextInjector`` adds the reminder (``reminder``). Past the
+    budget, ``BeforeToolCallEvent.cancel_tool`` (Hook events,
+    https://strandsagents.com/docs/user-guide/sdk/agents/hooks-events/index.md) declines any call that isn't wrap-up
+    work, with a message saying what to do instead; the model keeps going and writes its own last reply. A subagent
+    then replies with everything it found, which the subagent tool returns to its parent; a Swarm or Graph node writes
+    its artifact and hands off, because a Swarm agent that replies without ``handoff_to_agent`` ends its Swarm
+    (https://strandsagents.com/latest/documentation/docs/user-guide/concepts/multi-agent/swarm/). The harness
+    rebuilds every subagent with its parent's plugins, so subagents carry the same nudge.
     """
 
     name = "deep-research:turn-budget"
@@ -599,27 +604,31 @@ class TurnBudget(Plugin):
         return len(invocation.cycles) if invocation is not None else 0
 
     def init_agent(self, agent: Agent) -> None:
-        agent.add_hook(self.spend, BeforeModelCallEvent)
+        agent.add_hook(self.wrap_up, BeforeToolCallEvent)
 
-    def spend(self, event: BeforeModelCallEvent) -> None:
-        if event.agent.name not in self.node_ids and self.turn(event.agent) > self.turns:
-            event.cancel = f"My {self.turns} turns are spent."
+    def wrap_up(self, event: BeforeToolCallEvent) -> None:
+        if self.turn(event.agent) <= self.turns:
+            return
+        if event.agent.name not in self.node_ids:
+            event.cancel_tool = ("Wrap up now: no more tool calls. Reply with everything you found, every source, "
+                                 "number and quote, so your parent gets all of it.")
+        elif event.tool_use["name"] not in NODE_WRAP_UP_TOOLS:
+            event.cancel_tool = ("Wrap up now: no more research or delegation. Write your file from what you and your "
+                                 "subagents found, then hand off or finish as your role says.")
 
     def reminder(self, context: InjectionContext) -> str | None:
         """The ``<system-reminder>`` for each of the last turns (the harness's convention for injected text)."""
         turn = self.turn(context.agent)
-        left = self.turns - turn
-        if turn > self.turns and context.agent.name in self.node_ids:
-            return (f"<system-reminder>Your {self.turns} turns are spent. Finish your file now, then hand off or "
-                    "finish as your role says.</system-reminder>")
-        if left >= WRAP_UP_TURNS or turn > self.turns:
+        if self.turns - turn >= WRAP_UP_TURNS:
             return None
         if context.agent.name in self.node_ids:
-            work = ("Stop delegating. Gather what your subagents returned, finish your file, check it against your "
-                    "role and hand off or finish as your role says.")
+            work = ("You are down to your last few calls. Stop delegating and researching: gather what your "
+                    "subagents returned, write your file, check it against your role and hand off or finish as your "
+                    "role says.")
         else:
-            work = "Stop starting new work. Put together what you found and reply with your result."
-        return f"<system-reminder>Turn {turn} of {self.turns}: {left} left after this one. {work}</system-reminder>"
+            work = ("You are down to your last few calls. Stop starting new searches: finish what is in flight, then "
+                    "reply with everything you found, every source, number and quote, for your parent.")
+        return f"<system-reminder>{work}</system-reminder>"
 
 
 class Selection(TypedDict):

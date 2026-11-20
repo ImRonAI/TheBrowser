@@ -19,6 +19,7 @@ from fastapi import FastAPI
 import httpx
 from PIL import Image
 import pytest
+from strands.hooks import BeforeToolCallEvent
 from strands import Agent, tool
 from strands.models.model import Model
 from strands.multiagent import Status, Swarm
@@ -235,7 +236,7 @@ def test_six_levels_from_fast_to_ultra_each_with_its_prompt_and_size() -> None:
     assert "## Sandbox" in prompts["xhigh"] and "## Sandbox" not in prompts["high"]
     assert "a long run is expected" in prompts["ultra"]
     assert "5 to 8 pages" in prompts["fast"] and "30 to 40 pages" in prompts["ultra"]
-    assert "You have 100 turns" in prompts["ultra"]
+    assert "turns" not in prompts["ultra"].split("## How you work")[1]
 
 
 def test_each_agent_has_the_level_prompt_its_budget_and_its_tools(isolated: None) -> None:
@@ -290,34 +291,53 @@ def note(text: str) -> str:
     return text
 
 
-@pytest.mark.asyncio
-async def test_the_turn_budget_reminds_the_last_turns_and_ends_a_subagent() -> None:
-    budget = deep_research.TurnBudget(7, frozenset({"researcher"}))
-    model = LoopingModel()
-    agent = Agent(name="a-subagent", model=model, tools=[note], callback_handler=None,
-                  plugins=[budget, ContextInjector(budget.reminder, trigger="everyTurn")])
-    result = await agent.invoke_async("Research it.")
-    assert len(model.calls) == 7
-    assert str(result).strip() == "My 7 turns are spent."
-    reminded = [call for call in model.calls if "<system-reminder>" in call]
-    assert len(reminded) == deep_research.WRAP_UP_TURNS
-    assert "Turn 3 of 7: 4 left after this one." in model.calls[2]
-    assert "Turn 7 of 7: 0 left after this one." in model.calls[6]
-    assert "Stop delegating" not in model.calls[6]
+class WrapUpModel(LoopingModel):
+    """Keeps calling ``note`` until a call is declined, then replies with its findings."""
+
+    async def stream(
+        self, messages: Any, tool_specs: list[Any] | None = None, system_prompt: str | None = None, **kwargs: Any
+    ) -> AsyncIterator[StreamEvent]:
+        msgs = list(messages)
+        last = msgs[-1]
+        self.calls.append(json.dumps(last.get("content")))
+        if "Wrap up now" in self.calls[-1]:
+            for event in _text("All findings: 1, 2, 3."):
+                yield event
+            return
+        for event in _tool_use(f"t{len(self.calls)}", "note", {"text": str(len(self.calls))}):
+            yield event
 
 
 @pytest.mark.asyncio
-async def test_the_turn_budget_never_cuts_off_a_swarm_node_before_it_hands_off() -> None:
-    """A Swarm agent that replies without ``handoff_to_agent`` ends its Swarm, so a node is reminded, never cancelled."""
+@pytest.mark.parametrize("name", ["researcher", "a-subagent"])
+async def test_the_wrap_up_nudge_reminds_then_declines_calls_and_the_agent_writes_its_own_last_reply(
+    name: str,
+) -> None:
+    """Nothing is cut off: past the budget a call is declined with what to do, and the model replies itself."""
     budget = deep_research.TurnBudget(7, frozenset({"researcher"}))
-    model = LoopingModel()
-    agent = Agent(name="researcher", model=model, tools=[note], callback_handler=None,
+    model = WrapUpModel()
+    agent = Agent(name=name, model=model, tools=[note], callback_handler=None,
                   plugins=[budget, ContextInjector(budget.reminder, trigger="everyTurn")])
-    result = await agent.invoke_async("Research it.", limits={"turns": 9})
+    result = await agent.invoke_async("Research it.", limits={"turns": 20})
+    assert str(result).strip() == "All findings: 1, 2, 3."
+    assert result.stop_reason == "end_turn"
     assert len(model.calls) == 9
-    assert result.stop_reason == "limit_turns"
-    assert "Turn 7 of 7: 0 left after this one." in model.calls[6] and "Stop delegating" in model.calls[6]
-    assert "Your 7 turns are spent. Finish your file now" in model.calls[8]
+    reminded = [call for call in model.calls if "last few calls" in call]
+    assert len(reminded) == 7 and "last few calls" not in model.calls[1]
+    assert ("Stop delegating" in model.calls[7]) == (name == "researcher")
+    assert "Wrap up now" in model.calls[8]
+
+
+@pytest.mark.asyncio
+async def test_a_node_past_its_budget_can_still_write_its_file_and_hand_off() -> None:
+    budget = deep_research.TurnBudget(1, frozenset({"researcher"}))
+    agent = Agent(name="researcher", model=LoopingModel(), callback_handler=None)
+    for tool_name, declined in (("write", False), ("handoff_to_agent", False), ("tavily_search", True)):
+        event = BeforeToolCallEvent(agent=agent, selected_tool=None, tool_use={"toolUseId": "x", "name": tool_name,
+                                                                                "input": {}}, invocation_state={})
+        budget.turns = -1
+        budget.wrap_up(event)
+        assert bool(event.cancel_tool) is declined
 
 
 @pytest.mark.asyncio
