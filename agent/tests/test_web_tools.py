@@ -19,6 +19,7 @@ def keys(monkeypatch: pytest.MonkeyPatch) -> pytest.MonkeyPatch:
     for name in ("TAVILY_API_KEY", "EXA_API_KEY", "BRIGHTDATA_API_KEY", "OLOSTEP_API_KEY", "APIFY_TOKEN"):
         monkeypatch.setattr(app_config, name, None)
     monkeypatch.setattr(app_config, "APIFY_MCP_URL", "")
+    monkeypatch.setattr(app_config, "FIRECRAWL_MCP", False)
     return monkeypatch
 
 
@@ -55,6 +56,8 @@ def test_http_request_is_strands_vended_tool() -> None:
 
 def test_olostep_names() -> None:
     assert web.is_web_tool("olostep_answers") and web.is_web_tool("tavily_search") and web.is_web_tool("places_search") and web.is_web_tool("apify_call-actor") and not web.is_web_tool("brave_answer")
+    assert web.is_web_tool("olostep_answers") and web.is_web_tool("tavily_search") and web.is_web_tool("places_search") and web.is_web_tool("firecrawl_scrape") and not web.is_web_tool("brave_answer")
+    assert web.is_web_tool("olostep_answers") and web.is_web_tool("tavily_search") and web.is_web_tool("places_search") and not web.is_web_tool("brave_answer")
 
 
 

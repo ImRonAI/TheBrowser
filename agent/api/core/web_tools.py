@@ -5,6 +5,9 @@ Tavily (``tavily_search``, ``tavily_extract``, ``tavily_crawl``, ``tavily_map``)
 ``places_search`` finds places on Google Maps through Apify (``core/web_search.apify_places``, ``APIFY_TOKEN``), for
 local stores and businesses. Olostep has no Strands tool; its hosted MCP server (https://mcp.olostep.com/mcp, the API key as its bearer) is one
 process-wide Strands ``MCPClient``, its tools prefixed ``olostep_`` (``olostep_answers``, ``olostep_scrape_website`` and
+the rest). Firecrawl's hosted MCP server (https://mcp.firecrawl.dev/v2/mcp-oauth) signs in with OAuth: FastMCP's
+``OAuth`` is the client's ``auth_provider``, its tokens kept on disk, and its tools are prefixed ``firecrawl_``. Each
+provider joins only where its key (for Firecrawl, ``RON_FIRECRAWL_MCP=1`` and a sign-in) is set.
 the rest). ``olostep_api`` is a native ``@tool`` over the Olostep REST API (https://api.olostep.com, the key as its bearer)
 for the endpoints that MCP server has no tool for (get by id, retrieve, files, schedules, batch metadata), restricted to
 the documented endpoints in ``OLOSTEP_ENDPOINTS``. Apify's hosted MCP server (``APIFY_MCP_URL``, ``APIFY_TOKEN`` as its
@@ -14,6 +17,8 @@ one tool per Actor in the URL). Each provider joins only where its key is set.
 
 from __future__ import annotations
 
+import asyncio
+from typing import Any
 import json
 import re
 from typing import Any, Literal
@@ -37,6 +42,10 @@ APIFY_PREFIX = "apify"
 
 _olostep = HostedMCP(OLOSTEP_PREFIX)
 _apify = HostedMCP(APIFY_PREFIX)
+FIRECRAWL_PREFIX = "firecrawl"
+
+_olostep = HostedMCP(OLOSTEP_PREFIX)
+_firecrawl = HostedMCP(FIRECRAWL_PREFIX)
 
 #: Olostep's documented REST endpoints (https://docs.olostep.com/llms.txt, API Reference): method, path, reference page.
 OLOSTEP_ENDPOINTS: tuple[tuple[str, str, str], ...] = (
@@ -75,6 +84,7 @@ def is_web_tool(name: str) -> bool:
     return (
         name in TAVILY_TOOL_NAMES or name in EXA_TOOL_NAMES or name in BRIGHT_DATA_TOOL_NAMES or name in APIFY_TOOL_NAMES
         or name.startswith((f"{OLOSTEP_PREFIX}_", f"{APIFY_PREFIX}_"))
+        or name.startswith((f"{OLOSTEP_PREFIX}_", f"{FIRECRAWL_PREFIX}_"))
     )
 
 
@@ -171,8 +181,46 @@ async def olostep_api(
     return data
 
 
+def _firecrawl_oauth() -> Any:
+    """FastMCP's OAuth for Firecrawl, its tokens in ``RON_FIRECRAWL_OAUTH_DIR`` (refreshed there as they expire)."""
+    from fastmcp.client.auth import OAuth
+    from key_value.aio.stores.filetree import (
+        FileTreeStore,
+        FileTreeV1CollectionSanitizationStrategy,
+        FileTreeV1KeySanitizationStrategy,
+    )
+
+    folder = app_config.FIRECRAWL_OAUTH_DIR
+    folder.mkdir(mode=0o700, parents=True, exist_ok=True)
+    store = FileTreeStore(
+        data_directory=folder,
+        key_sanitization_strategy=FileTreeV1KeySanitizationStrategy(folder),
+        collection_sanitization_strategy=FileTreeV1CollectionSanitizationStrategy(folder),
+    )
+    return OAuth(app_config.FIRECRAWL_MCP_URL, client_name="Ren", token_storage=store)
+
+
+def firecrawl_sign_in() -> None:
+    """Sign in to Firecrawl in the browser once; the agents' client then uses (and refreshes) the stored tokens."""
+    from fastmcp import Client
+
+    async def sign_in() -> None:
+        async with Client(app_config.FIRECRAWL_MCP_URL, auth=_firecrawl_oauth()) as client:
+            await client.ping()
+
+    asyncio.run(sign_in())
+
+
+def firecrawl_tools() -> list[AgentTool]:
+    """Firecrawl's MCP tools from the process-wide client (``HostedMCP``); none unless ``RON_FIRECRAWL_MCP=1``."""
+    if not app_config.FIRECRAWL_MCP:
+        return []
+    return _firecrawl.tools(app_config.FIRECRAWL_MCP_URL, auth=_firecrawl_oauth())
+
+
 def web_tools() -> list[AgentTool]:
     """Tavily, Exa, Bright Data, Apify (``places_search`` and its MCP server) and Olostep, each where its key is set."""
+    """Tavily, Exa, Bright Data, Apify's ``places_search``, Olostep and Firecrawl, each where its key is set."""
     tools: list[AgentTool] = []
     if app_config.TAVILY_API_KEY:
         from strands_tools import tavily
@@ -191,4 +239,5 @@ def web_tools() -> list[AgentTool]:
         if app_config.APIFY_MCP_URL:
             tools.extend(_apify.tools(app_config.APIFY_MCP_URL, app_config.APIFY_TOKEN))
     tools.extend(olostep_tools())
+    tools.extend(firecrawl_tools())
     return tools
