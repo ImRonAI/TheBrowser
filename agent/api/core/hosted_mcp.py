@@ -1,4 +1,4 @@
-"""A hosted MCP server's tools through one process-wide Strands ``MCPClient`` (Streamable HTTP, bearer token).
+"""A hosted MCP server's tools through one process-wide Strands ``MCPClient`` (Streamable HTTP, a bearer token or an\n``httpx.Auth`` such as FastMCP's ``OAuth``).
 
 The client starts on first use and stays open for the process, so every agent built from it shares one session. A server
 that can't be reached is left out of that agent and tried again for the next.
@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import logging
 import threading
+
+import httpx
 
 from strands.tools.mcp import MCPClient
 from strands.tools.mcp.mcp_agent_tool import MCPAgentTool
@@ -26,7 +28,7 @@ class HostedMCP:
         self._client: MCPClient | None = None
         self._tools: list[AgentTool] = []
 
-    def tools(self, url: str, token: str) -> list[AgentTool]:
+    def tools(self, url: str, token: str | None = None, auth: httpx.Auth | None = None) -> list[AgentTool]:
         with self._lock:
             if self._client is not None and not self._client._is_session_active():
                 self._client.stop(None, None, None)
@@ -35,7 +37,8 @@ class HostedMCP:
             if self._client is None:
                 client = MCPClient(
                     url=url,
-                    headers={"Authorization": f"Bearer {token}"},
+                    headers={"Authorization": f"Bearer {token}"} if token else None,
+                    auth_provider=auth,
                     prefix=self.prefix,
                     tasks_config=DEFAULT_TASK_CONFIG,
                 )
