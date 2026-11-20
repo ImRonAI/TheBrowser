@@ -13,9 +13,9 @@ from agent.api.core import config
 
 
 @pytest.mark.skipif(os.getenv("RON_TEST_LIVE_BIDI") != "1", reason="Set RON_TEST_LIVE_BIDI=1 for provider acceptance")
-@pytest.mark.parametrize("model_id", ["gemini-3.8-live", "gemini-3.8-live-extended-thinking"])
 @pytest.mark.asyncio
-async def test_live_audio_with_native_delayed_function(model_id):
+async def test_live_audio_with_native_delayed_function():
+    model_id = "gemini-3.8-live"
     started = asyncio.Event()
     finished = asyncio.Event()
     result_received = asyncio.Event()
@@ -23,7 +23,6 @@ async def test_live_audio_with_native_delayed_function(model_id):
     audio_during_tool = []
     audio_received = []
     tool_calls = []
-    statuses = []
 
     @tool
     async def delayed_check() -> dict:
@@ -35,12 +34,7 @@ async def test_live_audio_with_native_delayed_function(model_id):
         return {"status": "success", "retryable": False, "message": "Verification word: blueberry."}
 
     agent = BidiAgent(
-        model=GoogleGeminiLiveModel(
-            model_id=model_id,
-            client_args={"api_key": config.GEMINI_API_KEY, "http_options": {"api_version": "v1beta"}},
-            params={"thinking_config": {"thinking_level": "HIGH"}}
-            if model_id.endswith("extended-thinking") else {},
-        ),
+        model=GoogleGeminiLiveModel(model_id=model_id, client_args={"api_key": config.GEMINI_API_KEY}),
         tools=[delayed_check],
         system_prompt=(
             "You are a voice integration test. Call delayed_check exactly once when requested. "
@@ -58,11 +52,7 @@ async def test_live_audio_with_native_delayed_function(model_id):
                     audio_during_tool.append(time.monotonic())
             if kind == "tool_result":
                 result_received.set()
-            if kind == "bidi_interaction_status":
-                statuses.append(event.get("status"))
-                if event.get("status") == "idle" and result_received.is_set():
-                    completion.set()
-            if kind == "bidi_response_stop" and model_id == "gemini-3.8-live" and result_received.is_set():
+            if kind == "bidi_response_stop" and result_received.is_set():
                 completion.set()
 
     reader = None
@@ -77,16 +67,13 @@ async def test_live_audio_with_native_delayed_function(model_id):
                 reader.result()
             assert waiter in done, (
                 f"Live interaction did not finish: calls={len(tool_calls)}, "
-                f"result_received={result_received.is_set()}, statuses={statuses}"
+                f"result_received={result_received.is_set()}"
             )
         finally:
             waiter.cancel()
             await asyncio.gather(waiter, return_exceptions=True)
         assert len(tool_calls) == 1, "Expected exactly one native diagnostic tool invocation"
         assert audio_received, "No native speech received"
-        if model_id.endswith("extended-thinking"):
-            assert audio_during_tool, "No audio arrived during the delayed asynchronous function"
-            assert "idle" in statuses, "Extended Thinking never signalled completion"
     finally:
         if reader is not None:
             reader.cancel()

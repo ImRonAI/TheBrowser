@@ -53,8 +53,8 @@ no IP or token is committed anywhere in this repository.
 
    `vps-install.sh` runs `deploy/prepare-strands.sh` before pip. It reconstructs
    `agent/api/core/harness-sdk` directly from GitHub at the recorded SHA (`strands-py`
-   and `harness-py`) and applies `deploy/strands-bidi.patch` and
-   `deploy/strands-subagent-async.patch`; the nested checkout is excluded from rsync.
+   and `harness-py`) and applies `deploy/strands-subagent-async.patch` (the bidi
+   package stays unpatched); the nested checkout is excluded from rsync.
    Existing source with a different origin/revision is rejected, never reset.
    For a new SDK pin or changed native patch, stop the API, inspect the existing
    checkout's `git status`/`git diff`, then **move the directory aside to a unique

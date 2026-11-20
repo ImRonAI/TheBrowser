@@ -1,10 +1,10 @@
-"""Panel Live: native ``strands.bidi.BidiAgent`` on ``GoogleGeminiLiveModel``.
+"""Panel Live: the documented ``strands.bidi.BidiAgent`` on ``GoogleGeminiLiveModel``.
 
-The tool set is ``core.live_tools``: the text agent's tools minus those ``BidiAgent`` cannot
-run. The browser is the Electron MCP server (``electron-playwright-mcp``) for the selected
-target, a native ``MCPClient`` passed in ``tools`` and loaded when the agent is constructed.
-``GoogleGeminiLiveModel`` declares those functions ``NON_BLOCKING``. ``BidiAgent`` has no
-``tool_executor`` parameter.
+https://strandsagents.com/docs/user-guide/sdk/bidi/models/google/ : the model is built with
+``model_id``, ``voice`` and ``client_args``, nothing else. The tool set is ``core.live_tools``: the
+text agent's tools minus those ``BidiAgent`` cannot run or Gemini Live cannot declare. The browser is
+the Electron MCP server (``electron-playwright-mcp``) for the selected target, a native ``MCPClient``
+passed in ``tools``.
 """
 
 from __future__ import annotations
@@ -18,7 +18,7 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from strands.bidi.models.google import GoogleGeminiLiveModel
 
 from agent.api.core import config
-from agent.api.core.live_io import LiveSocketInput, ToolCallRecovery, WebSocketOutput, context_text, local_origin
+from agent.api.core.live_io import LiveSocketInput, WebSocketOutput, context_text, local_origin
 from agent.api.core.live_takeover import pending_work, start_takeover
 from agent.api.core.live_tools import close_live_music, create_live_agent, live_id_of
 
@@ -26,37 +26,18 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-MODELS = ("gemini-3.8-live-extended-thinking", "gemini-3.8-live")
-# Default is the regular model: gemini-3.8-live-extended-thinking usually announces a browser
-# action, never emits the toolCall, and then reports "a system error occurred" (reproduced on the
-# raw Live WebSocket with the official doc declaration, so it is provider-side; tracked as
-# googleapis/python-genai#3015). gemini-3.8-live calls the same declarations every time. Extended
-# sessions get ``ToolCallRecovery`` (the community workaround: one text nudge once the model is idle).
-DEFAULT_MODEL = MODELS[1]
-
-
-def live_outputs(websocket: WebSocket, model: str) -> list[Any]:
-    """The socket output plus, for the extended model only, the dropped-tool-call recovery stream."""
-    outputs: list[Any] = [WebSocketOutput(websocket)]
-    if model == MODELS[0] and config.LIVE_TOOL_NUDGE_ENABLED:
-        outputs.append(ToolCallRecovery(
-            report=lambda frame: _send(websocket, frame),
-            stall_seconds=config.LIVE_TOOL_NUDGE_STALL_SECONDS,
-            max_per_turn=config.LIVE_TOOL_NUDGE_MAX_PER_TURN,
-        ))
-    return outputs
+MODELS = ("gemini-3.8-live",)
+DEFAULT_MODEL = MODELS[0]
 VOICES = ("Puck", "Charon", "Kore", "Fenrir", "Aoede", "Leda", "Orus", "Zephyr")
-EFFORTS = ("low", "medium", "high")
 
 
 @router.get("/bidi/settings")
 async def live_settings() -> dict:
-    return {"models": list(MODELS), "voices": list(VOICES), "efforts": list(EFFORTS)}
+    return {"models": list(MODELS), "voices": list(VOICES), "efforts": []}
 
 
-def live_model(model: str, voice: str, effort: str | None) -> GoogleGeminiLiveModel:
-    params = {"thinking_config": {"thinking_level": effort.upper()}} if model == MODELS[0] and effort else {}
-    return GoogleGeminiLiveModel(model_id=model, client_args={"api_key": config.GEMINI_API_KEY}, voice=voice, params=params)
+def live_model(model: str, voice: str) -> GoogleGeminiLiveModel:
+    return GoogleGeminiLiveModel(model_id=model, voice=voice, client_args={"api_key": config.GEMINI_API_KEY})
 
 
 async def _read_frame(websocket: WebSocket) -> Any:
@@ -100,7 +81,6 @@ async def bidi(
     websocket: WebSocket,
     model: str = DEFAULT_MODEL,
     voice: str = "Kore",
-    effort: str | None = "high",
     browser: Literal["user", "cloud"] = "user",
     user_id: str = "default",
     agent_scope: str = "panel",
@@ -111,12 +91,10 @@ async def bidi(
         await websocket.close(code=1008)
         return
     await websocket.accept()
-    if model not in MODELS or voice not in VOICES or (effort is not None and effort not in EFFORTS):
-        await _send(websocket, {"type": "error", "code": "invalid_settings", "message": "Unsupported Live model, voice, or effort."})
+    if model not in MODELS or voice not in VOICES:
+        await _send(websocket, {"type": "error", "code": "invalid_settings", "message": "Unsupported Live model or voice."})
         await websocket.close(code=1008)
         return
-    if model != MODELS[0]:
-        effort = None
     # The thread this Live session belongs to (`conversation_id` is the renderer's older name for it).
     # With a thread the BidiAgent carries a native SnapshotSessionManager over the same key as Chat.
     thread_id = (session_id or conversation_id or "").strip()
@@ -130,8 +108,8 @@ async def bidi(
             await websocket.close(code=1008)
             return
         agent, prefix = create_live_agent(
-            live_model(model, voice, effort), user_id or "default", agent_scope or "panel", browser,
-            emit=_music_emitter(websocket), session_id=thread_id or None,
+            live_model(model, voice), user_id or "default", agent_scope or "panel", browser,
+            emit=_music_emitter(websocket), session_id=thread_id or None, context=context,
         )
         restored = len(agent.messages)
         names = list(agent.tool_names)
@@ -139,7 +117,7 @@ async def bidi(
             "type": "ready",
             "model": model,
             "voice": voice,
-            "effort": effort,
+            "effort": None,
             "conversation_id": thread_id,
             "session_id": thread_id,
             "tools": names,
@@ -157,8 +135,8 @@ async def bidi(
                 "message": f"The Electron MCP server ({prefix}) connected but published no tools.",
             })
         await agent.run(
-            inputs=[LiveSocketInput(websocket, pending, context)],
-            outputs=live_outputs(websocket, model),
+            inputs=[LiveSocketInput(websocket, pending)],
+            outputs=[WebSocketOutput(websocket)],
         )
     except WebSocketDisconnect:
         end_reason = "the app disconnected"

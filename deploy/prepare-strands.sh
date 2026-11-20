@@ -6,9 +6,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 SDK="$ROOT/agent/api/core/harness-sdk"
 REVISION=563f57d7a387931760a2c3106014cd7c0db4c9bc
 REMOTE=https://github.com/strands-agents/harness-sdk.git
-PATCH="$ROOT/deploy/strands-bidi.patch"
 SUBAGENT_PATCH="$ROOT/deploy/strands-subagent-async.patch"
-[ -s "$PATCH" ] || { echo "Missing native Bidi patch: $PATCH" >&2; exit 1; }
 [ -s "$SUBAGENT_PATCH" ] || { echo "Missing native Subagent/Hot-Reload patch: $SUBAGENT_PATCH" >&2; exit 1; }
 
 if [ ! -d "$SDK" ]; then
@@ -25,12 +23,8 @@ if [ ! -d "$SDK/harness-py" ]; then
   git -C "$SDK" sparse-checkout add harness-py
 fi
 
-if git -C "$SDK" apply --reverse --check "$PATCH" 2>/dev/null; then
-  echo "Native Bidi patch already present"
-else
-  git -C "$SDK" apply --check "$PATCH" || { echo "SDK patch differs; move the existing checkout aside (do not delete local work), then rerun. See docs/deploy-vps.md." >&2; exit 1; }
-  git -C "$SDK" apply "$PATCH"
-fi
+# The bidi package is the pinned upstream source, unpatched (an older checkout carried deploy/strands-bidi.patch).
+git -C "$SDK" checkout -- strands-py/src/strands/bidi strands-py/tests/strands/bidi
 
 if git -C "$SDK" apply --reverse --check "$SUBAGENT_PATCH" 2>/dev/null; then
   echo "Native Subagent/Hot-Reload patch already present"

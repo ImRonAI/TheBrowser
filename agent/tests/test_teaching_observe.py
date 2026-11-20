@@ -1,4 +1,4 @@
-"""Teach Ron observe socket: frames pass through untouched, graceful stop, SOP seed, refusals, silence markup."""
+"""Teach Ron observe socket: frames as documented image inputs, graceful stop, SOP seed, refusals, silence markup."""
 
 from __future__ import annotations
 
@@ -9,6 +9,10 @@ from pathlib import Path
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+
+from strands.bidi.types import AudioDelta
+from strands.types.content import TextBlock
+from strands.types.media import ImageBlock
 
 from agent.api.core.live_io import DEBRIEF_REQUEST, STOP_REQUEST, LessonStopped, TeachingObserveInput
 from agent.api.core.teaching import TeachingService
@@ -31,18 +35,19 @@ JPEG = base64.b64encode(b"\xff\xd8jpeg").decode()
 
 
 @pytest.mark.asyncio
-async def test_frames_are_forwarded_as_realtime_video_with_no_synthetic_turns():
-    """The model watches the stream itself: no text is ever injected between frames."""
-    socket = FakeSocket([{"type": "frame", "data": JPEG}] * 3 + [{"type": "note", "text": " hi "}])
+async def test_first_frame_is_an_image_turn_and_later_frames_ride_with_notes():
+    """Strands sends every image as a complete user turn, so frames are never a stream of turns."""
+    socket = FakeSocket([{"type": "frame", "data": JPEG}] * 3 + [{"type": "audio_stream_end"},
+                        {"type": "audio", "data": "AAA="}, {"type": "note", "text": " hi "}])
     stream = TeachingObserveInput(socket)  # type: ignore[arg-type]
     await stream.start(object())
     assert socket.sent == [{"type": "ready", "audio": True}]
 
-    for _ in range(3):
-        frame = await stream()
-        assert frame == {"realtime_input": {"video": {"format": "jpeg", "source": {"bytes": b"\xff\xd8jpeg"}}}}
-    assert await stream() == {"text": "hi"}
-    assert stream.counts == {"frames": 3, "audio": 0, "notes": 1}
+    image = ImageBlock(format="jpeg", source={"bytes": b"\xff\xd8jpeg"})
+    assert await stream() == image
+    assert await stream() == AudioDelta(format="pcm", source={"bytes": b"\0\0"})
+    assert await stream() == [TextBlock("hi"), image]
+    assert stream.counts == {"frames": 3, "audio": 1, "notes": 1}
 
 
 def test_observer_is_silent_during_the_demo_and_talks_in_the_debrief():
@@ -63,15 +68,16 @@ async def test_finish_demo_starts_the_spoken_debrief_without_a_timer_and_drops_l
                          {"type": "finish_demo"}, {"type": "note", "text": "five to eight videos"}, {"type": "stop"}])
     stream = TeachingObserveInput(socket, stop_grace_seconds=0)  # type: ignore[arg-type]
     await stream.start(object())
-    assert "video" in (await stream())["realtime_input"]
-    assert await stream() == {"text": DEBRIEF_REQUEST}
+    image = await stream()
+    assert isinstance(image, ImageBlock)
+    assert await stream() == [TextBlock(DEBRIEF_REQUEST), image]
     assert stream.debriefing and not stream.stop_requested
     assert socket.sent[-1] == {"type": "debrief"}
     # A frame still in flight and a repeated finish_demo are ignored; the user's answer reaches the model.
-    assert await stream() == {"text": "five to eight videos"}
+    assert await stream() == TextBlock("five to eight videos")
     assert stream.counts == {"frames": 1, "audio": 0, "notes": 1}
     # Only "End conversation" (stop) arms the grace timer.
-    assert await stream() == {"text": STOP_REQUEST}
+    assert await stream() == TextBlock(STOP_REQUEST)
     assert stream.stop_requested
     with pytest.raises(LessonStopped):
         await stream()
@@ -89,7 +95,7 @@ async def test_stop_asks_for_finish_observation_then_ends_the_run_after_grace():
     socket = FakeSocket([{"type": "stop"}])
     stream = TeachingObserveInput(socket, stop_grace_seconds=0)  # type: ignore[arg-type]
     await stream.start(object())
-    assert await stream() == {"text": STOP_REQUEST}
+    assert await stream() == TextBlock(STOP_REQUEST)
     assert stream.stop_requested
     with pytest.raises(LessonStopped):
         await stream()
@@ -116,7 +122,7 @@ def _client(monkeypatch, service: TeachingService) -> TestClient:
 
 
 @pytest.mark.asyncio
-async def test_extended_thinking_is_refused_with_an_error_frame(tmp_path: Path, monkeypatch):
+async def test_an_unknown_live_model_is_refused_with_an_error_frame(tmp_path: Path, monkeypatch):
     service = TeachingService(tmp_path)
     session = await service.create_session("u", "panel", "Title", "Objective")
     with _client(monkeypatch, service).websocket_connect(
