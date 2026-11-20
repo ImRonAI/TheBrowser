@@ -291,11 +291,10 @@ def note(text: str) -> str:
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("name", ["researcher", "a-subagent"])
-async def test_the_turn_budget_reminds_the_last_turns_and_ends_the_invocation(name: str) -> None:
+async def test_the_turn_budget_reminds_the_last_turns_and_ends_a_subagent() -> None:
     budget = deep_research.TurnBudget(7, frozenset({"researcher"}))
     model = LoopingModel()
-    agent = Agent(name=name, model=model, tools=[note], callback_handler=None,
+    agent = Agent(name="a-subagent", model=model, tools=[note], callback_handler=None,
                   plugins=[budget, ContextInjector(budget.reminder, trigger="everyTurn")])
     result = await agent.invoke_async("Research it.")
     assert len(model.calls) == 7
@@ -304,7 +303,21 @@ async def test_the_turn_budget_reminds_the_last_turns_and_ends_the_invocation(na
     assert len(reminded) == deep_research.WRAP_UP_TURNS
     assert "Turn 3 of 7: 4 left after this one." in model.calls[2]
     assert "Turn 7 of 7: 0 left after this one." in model.calls[6]
-    assert ("Stop delegating" in model.calls[6]) == (name == "researcher")
+    assert "Stop delegating" not in model.calls[6]
+
+
+@pytest.mark.asyncio
+async def test_the_turn_budget_never_cuts_off_a_swarm_node_before_it_hands_off() -> None:
+    """A Swarm agent that replies without ``handoff_to_agent`` ends its Swarm, so a node is reminded, never cancelled."""
+    budget = deep_research.TurnBudget(7, frozenset({"researcher"}))
+    model = LoopingModel()
+    agent = Agent(name="researcher", model=model, tools=[note], callback_handler=None,
+                  plugins=[budget, ContextInjector(budget.reminder, trigger="everyTurn")])
+    result = await agent.invoke_async("Research it.", limits={"turns": 9})
+    assert len(model.calls) == 9
+    assert result.stop_reason == "limit_turns"
+    assert "Turn 7 of 7: 0 left after this one." in model.calls[6] and "Stop delegating" in model.calls[6]
+    assert "Your 7 turns are spent. Finish your file now" in model.calls[8]
 
 
 @pytest.mark.asyncio
@@ -706,8 +719,10 @@ async def test_hung_or_failing_background_tool_is_polled_cancelled_and_formation
             spec_names = {spec["name"] for spec in tool_specs or ()}
             if label == "Researcher" and "subagent" in spec_names:
                 assert "strands_manage_background_task" in spec_names
+                assert "retrieve_context" not in spec_names
                 scrape_spec = next(spec for spec in (tool_specs or ()) if spec["name"] == "olostep_scrape_website")
-                assert "_background_execution" not in scrape_spec["inputSchema"]["json"]["properties"]
+                # The SDK's agentic policy: the model chooses background per call; handoff never goes there.
+                assert "_background_execution" in scrape_spec["inputSchema"]["json"]["properties"]
                 assert "handoff_to_agent" in spec_names
                 handoff_spec = next(spec for spec in (tool_specs or ()) if spec["name"] == "handoff_to_agent")
                 assert "_background_execution" not in handoff_spec["inputSchema"]["json"]["properties"]
@@ -727,7 +742,7 @@ async def test_hung_or_failing_background_tool_is_polled_cancelled_and_formation
                     for ev in _tool_use(
                         "res-scrape",
                         "olostep_scrape_website",
-                        {"url_to_scrape": "https://slow.example"},
+                        {"url_to_scrape": "https://slow.example", "_background_execution": True},
                     ):
                         yield ev
                     return
