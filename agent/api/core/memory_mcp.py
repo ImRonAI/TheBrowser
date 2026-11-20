@@ -16,7 +16,7 @@ from fastmcp.exceptions import ToolError
 from fastmcp.server.dependencies import get_http_headers
 
 from agent.api.core.dreaming import JOURNAL_DIRECTIVE, JOURNAL_TOOL, Journal, agent_memory, folder
-from agent.api.core.memory import people_store, save_person
+from agent.api.core.memory import people_store
 
 server = FastMCP("ren-memory", instructions=JOURNAL_DIRECTIVE.strip())
 
@@ -46,8 +46,8 @@ async def remember_person(name: str, relationship: str = "", contact: str = "",
     """Remember or update a person in the user's life: friendship/relationship, contact info, notes, and what
     interests, projects or plans they connect to."""
     user, _ = _caller()
-    clean, _ = await save_person(user, name=name, relationship=relationship, contact=contact,
-                                 notes=notes, applies_to=applies_to)
+    clean, _ = await people_store(user).remember(name=name, relationship=relationship, contact=contact,
+                                                 notes=notes, applies_to=applies_to)
     return f"Remembered {clean}."
 
 

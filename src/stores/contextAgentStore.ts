@@ -8,9 +8,8 @@
  */
 import { create } from 'zustand'
 import { createJSONStorage, persist } from 'zustand/middleware'
-import { getSession } from '@/api/supabase'
+import { projectAuthHeaders } from '@/api/supabase'
 import { API_BASE_URL } from '@/lib/api-base'
-import { guestWorkspace } from '@/lib/project-workspace'
 import { cancelRon, ronSessionId, runRon } from '@/lib/ron-run'
 import {
   APPLICATIONS_CHANGED, approveAgentTurn, browsingDue, browsingTurn, cadenceLabel, contextAddedTurn, contextResults, createContextClient, dataUrlBlob,
@@ -27,11 +26,6 @@ export type ContextTab = 'interests' | 'context' | 'agents' | 'ask'
 export interface AskTurn { id: string; question: string; answer: string; error?: string }
 /** `activity` while one of the user's own Ask questions is the running turn (background turns use other labels). */
 export const ASK_ACTIVITY = 'Thinking'
-
-async function workspaceAuthHeaders(): Promise<Record<string, string>> {
-  const session = await getSession().catch(() => null)
-  return session ? { Authorization: `Bearer ${session.access_token}` } : { 'X-Ron-Workspace': guestWorkspace().token }
-}
 
 interface ContextAgentState {
   userId: string
@@ -135,7 +129,7 @@ export const useContextAgentStore = create<ContextAgentState>()(persist((set, ge
       const userId = get().userId
       set({ status: 'running', activity, error: '' })
       try {
-        const headers = await workspaceAuthHeaders()
+        const headers = await projectAuthHeaders()
         const state = await runRon({ apiBase: API_BASE_URL, destination: 'context', sessionId: sessionFor(userId), userId, message, headers })
         if (get().userId !== userId) return ''
         const results = contextResults(state.messages)
@@ -347,7 +341,6 @@ export const useContextAgentStore = create<ContextAgentState>()(persist((set, ge
       set({ sendingReply: draft.id, error: '', notice: '' })
       try {
         const reply = await run(sendReplyTurn(draft, text), `Sending reply to ${draft.sender}`)
-        get().observeChat(draft.app, draft.incoming, text)
         set({
           handled: [...get().handled, draft.id],
           replyDrafts: get().replyDrafts.filter((item) => item.id !== draft.id),

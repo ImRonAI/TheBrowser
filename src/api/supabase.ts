@@ -6,6 +6,7 @@
  */
 
 import { createClient, SupabaseClient, Session, AuthChangeEvent } from '@supabase/supabase-js'
+import { guestWorkspace } from '@/lib/project-workspace'
 
 // ============================================
 // Configuration
@@ -110,6 +111,12 @@ export async function getSession(): Promise<Session | null> {
 export async function getAccessToken(): Promise<string | null> {
   const session = await getSession()
   return session?.access_token ?? null
+}
+
+/** The user's own project access, as the Projects API takes it: the signed-in session, or the guest workspace. */
+export async function projectAuthHeaders(): Promise<Record<string, string>> {
+  const session = await getSession()
+  return session ? { Authorization: `Bearer ${session.access_token}` } : { 'X-Ron-Workspace': guestWorkspace().token }
 }
 
 /**

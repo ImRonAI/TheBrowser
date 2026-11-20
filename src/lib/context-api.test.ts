@@ -63,11 +63,11 @@ test('searches, chats, notifications, reply drafts and twice-daily reviews forma
 
   const notif = notificationTurn({
     key: '0|com.whatsapp|7', app: 'WhatsApp', package: 'com.whatsapp', title: 'Dana Kim',
-    text: 'Saturday 7am trail run?', at: '2026-11-17T14:32:00Z', can_reply: true, number: '+18015550100',
+    text: 'Saturday 7am trail run?', at: '2026-11-17T14:32:00Z', can_reply: true,
     messages: [{ from: 'Dana Kim', text: 'Saturday 7am trail run?', at: '14:32' }],
   }, [{ label: 'Running', weight: 0.7 }])
   assert.match(notif, /^\[notification\] App: WhatsApp \(com\.whatsapp\)/)
-  assert.match(notif, /notification_key=0\|com\.whatsapp\|7, number=\+18015550100/)
+  assert.match(notif, /Reply target: notification_key=0\|com\.whatsapp\|7\n/)
   assert.match(notif, /Recent thread:\n- Dana Kim: Saturday 7am trail run\?/)
 
   const send = sendReplyTurn({
@@ -230,31 +230,24 @@ test('scheduled runs: cadence labels, notifications, plain summaries and headlin
   assert.equal(agoLabel('2026-11-10T12:00:00Z', now), '3 d ago')
 })
 
-test('phoneTurn names all apps, sub-minute sessions, runtime logs, calls, SMS, notifications, calendar, reminders and graph', () => {
+test('phoneTurn names the apps, what Ren did, the calls and texts, and the graph', () => {
   const turn = phoneTurn({
     since: Date.UTC(2026, 10, 15, 8, 0), until: Date.UTC(2026, 10, 15, 9, 30),
-    apps: [{ name: 'Strava', minutes: 42 }, { name: 'WhatsApp', package: 'com.whatsapp', minutes: 0, seconds: 38, opens: 3 }],
-    actions: [{ kind: 'device', text: 'sms_send: {"sent":true,"to":"+18015550100"}', at: Date.UTC(2026, 10, 15, 9, 5) }],
+    apps: [{ name: 'Strava', minutes: 42 }],
+    actions: [{ text: 'Sent a text: {"sent":true,"to":"+18015550100"}', at: Date.UTC(2026, 10, 15, 9, 5) }],
     calls: [{ kind: 'incoming', number: '+18015550100', name: 'Dana Kim', seconds: 195, at: '2026-11-15T08:40' }],
     sms: [{ from: 'Dana Kim', number: '+18015550100', contact: 'Dana Kim', text: 'Trailhead at 7?', at: '2026-11-15T08:45', unread: false }],
-    notifications: [{ key: 'k1', app: 'Slack', package: 'com.Slack', title: '#launch', text: 'Ship beta', at: '2026-11-15T08:50', can_reply: true }],
-    events: [{ title: 'Half Marathon', start: '2026-11-16T07:00', end: '2026-11-16T10:00', location: 'Austin' }],
-    reminders: [{ id: 'r1', text: 'Pack gels', at: '2026-11-15T20:00' }],
-    device: { battery_percent: 82, charging: true, network: 'wifi' },
   }, [{ label: 'Running', weight: 0.5 }])
   assert.match(turn, /^\[phone\]\nThe user's phone from 2026-11-15 08:00 to 2026-11-15 09:30 UTC\./)
-  assert.match(turn, /Device status: battery 82% \(charging\), network: wifi/)
   assert.match(turn, /- Strava — 42 min/)
-  assert.match(turn, /- WhatsApp \(com\.whatsapp\) — 38s, 3 opens/)
-  assert.match(turn, /- 2026-11-15 09:05 \[device\] sms_send: \{"sent":true,"to":"\+18015550100"\}/)
-  assert.match(turn, /Call log:\n- 2026-11-15T08:40 \[incoming\] Dana Kim \(\+18015550100\) — 195s/)
-  assert.match(turn, /SMS \/ text messages:\n- 2026-11-15T08:45 Dana Kim \(\+18015550100\): Trailhead at 7\?/)
-  assert.match(turn, /App notifications:\n- 2026-11-15T08:50 \[Slack \/ com\.Slack\] #launch: Ship beta/)
-  assert.match(turn, /Calendar & reminders:\n- \[calendar\] 2026-11-16T07:00 – 2026-11-16T10:00 Half Marathon @ Austin\n- \[reminder r1\] 2026-11-15T20:00 Pack gels/)
+  assert.match(turn, /- 2026-11-15 09:05 Sent a text: \{"sent":true,"to":"\+18015550100"\}/)
+  assert.match(turn, /Calls:\n- 2026-11-15T08:40 \[incoming\] Dana Kim \(\+18015550100\) — 195s/)
+  assert.match(turn, /Texts:\n- 2026-11-15T08:45 Dana Kim \(\+18015550100\): Trailhead at 7\?/)
   assert.match(turn, /Current interest graph: Running \(0\.50\)/)
-  assert.equal(hasPhoneActivity({ since: 0, until: 0, apps: [], actions: [] }), false)
-  assert.equal(hasPhoneActivity({ since: 0, until: 0, apps: [], actions: [], sms: [{ from: 'me', number: '+1801', text: 'Yo', at: 'now' }] }), true)
-  assert.match(phoneTurn({ since: 0, until: 0, apps: [], actions: [] }, []), /\(none\)[\s\S]*\(nothing\)/)
+  const empty = { since: 0, until: 0, apps: [], actions: [], calls: [], sms: [] }
+  assert.equal(hasPhoneActivity(empty), false)
+  assert.equal(hasPhoneActivity({ ...empty, sms: [{ from: 'me', number: '+1801', text: 'Yo', at: 'now' }] }), true)
+  assert.match(phoneTurn(empty, []), /\(none\)[\s\S]*\(nothing\)/)
 })
 
 test('a dream notice names each topic by its heading and the agent whose folder it is in, and sends the checklist', async () => {
