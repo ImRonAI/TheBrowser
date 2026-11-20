@@ -161,13 +161,6 @@ def people_store(user_id: str, storage: Storage | None = None, *, writable: bool
     return People(user_id, storage, writable=writable)
 
 
-async def save_person(user_id: str, *, name: str, relationship: str = "", contact: str = "",
-                      notes: str = "", applies_to: str = "", storage: Storage | None = None) -> tuple[str, str]:
-    """Write or append facts about one person under ``# <name>`` in the native ``people`` ``FileMemoryStore``."""
-    return await people_store(user_id, storage).remember(
-        name=name, relationship=relationship, contact=contact, notes=notes, applies_to=applies_to)
-
-
 def user_stores(user_id: str, scope: MemoryScope | None = None) -> list[FileMemoryStore]:
     """The user's memory stores, ``tasks`` last."""
     storage = get_user_session_storage(user_id)

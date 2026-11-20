@@ -11,8 +11,7 @@ import { notePanelTools } from '@/stores/agentPresenceStore'
 import { API_BASE_URL } from '@/lib/api-base'
 import { agentTarget, RON_AGENT, type AgentChoice } from '@/lib/panel-agents'
 import { chatScopeFields, panelSessionKey, sendsProjectCredential, type PanelConnection } from '@/lib/panel-chat'
-import { getSession } from '@/api/supabase'
-import { guestWorkspace } from '@/lib/project-workspace'
+import { projectAuthHeaders } from '@/api/supabase'
 import { useRepairStore } from '@/stores/repairStore'
 import { useContextAgentStore } from '@/stores/contextAgentStore'
 import { latestReply } from '@/lib/context-api'
@@ -29,11 +28,6 @@ const waitForFollow = (signal: AbortSignal, delay: number) => new Promise<void>(
 })
 function savedSession(key: string): string {
   try { return localStorage.getItem(key) || newSessionId() } catch { return newSessionId() }
-}
-/** A project agent and an issue chat act with the user's own project access: the same credential the Projects API uses. */
-async function projectAuthHeaders(): Promise<Record<string, string>> {
-  const session = await getSession()
-  return session ? { Authorization: `Bearer ${session.access_token}` } : { 'X-Ron-Workspace': guestWorkspace().token }
 }
 /** `GET /sessions/{id}` snapshot → `selection.browser`, or null when absent/invalid. */
 function snapshotBrowser(snapshot: unknown): BrowserSelection | null {

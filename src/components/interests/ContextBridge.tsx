@@ -57,7 +57,6 @@ export function ContextBridge() {
     const refresh = () => {
       void useContextAgentStore.getState().refreshRuns()
       void useContextAgentStore.getState().refreshDream()
-      void useContextAgentStore.getState().flushReview()
     }
     const timer = window.setInterval(refresh, RUNS_CHECK_MS)
     window.addEventListener('focus', refresh)
