@@ -8,13 +8,20 @@ process-wide Strands ``MCPClient``, its tools prefixed ``olostep_`` (``olostep_a
 the rest). Firecrawl's hosted MCP server (https://mcp.firecrawl.dev/v2/mcp-oauth) signs in with OAuth: FastMCP's
 ``OAuth`` is the client's ``auth_provider``, its tokens kept on disk, and its tools are prefixed ``firecrawl_``. Each
 provider joins only where its key (for Firecrawl, ``RON_FIRECRAWL_MCP=1`` and a sign-in) is set.
+the rest). ``olostep_api`` is a native ``@tool`` over the Olostep REST API (https://api.olostep.com, the key as its bearer)
+for the endpoints that MCP server has no tool for (get by id, retrieve, files, schedules, batch metadata), restricted to
+the documented endpoints in ``OLOSTEP_ENDPOINTS``. Each provider joins only where its key is set.
 """
 
 from __future__ import annotations
 
 import asyncio
 from typing import Any
+import json
+import re
+from typing import Any, Literal
 
+import httpx
 from strands import tool
 from strands.types.tools import AgentTool
 
@@ -33,6 +40,37 @@ FIRECRAWL_PREFIX = "firecrawl"
 
 _olostep = HostedMCP(OLOSTEP_PREFIX)
 _firecrawl = HostedMCP(FIRECRAWL_PREFIX)
+
+#: Olostep's documented REST endpoints (https://docs.olostep.com/llms.txt, API Reference): method, path, reference page.
+OLOSTEP_ENDPOINTS: tuple[tuple[str, str, str], ...] = (
+    ("POST", "/v1/scrapes", "scrapes/create"),
+    ("GET", "/v1/scrapes/{scrape_id}", "scrapes/get"),
+    ("POST", "/v1/answers", "answers/create"),
+    ("GET", "/v1/answers/{answer_id}", "answers/get"),
+    ("POST", "/v1/batches", "batches/create"),
+    ("GET", "/v1/batches/{batch_id}", "batches/info"),
+    ("GET", "/v1/batches/{batch_id}/items", "batches/items"),
+    ("PATCH", "/v1/batches/{batch_id}", "batches/update"),
+    ("POST", "/v1/crawls", "crawls/create"),
+    ("GET", "/v1/crawls/{crawl_id}", "crawls/info"),
+    ("GET", "/v1/crawls/{crawl_id}/pages", "crawls/pages"),
+    ("POST", "/v1/maps", "maps/create"),
+    ("GET", "/v1/maps/{map_id}", "maps/get"),
+    ("POST", "/v1/searches", "searches/create"),
+    ("GET", "/v1/searches/{search_id}", "searches/get"),
+    ("GET", "/v1/retrieve", "retrieve"),
+    ("POST", "/v1/files", "files/create"),
+    ("POST", "/v1/files/{file_id}/complete", "files/complete"),
+    ("GET", "/v1/files/{file_id}", "files/get"),
+    ("GET", "/v1/files/{file_id}/content", "files/content"),
+    ("GET", "/v1/files", "files/list"),
+    ("DELETE", "/v1/files/{file_id}", "files/delete"),
+    ("POST", "/v1/schedules", "schedules/create"),
+    ("GET", "/v1/schedules", "schedules/list"),
+    ("GET", "/v1/schedules/{schedule_id}", "schedules/get"),
+    ("DELETE", "/v1/schedules/{schedule_id}", "schedules/delete"),
+)
+_OLOSTEP_ROUTES = [(m, re.compile("^" + re.sub(r"\{\w+\}", "[^/]+", p) + "$")) for m, p, _ in OLOSTEP_ENDPOINTS]
 
 
 def is_web_tool(name: str) -> bool:
@@ -82,10 +120,58 @@ async def places_search(
 
 
 def olostep_tools() -> list[AgentTool]:
-    """Olostep's MCP tools from the process-wide client (``HostedMCP``); none without ``OLOSTEP_API_KEY``."""
+    """Olostep's MCP tools from the process-wide client (``HostedMCP``) and ``olostep_api``; none without ``OLOSTEP_API_KEY``."""
     if not app_config.OLOSTEP_API_KEY:
         return []
-    return _olostep.tools(app_config.OLOSTEP_MCP_URL, app_config.OLOSTEP_API_KEY)
+    return [*_olostep.tools(app_config.OLOSTEP_MCP_URL, app_config.OLOSTEP_API_KEY), olostep_api]
+
+
+@tool
+async def olostep_api(
+    method: Literal["GET", "POST", "PATCH", "DELETE"],
+    path: str,
+    body: dict[str, Any] | None = None,
+    query: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Call an Olostep REST endpoint (https://api.olostep.com) and return its JSON response.
+
+    Endpoints (each one's request and response is documented at https://docs.olostep.com/api-reference/<page>.md;
+    read the page with http_request before a call you have not made before):
+    POST /v1/scrapes, GET /v1/scrapes/{scrape_id}; POST /v1/answers, GET /v1/answers/{answer_id};
+    POST /v1/batches, GET /v1/batches/{batch_id}, GET /v1/batches/{batch_id}/items, PATCH /v1/batches/{batch_id};
+    POST /v1/crawls, GET /v1/crawls/{crawl_id}, GET /v1/crawls/{crawl_id}/pages; POST /v1/maps, GET /v1/maps/{map_id};
+    POST /v1/searches, GET /v1/searches/{search_id}; GET /v1/retrieve (query retrieve_id, formats);
+    POST /v1/files, POST /v1/files/{file_id}/complete, GET /v1/files/{file_id}, GET /v1/files/{file_id}/content,
+    GET /v1/files, DELETE /v1/files/{file_id}; POST /v1/schedules, GET /v1/schedules, GET /v1/schedules/{schedule_id},
+    DELETE /v1/schedules/{schedule_id}.
+
+    Scrapes, searches, answers and maps answer at once; batches and crawls are asynchronous: create, poll the info
+    endpoint until completed, list the items or pages, then GET /v1/retrieve with each ``retrieve_id``. An answer of
+    "NOT_FOUND" is a valid outcome. When ``size_exceeded`` is true, read the hosted URLs instead of the inline content.
+
+    Args:
+        method: The HTTP method of the endpoint.
+        path: The endpoint path with its ids filled in, e.g. "/v1/scrapes" or "/v1/batches/batch_123/items".
+        body: The JSON request body, for POST and PATCH.
+        query: Query parameters, e.g. {"retrieve_id": "...", "formats": ["markdown"]} or a list's cursor and limit.
+    """
+    if not any(m == method and route.match(path) for m, route in _OLOSTEP_ROUTES):
+        return {"status": "error", "content": [{"text": f"olostep_api: {method} {path} is not a documented Olostep endpoint"}]}
+    async with httpx.AsyncClient(base_url=app_config.OLOSTEP_API_URL, timeout=180) as client:
+        response = await client.request(
+            method, path, json=body, params=query, headers={"Authorization": f"Bearer {app_config.OLOSTEP_API_KEY}"}
+        )
+    if response.is_error:
+        return {"status": "error", "content": [{"text": f"olostep_api {response.status_code}: {response.text[:2000]}"}]}
+    data = response.json()
+    # ``json_content`` is stringified JSON (Integration rule 4); hand the agent the parsed value.
+    result = data.get("result") if isinstance(data, dict) else None
+    if isinstance(result, dict) and isinstance(result.get("json_content"), str):
+        try:
+            result["json_content"] = json.loads(result["json_content"])
+        except ValueError:
+            pass
+    return data
 
 
 def _firecrawl_oauth() -> Any:

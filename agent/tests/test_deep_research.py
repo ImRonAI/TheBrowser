@@ -954,7 +954,15 @@ def test_deep_research_defaults_have_no_timeout_dependencies(
     assert graph.execution_timeout is None
     assert graph.node_timeout is None
     assert len(captured_ptc_configs) == 19
-    assert all(cfg == {"hot_reload": True, "timeout": None} for cfg in captured_ptc_configs)
+    assert all(
+        {k: v for k, v in cfg.items() if k != "mount"} == {"hot_reload": True, "timeout": None}
+        for cfg in captured_ptc_configs
+    )
+    mounts = {id(cfg["mount"]) for cfg in captured_ptc_configs}
+    assert len(mounts) == 1
+    mount = captured_ptc_configs[0]["mount"]
+    workspace = str(deep_research.artifacts_dir("no-timeout-check").resolve())
+    assert (str(mount.host_path), mount.virtual_path, mount.mode) == (workspace, workspace, "read-write")
     for node in graph.nodes.values():
         executor = node.executor
         if isinstance(executor, Swarm):
