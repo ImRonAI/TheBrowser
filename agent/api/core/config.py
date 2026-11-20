@@ -75,6 +75,11 @@ EXA_API_KEY = os.getenv("EXA_API_KEY")
 BRIGHTDATA_API_KEY = os.getenv("BRIGHTDATA_API_KEY")
 OLOSTEP_API_KEY = os.getenv("OLOSTEP_API_KEY")
 OLOSTEP_MCP_URL = "https://mcp.olostep.com/mcp"
+# Firecrawl's hosted MCP server with OAuth sign-in (docs.firecrawl.dev/mcp-server), on when RON_FIRECRAWL_MCP=1. Its
+# tokens are kept in RON_FIRECRAWL_OAUTH_DIR; sign in once with ``web_tools.firecrawl_sign_in()``.
+FIRECRAWL_MCP = os.getenv("RON_FIRECRAWL_MCP", "0") == "1"
+FIRECRAWL_MCP_URL = "https://mcp.firecrawl.dev/v2/mcp-oauth"
+FIRECRAWL_OAUTH_DIR = Path(os.getenv("RON_FIRECRAWL_OAUTH_DIR", "~/.ron/firecrawl-oauth")).expanduser()
 # Apify: Google Maps places for the Search page, Discover and the agents' ``places_search``, from the Actor
 # RON_APIFY_PLACES_ACTOR (default Apify's Google Maps Scraper).
 APIFY_TOKEN = os.getenv("APIFY_TOKEN")
