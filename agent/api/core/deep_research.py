@@ -45,6 +45,7 @@ from typing import Final, Literal, TypedDict
 import uuid
 
 from PIL import Image
+from pydantic_monty import MountDir
 from strands import Agent
 from strands.memory import MemoryManager
 from strands.models import Model, ModelRouter
@@ -560,8 +561,9 @@ def level_prompt(depth: ResearchDepth, today: str) -> str:
         "- Use `subagent` for the independent parts (a question, a source, a chart, a section each), several in "
         "parallel, each told the exact files to read and the result to bring back. Each one's full findings come back "
         "to you when it finishes.\n"
-        "- Read and write the workspace with `read`, `write`, `edit` and `shell`. `programmatic_tool_caller` has no "
-        "file access; use it only to orchestrate other tool calls.\n"
+        "- Read and write the workspace with `read`, `write`, `edit` and `shell`. `programmatic_tool_caller` code "
+        "sees the workspace too (`open()` and `pathlib` under its absolute path), so it can read files, call tools "
+        "and write the results in one run.\n"
         "- If a tool fails or stalls, pivot to another tool or write a replacement `@tool` in `./tools/<name>.py` (loaded "
         "automatically). Never call `handoff_to_agent` while subagents are still "
         "running: wait for their findings first.\n"
@@ -746,10 +748,14 @@ def build_deep_research_graph(
     on_node_event: Callable[[JsonDict], None] | None = None,
 ) -> Graph:
     """Build ``FORMATION_TOPOLOGY`` as a Strands Graph whose nodes are Swarms and Graphs of harness agents."""
-    workspace = artifacts_dir(session_id)
+    workspace = artifacts_dir(session_id).resolve()
     workspace.mkdir(parents=True, exist_ok=True)
     (workspace / "tools").mkdir(exist_ok=True)
     (Path.cwd() / "tools").mkdir(exist_ok=True)
+    # Monty's own filesystem (pydantic_monty ``MountDir``): the workspace at its own path, read-write, so
+    # ``programmatic_tool_caller`` code opens the same files as ``read``/``write``/``shell``. One mount serves
+    # every agent's runs; Monty reuses only its configuration per feed.
+    workspace_mount = MountDir(host_path=workspace, virtual_path=str(workspace), mode="read-write")
     skills = _skills()
     level = level_prompt(depth, datetime.now().astimezone().strftime("%A, %B %d, %Y"))
     workspace_note = (
@@ -822,7 +828,7 @@ def build_deep_research_graph(
                 "read": True,
                 "write": True,
                 "edit": True,
-                "programmatic_tool_caller": {"hot_reload": True, "timeout": None},
+                "programmatic_tool_caller": {"hot_reload": True, "timeout": None, "mount": workspace_mount},
                 "subagent": {"background": True, "stall_timeout": 60.0, "max_consecutive_errors": 3},
             },
             builtin_plugins=["todos"],
