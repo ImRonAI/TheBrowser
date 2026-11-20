@@ -1,5 +1,5 @@
 diff --git a/harness-py/src/strands_harness/agent.py b/harness-py/src/strands_harness/agent.py
-index 1efc0de89..e939e127f 100644
+index 1efc0de8..e939e127 100644
 --- a/harness-py/src/strands_harness/agent.py
 +++ b/harness-py/src/strands_harness/agent.py
 @@ -450,6 +450,8 @@ def create_harness(
@@ -43,7 +43,7 @@ index 1efc0de89..e939e127f 100644
      agent = Agent(
          model=resolved_model,
 diff --git a/harness-py/src/strands_harness/config.py b/harness-py/src/strands_harness/config.py
-index 187cb1ac5..79f8a914a 100644
+index 187cb1ac..79f8a914 100644
 --- a/harness-py/src/strands_harness/config.py
 +++ b/harness-py/src/strands_harness/config.py
 @@ -333,10 +333,14 @@ class _WebFetchConfig(_Model):
@@ -62,14 +62,26 @@ index 187cb1ac5..79f8a914a 100644
  
  _BUILTIN_TOOL_CONFIGS: dict[str, type[_Model]] = {
 diff --git a/harness-py/src/strands_harness/options.py b/harness-py/src/strands_harness/options.py
-index 0bba543b4..76b8e5e68 100644
+index 0bba543b..034e94be 100644
 --- a/harness-py/src/strands_harness/options.py
 +++ b/harness-py/src/strands_harness/options.py
-@@ -64,8 +64,15 @@ def _check_builtin_tool_config_value(tool: str, key: str, value: object) -> None
+@@ -8,6 +8,7 @@ import re
+ from collections.abc import Mapping, Sequence
+ from typing import Any
+ 
++from pydantic_monty import MountDir
+ from strands.memory import MemoryManager
+ from strands.models import Model, ModelRouter
+ from strands.session import SessionManager
+@@ -64,8 +65,19 @@ def _check_builtin_tool_config_value(tool: str, key: str, value: object) -> None
              isinstance(value, list) and all(isinstance(item, str) and item.strip() for item in value),
          ),
          "timeout": ("a positive number of seconds", number and math.isfinite(value) and value > 0),
 +        "hot_reload": ("a bool", isinstance(value, bool)),
++        "mount": (
++            "a pydantic_monty.MountDir or a list of them",
++            isinstance(value, MountDir) or (isinstance(value, list) and all(isinstance(m, MountDir) for m in value)),
++        ),
          "media": ("a bool", isinstance(value, bool)),
          "max_depth": ("a non-negative int", isinstance(value, int) and not isinstance(value, bool) and value >= 0),
 +        "background": ("a bool", isinstance(value, bool)),
@@ -82,9 +94,18 @@ index 0bba543b4..76b8e5e68 100644
      if not accepted:
          raise ValueError(f"builtin_tools[{tool!r}][{key!r}] must be {expected}, got {value!r}.")
 diff --git a/harness-py/src/strands_harness/tools/programmatic_tool_caller.py b/harness-py/src/strands_harness/tools/programmatic_tool_caller.py
-index e05ab3d97..243bc0adf 100644
+index e05ab3d9..6307b3dc 100644
 --- a/harness-py/src/strands_harness/tools/programmatic_tool_caller.py
 +++ b/harness-py/src/strands_harness/tools/programmatic_tool_caller.py
+@@ -32,7 +32,7 @@ import weakref
+ from collections.abc import Awaitable, Callable
+ from typing import Any
+ 
+-from pydantic_monty import AsyncMonty, MontyError, MontyRuntimeError, MontySyntaxError
++from pydantic_monty import AsyncMonty, MontyError, MontyRuntimeError, MontySyntaxError, MountDir
+ from strands.tools.decorator import tool
+ from strands.tools.executors._executor import ToolExecutor
+ from strands.types._events import ToolInterruptEvent
 @@ -169,8 +169,9 @@ async def _execute_tool(tool_context: ToolContext, tool_name: str, tool_input: d
          "input": tool_input,
      }
@@ -200,20 +221,39 @@ index e05ab3d97..243bc0adf 100644
  class _Output:
      """Collects the code's ``print()`` output, capped at ``_MAX_OUTPUT_CHARS``."""
  
-@@ -302,6 +347,7 @@ def make_programmatic_tool_caller(
+@@ -290,10 +335,12 @@ def _cap(raw: str, limit: int = _MAX_OUTPUT_CHARS) -> str:
+     return f"{raw[:limit].strip()}\n[output truncated at {limit} characters]"
+ 
+ 
+-async def _run_sandboxed(code: str, external_lookup: dict[str, Any], output: _Output) -> None:
++async def _run_sandboxed(
++    code: str, external_lookup: dict[str, Any], output: _Output, mount: MountDir | list[MountDir] | None = None
++) -> None:
+     async with AsyncMonty() as pool:
+         async with pool.checkout(script_name=_USER_CODE_FILENAME, limits=_LIMITS) as session:
+-            await session.feed_run(code, external_lookup=external_lookup, print_callback=output)
++            await session.feed_run(code, external_lookup=external_lookup, print_callback=output, mount=mount)
+ 
+ 
+ def make_programmatic_tool_caller(
+@@ -302,6 +349,8 @@ def make_programmatic_tool_caller(
      name: str = "programmatic_tool_caller",
      description: str = DEFAULT_PROGRAMMATIC_TOOL_CALLER_DESCRIPTION,
      timeout: float | None = _DEFAULT_TIMEOUT,
 +    hot_reload: bool = True,
++    mount: MountDir | list[MountDir] | None = None,
  ) -> Any:
      """Create a programmatic-tool-caller tool.
  
-@@ -317,11 +363,14 @@ def make_programmatic_tool_caller(
+@@ -317,11 +366,17 @@ def make_programmatic_tool_caller(
          description: Tool description shown to the model.
          timeout: Wall-clock ceiling in seconds for a run, tool calls included, or ``None`` to
              disable it. Guest compute time is bounded separately by the sandbox (``_LIMITS``).
 +        hot_reload: Sync ``./tools/*.py`` and runtime-loaded ``@tool`` registrations dynamically
 +            before and during sandbox execution. Defaults to ``True``.
++        mount: Host directories mounted into the sandbox for every run (Monty's ``MountDir``, passed
++            to ``feed_run(mount=...)``), so the code can ``open()`` and ``pathlib`` their files. ``None``
++            (the default) leaves the sandbox without a filesystem.
  
      Returns:
          A decorated tool that runs code with access to the agent's other tools.
@@ -223,7 +263,7 @@ index e05ab3d97..243bc0adf 100644
  
      @tool(name=name, description=description, context="tool_context")
      async def programmatic_tool_caller_tool(code: str, tool_context: ToolContext) -> dict[str, Any]:
-@@ -339,8 +388,28 @@ def make_programmatic_tool_caller(
+@@ -339,12 +394,34 @@ def make_programmatic_tool_caller(
          if agent is None:
              return _error_result("No agent available. The programmatic tool caller requires an agent context.")
  
@@ -254,8 +294,15 @@ index e05ab3d97..243bc0adf 100644
          output = _Output()
  
          try:
+-            await _await_bounded(_run_sandboxed(code, external_lookup, output), timeout, tool_context.cancel_signal)
++            await _await_bounded(
++                _run_sandboxed(code, external_lookup, output, mount), timeout, tool_context.cancel_signal
++            )
+         except _Cancelled:
+             return _error_result("Execution cancelled.")
+         except asyncio.TimeoutError:
 diff --git a/harness-py/src/strands_harness/tools/subagent.py b/harness-py/src/strands_harness/tools/subagent.py
-index e13174e62..b6f8ae5eb 100644
+index e13174e6..b6f8ae5e 100644
 --- a/harness-py/src/strands_harness/tools/subagent.py
 +++ b/harness-py/src/strands_harness/tools/subagent.py
 @@ -16,20 +16,31 @@ Named ``presets`` add an ``agent_type`` enum. Children are built through an inje
@@ -1131,23 +1178,33 @@ index e13174e62..b6f8ae5eb 100644
 +        max_consecutive_errors=max_consecutive_errors,
      )
 diff --git a/harness-py/src/strands_harness/types/agent.py b/harness-py/src/strands_harness/types/agent.py
-index fccfa3f8d..1d072d30b 100644
+index fccfa3f8..f801e87a 100644
 --- a/harness-py/src/strands_harness/types/agent.py
 +++ b/harness-py/src/strands_harness/types/agent.py
-@@ -86,10 +86,12 @@ class ProgrammaticToolCallerConfig(TypedDict, total=False):
+@@ -10,6 +10,7 @@ from __future__ import annotations
+ 
+ from typing import Literal
+ 
++from pydantic_monty import MountDir
+ from strands.experimental.context_manager import ContextManager, ContextManagerConfig
+ from strands.memory import MemoryStore
+ from strands.models import Model, ModelRouter
+@@ -86,10 +87,14 @@ class ProgrammaticToolCallerConfig(TypedDict, total=False):
      Attributes:
          allowed_tools: Names of the agent's other tools the code may call; omit for all of them.
          timeout: Wall-clock bound in seconds for one run, tool calls included; ``None`` for no bound.
 +        hot_reload: Sync hot-reloaded directory/loaded tools into the sandbox dynamically during and across runs.
++        mount: Host directories (``pydantic_monty.MountDir``) mounted into the sandbox for every run.
      """
  
      allowed_tools: list[str] | None
      timeout: float | None
 +    hot_reload: bool
++    mount: MountDir | list[MountDir]
  
  
  class SubagentConfig(TypedDict, total=False):
-@@ -97,9 +99,16 @@ class SubagentConfig(TypedDict, total=False):
+@@ -97,9 +102,16 @@ class SubagentConfig(TypedDict, total=False):
  
      Attributes:
          max_depth: How many levels of delegation a child may itself open (default 2).
@@ -1165,7 +1222,7 @@ index fccfa3f8d..1d072d30b 100644
  
  BuiltinToolsConfig = TypedDict(
 diff --git a/harness-py/tests/test_agent.py b/harness-py/tests/test_agent.py
-index 572b52def..9ec41ce60 100644
+index 572b52de..15092bdd 100644
 --- a/harness-py/tests/test_agent.py
 +++ b/harness-py/tests/test_agent.py
 @@ -364,8 +364,8 @@ class TestBuiltinToolsUnion:
@@ -1174,17 +1231,17 @@ index 572b52def..9ec41ce60 100644
              ("web_fetch", "model"),
 -            ("programmatic_tool_caller", "allowed_tools, timeout"),
 -            ("subagent", "max_depth"),
-+            ("programmatic_tool_caller", "allowed_tools, hot_reload, timeout"),
++            ("programmatic_tool_caller", "allowed_tools, hot_reload, mount, timeout"),
 +            ("subagent", "background, max_consecutive_errors, max_depth, stall_timeout"),
          ],
      )
      def test_unknown_tool_config_keys_raise(self, name, allowed):
 diff --git a/harness-py/tests/tools/test_programmatic_tool_caller_async_hot_reload.py b/harness-py/tests/tools/test_programmatic_tool_caller_async_hot_reload.py
 new file mode 100644
-index 000000000..946ad68ac
+index 00000000..19f9c70d
 --- /dev/null
 +++ b/harness-py/tests/tools/test_programmatic_tool_caller_async_hot_reload.py
-@@ -0,0 +1,194 @@
+@@ -0,0 +1,226 @@
 +"""Tests for programmatic_tool_caller under always=['*'] background_tasks and native hot_reload."""
 +
 +from __future__ import annotations
@@ -1379,8 +1436,40 @@ index 000000000..946ad68ac
 +            break
 +        await asyncio.sleep(0.05)
 +    assert "watcher_created" in agent.tool_registry.registry
++
++
++async def test_mount_gives_the_sandbox_the_host_directory(tmp_path: Path) -> None:
++    """A ``MountDir`` passed as ``mount`` is handed to every run's ``feed_run``: the code reads a host file
++    and writes one back, and the write lands on the host."""
++    from pydantic_monty import MountDir
++
++    (tmp_path / "research.md").write_text("finding one", encoding="utf-8")
++    mount = MountDir(host_path=tmp_path, virtual_path=str(tmp_path), mode="read-write")
++    ptc = make_programmatic_tool_caller(hot_reload=False, mount=mount)
++    code = (
++        f"from pathlib import Path\n"
++        f"text = Path('{tmp_path}/research.md').read_text()\n"
++        f"Path('{tmp_path}/report.md').write_text(text + ' and two')\n"
++        f"print(text)"
++    )
++    model = _ScriptedModel(
++        [_assistant_tool("programmatic_tool_caller", "ptc-1", {"code": code}), _assistant_text("Done.")]
++    )
++    agent = Agent(model=model, tools=[ptc], load_tools_from_directory=False, callback_handler=None)
++
++    await agent.invoke_async("Read and write the workspace")
++
++    texts = [
++        c.get("text", "")
++        for m in agent.messages
++        for b in m.get("content", [])
++        if "toolResult" in b
++        for c in b["toolResult"].get("content", [])
++    ]
++    assert any(t.strip() == "finding one" for t in texts), texts
++    assert (tmp_path / "report.md").read_text(encoding="utf-8") == "finding one and two"
 diff --git a/strands-py/src/strands/multiagent/__init__.py b/strands-py/src/strands/multiagent/__init__.py
-index 8dd78c38c..1592ceb51 100644
+index 8dd78c38..1592ceb5 100644
 --- a/strands-py/src/strands/multiagent/__init__.py
 +++ b/strands-py/src/strands/multiagent/__init__.py
 @@ -10,15 +10,23 @@ Submodules:
@@ -1409,7 +1498,7 @@ index 8dd78c38c..1592ceb51 100644
      "SwarmResult",
 diff --git a/strands-py/src/strands/multiagent/_agent_tool_streamer.py b/strands-py/src/strands/multiagent/_agent_tool_streamer.py
 new file mode 100644
-index 000000000..fc6c23d66
+index 00000000..fc6c23d6
 --- /dev/null
 +++ b/strands-py/src/strands/multiagent/_agent_tool_streamer.py
 @@ -0,0 +1,310 @@
@@ -1725,7 +1814,7 @@ index 000000000..fc6c23d66
 +        self._interrupt_state._version += 1
 diff --git a/strands-py/src/strands/multiagent/spec.py b/strands-py/src/strands/multiagent/spec.py
 new file mode 100644
-index 000000000..b2cd8321d
+index 00000000..b2cd8321
 --- /dev/null
 +++ b/strands-py/src/strands/multiagent/spec.py
 @@ -0,0 +1,377 @@
@@ -2107,7 +2196,7 @@ index 000000000..b2cd8321d
 +
 +    return build
 diff --git a/strands-py/src/strands/tools/watcher.py b/strands-py/src/strands/tools/watcher.py
-index c7f50fccd..63a3e8571 100644
+index c7f50fcc..63a3e857 100644
 --- a/strands-py/src/strands/tools/watcher.py
 +++ b/strands-py/src/strands/tools/watcher.py
 @@ -49,14 +49,9 @@ class ToolWatcher:
@@ -2197,7 +2286,7 @@ index c7f50fccd..63a3e8571 100644
      def start(self) -> None:
          """Start watching all tools directories for changes."""
 diff --git a/strands-py/src/strands/types/event_loop.py b/strands-py/src/strands/types/event_loop.py
-index 5f8db40ec..f06094268 100644
+index 5f8db40e..f0609426 100644
 --- a/strands-py/src/strands/types/event_loop.py
 +++ b/strands-py/src/strands/types/event_loop.py
 @@ -8,12 +8,23 @@ from typing_extensions import Required, TypedDict
@@ -2271,7 +2360,7 @@ index 5f8db40ec..f06094268 100644
 +        "a limit on this call was reached, so its answer is incomplete"
 +    )
 diff --git a/strands-py/src/strands/vended_tools/__init__.py b/strands-py/src/strands/vended_tools/__init__.py
-index 2d814f9e9..b8ad84ee6 100644
+index 2d814f9e..b8ad84ee 100644
 --- a/strands-py/src/strands/vended_tools/__init__.py
 +++ b/strands-py/src/strands/vended_tools/__init__.py
 @@ -52,6 +52,7 @@ from .mcp_router import make_mcp_router
@@ -2294,7 +2383,7 @@ index 2d814f9e9..b8ad84ee6 100644
  ]
 diff --git a/strands-py/src/strands/vended_tools/subagent/__init__.py b/strands-py/src/strands/vended_tools/subagent/__init__.py
 new file mode 100644
-index 000000000..8bfce1411
+index 00000000..8bfce141
 --- /dev/null
 +++ b/strands-py/src/strands/vended_tools/subagent/__init__.py
 @@ -0,0 +1,17 @@
@@ -2317,7 +2406,7 @@ index 000000000..8bfce1411
 +]
 diff --git a/strands-py/src/strands/vended_tools/subagent/subagent.py b/strands-py/src/strands/vended_tools/subagent/subagent.py
 new file mode 100644
-index 000000000..167effebf
+index 00000000..167effeb
 --- /dev/null
 +++ b/strands-py/src/strands/vended_tools/subagent/subagent.py
 @@ -0,0 +1,1061 @@
@@ -3384,7 +3473,7 @@ index 000000000..167effebf
 +"""Pre-built subagent tool with default settings (generalist preset, all axes using defaults)."""
 diff --git a/strands-py/src/strands/vended_tools/subagent/types.py b/strands-py/src/strands/vended_tools/subagent/types.py
 new file mode 100644
-index 000000000..064f976ac
+index 00000000..064f976a
 --- /dev/null
 +++ b/strands-py/src/strands/vended_tools/subagent/types.py
 @@ -0,0 +1,28 @@
@@ -3418,7 +3507,7 @@ index 000000000..064f976ac
 +"""Built-in generalist preset."""
 diff --git a/strands-py/tests/strands/vended_tools/test_subagent_async_background.py b/strands-py/tests/strands/vended_tools/test_subagent_async_background.py
 new file mode 100644
-index 000000000..187141674
+index 00000000..18714167
 --- /dev/null
 +++ b/strands-py/tests/strands/vended_tools/test_subagent_async_background.py
 @@ -0,0 +1,349 @@
