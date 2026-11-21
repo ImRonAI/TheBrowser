@@ -121,7 +121,7 @@ async def lifespan(app: FastAPI):
                 mounted_routes = [route for route in app.routes if route not in previous]
         # Opt-in (RON_NGROK=1); only allow-listed webhook paths are reachable.
         app.state.public_url = await public_tunnel.start()
-        async with skills_mcp_app.lifespan(app), ren_mcp_app.lifespan(app), memory_mcp_app.lifespan(app):
+        async with skills_mcp_app.lifespan(app), ren_mcp_app.lifespan(app), memory_mcp_app.lifespan(app), connections_mcp_app.lifespan(app):
             # Joined to Ren's hub (REN_HUB_URL), ren desktop serves its MCP server there too, so the phone and the
             # agents outside this machine can reach it.
             hub = ren_mcp.hub_url() if os.getenv("REN_HUB_ATTACH", "1") != "0" else None
@@ -202,6 +202,11 @@ app.mount("/mcp", ren_mcp_app)
 from agent.api.core import memory_mcp  # noqa: E402
 memory_mcp_app = memory_mcp.server.http_app(path="/")
 app.mount("/memory/mcp", memory_mcp_app)
+# The user's own developer accounts for every agent, and signing in to them from the phone (core/connections.py).
+from agent.api.core import connections  # noqa: E402
+connections_mcp_app = connections.server.http_app(path="/")
+app.mount("/connections/mcp", connections_mcp_app)
+app.include_router(connections.router, tags=["connections"])
 # Stored harness specialists over native A2A (<PANEL_A2A_URL>/agents/<id>). Mounted before the
 # lifespan's /a2a mount so this prefix wins; loopback-only like /a2a (never on the ngrok allowlist).
 from agent.api.core.a2a_tools import a2a_enabled as _a2a_enabled  # noqa: E402

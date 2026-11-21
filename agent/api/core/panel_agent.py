@@ -1478,6 +1478,9 @@ def create_panel_agent(
             # Specialists built with strands_harness create_harness, stored in Supabase, served over A2A.
             from agent.api.core.harness_agents import create_harness_tools
             catalog.add_tools(create_harness_tools(user_id))
+            # The user's own Vercel, Netlify, GitHub, GitLab, Supabase and Bitbucket accounts, the ones they connected.
+            from agent.api.core.connections import connection_tools
+            catalog.add_tools(connection_tools(user_id))
             # Batch music generation (Lyria 3.5 / Clip via the Interactions API, ElevenLabs Music); saves to the songs library.
             from agent.api.core.music_generation import music_generation_tools
             catalog.add_tools(music_generation_tools(user_id))
