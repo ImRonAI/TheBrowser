@@ -22,8 +22,8 @@ Every agent is ``strands_harness.create_harness(...)`` with the level's prompt (
 Agent API's effort levels, https://docs.perplexity.ai/docs/agent-api/effort.md), its role, the sections of its skill's
 ``SKILL.md`` that fit the role (``SKILL_SECTIONS``) and the same tools as every other agent. The Slidev agents load
 their Slidev skills with the harness's ``skills`` tool instead (``SLIDEV_SKILLS``). Each agent and each subagent it
-starts has the level's turn budget (``TurnBudget``), except the build agents, which have OpenCode build the app or
-website on Ren's workspace computer as the Context Agent does (``OPENCODE_BUILD``) and wait on it.
+starts has the level's turn budget (``TurnBudget``), except the build agent, which has OpenCode build the app or
+website on Ren's workspace computer as the Context Agent does (``OPENCODE_BUILD``) and waits on it.
 """
 
 from __future__ import annotations
@@ -69,7 +69,7 @@ from agent.api.core import config as app_config
 from agent.api.core.brave_tools import brave_tools
 from agent.api.core.context_agent import OPENCODE_BUILD, Application, computer_tools, register_application_tool
 from agent.api.core.dreaming import MEMORY_PROTOCOL, brain_memory
-from agent.api.core.grid import GRID_JSON, GRID_MARKDOWN, grid_block_html, grid_from_json
+from agent.api.core.grid import GRID_JSON, grid_block_html, grid_from_json
 from agent.api.core.media_understanding import EMBED_TABS_MARKDOWN, markdown_to_html
 from agent.api.core.panel_agent import (
     DEFAULT_PROVIDER,
@@ -365,13 +365,6 @@ BUILD_SWARM: Final[FormationSpec] = {
             "Writes the brief from the inquiry and research.md, has OpenCode build, deploy and check the app or "
             "website on Ren's workspace computer, and lists it under the user's Applications.",
         ),
-        _agent(
-            "app_qa",
-            "App QA",
-            "verification-before-completion",
-            "Checks what OpenCode built against the brief and research.md: opens the deployed site, or has the APK "
-            "built again, and sends what fails back to the App Builder.",
-        ),
     ],
     "edges": [],
 }
@@ -382,7 +375,7 @@ GRID_SWARM: Final[FormationSpec] = {
     "label": "Grid Swarm",
     "kind": "swarm",
     "description": "Builds the spreadsheet from the research, every value with its source and every result a "
-    "formula, and checks it.",
+    "formula.",
     "children": [
         _agent(
             "grid_builder",
@@ -391,20 +384,13 @@ GRID_SWARM: Final[FormationSpec] = {
             "Builds the spreadsheet the inquiry asks for from research.md and references.md and writes it as "
             "grid.json: its sheets, a row per item, numbers as numbers, every result a formula and every row's source.",
         ),
-        _agent(
-            "grid_qa",
-            "Grid QA",
-            "verification-before-completion",
-            "Checks grid.json with Python: its shape, every formula's cells, every value against research.md and "
-            "every source against references.md, and sends what fails back to the Grid Builder.",
-        ),
     ],
     "edges": [],
 }
 
 
 #: When each Swarm agent hands off. An agent that replies without handing off ends its Swarm, so only each Swarm's
-#: last check ends it.
+#: last agent ends it.
 SWARM_HANDOFFS: Final[dict[str, str]] = {
     "researcher": "When research.md is written, hand off to fact_checker.",
     "fact_checker": "When fact-check.md is written and research.md is fixed, hand off to citation_manager. If a claim "
@@ -420,12 +406,10 @@ SWARM_HANDOFFS: Final[dict[str, str]] = {
     "deck_writer": "When deck-copy.md is written, hand off to deck_qa.",
     "deck_qa": "If deck-copy.md fails your check, hand off to deck_writer. When it passes, reply with your verdict "
     "without handing off: that ends the writing.",
-    "app_builder": "When OpenCode has built it, it works and register_application has listed it, hand off to app_qa.",
-    "app_qa": "If it fails your check, hand off to app_builder with exactly what fails. When it passes, reply with "
-    "your verdict and where it is without handing off: that ends the build.",
-    "grid_builder": "When grid.json is written, hand off to grid_qa.",
-    "grid_qa": "If grid.json fails your check, hand off to grid_builder with exactly what fails. When it passes, reply "
-    "with your verdict without handing off: that ends the spreadsheet.",
+    "app_builder": "When OpenCode has built it, it works and register_application has listed it, reply with where it "
+    "is without handing off: that ends the build.",
+    "grid_builder": "When grid.json is written, reply with what it holds without handing off: that ends the "
+    "spreadsheet.",
 }
 
 #: The agents each outcome's team keeps from ``FORMATION_TOPOLOGY``; a formation left with none drops out. The PDF is
@@ -435,12 +419,12 @@ _RESEARCH_AGENTS: Final[frozenset[str]] = frozenset(
      "visual_citation", "visual_qa", "report_designer", "layout_qa", "report_writer", "report_qa"}
 )
 _BUILD_AGENTS: Final[frozenset[str]] = frozenset(
-    {"researcher", "fact_checker", "citation_manager", "research_qa", "app_builder", "app_qa"}
+    {"researcher", "fact_checker", "citation_manager", "research_qa", "app_builder"}
 )
 OUTCOME_AGENTS: Final[dict[Outcome, frozenset[str]]] = {
     "report": _RESEARCH_AGENTS,
     "deck": _RESEARCH_AGENTS | {"deck_designer", "deck_writer", "deck_qa", "deck_producer", "deck_build_qa"},
-    "datagrid": frozenset({"researcher", "fact_checker", "citation_manager", "research_qa", "grid_builder", "grid_qa"}),
+    "datagrid": frozenset({"researcher", "fact_checker", "citation_manager", "research_qa", "grid_builder"}),
     "web_app": _BUILD_AGENTS,
     "website": _BUILD_AGENTS,
     "mobile_app": _BUILD_AGENTS,
@@ -462,7 +446,7 @@ OUTCOME_HANDOFFS: Final[dict[Outcome, dict[str, str]]] = {
     "mobile_app": {},
 }
 
-#: What each build outcome's App Builder has OpenCode make; App QA reads the same.
+#: What each build outcome's App Builder has OpenCode make.
 BUILD_NOTES: Final[dict[Outcome, str]] = {
     "web_app": "Build a web app: an interactive tool that does what the inquiry asks, for the person who asked, its "
     "features and data grounded in research.md. It opens in Ren's browser from Applications.",
@@ -482,7 +466,7 @@ def available_outcomes() -> tuple[Outcome, ...]:
 
 
 def build_note(outcome: Outcome, user_id: str) -> str:
-    """The App Builder's and App QA's instructions for a build outcome: what to make and how OpenCode builds it.
+    """The App Builder's instructions for a build outcome: what to make and how OpenCode builds it.
 
     A fix goes to the OpenCode session that built it: ``opencode run --continue`` continues the last session of the
     folder it runs in (https://opencode.ai/docs/cli/commands/).
@@ -491,7 +475,7 @@ def build_note(outcome: Outcome, user_id: str) -> str:
         f"{BUILD_NOTES[outcome]}\n"
         "OpenCode can't read this run's workspace: copy research.md and references.md into the project folder with "
         "computer_write_file and have the brief point OpenCode at them. computer_read_process_output waits up to 50 s "
-        "a call, so keep reading until OpenCode exits. A fix after App QA's check goes to the session that built it: "
+        "a call, so keep reading until OpenCode exits. A fix goes to the session that built it: "
         "the same command in the project folder with --continue before the message, which says exactly what fails.\n"
         + OPENCODE_BUILD.replace("{user_id}", user_id)
     )
@@ -545,11 +529,10 @@ ROLE_NOTES: Final[dict[str, str]] = {
         "write the same title, steps and connections into report.md as a ```workflow fence holding "
         "{\"title\": ..., \"steps\": [...], \"connections\": [...]}.\n"
         f"- {EMBED_TABS_MARKDOWN} A YouTube video is a YouTube tab in such a fence, from a real URL a tool returned.\n"
-        f"- {GRID_MARKDOWN}\n"
     ),
     "grid_builder": (
-        "grid.json is the spreadsheet the user gets: it opens in Ren as a sheet to sort, filter and calculate with, "
-        "and downloads as an Excel file. Write it with Python (`json.dump`), so it is valid JSON:\n"
+        "grid.json is the spreadsheet the user gets: it opens in Ren as a sheet to sort, filter and calculate with. "
+        "Write it with Python (`json.dump`), so it is valid JSON:\n"
         f"{GRID_JSON}\n"
         "- One row per item the inquiry asks about and one column per fact, so every row reads on its own.\n"
         "- Numbers are numbers, never text with a unit or a separator: the unit goes in the header (\"Price (USD)\") "
@@ -558,11 +541,6 @@ ROLE_NOTES: Final[dict[str, str]] = {
         "and a summary sheet that reads the data sheet.\n"
         "- Every data row ends with a Source column holding the reference numbers its facts came from, and the last "
         "sheet, Sources, lists references.md: number, title, URL.\n"
-    ),
-    "grid_qa": (
-        "Load grid.json with Python and check it: every sheet has a header and rows no wider than it, numbers are "
-        "numbers, every formula points at cells that exist and hold what it needs, and nothing that follows from "
-        "other cells is typed in. Then compare every value with research.md and every Source with references.md.\n"
     ),
     "deck_designer": (
         "Load your Slidev skills with the `skills` tool before you design (Deckcraft's references/art-direction.md, "
@@ -977,9 +955,7 @@ def build_deep_research_graph(
         if spec["id"] == "report_writer":
             tools.append(render_workflow)
         if builds:
-            tools.extend(computer_tools())
-        if spec["id"] == "app_builder":
-            tools.append(register_application_tool(user_id, on_application))
+            tools.extend([*computer_tools(), register_application_tool(user_id, on_application)])
 
         agent_holder: list[Agent] = []
 

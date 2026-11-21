@@ -3,18 +3,8 @@ import { Node } from '@tiptap/core'
 import { ReactNodeViewRenderer, type NodeViewProps } from '@tiptap/react'
 import { Trash2 } from 'lucide-react'
 import { GridView } from '@/components/grid/GridView'
-import { gridDisplay, gridMarkdown, gridValue, starterGrid, type GridDisplaySheet, type GridValue } from '@/lib/grid'
-import { placeBlock } from './commands'
+import { gridDisplay, gridMarkdown, gridValue, type GridDisplaySheet, type GridValue } from '@/lib/grid'
 import { BlockFrame, IconButton } from './ui'
-
-declare module '@tiptap/core' {
-  interface Commands<ReturnType> {
-    grid: {
-      /** A spreadsheet with a header row to type over. */
-      insertGrid: () => ReturnType
-    }
-  }
-}
 
 function parsed(json: string | null): unknown {
   try {
@@ -32,9 +22,10 @@ function tables(block: HTMLElement): GridDisplaySheet[] {
   }))
 }
 
-/** What the block holds; one made without a grid holds a new one. */
+/** What the block holds; one made without a grid holds an empty sheet. */
 const held = (attrs: { readonly [name: string]: unknown }): GridValue =>
-  gridValue(attrs["grid"], attrs["display"], attrs["workbook"]) ?? { grid: starterGrid(), display: null, workbook: null }
+  gridValue(attrs["grid"], attrs["display"], attrs["workbook"])
+    ?? { grid: { title: 'Spreadsheet', sheets: [{ name: 'Sheet1', rows: [] }] }, display: null, workbook: null }
 
 /**
  * NOT NATIVE: a spreadsheet (`GridView`): sheets with formulas, number formats, sorting and filters, shown as a
@@ -78,12 +69,6 @@ export const GridBlock = Node.create({
   },
 
   renderMarkdown: (node) => gridMarkdown(held(node.attrs ?? {}).grid),
-
-  addCommands() {
-    return {
-      insertGrid: () => placeBlock((schema) => schema.nodes["grid"]?.create() ?? null),
-    }
-  },
 
   addNodeView() {
     return ReactNodeViewRenderer(GridBlockView)

@@ -7,7 +7,6 @@
  */
 import { messageSegments, workflowFromTool, type RonSegment } from './ron-run.ts'
 import { EMBED_TABS_RULE } from './document-ron.ts'
-import { GRID_RULE } from './grid.ts'
 import type { PanelMessage, PanelPart, RunStatus, ToolPart } from './panel-stream.ts'
 import type { PromptAttachment } from './prompt-attachments.ts'
 
@@ -85,7 +84,7 @@ const DESCRIPTION_RULES = 'Reply with only Markdown (headings, paragraphs, lists
   + 'Write only what the request asks for: when it adds to the description (acceptance criteria, a section, a summary), '
   + 'write just that new content and do not repeat what the description already has, because the user inserts it where they choose; '
   + 'when it asks for the whole description, write all of it, because the user overwrites the description with it. '
-  + `${EMBED_TABS_RULE} ${GRID_RULE} `
+  + `${EMBED_TABS_RULE} `
   + 'Research with your search tools when you need facts and cite them as Markdown links. '
   + 'Do not edit the issue with tools: the user reviews your draft, then inserts it or overwrites the description with it.'
 

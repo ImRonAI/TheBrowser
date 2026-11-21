@@ -61,7 +61,6 @@ const IMMEDIATE: Record<string, Build> = {
   'columns-4': (chain) => chain.insertColumns(4),
   card: (chain) => chain.insertCard(),
   table: (chain) => chain.insertTable({ rows: 3, cols: 3, withHeaderRow: true }),
-  spreadsheet: (chain) => chain.insertGrid(),
   toc: (chain) => chain.insertTableOfContents(),
   code: (chain) => chain.toggleCodeBlock(),
   workflow: (chain) => chain.insertWorkflow(),

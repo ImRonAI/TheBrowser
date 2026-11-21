@@ -2,7 +2,7 @@ import { Extension, type Editor, type Range } from '@tiptap/core'
 import { RenIcon } from '@/components/brand'
 import Suggestion, { type SuggestionKeyDownProps, type SuggestionOptions, type SuggestionProps } from '@tiptap/suggestion'
 import { ReactRenderer } from '@tiptap/react'
-import { AlertTriangle, AppWindow, Baseline, CalendarDays, CheckSquare, Clapperboard, Code, Columns2, Columns3, Columns4, CreditCard, Figma, FileSymlink, FileText, Film, HardDrive, Heading1, Heading2, Heading3, Highlighter, Image, List, ListCollapse, ListOrdered, ListTree, MapPin, MessageSquareText, Minus, MousePointerClick, Music, PanelsTopLeft, Quote, Radical, Sheet, Sigma, Smile, SquareKanban, Table, Target, Type, Upload, Video, Workflow, Youtube } from 'lucide-react'
+import { AlertTriangle, AppWindow, Baseline, CalendarDays, CheckSquare, Clapperboard, Code, Columns2, Columns3, Columns4, CreditCard, Figma, FileSymlink, FileText, Film, HardDrive, Heading1, Heading2, Heading3, Highlighter, Image, List, ListCollapse, ListOrdered, ListTree, MapPin, MessageSquareText, Minus, MousePointerClick, Music, PanelsTopLeft, Quote, Radical, Sigma, Smile, SquareKanban, Table, Target, Type, Upload, Video, Workflow, Youtube } from 'lucide-react'
 import { flattenSections, slashSections } from '@/lib/editor-blocks'
 import { SLASH_PLUGIN_KEY, askRonCallback, type SlashItem } from './slash-shared'
 import { SlashCommandMenu, type SlashMenuHandle } from '../SlashCommandMenu'
@@ -51,7 +51,6 @@ export const SLASH_COMMANDS: readonly SlashItem[] = [
   { id: 'columns-4', label: '4 columns', description: 'Four side-by-side columns', group: 'layout', icon: Columns4, keywords: ['columns', 'layout', 'section', 'grid'], requires: ['columns'] },
   { id: 'card', label: 'Card', description: 'A titled card to fill in', group: 'layout', icon: CreditCard, keywords: ['box', 'panel', 'container', 'form'], requires: ['card'] },
   { id: 'table', label: 'Table', description: 'A 3 × 3 table with a header row', group: 'layout', icon: Table, keywords: ['grid', 'spreadsheet', 'rows'] },
-  { id: 'spreadsheet', label: 'Spreadsheet', description: 'Sheets with formulas, sorting and filters', group: 'layout', icon: Sheet, keywords: ['grid', 'excel', 'sheet', 'formula', 'data', 'csv', 'xlsx'], requires: ['grid'] },
   { id: 'toc', label: 'Table of contents', description: 'A live outline of the headings', group: 'layout', icon: ListTree, keywords: ['toc', 'outline', 'contents', 'index'], requires: ['tableOfContents'] },
   // Advanced
   { id: 'code', label: 'Code Block', description: 'Code with syntax highlighting', group: 'advanced', icon: Code, keywords: ['snippet', 'pre', '```', 'program'] },

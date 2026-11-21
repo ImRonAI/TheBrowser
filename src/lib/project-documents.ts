@@ -6,7 +6,6 @@
  * version-checked: a stale version answers 409.
  * Pure (relative imports) so node:test can run it.
  */
-import type { Grid, GridCell } from './grid.ts'
 import { allProjectPages, type ProjectsRequest } from './projects-api.ts'
 
 type Row = Record<string, any>
@@ -66,10 +65,6 @@ export interface ExportedDocument { filename: string; media_type: string; data: 
 export const exportDocument = (request: ProjectsRequest, id: string, format: DocumentExportFormat) =>
   request<ExportedDocument>(`/documents/${encodeURIComponent(id)}/export?format=${format}`)
 
-/** A spreadsheet as an Excel file: each formula with the result it has in `values`, by sheet, row and cell. */
-export const exportGrid = (request: ProjectsRequest, grid: Grid, values: GridCell[][][]) =>
-  request<ExportedDocument>('/grids/export', 'POST', { grid, values })
-
 /** Hand the browser `blob` as a download named `filename`. */
 export function saveFile(filename: string, blob: Blob): void {
   const url = URL.createObjectURL(blob)
@@ -82,7 +77,7 @@ export function saveFile(filename: string, blob: Blob): void {
   window.setTimeout(() => URL.revokeObjectURL(url), 1000)
 }
 
-/** Save a file the backend made: a printed page, or a spreadsheet's Excel file. */
+/** Save a file the backend made: a printed page. */
 export const saveExported = (file: ExportedDocument) =>
   saveFile(file.filename, new Blob([Uint8Array.from(atob(file.data), (char) => char.charCodeAt(0))], { type: file.media_type }))
 

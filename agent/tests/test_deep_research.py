@@ -154,7 +154,7 @@ def _agents() -> list[deep_research.AgentSpec]:
 def test_every_agent_has_its_skill_and_swarms_have_no_edges() -> None:
     skills = {skill.name for skill in deep_research.Skill.from_directory(deep_research.DEEP_RESEARCH_SKILLS_DIR)}
     agents = _agents()
-    assert len(agents) == 23
+    assert len(agents) == 21
     assert len({agent["id"] for agent in agents}) == len(agents)
     assert {agent["skill"] for agent in agents} <= skills
     for formation in _formations():
@@ -182,7 +182,7 @@ def test_skill_sections_end_at_the_next_heading_of_their_level_and_skip_code_fen
 
 
 @pytest.mark.parametrize("outcome", deep_research.VALID_OUTCOMES)
-def test_every_swarm_agent_is_told_when_to_hand_off_and_only_the_last_check_ends_it(
+def test_every_swarm_agent_is_told_when_to_hand_off_and_only_the_last_agent_ends_it(
     outcome: deep_research.Outcome,
 ) -> None:
     handoffs = {**deep_research.SWARM_HANDOFFS, **deep_research.OUTCOME_HANDOFFS[outcome]}
@@ -262,14 +262,12 @@ def test_a_build_outcome_researches_then_has_opencode_build_it(
     )
     agents = _formation_agents(graph)
     assert set(agents) == deep_research.OUTCOME_AGENTS[outcome]
-    for agent_id in ("app_builder", "app_qa"):
-        agent = agents[agent_id]
-        prompt = agent.system_prompt or ""
-        assert deep_research.BUILD_NOTES[outcome] in prompt
-        assert "REN_USER_ID=u1 opencode run" in prompt and "--continue" in prompt and "- report.md:" not in prompt
-        assert "computer_start_process" in agent.tool_names
-        assert ("register_application" in agent.tool_names) == (agent_id == "app_builder")
-        assert not _has_turn_budget(agent)
+    agent = agents["app_builder"]
+    prompt = agent.system_prompt or ""
+    assert deep_research.BUILD_NOTES[outcome] in prompt
+    assert "REN_USER_ID=u1 opencode run" in prompt and "--continue" in prompt and "- report.md:" not in prompt
+    assert "computer_start_process" in agent.tool_names and "register_application" in agent.tool_names
+    assert not _has_turn_budget(agent)
     assert _has_turn_budget(agents["researcher"])
 
 
@@ -308,7 +306,7 @@ async def test_a_build_outcome_needs_the_computer_a_mobile_app_an_account_and_th
     assert meta.get("application") == app.model_dump()
 
 
-def test_a_spreadsheet_outcome_researches_then_builds_the_grid_and_checks_it(isolated: None) -> None:
+def test_a_spreadsheet_outcome_researches_then_builds_the_grid(isolated: None) -> None:
     topology = deep_research.outcome_topology("datagrid")
     assert [node["id"] for node in topology["nodes"]] == ["research_swarm", "grid_swarm"]
     assert topology["edges"] == [{"from": "research_swarm", "to": "grid_swarm"}]
@@ -318,11 +316,10 @@ def test_a_spreadsheet_outcome_researches_then_builds_the_grid_and_checks_it(iso
     )
     agents = _formation_agents(graph)
     assert set(agents) == deep_research.OUTCOME_AGENTS["datagrid"]
-    for agent_id in ("grid_builder", "grid_qa"):
-        prompt = agents[agent_id].system_prompt or ""
-        assert "grid.json" in prompt and "- research.md: at least 15" in prompt and "- report.md:" not in prompt
-        assert _has_turn_budget(agents[agent_id])
-    assert deep_research.GRID_JSON in (agents["grid_builder"].system_prompt or "")
+    prompt = agents["grid_builder"].system_prompt or ""
+    assert deep_research.GRID_JSON in prompt and "grid.json" in prompt
+    assert "- research.md: at least 15" in prompt and "- report.md:" not in prompt
+    assert _has_turn_budget(agents["grid_builder"])
     # The tool Ren's agents start a run with names every outcome a run can make.
     start = deep_research_tools(user_id="u1")[0]
     assert tuple(start.tool_spec["inputSchema"]["json"]["properties"]["outcome"]["enum"]) == deep_research.VALID_OUTCOMES
@@ -339,7 +336,7 @@ async def test_a_spreadsheet_run_gives_its_grid_and_opens_as_a_document(
     session_id = meta["session_id"]
     run = await _wait_until_done("u1", session_id)
     assert run["status"] == "completed" and run["grid_json"] == ""
-    assert model.roles[-2:] == ["Grid Builder", "Grid QA"]
+    assert model.roles[-1] == "Grid Builder"
     assert await deep_research.report_document(user_id="u1", session_id=session_id) is None
     grid = {"title": "EV range", "sheets": [
         {"name": "Models", "rows": [["Model", "Range (km)", "Price (USD)", "USD per km", "Source"],

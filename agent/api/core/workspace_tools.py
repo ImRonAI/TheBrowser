@@ -22,7 +22,6 @@ from uuid import UUID
 from strands import tool
 from strands.types.tools import AgentTool
 
-from agent.api.core.grid import GRID_MARKDOWN
 from agent.api.core.media_understanding import EMBED_TABS_MARKDOWN, html_to_markdown, markdown_to_html
 from agent.api.core.projects import ProjectIdentity, ProjectService
 
@@ -80,8 +79,7 @@ def workspace_prompt() -> str:
         "link_document_to_issue. Pages read and write as Markdown. A page without a project is one of the user's "
         "personal pages (My documents in the Documents library). Change projects, issues and pages only when the user "
         "asks you to, and give the `url` of a page you created or moved. Pass a page's latest `version` to "
-        "update_document; on a conflict, reread the page and retry once. " + EMBED_TABS_MARKDOWN + " "
-        + GRID_MARKDOWN + "\n"
+        "update_document; on a conflict, reread the page and retry once. " + EMBED_TABS_MARKDOWN + "\n"
         "To create a project from a document:\n"
         "1. read_document. If list_projects already shows a project for it, ask the user before creating another.\n"
         "2. Choose a name, a key (2-12 capital letters or digits starting with a letter, e.g. LAUNCH) and the type that "
