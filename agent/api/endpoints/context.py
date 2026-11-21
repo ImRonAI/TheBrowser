@@ -22,6 +22,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from agent.api.core import context_agent
 from agent.api.core.agent_schedules import AgentBusy, AgentScheduler, Cadence
 from agent.api.endpoints.chat import Identifier
+from agent.api.core.tenancy import tenant_id
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/context")
@@ -68,6 +69,7 @@ async def _readable_text(url: str) -> str:
 
 @router.post("/items")
 async def create_item(body: ItemCreate, request: Request) -> dict[str, Any]:
+    body.user_id = await tenant_id(request, body.user_id)
     text, title = body.text, body.title.strip()
     if body.kind == "thread":
         if not body.session_id:
@@ -91,6 +93,7 @@ async def create_item(body: ItemCreate, request: Request) -> dict[str, Any]:
 
 @router.post("/files")
 async def upload_file(
+    request: Request,
     file: Annotated[UploadFile, File()],
     user_id: Annotated[str, Form(min_length=1, max_length=128, pattern=r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")] = "default",
     kind: Annotated[FileKind, Form()] = "file",
@@ -98,6 +101,7 @@ async def upload_file(
     source: Annotated[str, Form(max_length=4096)] = "",
     text: Annotated[str, Form(max_length=20_000)] = "",
 ) -> dict[str, Any]:
+    user_id = await tenant_id(request, user_id)
     chunks: list[bytes] = []
     size = 0
     while chunk := await file.read(_CHUNK):
@@ -116,12 +120,14 @@ async def upload_file(
 
 
 @router.get("/items")
-async def list_items(user_id: Identifier = "default", limit: Annotated[int, Query(ge=1, le=500)] = 100) -> dict[str, Any]:
+async def list_items(request: Request, user_id: Identifier = "default", limit: Annotated[int, Query(ge=1, le=500)] = 100) -> dict[str, Any]:
+    user_id = await tenant_id(request, user_id)
     return {"items": await context_agent.list_items(user_id, limit=limit)}
 
 
 @router.get("/items/{item_id}")
-async def get_item(item_id: str, user_id: Identifier = "default") -> dict[str, Any]:
+async def get_item(request: Request, item_id: str, user_id: Identifier = "default") -> dict[str, Any]:
+    user_id = await tenant_id(request, user_id)
     try:
         found = await context_agent.read_item(user_id, item_id)
     except ValueError as error:
@@ -133,7 +139,8 @@ async def get_item(item_id: str, user_id: Identifier = "default") -> dict[str, A
 
 
 @router.get("/items/{item_id}/file")
-async def get_item_file(item_id: str, user_id: Identifier = "default") -> Response:
+async def get_item_file(request: Request, item_id: str, user_id: Identifier = "default") -> Response:
+    user_id = await tenant_id(request, user_id)
     try:
         found = await context_agent.read_item(user_id, item_id)
         data = await context_agent.read_file(user_id, item_id) if found else None
@@ -156,7 +163,8 @@ async def get_item_file(item_id: str, user_id: Identifier = "default") -> Respon
 
 
 @router.delete("/items/{item_id}")
-async def delete_item(item_id: str, user_id: Identifier = "default") -> dict[str, Any]:
+async def delete_item(request: Request, item_id: str, user_id: Identifier = "default") -> dict[str, Any]:
+    user_id = await tenant_id(request, user_id)
     try:
         deleted = await context_agent.delete_item(user_id, item_id)
     except ValueError as error:
@@ -169,6 +177,7 @@ async def delete_item(item_id: str, user_id: Identifier = "default") -> dict[str
 @router.get("/agents")
 async def list_agents(request: Request, user_id: Identifier = "default") -> dict[str, Any]:
     """The user's saved specialists (``harness_agents``), newest first, each with its schedule. Guests must sign in."""
+    user_id = await tenant_id(request, user_id)
     from agent.api.core.harness_agents import SignInRequired, _listing, harness_table, owner_uuid
 
     try:
@@ -233,6 +242,7 @@ def _owner(user_id: str) -> str:
 @router.put("/agents/{agent_id}/schedule")
 async def set_agent_schedule(agent_id: UUID, body: ScheduleRequest, request: Request) -> dict[str, Any]:
     """Run this specialist at ``cadence`` (in the user's time zone); a null cadence stops its schedule."""
+    body.user_id = await tenant_id(request, body.user_id)
     owner, scheduler = _owner(body.user_id), _scheduler(request)
     try:
         if body.cadence is None:
@@ -249,6 +259,7 @@ async def set_agent_schedule(agent_id: UUID, body: ScheduleRequest, request: Req
 @router.post("/agents/{agent_id}/run")
 async def run_agent_now(agent_id: UUID, body: RunRequest, request: Request) -> dict[str, Any]:
     """Start one run of this specialist now, exactly as its schedule would (a new panel session)."""
+    body.user_id = await tenant_id(request, body.user_id)
     owner, scheduler = _owner(body.user_id), _scheduler(request)
     try:
         # Without a task of its own, Run now does what the schedule's runs do.
@@ -266,6 +277,7 @@ async def run_agent_now(agent_id: UUID, body: RunRequest, request: Request) -> d
 async def list_runs(request: Request, user_id: Identifier = "default",
                     limit: Annotated[int, Query(ge=1, le=100)] = 30) -> dict[str, Any]:
     """The user's specialist runs, newest first: the Context widget's notifications. Guests have none."""
+    user_id = await tenant_id(request, user_id)
     from agent.api.core.harness_agents import SignInRequired, owner_uuid
 
     try:
@@ -280,6 +292,7 @@ async def list_runs(request: Request, user_id: Identifier = "default",
 
 @router.post("/runs/{run_id}/seen")
 async def mark_run_seen(run_id: UUID, body: RunSeen, request: Request) -> dict[str, Any]:
+    body.user_id = await tenant_id(request, body.user_id)
     if not await _scheduler(request).mark_seen(_owner(body.user_id), str(run_id)):
         raise HTTPException(404, "Unknown run")
     return {"seen": str(run_id)}
@@ -300,10 +313,11 @@ class DreamReview(BaseModel):
 
 
 @router.get("/dream")
-async def newest_dream(user_id: Identifier = "default") -> dict[str, Any]:
+async def newest_dream(request: Request, user_id: Identifier = "default") -> dict[str, Any]:
     """The dream that waits for the user's review: each topic it would change, as the dream wrote it (``text``, null
     when it deletes the topic) and as it reads now (``before``). The Context widget's notification; null when there
     is none."""
+    user_id = await tenant_id(request, user_id)
     from agent.api.core.dreaming import pending_dream
 
     found = await pending_dream(user_id)
@@ -315,9 +329,10 @@ async def newest_dream(user_id: Identifier = "default") -> dict[str, Any]:
 
 
 @router.post("/dream/{version}")
-async def review_dream(version: Annotated[str, Path(pattern=r"^\d{8}T\d{12}$")], body: DreamReview) -> dict[str, Any]:
+async def review_dream(request: Request, version: Annotated[str, Path(pattern=r"^\d{8}T\d{12}$")], body: DreamReview) -> dict[str, Any]:
     """Approve the topics marked right, which reach memory now; the others stay as they are and go to the dreaming
     agent with their comments (``dreaming.apply_dream``). An empty review dismisses the dream."""
+    body.user_id = await tenant_id(request, body.user_id)
     from agent.api.core.dreaming import apply_dream
 
     applied = await apply_dream(body.user_id, version, [(topic.key, topic.right, topic.comment) for topic in body.topics])
@@ -386,16 +401,18 @@ PROFILE_KEY = "profile.json"
 
 
 @router.get("/profile")
-async def read_profile(user_id: Identifier = "default") -> dict[str, Any]:
+async def read_profile(request: Request, user_id: Identifier = "default") -> dict[str, Any]:
     """The account's interview and interest graph, or null before any device saved them. Guests have none."""
+    user_id = await tenant_id(request, user_id)
     _owner(user_id)
     data = await context_agent.get_user_session_storage(user_id).read(PROFILE_KEY)
     return {"profile": Profile.model_validate_json(data).model_dump(by_alias=True, exclude_none=True) if data else None}
 
 
 @router.put("/profile")
-async def save_profile(body: ProfileSave) -> dict[str, Any]:
+async def save_profile(request: Request, body: ProfileSave) -> dict[str, Any]:
     """Keeps the newer profile: a save older than the stored one returns the stored one unchanged."""
+    body.user_id = await tenant_id(request, body.user_id)
     _owner(body.user_id)
     storage = context_agent.get_user_session_storage(body.user_id)
     stored = await storage.read(PROFILE_KEY)
@@ -408,15 +425,17 @@ async def save_profile(body: ProfileSave) -> dict[str, Any]:
 
 
 @router.get("/applications")
-async def list_applications(user_id: Identifier = "default") -> dict[str, Any]:
+async def list_applications(request: Request, user_id: Identifier = "default") -> dict[str, Any]:
     """The apps OpenCode built for the account (the Context Agent's ``register_application``), newest first."""
+    user_id = await tenant_id(request, user_id)
     _owner(user_id)
     return {"applications": [item.model_dump() for item in await context_agent.read_applications(user_id)]}
 
 
 @router.get("/applications/{application_id}/apk")
-async def application_apk(application_id: str, user_id: Identifier = "default") -> FileResponse:
+async def application_apk(request: Request, application_id: str, user_id: Identifier = "default") -> FileResponse:
     """An Android app's APK, for ren mobile to install. Served where the workspace computer's home is mounted (the VM)."""
+    user_id = await tenant_id(request, user_id)
     _owner(user_id)
     application = next((item for item in await context_agent.read_applications(user_id) if item.id == application_id), None)
     if application is None or application.kind != "android":
@@ -429,8 +448,9 @@ async def application_apk(application_id: str, user_id: Identifier = "default") 
 
 
 @router.delete("/applications/{application_id}")
-async def remove_application(application_id: str, user_id: Identifier = "default") -> dict[str, Any]:
+async def remove_application(request: Request, application_id: str, user_id: Identifier = "default") -> dict[str, Any]:
     """Takes an app off the list; the app itself stays where OpenCode put it."""
+    user_id = await tenant_id(request, user_id)
     _owner(user_id)
     applications = await context_agent.read_applications(user_id)
     kept = [item for item in applications if item.id != application_id]

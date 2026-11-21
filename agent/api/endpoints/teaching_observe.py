@@ -18,7 +18,7 @@ import re
 from pathlib import Path
 from typing import Any, cast
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
 from starlette.websockets import WebSocketState
 from strands import LocalAgent, ToolContext, tool
 from strands.bidi import BidiAgent
@@ -35,6 +35,7 @@ from agent.api.core.teaching_journal import (
     lesson_workspace,
 )
 from agent.api.endpoints.bidi import DEFAULT_MODEL, VOICES, live_model
+from agent.api.core.tenancy import tenant_id
 
 logger = logging.getLogger(__name__)
 
@@ -169,6 +170,11 @@ async def _close(websocket: WebSocket, payload: dict[str, Any], code: int) -> No
 async def observe(websocket: WebSocket, session_id: str, user_id: str, agent_id: str,
                   model: str = DEFAULT_MODEL, voice: str = "Kore") -> None:
     if not local_origin(websocket):
+        await websocket.close(code=1008)
+        return
+    try:
+        user_id = await tenant_id(websocket, user_id)
+    except HTTPException:
         await websocket.close(code=1008)
         return
     await websocket.accept()

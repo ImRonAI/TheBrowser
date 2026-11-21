@@ -11,6 +11,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from agent.api.core import document_export
 from agent.api.core.document_export import ExportFormat
 from agent.api.core.projects import ProjectIdentity, ProjectService, project_identity
+from agent.api.core.tenancy import tenant_id
 
 router = APIRouter(prefix="/projects")
 Identity = Annotated[ProjectIdentity, Depends(project_identity)]
@@ -442,9 +443,10 @@ async def export_document(document_id: UUID, format: ExportFormat, identity: Ide
 
 
 @router.get("/documents/{document_id}/skill")
-async def get_document_skill(document_id: UUID, identity: Identity, user_id: str = Query(min_length=1, max_length=256),
+async def get_document_skill(request: Request, document_id: UUID, identity: Identity, user_id: str = Query(min_length=1, max_length=256),
                              agent_id: str = Query("panel", min_length=1, max_length=256)):
     """The agent skill this page was published as (``core/document_skills.py``), or ``{"skill": null}``."""
+    user_id = await tenant_id(request, user_id)
     from agent.api.core.document_skills import bind_owner, document_skill
     from agent.api.core.teaching import get_teaching_service
 
@@ -457,12 +459,13 @@ async def get_document_skill(document_id: UUID, identity: Identity, user_id: str
 
 
 @router.post("/documents/{document_id}/skill")
-async def publish_document_skill(document_id: UUID, body: DocumentSkillPublish, identity: Identity):
+async def publish_document_skill(request: Request, document_id: UUID, body: DocumentSkillPublish, identity: Identity):
     """Publish (or republish) the page as a native Agent Skill of ``agent_id``, read with the caller's own access.
 
     Stored with the agent's taught skills, so ``GET /teaching/skills`` and ``use_skill`` find it. 422 lists every
     unknown reference or missing section; 403 when the credential is another user's.
     """
+    body.user_id = await tenant_id(request, body.user_id)
     from agent.api.core.document_skills import bind_owner, publish_document_skill as publish
     from agent.api.core.teaching import get_teaching_service
 

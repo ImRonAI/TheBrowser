@@ -58,6 +58,7 @@ from agent.api.core.panel_agent import (
     NIM_REASONING_EFFORTS_BY_MODEL,
 )
 from agent.api.core.panel_runtime import PanelRuntimeManager, ReplayOverflow, RuntimeConflict, SessionRun
+from agent.api.core.tenancy import Identifier, tenant_id
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -296,7 +297,6 @@ DOCUMENT_AGENT_SYSTEM_PROMPT = """You are Document Agent. You are Ren working in
    - **Workflows**: When a process, timeline, pipeline, or decision flow clarifies the subject, call `render_workflow` at the exact point in the document where the diagram belongs (write the Markdown before it, call `render_workflow`, then continue writing the Markdown after it).
 4. Cite external sources inline as clean Markdown links (`[Source Name](https://...)`). When revising after user feedback, output the complete revised draft."""
 
-Identifier = Annotated[str, Field(min_length=1, max_length=128, pattern=r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")]
 
 
 class RuntimeOptions(BaseModel):
@@ -767,6 +767,7 @@ async def _authorize_issue(selection: dict[str, Any], request: ChatRequest, http
 @router.post("/chat")
 async def chat(request: ChatRequest, http_request: Request) -> StreamingResponse:
     """Reserve a native server task and attach a disposable SSE subscriber."""
+    request.user_id = await tenant_id(http_request, request.user_id)
     # Resolve explicit selections before accessing the manager so missing-key
     # requests fail without constructing agents or managed shell connections.
     explicit_selection = bool(request.provider or request.model)
@@ -870,6 +871,7 @@ async def list_sessions(request: Request, user_id: Identifier = "default", desti
 
     Guests have no durable threads (RLS keys rows by auth user): `[]` with `sign_in_required`.
     """
+    user_id = await tenant_id(request, user_id)
     from agent.api.core.live_music import supabase_client
     from agent.api.core.threads import list_threads, owner_uuid
 
@@ -886,6 +888,7 @@ async def list_sessions(request: Request, user_id: Identifier = "default", desti
 @router.get("/sessions/{session_id}/thread")
 async def get_thread(session_id: Identifier, request: Request, user_id: Identifier = "default"):
     """One thread in sequential order (user prompts, reasoning, tool calls/results, outputs), either agent."""
+    user_id = await tenant_id(request, user_id)
     from agent.api.core.live_music import supabase_client
     from agent.api.core.threads import owner_uuid, read_thread
 
@@ -950,6 +953,7 @@ async def _native_thread_snapshot(user_id: str, session_id: str) -> dict[str, An
 
 @router.get("/sessions/{session_id}")
 async def get_session(session_id: Identifier, request: Request, user_id: Identifier = "default"):
+    user_id = await tenant_id(request, user_id)
     try:
         snapshot = await _manager(request).snapshot(user_id, session_id)
         return {**snapshot, "status": _status(snapshot["status"])}
@@ -968,6 +972,7 @@ async def get_session_events(
     after: Annotated[int | None, Query(ge=0)] = None,
     last_event_id: Annotated[str | None, Header()] = None,
 ):
+    user_id = await tenant_id(request, user_id)
     try:
         session = await _manager(request).get(user_id, session_id)
         if session is None:
@@ -980,6 +985,7 @@ async def get_session_events(
 
 @router.post("/sessions/{session_id}/steer")
 async def steer_session(session_id: Identifier, control: SteeringRequest, request: Request):
+    control.user_id = await tenant_id(request, control.user_id)
     try:
         return await _manager(request).steer(control.user_id, session_id, control.message,
                                              steering_id=control.steering_id)
@@ -989,6 +995,7 @@ async def steer_session(session_id: Identifier, control: SteeringRequest, reques
 
 @router.post("/sessions/{session_id}/cancel")
 async def cancel_session(session_id: Identifier, control: SessionControl, request: Request):
+    control.user_id = await tenant_id(request, control.user_id)
     try:
         return await _manager(request).cancel(control.user_id, session_id)
     except (RuntimeConflict, KeyError, ValueError) as error:

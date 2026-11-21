@@ -29,6 +29,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from agent.api.core import tool_repair
 from agent.api.endpoints.chat import Identifier
+from agent.api.core.tenancy import tenant_id
 
 router = APIRouter()
 
@@ -80,6 +81,7 @@ class RepairUser(BaseModel):
 
 @router.post("/tools/repairs")
 async def start_repair(body: RepairStart, request: Request) -> dict[str, Any]:
+    body.user_id = await tenant_id(request, body.user_id)
     _require_loopback(request)
     manager = _manager(request)
     session = await manager.get(body.user_id, body.session_id)
@@ -100,12 +102,14 @@ async def start_repair(body: RepairStart, request: Request) -> dict[str, Any]:
 
 @router.get("/tools/repairs/active")
 async def active_repairs(request: Request, user_id: Identifier = "default") -> dict[str, Any]:
+    user_id = await tenant_id(request, user_id)
     _require_loopback(request)
     return {"user_id": user_id, "investigations": _service(request).active(user_id)}
 
 
 @router.get("/tools/repairs")
 async def list_repairs(request: Request, user_id: Identifier = "default", tool: str | None = None) -> dict[str, Any]:
+    user_id = await tenant_id(request, user_id)
     _require_loopback(request)
     try:
         revisions = await tool_repair.list_repairs(user_id, tool)
@@ -117,6 +121,7 @@ async def list_repairs(request: Request, user_id: Identifier = "default", tool: 
 
 @router.post("/tools/repairs/{tool}/decline")
 async def decline_repair(tool: str, body: RepairDecline, request: Request) -> dict[str, Any]:
+    body.user_id = await tenant_id(request, body.user_id)
     _require_loopback(request)
     try:
         return _service(request).decline(body.user_id, tool, body.rev)
@@ -128,6 +133,7 @@ async def decline_repair(tool: str, body: RepairDecline, request: Request) -> di
 
 @router.post("/tools/repairs/{tool}/cancel")
 async def cancel_repair(tool: str, body: RepairUser, request: Request) -> dict[str, Any]:
+    body.user_id = await tenant_id(request, body.user_id)
     _require_loopback(request)
     try:
         return await _service(request).cancel(body.user_id, tool)
@@ -194,6 +200,7 @@ async def reload_live_sessions(manager: Any, user_id: str, tool_name: str, revis
 
 @router.post("/tools/repairs/{tool}/activate")
 async def activate_repair(tool: str, body: RepairActivate, request: Request) -> dict[str, Any]:
+    body.user_id = await tenant_id(request, body.user_id)
     _require_loopback(request)
     try:
         active = await tool_repair.activate(body.user_id, tool, body.rev, approval_token_=body.approval_token)
@@ -217,6 +224,7 @@ async def activate_repair(tool: str, body: RepairActivate, request: Request) -> 
 
 @router.post("/tools/repairs/{tool}/rollback")
 async def rollback_repair(tool: str, body: RepairUser, request: Request) -> dict[str, Any]:
+    body.user_id = await tenant_id(request, body.user_id)
     _require_loopback(request)
     try:
         result = await tool_repair.rollback(body.user_id, tool)
