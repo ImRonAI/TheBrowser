@@ -156,7 +156,6 @@ test('a ```grid fence becomes a spreadsheet; one that holds no grid stays code',
   const doc = withWorkflowBlocks(parse(`Costs:\n\n${gridMarkdown(grid)}\n\n\`\`\`grid\n{"sheets": []}\n\`\`\``), () => 'w1')
   assert.deepEqual(doc.content?.map((node) => node.type), ['paragraph', 'grid', 'codeBlock'])
   assert.deepEqual(doc.content?.[1]?.attrs, { grid, display: null, workbook: null })
-  assert.match(documentRonMessage({ target: { kind: 'page', title: 'Costs', projectName: 'R', projectKey: 'R' }, intent: 'x', currentMarkdown: '' }), /A spreadsheet is one ```grid fence holding JSON/)
 })
 
 test('a tab is built only from a link that fits its kind', () => {

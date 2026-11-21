@@ -17,7 +17,6 @@ from uuid import UUID, uuid4
 from strands import tool
 from strands.types.tools import AgentTool
 
-from agent.api.core.grid import GRID_MARKDOWN
 from agent.api.core.media_understanding import CONTEXT_READING, EMBED_TABS_MARKDOWN, html_to_markdown, markdown_to_html, media_tools, with_current_pages
 from agent.api.core.projects import ProjectIdentity, ProjectService
 
@@ -44,7 +43,7 @@ def project_agent_prompt(project_id: str) -> str:
         "issues and pages before you talk about them. Issue keys are <PROJECT KEY>-<number>.\n"
         "You can create issues (create_issue) and edit existing ones (update_issue). Issue types come from the project's "
         "`issueTypes`: a child must be exactly one level below its parent and subtasks need a parent. Only the user "
-        "changes status or assignees. Descriptions are Markdown (`description_markdown`). " + EMBED_TABS_MARKDOWN + " " + GRID_MARKDOWN + " For a batch of more than five "
+        "changes status or assignees. Descriptions are Markdown (`description_markdown`). " + EMBED_TABS_MARKDOWN + " For a batch of more than five "
         "new or changed issues, list them and ask the user before writing. Always pass an issue's latest `version`; on a "
         "conflict reread it and retry once.\n"
         "Improve context: put research findings, sources and notes into an issue's Context with add_issue_context so the "

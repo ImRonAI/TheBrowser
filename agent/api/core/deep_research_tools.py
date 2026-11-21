@@ -62,10 +62,9 @@ def deep_research_tools(*, user_id: str = "default") -> list[AgentTool]:
             depth: fastest to most complete: "fast" (a 5 to 8 page report), "low", "medium" (default), "high",
                 "xhigh" or "ultra" (30 to 40 pages).
             outcome: "report" (a Document, printed to PDF from it), "deck" (a Slidev deck written from the report),
-                "datagrid" (a spreadsheet of the researched data with formulas, as a Document that downloads as Excel
-                or CSV), "web_app" or "website" (built and deployed by OpenCode, opened in Ren's browser from
-                Applications) or "mobile_app" (an Android app OpenCode builds, installed from Applications on the
-                phone).
+                "datagrid" (a spreadsheet of the researched data with formulas, as a Document), "web_app" or
+                "website" (built and deployed by OpenCode, opened in Ren's browser from Applications) or
+                "mobile_app" (an Android app OpenCode builds, installed from Applications on the phone).
         """
         from agent.api.core import deep_research
 

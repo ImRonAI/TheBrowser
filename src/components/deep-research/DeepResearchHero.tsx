@@ -57,7 +57,7 @@ import { cn } from '@/utils/cn'
 const OUTCOME_METADATA: readonly { id: SquadOutcome; label: string; icon: LucideIcon; description: string }[] = [
   { id: 'report', label: 'Report', icon: FileText, description: 'A cited report as a ren Document, printed to PDF from it.' },
   { id: 'deck', label: 'Slide Deck', icon: Presentation, description: 'A Slidev deck, written from a cited report.' },
-  { id: 'datagrid', label: 'DataGrid', icon: Sheet, description: 'A spreadsheet of the researched data with formulas, sorting and filters, as a ren Document that downloads as Excel or CSV.' },
+  { id: 'datagrid', label: 'DataGrid', icon: Sheet, description: 'A spreadsheet of the researched data with formulas, sorting and filters, as a ren Document that downloads as CSV.' },
   { id: 'web_app', label: 'Web App', icon: AppWindow, description: 'A web app OpenCode builds from the research and deploys, opened in Ren.' },
   { id: 'website', label: 'Website', icon: Globe, description: 'A website OpenCode builds from the research and deploys, opened in Ren.' },
   { id: 'mobile_app', label: 'Mobile App', icon: Smartphone, description: 'An Android app OpenCode builds from the research, installed from Applications on your phone.' },
