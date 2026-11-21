@@ -5,7 +5,7 @@
  * - Idle (`sessionId === null` and no selected run): centered hero + `.ron-field` composer +
  *   depth selector + 4 one-click starter briefs.
  * - Active / Completed run: two full-width tabs, `Formation` (the agent graph, or the stage list)
- *   and `Report Studio`.
+ *   and `Report Studio`, which a build outcome's run names after what it makes (Web App, Website, Mobile App).
  * - Polls `/deep-research/runs` every 5s while mounted so async runs launched by Ren or any
  *   specialist/issue/live agent via `deep_research_start` surface automatically.
  */
@@ -17,9 +17,10 @@ import {
   DeepResearchHero,
   DeepResearchReportStudio,
   DeepResearchRunsRail,
+  builtOutcome,
 } from '@/components/deep-research'
 import { useElementWidth } from '@/hooks/useElementWidth'
-import { emptyDeepResearchSnapshot } from '@/lib/deep-research-api'
+import { DEFAULT_SQUAD_OUTCOME, emptyDeepResearchSnapshot } from '@/lib/deep-research-api'
 import { useDeepResearchStore, useResearchUserId } from '@/stores/deepResearchStore'
 import { cn } from '@/utils/cn'
 
@@ -99,13 +100,17 @@ export function DeepResearchPage({ sessionId = null }: { sessionId?: string | nu
       }))
     : null
 
-  // Switch to the Studio tab when the final report or artifacts are ready.
+  // What a build outcome's run makes: its Studio tab carries that name and shows the app OpenCode built.
+  const made = builtOutcome(activeSnapshot?.outcome)
+
+  // Switch to the Studio tab when the final report, the artifacts or the app are ready.
   const hasStudioOutput = Boolean(
     activeSnapshot &&
       (activeSnapshot.report_markdown.trim() ||
         activeSnapshot.slidev_markdown.trim() ||
         activeSnapshot.artifacts?.report_pdf_url ||
-        activeSnapshot.artifacts?.slidev_preview_url),
+        activeSnapshot.artifacts?.slidev_preview_url ||
+        activeSnapshot.application),
   )
   useEffect(() => {
     if (activeSnapshot && !activeSnapshot.active && hasStudioOutput) {
@@ -176,7 +181,7 @@ export function DeepResearchPage({ sessionId = null }: { sessionId?: string | nu
               userId={userId}
               depth={preferredDepth}
               depths={depths}
-              outcome={preferredOutcome}
+              outcome={outcomes.includes(preferredOutcome) ? preferredOutcome : DEFAULT_SQUAD_OUTCOME}
               outcomes={outcomes}
               preferredModel={preferredModel}
               defaultSelection={defaultSelection}
@@ -214,7 +219,7 @@ export function DeepResearchPage({ sessionId = null }: { sessionId?: string | nu
                     {(
                       [
                         ['formation', 'Formation', GitFork],
-                        ['studio', 'Report Studio', FileText],
+                        ['studio', made?.label ?? 'Report Studio', made?.icon ?? FileText],
                       ] as const
                     ).map(([id, label, Icon]) => {
                       const selected = pane === id
@@ -237,7 +242,7 @@ export function DeepResearchPage({ sessionId = null }: { sessionId?: string | nu
                           {id === 'formation' && activeSnapshot.active && pane !== 'formation' && (
                             <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-volt" aria-hidden />
                           )}
-                          {id === 'studio' && Boolean(activeSnapshot.report_markdown.trim()) && pane !== 'studio' && (
+                          {id === 'studio' && Boolean(activeSnapshot.report_markdown.trim() || activeSnapshot.application) && pane !== 'studio' && (
                             <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" aria-hidden />
                           )}
                         </button>

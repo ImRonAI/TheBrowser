@@ -103,8 +103,8 @@ async def get_deep_research_status() -> dict[str, object]:
         },
         "depths": list(deep_research.VALID_DEPTHS),
         "topology": deep_research.FORMATION_TOPOLOGY,
-        "outcomes": list(deep_research.VALID_OUTCOMES),
-        "topologies": {outcome: deep_research.outcome_topology(outcome) for outcome in deep_research.VALID_OUTCOMES},
+        "outcomes": list(deep_research.available_outcomes()),
+        "topologies": {outcome: deep_research.outcome_topology(outcome) for outcome in deep_research.available_outcomes()},
     }
 
 

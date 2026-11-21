@@ -1,7 +1,8 @@
 /**
  * DeepResearchReportStudio — the right-hand studio pane of the Deep Research workbench.
  *
- * Three studio views:
+ * Three studio views (a build outcome's run shows what OpenCode built, `DeepResearchApplication`, in the report's
+ * place, and has no deck):
  * - **PDF Report**: Embedded scholarly PDF viewer (`/deep-research/runs/{id}/artifacts/report.pdf`)
  *   when ready, with live streaming Markdown fallback (and PDF / Markdown toggle), **Download PDF**,
  *   **Copy Markdown**, and **Save to Context** (`POST /context/items`).
@@ -53,6 +54,8 @@ import {
 } from '@/lib/deep-research-api'
 import { useContextAgentStore } from '@/stores/contextAgentStore'
 import { cn } from '@/utils/cn'
+import { DeepResearchApplication } from './DeepResearchApplication'
+import { builtOutcome } from './DeepResearchHero'
 import { openSourceInNewTab } from './openSource'
 
 export type ResearchStudioTab = 'report' | 'deck' | 'trace'
@@ -309,6 +312,9 @@ export function DeepResearchReportStudio({ snapshot, userId }: DeepResearchRepor
   const twoColSources = studioWidth === 0 || studioWidth >= 680
 
   const [activeTab, setActiveTab] = useState<ResearchStudioTab>('report')
+  // A build outcome's run shows what OpenCode built where a report's run shows its report, and has no deck.
+  const made = builtOutcome(snapshot.outcome)
+  const tab = made && activeTab === 'deck' ? 'report' : activeTab
   const [reportFormat, setReportFormat] = useState<'pdf' | 'markdown'>('pdf')
   const [deckFormat, setDeckFormat] = useState<'interactive' | 'markdown'>('interactive')
   const [traceFilter, setTraceFilter] = useState<TraceFilter>('all')
@@ -446,10 +452,10 @@ export function DeepResearchReportStudio({ snapshot, userId }: DeepResearchRepor
             [
               {
                 id: 'report',
-                label: compact ? 'PDF' : 'PDF Report',
-                icon: FileText,
+                label: made ? made.label : compact ? 'PDF' : 'PDF Report',
+                icon: made ? made.icon : FileText,
                 count: null,
-                readyDot: Boolean(reportPdfUrl),
+                readyDot: Boolean(made ? snapshot.application : reportPdfUrl),
               },
               {
                 id: 'deck',
@@ -466,8 +472,8 @@ export function DeepResearchReportStudio({ snapshot, userId }: DeepResearchRepor
                 readyDot: false,
               },
             ] as const
-          ).map(({ id, label, icon: Icon, count, readyDot }) => {
-            const selected = activeTab === id
+          ).filter(({ id }) => !made || id !== 'deck').map(({ id, label, icon: Icon, count, readyDot }) => {
+            const selected = tab === id
             return (
               <button
                 key={id}
@@ -498,7 +504,7 @@ export function DeepResearchReportStudio({ snapshot, userId }: DeepResearchRepor
         </nav>
 
         {/* Report Tab Actions */}
-        {activeTab === 'report' && (reportPdfUrl || hasReportText) && (
+        {tab === 'report' && (reportPdfUrl || hasReportText) && (
           <div className="flex shrink-0 flex-wrap items-center gap-1.5">
             {reportPdfUrl && hasReportText && (
               <div
@@ -628,7 +634,7 @@ export function DeepResearchReportStudio({ snapshot, userId }: DeepResearchRepor
         )}
 
         {/* Slidev Deck Tab Actions */}
-        {activeTab === 'deck' && (deckEmbedUrl || hasSlidevText || slidevMarkdownUrl || slidevPdfUrl) && (
+        {tab === 'deck' && (deckEmbedUrl || hasSlidevText || slidevMarkdownUrl || slidevPdfUrl) && (
           <div className="flex shrink-0 flex-wrap items-center gap-1.5">
             {deckEmbedUrl && hasSlidevText && (
               <div
@@ -710,8 +716,8 @@ export function DeepResearchReportStudio({ snapshot, userId }: DeepResearchRepor
       {/* Tab Body */}
       <div className="min-h-0 flex-1 overflow-y-auto px-6 py-6 scrollbar-thin">
         {/* 1. PDF Report Tab */}
-        {activeTab === 'report' && (
-          <div className={cn('mx-auto', showPdfIframe ? 'max-w-[960px]' : 'max-w-[760px]')}>
+        {tab === 'report' && (
+          <div className={cn('mx-auto', showPdfIframe || snapshot.application ? 'max-w-[960px]' : 'max-w-[760px]')}>
             {snapshot.error && (
               <div
                 role="alert"
@@ -722,7 +728,9 @@ export function DeepResearchReportStudio({ snapshot, userId }: DeepResearchRepor
               </div>
             )}
 
-            {showPdfIframe && reportPdfUrl ? (
+            {snapshot.application ? (
+              <DeepResearchApplication application={snapshot.application} userId={userId} />
+            ) : showPdfIframe && reportPdfUrl ? (
               <div className="flex flex-col gap-3">
                 <div className="flex items-center justify-between gap-2 rounded-xl border border-surface-200 bg-surface-50/80 px-3.5 py-2 dark:border-surface-800 dark:bg-surface-850/80">
                   <div className="flex min-w-0 items-center gap-2">
@@ -794,9 +802,9 @@ export function DeepResearchReportStudio({ snapshot, userId }: DeepResearchRepor
                 </div>
 
                 <p className="mt-3 font-sans text-[13.5px] leading-relaxed text-ink-secondary dark:text-ink-inverse-secondary">
-                  The research swarm researches and checks the sources, the data analysis graph builds the
-                  charts, the writing swarm writes the report and the deck, and the production graph
-                  publishes the PDF and the Slidev deck.
+                  {made
+                    ? "The research swarm researches and checks the sources, then the build swarm has OpenCode build it on Ren's workspace computer, checks it and lists it under Applications."
+                    : 'The research swarm researches and checks the sources, the data analysis graph builds the charts, the writing swarm writes the report and the deck, and the production graph publishes the PDF and the Slidev deck.'}
                 </p>
 
                 {snapshot.active_node_path.length > 0 && (
@@ -846,7 +854,7 @@ export function DeepResearchReportStudio({ snapshot, userId }: DeepResearchRepor
             ) : (
               <div className="rounded-2xl border border-dashed border-surface-200 px-6 py-12 text-center dark:border-surface-800">
                 <h3 className="font-display text-[16px] font-semibold tracking-[-0.015em] text-ink dark:text-ink-inverse">
-                  No synthesis report was generated for this run.
+                  {made ? `No ${made.label.toLowerCase()} came out of this run.` : 'No synthesis report was generated for this run.'}
                 </h3>
                 <p className="mt-1.5 font-sans text-[13px] text-ink-muted dark:text-ink-inverse-muted">
                   Open the Formation Trace tab to inspect stage outputs and status details.
@@ -857,7 +865,7 @@ export function DeepResearchReportStudio({ snapshot, userId }: DeepResearchRepor
         )}
 
         {/* 2. Slidev Deck Tab */}
-        {activeTab === 'deck' && (
+        {tab === 'deck' && (
           <div className="mx-auto max-w-[960px]">
             {showDeckIframe && deckEmbedUrl ? (
               <div className="flex flex-col gap-4">
@@ -1003,7 +1011,7 @@ export function DeepResearchReportStudio({ snapshot, userId }: DeepResearchRepor
         )}
 
         {/* 3. Formation Trace Tab */}
-        {activeTab === 'trace' && (
+        {tab === 'trace' && (
           <div className="mx-auto max-w-[780px]">
             <div className="mb-4 flex flex-wrap items-center gap-1.5">
               {(

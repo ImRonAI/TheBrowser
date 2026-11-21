@@ -1,8 +1,10 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import {
+  BUILD_OUTCOMES,
   DEFAULT_FORMATION_TOPOLOGY,
   DeepResearchSSEParser,
+  SQUAD_OUTCOMES,
   cancelDeepResearchRun,
   deleteDeepResearchRun,
   emptyDeepResearchSnapshot,
@@ -171,6 +173,74 @@ test('the REST helpers call /deep-research/* and read the run back', async () =>
   assert.equal(deleteCall.method, 'DELETE')
 
   await assert.rejects(getDeepResearchRun('dr-404', 'user-7', options), /HTTP 404: Not found/)
+})
+
+test('the build outcomes come from the backend with their team, and a run carries the app it listed', async () => {
+  const team = {
+    id: 'deep_research_graph',
+    label: 'Squad',
+    kind: 'graph',
+    nodes: [
+      { id: 'research_swarm', label: 'Research Swarm', kind: 'swarm', children: [{ id: 'researcher', label: 'Researcher', kind: 'agent' }], edges: [] },
+      {
+        id: 'build_swarm',
+        label: 'Build Swarm',
+        kind: 'swarm',
+        children: [
+          { id: 'app_builder', label: 'App Builder', kind: 'agent' },
+          { id: 'app_qa', label: 'App QA', kind: 'agent' },
+        ],
+        edges: [],
+      },
+    ],
+    edges: [{ from: 'research_swarm', to: 'build_swarm' }],
+  }
+  const application = {
+    id: 'app-1a2b3c4d5e',
+    name: 'Tide',
+    kind: 'android',
+    location: '/config/workspace/tide/app/build/outputs/apk/debug/app-debug.apk',
+    description: 'Tide times for a saved beach.',
+    created_at: 1795300000.5,
+  }
+  const built = { ...meta, outcome: 'mobile_app', status: 'completed', active: false }
+  const fetcher: typeof fetch = async (input, init) => {
+    const url = String(input)
+    if (url.endsWith('/deep-research/status')) {
+      return jsonResponse({
+        available: true,
+        default_selection: meta.selection,
+        depths: ['medium'],
+        topology: DEFAULT_FORMATION_TOPOLOGY,
+        outcomes: [...SQUAD_OUTCOMES, 'datagrid'],
+        topologies: { mobile_app: team, datagrid: team },
+      })
+    }
+    if (url.includes('/runs/dr-101/cancel')) return jsonResponse(built)
+    if (init?.method === 'POST') return jsonResponse({ ...built, application: { ...application, kind: 'ios' } })
+    return jsonResponse({ ...built, events: [], files: [], application })
+  }
+  const options = { baseUrl: 'http://localhost:8765/', fetcher }
+
+  // The picker offers what the backend lists, and knows which of those OpenCode builds.
+  const status = await fetchDeepResearchStatus(options)
+  assert.deepEqual(status.outcomes, SQUAD_OUTCOMES)
+  assert.deepEqual(BUILD_OUTCOMES, ['web_app', 'website', 'mobile_app'])
+  assert.deepEqual(Object.keys(status.topologies), ['mobile_app'])
+  assert.deepEqual(status.topologies.mobile_app?.nodes.map((node) => [node.id, node.kind]), [
+    ['research_swarm', 'swarm'],
+    ['build_swarm', 'swarm'],
+  ])
+  assert.deepEqual(status.topologies.mobile_app?.nodes[1]?.children?.map((node) => node.id), ['app_builder', 'app_qa'])
+
+  const opened = await getDeepResearchRun('dr-101', 'user-7', options)
+  assert.equal(opened.outcome, 'mobile_app')
+  assert.deepEqual(opened.application, { ...application })
+  assert.equal(emptyDeepResearchSnapshot('dr-102').application, null)
+
+  // A meta without the app keeps the one the run had; an app of a kind Ren doesn't list is none.
+  assert.deepEqual((await cancelDeepResearchRun('dr-101', 'user-7', options, opened)).application, application)
+  assert.equal((await saveReportDocument('dr-101', 'doc-9', 'user-7', options, opened)).application, null)
 })
 
 test('the SSE parser takes any chunk split and streamDeepResearchEvents ends on the run frame', async () => {
