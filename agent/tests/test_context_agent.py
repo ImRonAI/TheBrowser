@@ -298,25 +298,28 @@ def test_profile_follows_the_account_and_keeps_the_newer_save(client: TestClient
     assert client.put("/context/profile", json={"user_id": user, "profile": {**profile, "extra": 1}}).status_code == 422
 
 
-def test_a_dream_notifies_once_and_its_review_reaches_the_dreaming_journal(client: TestClient,
-                                                                           monkeypatch: pytest.MonkeyPatch) -> None:
+def test_a_pending_dream_shows_before_and_after_and_reaches_memory_only_when_approved(client: TestClient) -> None:
     from agent.api.core import dreaming
 
-    monkeypatch.setattr(dreaming, "_timers", {})
     assert client.get("/context/dream", params={"user_id": "u1"}).json() == {"dream": None}
     storage = panel_storage.get_user_session_storage("u1")
     version = "20261117T201500123456"
-    asyncio.run(storage.write("memory/brain/panel/travel.md", b"# Travel\nThe user flies from SLC."))
-    asyncio.run(storage.write(f"memory/dreams/{version}.json",
-                              json.dumps({"memory/brain/panel/travel.md": None, "memory/brain/panel/old.md": "# Old"}).encode()))
+    asyncio.run(storage.write("memory/brain/panel/old.md", b"# Old"))
+    asyncio.run(storage.write(f"memory/dreams/{version}.json", json.dumps({"status": "pending", "applied": [], "topics": {
+        "memory/brain/panel/travel.md": {"before": None, "after": "# Travel\nThe user flies from SLC."},
+        "memory/brain/panel/old.md": {"before": "# Old", "after": None}}}).encode()))
     dream = client.get("/context/dream", params={"user_id": "u1"}).json()["dream"]
     assert dream == {"version": version, "topics": [
-        {"key": "memory/brain/panel/travel.md", "text": "# Travel\nThe user flies from SLC."},
-        {"key": "memory/brain/panel/old.md", "text": None}]}
+        {"key": "memory/brain/panel/travel.md", "text": "# Travel\nThe user flies from SLC.", "before": None},
+        {"key": "memory/brain/panel/old.md", "text": None, "before": "# Old"}]}
+    assert asyncio.run(storage.read("memory/brain/panel/travel.md")) is None  # nothing reaches memory before review
     review = {"user_id": "u1", "topics": [{"key": "memory/brain/panel/travel.md", "right": False, "comment": "Ogden"},
                                           {"key": "memory/brain/panel/old.md", "right": True}]}
-    assert client.post(f"/context/dream/{version}", json=review).json() == {"reviewed": version}
+    assert client.post(f"/context/dream/{version}", json=review).json() == {
+        "reviewed": version, "applied": ["memory/brain/panel/old.md"]}
     assert client.get("/context/dream", params={"user_id": "u1"}).json() == {"dream": None}
+    assert asyncio.run(storage.read("memory/brain/panel/old.md")) is None
+    assert asyncio.run(storage.read("memory/brain/panel/travel.md")) is None
     notes = asyncio.run(dreaming.Journal("u1", dreaming.DREAMING).notes())
     assert "- memory/brain/panel/travel.md: wrong. Ogden\n- memory/brain/panel/old.md: right" in notes
     assert client.post("/context/dream/latest", json=review).status_code == 422
@@ -357,7 +360,7 @@ def test_context_agent_documents_phone_logs_in_the_background_via_native_harness
             yield {"contentBlockStop": {"contentBlockIndex": 0}}
             yield {"messageStop": {"stopReason": "end_turn"}}
 
-    monkeypatch.setattr(dreaming, "_timers", {})
+    monkeypatch.setattr(dreaming, "_marked", {})
     monkeypatch.setattr(panel_agent, "build_model", lambda *_a, **_kw: JournalInBackgroundModel())
     monkeypatch.setattr(panel_agent, "provider_api_key", lambda *_: "offline")
 

@@ -44,7 +44,7 @@ from strands_harness import create_harness as harness_factory
 from strands_harness import defaults as harness_defaults
 from strands_harness import define_harness_agent_config, harness_agent_kwargs_from_config
 
-from agent.api.core.dreaming import JOURNAL_DIRECTIVE, agent_memory
+from agent.api.core.dreaming import MEMORY_PROTOCOL, brain_memory
 
 logger = logging.getLogger(__name__)
 
@@ -135,8 +135,8 @@ def build_specialist(config: dict[str, Any], owner_id: str, *, connect_mcp: bool
             upgraded["subagent"] = {"background": True, "stall_timeout": 60.0, "max_consecutive_errors": 3}
         kwargs["builtin_tools"] = upgraded
     if config.get("memory") is not False:
-        kwargs["memory"] = MemoryManager(stores=agent_memory(owner_id, config["name"]))
-        kwargs["instructions"] = f"{kwargs.get('instructions') or ''}{JOURNAL_DIRECTIVE}"
+        kwargs["memory"] = brain_memory(owner_id, config["name"])
+        kwargs["instructions"] = f"{kwargs.get('instructions') or ''}{MEMORY_PROTOCOL}"
     provider, _, model_id = str(config["model"]).partition("/")
     if model is not None:
         kwargs["model"] = model

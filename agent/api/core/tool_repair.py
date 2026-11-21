@@ -53,14 +53,13 @@ from typing import Any
 from strands import Agent, tool
 from strands.multiagent.a2a._converters import convert_input_to_message
 from strands.hooks import AfterToolCallEvent, HookProvider, HookRegistry
-from strands.memory import MemoryManager
 from strands.models.routing import FallbackStrategy, ModelRouter
 from strands.types.tools import AgentTool
 from strands.vended_plugins.context_injector import ContextInjector, InjectionContext
 from strands_harness import create_harness
 
 from agent.api.core import config
-from agent.api.core.dreaming import JOURNAL_DIRECTIVE, agent_memory
+from agent.api.core.dreaming import MEMORY_PROTOCOL, brain_memory
 from agent.api.core.native_sop import native_sop_prompt
 from agent.api.core.panel_storage import _ScopedStorage, _user_scope, get_panel_storage
 from agent.api.core.tool_observation import (
@@ -1065,7 +1064,7 @@ def build_fixer(run: RepairRun, *, models: Sequence[str], effort: str | None = D
     if a2a is not None:
         tools.extend(a2a.tools)  # the provider vends plain AgentTools (not an SDK ToolProvider)
     return create_harness(
-        model=router, instructions=FIXER_PROMPT + JOURNAL_DIRECTIVE, tools=tools,
+        model=router, instructions=FIXER_PROMPT + MEMORY_PROTOCOL, tools=tools,
         builtin_tools={
             "*": False,
             "shell": True,
@@ -1075,7 +1074,7 @@ def build_fixer(run: RepairRun, *, models: Sequence[str], effort: str | None = D
             "programmatic_tool_caller": {"hot_reload": True},
         },
         builtin_plugins=["todos", "environment"],
-        sandbox=environment, memory=MemoryManager(stores=agent_memory(run.user_id, "tool-fixer")), session=False, skills=False, caching=None,
+        sandbox=environment, memory=brain_memory(run.user_id, "tool-fixer"), session=False, skills=False, caching=None,
         background_tasks=True,
         interventions=None, callback_handler=None, load_tools_from_directory=False,
         name="Ren Tool Fixer",

@@ -23,7 +23,6 @@ from fastmcp import FastMCP
 from pydantic import BaseModel, ConfigDict, Field
 from strands import Agent, tool
 from strands.hooks import BeforeToolCallEvent
-from strands.memory import MemoryManager
 from strands.storage import LocalFileStorage
 from strands.vended_memory_stores.file_memory_store import FileMemoryStore
 from strands.vended_plugins.skills import Skill
@@ -31,7 +30,7 @@ from strands_agents_sops.utils import load_external_sops
 
 from agent.api.core import config
 from agent.api.core.articles import public_address
-from agent.api.core.dreaming import INHERITED_TOOLS, JOURNAL_DIRECTIVE, agent_memory, inherited_memory
+from agent.api.core.dreaming import INHERITED_TOOLS, MEMORY_PROTOCOL, brain_memory, inherited_memory
 from agent.api.core.native_sop import learning_sop_injector, native_sop_prompt
 from agent.api.core.process_document import ProcessDocument, render_process_document
 
@@ -495,7 +494,7 @@ class TeachingService:
                 logger.info("lesson=<%s>, phase=<review>, sop=<learning-a-new-skill> | preparing process review", session["id"])
                 reviewer = Agent(model=teaching_model(), retry_strategy=None,
                     plugins=[learning_sop],
-                    memory_manager=MemoryManager(stores=agent_memory(session["user_id"], "teaching-reviewer")),
+                    memory_manager=brain_memory(session["user_id"], "teaching-reviewer"),
                     tools=[catalog], callback_handler=None, system_prompt="""Turn the actual teaching brief and timestamped journal into a process document for human approval.
 The user taught an OUTCOME and their judgement of a good result, not a click script: the
 process you write is what Ren will do with its own tools to produce that outcome faster and
@@ -521,7 +520,7 @@ Recommend the most efficient implementation in `implementation`: name the APIs o
 that replace browsing, the render_ui view and its controls (players, size options, thumbs
 up/down, ranking, feedback) when the result is something the user looks at, and the memory
 topic used to store and reuse their feedback. Put ONLY the questions that remain unanswered
-after the debrief in `questions`.""" + JOURNAL_DIRECTIVE)
+after the debrief in `questions`.""" + MEMORY_PROTOCOL)
                 catalog.bind(reviewer)
 
                 def review_discovery_only(event: BeforeToolCallEvent) -> None:
@@ -778,10 +777,10 @@ verify it with list_harness_agents, and assign a2a_send_message to the steps tha
         compiler = teaching_model()
         agent = Agent(model=compiler, retry_strategy=None,
             plugins=[learning_sop],
-            memory_manager=MemoryManager(stores=agent_memory(session["user_id"], "teaching-compiler")),
+            memory_manager=brain_memory(session["user_id"], "teaching-compiler"),
             system_prompt=prompt + ("\nThis is an issue-scoped agent. Use only the supplied issue tools. "
                 "General core shell/browser tools are not assigned; published SOP scripts are explicit taught capabilities."
-                if session["agent_id"].startswith("issue:") else "") + JOURNAL_DIRECTIVE, tools=[catalog], callback_handler=None)
+                if session["agent_id"].startswith("issue:") else "") + MEMORY_PROTOCOL, tools=[catalog], callback_handler=None)
         catalog.bind(agent)
         agent.add_hook(_learning_authoring_only, BeforeToolCallEvent)
         if session["agent_id"].startswith("issue:"):
@@ -1070,7 +1069,7 @@ def create_learned_skill_tools(user_id: str, agent_id: str, model_factory: Calla
             child = Agent(model=model_factory(skill_name), system_prompt=skill.instructions +
                 "\nUse read_skill_file for progressive disclosure of actual references and scripts relative to this skill. "
                 "Validate the requested outcome using actual results. If you cannot complete it, explicitly report the missing requirements."
-                + (JOURNAL_DIRECTIVE if inherited else ""),
+                + (MEMORY_PROTOCOL if inherited else ""),
                 tools=[*[assigned[name] for name in names], _configured_file_reader(skill), *a2a_tools(), *inherited],
                 background_tasks={
                     "always": ["*"],
@@ -1139,7 +1138,7 @@ def create_learned_skill_tools(user_id: str, agent_id: str, model_factory: Calla
             system_prompt=instructions + "\nFollow the native Agent SOP's ordered steps and MUST constraints. "
             "Use actual tool results to verify each expected outcome before advancing. "
             "Stop and report blocked when input, authorization or a required capability is missing."
-            + (JOURNAL_DIRECTIVE if inherited else ""))
+            + (MEMORY_PROTOCOL if inherited else ""))
         async with asyncio.timeout(300):
             outcome = cast(StepOutcome, (await child.invoke_async([{"text": prompt}, {"text":
                 "Verify the SOP completion criteria against actual execution evidence. Report complete, evidence and result."}],

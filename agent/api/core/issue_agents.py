@@ -29,7 +29,7 @@ from strands.vended_plugins.goal import GoalLoop, JudgeConfig
 from strands.hooks import HookProvider, HookRegistry
 from strands.hooks.events import BeforeToolCallEvent, AfterToolCallEvent
 
-from agent.api.core.dreaming import JOURNAL_DIRECTIVE, agent_memory
+from agent.api.core.dreaming import INDEX_INJECTION, MEMORY_PROTOCOL, agent_memory, brain_memory
 from agent.api.core.issue_agent_storage import IssueA2ATaskStore, IssueAgentStorage
 from agent.api.core.media_understanding import CONTEXT_READING
 from agent.api.core.panel_agent import build_model, default_selection
@@ -345,7 +345,6 @@ def create_issue_chat_agent(*, user_id: str, session_id: str, issue_id: str, pro
     - ``interventions=None``: no approval gate (agent.py:548); a gate would park runs as interrupts.
     - ``background_tasks``: see ``_issue_chat_background``; ``subagent`` is off, so nothing is forced (agent.py:532-539).
     """
-    from strands.memory import MemoryManager
     from strands.tools.executors import ConcurrentToolExecutor, SequentialToolExecutor
     from strands.vended_plugins.context_offloader import ContextOffloader
     from strands_harness import create_harness
@@ -393,7 +392,7 @@ def create_issue_chat_agent(*, user_id: str, session_id: str, issue_id: str, pro
     agent = create_harness(
         model=model,
         caching=False,
-        instructions=issue_agent_prompt(issue) + ISSUE_CHAT_ADDENDUM + JOURNAL_DIRECTIVE,
+        instructions=issue_agent_prompt(issue) + ISSUE_CHAT_ADDENDUM + MEMORY_PROTOCOL,
         tools=[
             *assigned,
             installed_http_request(),
@@ -413,9 +412,7 @@ def create_issue_chat_agent(*, user_id: str, session_id: str, issue_id: str, pro
         context_manager={"auto": "auto", "agentic": "agentic", "sliding": False}[context],
         session=False,
         skills=False,
-        memory=MemoryManager(stores=[get_teaching_service().get_memory_store(owner_id, agent_scope),
-                                     *agent_memory(user_id, agent_scope)],
-                             search_tool_config=True, injection=True),
+        memory=brain_memory(user_id, agent_scope, [get_teaching_service().get_memory_store(owner_id, agent_scope)]),
         interventions=None,
         name="Issue Ren",
         description="Ren for one canonical issue, in the issue's Ren tab",
@@ -594,13 +591,13 @@ class IssueAgentRuntime:
                     stall_timeout=60.0,
                     max_consecutive_errors=3,
                 )
-                agent = config_to_agent({"name": "Task Ren", "model": agent_record["model_id"], "prompt": prompt + JOURNAL_DIRECTIVE, "tools": []},
+                agent = config_to_agent({"name": "Task Ren", "model": agent_record["model_id"], "prompt": prompt + MEMORY_PROTOCOL, "tools": []},
                     model=model,
                     tools=[*base_issue_tools, task_subagent, *deep_research_tools(user_id=service.identity.user_id), *a2a_tools()],
                     description="Private canonical issue assistant",
                     memory_manager={"stores": [get_teaching_service().get_memory_store(service.identity.user_id, agent_scope),
                                                *agent_memory(service.identity.user_id, agent_scope)],
-                                    "search_tool_config": True, "injection": True},
+                                    "injection": INDEX_INJECTION},
                     background_tasks={"always": ["*"], "never": ["subagent", "todo_write", *sorted(DEEP_RESEARCH_TOOL_NAMES)], "wait_for_completion": True},
                     agent_id=agent_record["id"], session_manager=session, callback_handler=None,
                     checkpointing=False, load_tools_from_directory=False, plugins=plugins, hooks=[activity])

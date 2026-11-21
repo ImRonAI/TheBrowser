@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from array import array
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
@@ -15,13 +16,15 @@ import pytest
 from fastapi.testclient import TestClient
 from strands import Agent
 from strands.memory import MemoryManager
-from strands.memory.types import InjectionFormatContext, MemoryAddOptions, MemoryEntry
+from strands.memory.types import MemoryAddOptions
 from strands.models.model import Model
 from strands.storage import InMemoryStorage
 from strands.vended_memory_stores.file_memory_store import FileMemoryStore
 
+from agent.api.core import dreaming, panel_storage
 from agent.api.core import memory as mem
-from agent.api.core import panel_storage
+
+WORDS = ("tea", "dana", "sam", "co-founder", "flights", "aisle", "short")
 
 
 class Scripted(Model):
@@ -63,7 +66,21 @@ class Scripted(Model):
 def storage(monkeypatch: pytest.MonkeyPatch) -> InMemoryStorage:
     backend = InMemoryStorage()
     monkeypatch.setattr(panel_storage, "_storage", backend)
+    monkeypatch.setattr(dreaming, "_marked", {})
     return backend
+
+
+@pytest.fixture(autouse=True)
+def embedded(monkeypatch: pytest.MonkeyPatch) -> list[str]:
+    """Embeddings as counts of :data:`WORDS`; returns every text that was embedded."""
+    texts: list[str] = []
+
+    async def embed(batch: list[str]) -> list[array[float]]:
+        texts.extend(batch)
+        return [array("f", [float(text.lower().count(word)) for word in WORDS]) for text in batch]
+
+    monkeypatch.setattr(dreaming, "embed", embed)
+    return texts
 
 
 def _by_name(config: Any) -> dict[str, FileMemoryStore]:
@@ -74,30 +91,30 @@ def _first_user_text(messages: list[dict[str, Any]]) -> str:
     return "".join(block.get("text", "") for block in messages[0]["content"])
 
 
-def test_stores_are_native_file_stores_per_category_tasks_last() -> None:
+def test_stores_are_native_file_stores_people_first_tasks_then_the_brain() -> None:
     config = mem.memory_manager_config("u1")
     names = [store.name for store in config["stores"]]
-    assert names == ["facts", "remember", "people", "feedback", "context", "tasks", "brain", "journal/panel"]
+    assert names == ["brain/people", "context", "tasks", "brain", "journal/panel"]
     assert all(isinstance(store, FileMemoryStore) for store in config["stores"])
-    assert isinstance(config["stores"][2], mem.People)
+    assert isinstance(config["stores"][0], mem.People)
     # Nothing is distilled during a conversation: only the journal takes each turn, for the dream.
     assert [store.name for store in config["stores"] if store.extraction] == ["journal/panel"]
-    # The Context widget fills `context` and `remember_person` fills `people`; add_memory never writes either.
-    assert config["add_tool_config"] == {"stores": ["facts", "remember", "feedback", "tasks"]}
-    assert set(config["injection"]) == {"format"}  # SDK default trigger (userTurn), query and size
+    # The Context widget fills `context` and `remember_person` fills `people`; add_memory writes only tasks.
+    assert config["add_tool_config"] == {"stores": ["tasks"]}
+    assert config["injection"] is dreaming.INDEX_INJECTION
 
 
 def test_project_and_issue_stores_attach_only_when_scoped() -> None:
     names = [s.name for s in mem.user_stores("u1", mem.MemoryScope(project_id="p_1", issue_id="i-2"))]
-    assert names == ["facts", "remember", "people", "feedback", "project-p_1", "issue-i-2", "context", "tasks"]
+    assert names == ["brain/people", "project-p_1", "issue-i-2", "context", "tasks"]
     with pytest.raises(ValueError):
         mem.user_stores("u1", mem.MemoryScope(project_id="../x"))
 
 
 def test_users_are_isolated_and_chat_and_live_share_the_same_files() -> None:
     async def run() -> None:
-        chat = MemoryManager(**mem.memory_manager_config("u1"))
-        await chat.add("# Drinks\nLikes tea", MemoryAddOptions(stores=["facts"]))
+        await dreaming.memory_command("u1", "panel", "create", "/memories/panel/drinks.md",
+                                      file_text="# Drinks\nLikes tea")
         live = mem.live_memory_tools("u1")
         search = next(tool for tool in live if tool.tool_name == "search_memory")
         found = await search(query="tea")  # type: ignore[operator]  # DecoratedFunctionTool.__call__
@@ -108,9 +125,9 @@ def test_users_are_isolated_and_chat_and_live_share_the_same_files() -> None:
     asyncio.run(run())
 
 
-def test_live_tools_are_the_native_search_and_add_plus_the_journal() -> None:
+def test_live_tools_are_the_native_search_and_add_plus_the_memory_tool() -> None:
     assert [tool.tool_name for tool in mem.live_memory_tools("u1")] == [
-        "search_memory", "add_memory", "remember_person", "journal"
+        "search_memory", "add_memory", "remember_person", "memory", "journal"
     ]
     assert mem.people_store("u1", writable=False).get_tools() == []
 
@@ -133,12 +150,12 @@ def test_remember_person_merges_by_heading_and_is_injected_and_shared_over_mcp()
         assert "- contact: +1 801-555-0100" in found[0].content
         assert "- applies to: Running, Austin trip" in found[0].content
 
-        # MemoryManager injects people entries on user turns automatically.
+        # A person is a topic of the brain, so every agent's index lists them.
         model = Scripted()
         agent = Agent(model=model, memory_manager=mem.memory_manager_config("u1"), callback_handler=None)
         await agent.invoke_async("Plan a Saturday run with Dana")
         sent = _first_user_text(model.seen[0])
-        assert '<entry source="people">' in sent and "Dana Kim" in sent
+        assert "<memory_index>" in sent and "- /memories/people/dana-kim.md" in sent
 
         # Outside agents (OpenCode, ElevenLabs) read and write the same people store over /memory/mcp.
         app = memory_mcp.server.http_app(path="/mcp")
@@ -160,23 +177,24 @@ def test_remember_person_merges_by_heading_and_is_injected_and_shared_over_mcp()
 
 
 def test_add_memory_writes_the_store_the_model_names() -> None:
-    model = Scripted(add={"entries": ["# Coffee order\nOat flat white, no sugar"], "stores": ["remember"]})
+    model = Scripted(add={"entries": ["# Dentist\nBook a cleaning in March"], "stores": ["tasks"]})
     config = mem.memory_manager_config("u1")
     agent = Agent(model=model, memory_manager=config, callback_handler=None)
 
     async def run() -> None:
-        await agent.invoke_async("Remember my coffee order: oat flat white, no sugar.")
+        await agent.invoke_async("Track this: book a dentist cleaning in March.")
         stores = _by_name(config)
-        assert (await stores["remember"].search("flat white"))[0].content.startswith("# Coffee order")
-        assert await stores["facts"].search("flat white") == []
+        assert (await stores["tasks"].search("cleaning"))[0].content.startswith("# Dentist")
+        assert await panel_storage.get_user_session_storage("u1").list("memory/brain/") == []
 
     asyncio.run(run())
 
 
-def test_injection_is_on_user_turns_and_never_includes_tasks() -> None:
+def test_injection_is_the_index_alone_with_no_embedding(embedded: list[str]) -> None:
     async def seed() -> None:
+        await dreaming.memory_command("u1", "panel", "create", "/memories/panel/flights.md",
+                                      file_text="# Flights\nPrefers aisle seats on flights")
         manager = MemoryManager(**mem.memory_manager_config("u1"))
-        await manager.add("# Flights\nPrefers aisle seats on flights", MemoryAddOptions(stores=["facts"]))
         await manager.add("# Flights todo\nBook flights to Lisbon", MemoryAddOptions(stores=["tasks"]))
 
     asyncio.run(seed())
@@ -184,21 +202,14 @@ def test_injection_is_on_user_turns_and_never_includes_tasks() -> None:
     agent = Agent(model=model, memory_manager=mem.memory_manager_config("u1"), callback_handler=None)
     asyncio.run(agent.invoke_async("Find me flights"))
     sent = _first_user_text(model.seen[0])
-    assert '<entry source="facts">' in sent and "aisle seats" in sent
-    assert "Lisbon" not in sent and 'source="tasks"' not in sent
+    assert "- /memories/panel/flights.md" in sent and "aisle seats" not in sent and "Lisbon" not in sent
+    assert embedded == []
     # Injection is ephemeral: nothing is written into the durable conversation.
-    assert "<memory>" not in json.dumps(agent.messages)
-
-
-def test_render_injection_is_the_sdk_block_minus_tasks() -> None:
-    entries = [MemoryEntry("likes <tea>", "facts"), MemoryEntry("book flights", "tasks")]
-    assert mem.render_injection(InjectionFormatContext(entries=entries)) == (
-        '<memory>\n<entry source="facts">likes &lt;tea&gt;</entry>\n</memory>')
-    assert mem.render_injection(InjectionFormatContext(entries=[MemoryEntry("x", "tasks")])) == ""
+    assert "<memory_index>" not in json.dumps(agent.messages)
 
 
 def test_writes_across_threads_land_in_one_file() -> None:
-    stores = [mem.user_stores("u1")[1] for _ in range(8)]
+    stores = [mem.user_stores("u1")[-1] for _ in range(8)]
     with ThreadPoolExecutor(max_workers=4) as pool:
         list(pool.map(lambda i: asyncio.run(stores[i].add(f"# Topic\nline-{i}")), range(8)))
     text = asyncio.run(stores[0].search("Topic"))[0].content
@@ -207,8 +218,8 @@ def test_writes_across_threads_land_in_one_file() -> None:
 
 def test_directive_names_every_store_and_forbids_acting_on_tasks() -> None:
     assert all(f"- {name}:" in mem.MEMORY_DIRECTIVE for name in mem.CATEGORIES)
-    assert "never your current" in mem.MEMORY_DIRECTIVE and "search_memory" in mem.MEMORY_DIRECTIVE
-    assert "Never mention the journal" in mem.MEMORY_DIRECTIVE
+    assert "never your current" in mem.MEMORY_DIRECTIVE and "remember_person" in mem.MEMORY_DIRECTIVE
+    assert mem.MEMORY_DIRECTIVE.endswith(dreaming.MEMORY_PROTOCOL)
 
 
 # --- /memory API: owner-bound view/add/edit/delete --------------------------------------------
@@ -231,14 +242,15 @@ def client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
 
 
 def test_memory_api_add_list_edit_delete_round_trip(client: TestClient) -> None:
+    # The Memory panel's Feedback tab is the panel agent's folder of the brain.
     added = client.post("/memory/entries", json={"store": "feedback", "content": "# Tone\nToo wordy; keep it short"})
-    assert added.status_code == 200 and added.json()["key"] == "tone.md"
-    listed = client.get("/memory/entries", params={"store": "feedback"}).json()["entries"]
-    assert listed == [{"store": "feedback", "key": "tone.md", "content": "# Tone\nToo wordy; keep it short"}]
+    assert added.status_code == 200 and added.json() == {"store": "brain/panel", "key": "tone.md"}
+    listed = client.get("/memory/entries", params={"store": "brain/panel"}).json()["entries"]
+    assert listed == [{"store": "brain/panel", "key": "tone.md", "content": "# Tone\nToo wordy; keep it short"}]
     assert client.put("/memory/entries", json={"store": "feedback", "key": "tone.md", "content": "# Tone\nShort"}).status_code == 200
-    assert client.get("/memory/search", params={"q": "Short"}).json()["results"][0]["store"] == "feedback"
+    assert client.get("/memory/search", params={"q": "short"}).json()["results"][0]["content"] == "# Tone\nShort"
     counts = {s["name"]: s["count"] for s in client.get("/memory/stores").json()["stores"]}
-    assert counts == {"facts": 0, "remember": 0, "feedback": 1, "tasks": 0}
+    assert counts == {"tasks": 0, "brain/panel": 1}
     assert client.delete("/memory/entries", params={"store": "feedback", "key": "tone.md"}).json()["deleted"]
     assert client.get("/memory/entries", params={"store": "feedback"}).json()["entries"] == []
 

@@ -13,7 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from agent.api.core import public_tunnel
 from agent.api.core.config import CORS_ORIGINS, SESSION_STORAGE_DIR
-from agent.api.core.dreaming import JOURNAL_DIRECTIVE, agent_memory, resume_dreams
+from agent.api.core.dreaming import MEMORY_PROTOCOL, agent_memory, run_dreams
 from agent.api.core.panel_storage import get_panel_storage
 from agent.api.core.tool_observation import setup_evals_exporter
 from agent.api.endpoints import chat
@@ -45,8 +45,9 @@ async def lifespan(app: FastAPI):
     await asyncio.to_thread(get_panel_storage)
     # RON_TOOL_OBSERVATION=1: retain spans in memory (strands_evals) for tool diagnosis.
     setup_evals_exporter()
-    # Every user whose dream had not run when the process stopped gets it, signed in or not (core/dreaming.py).
-    await resume_dreams()
+    # This process is the one dreamer: every user who journaled, here or in another service, gets their dream once
+    # idle, signed in or not (core/dreaming.py).
+    dreams = asyncio.create_task(run_dreams())
     manager = chat.create_runtime_manager()
     from agent.api.core import deep_research
     from agent.api.core.deep_research_tools import deep_research_tools
@@ -109,7 +110,7 @@ async def lifespan(app: FastAPI):
                             *deep_research_tools(user_id="default"),
                         ],
                         name="Ren", description="Ren browser agent with core tools",
-                        system_prompt=chat.AGENT_SYSTEM_PROMPT + JOURNAL_DIRECTIVE,
+                        system_prompt=chat.AGENT_SYSTEM_PROMPT + MEMORY_PROTOCOL,
                         memory=lambda: agent_memory("default", "ren-a2a"),
                     )
                     integration = await asyncio.to_thread(
@@ -134,6 +135,7 @@ async def lifespan(app: FastAPI):
                     await asyncio.gather(link, return_exceptions=True)
     finally:
         try:
+            dreams.cancel()
             from agent.api.core.articles import close_article_browser
 
             await close_article_browser()

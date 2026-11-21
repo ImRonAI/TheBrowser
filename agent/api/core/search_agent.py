@@ -53,7 +53,7 @@ from strands_harness.tools.subagent import AgentSpec, Choice, Fixed, Preset, mak
 from agent.api.core import config as app_config
 from agent.api.core.brave_answers_tool import answers_client
 from agent.api.core.brave_search import BraveSearchError
-from agent.api.core.dreaming import JOURNAL_DIRECTIVE, agent_memory
+from agent.api.core.dreaming import INDEX_INJECTION, MEMORY_PROTOCOL, agent_memory
 from agent.api.core.panel_agent import (
     NIM_REASONING_EFFORTS_BY_MODEL, PROVIDERS, build_model, gemini_thinking_levels, mistral_reasoning_efforts,
     provider_api_key, telnyx_reasoning_efforts, xai_reasoning_efforts,
@@ -195,14 +195,14 @@ def build_harness_from_config(
        and ``effort="auto"`` passed to ``create_harness`` (since ``create_harness`` ignores ``effort``
        on pre-built ``Model`` instances).
     4. ``memory`` (``dreaming.agent_memory``) is the user's second brain and the agent's journal, with
-       ``JOURNAL_DIRECTIVE`` on its instructions; the config's own ``memory`` stays off.
+       ``MEMORY_PROTOCOL`` on its instructions; the config's own ``memory`` stays off.
     """
     merged = dict(config)
     if instructions_suffix:
         base_inst = str(merged.get("instructions") or "").rstrip()
         merged["instructions"] = f"{base_inst}\n\n{instructions_suffix.strip()}" if base_inst else instructions_suffix.strip()
     if memory:
-        merged["instructions"] = f"{merged.get('instructions') or ''}{JOURNAL_DIRECTIVE}"
+        merged["instructions"] = f"{merged.get('instructions') or ''}{MEMORY_PROTOCOL}"
     if session_override is not None:
         merged["session"] = session_override
 
@@ -261,7 +261,7 @@ def build_harness_from_config(
     kwargs.setdefault("load_tools_from_directory", True)
 
     if memory:
-        kwargs["memory"] = MemoryManager(stores=list(memory))
+        kwargs["memory"] = MemoryManager(stores=list(memory), injection=INDEX_INJECTION)
     hooks = [XAIStatePruner()] if resolved_provider == "xai" else []
     return create_harness(callback_handler=None, hooks=hooks, **kwargs)
 

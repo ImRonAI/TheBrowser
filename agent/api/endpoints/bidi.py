@@ -18,6 +18,7 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from strands.bidi.models.google import GoogleGeminiLiveModel
 
 from agent.api.core import config
+from agent.api.core.dreaming import index_block
 from agent.api.core.live_io import LiveSocketInput, WebSocketOutput, context_text, local_origin
 from agent.api.core.live_takeover import pending_work, start_takeover
 from agent.api.core.live_tools import close_live_music, create_live_agent, live_id_of
@@ -109,7 +110,8 @@ async def bidi(
             return
         agent, prefix = create_live_agent(
             live_model(model, voice), user_id or "default", agent_scope or "panel", browser,
-            emit=_music_emitter(websocket), session_id=thread_id or None, context=context,
+            emit=_music_emitter(websocket), session_id=thread_id or None,
+            context="\n\n".join(part for part in (context, await index_block(user_id or "default")) if part),
         )
         restored = len(agent.messages)
         names = list(agent.tool_names)

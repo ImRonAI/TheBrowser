@@ -92,7 +92,7 @@ from agent.api.core.panel_browser import (
     is_browser_tool,
     server_name,
 )
-from agent.api.core.dreaming import JOURNAL_DIRECTIVE, agent_memory
+from agent.api.core.dreaming import INDEX_INJECTION, MEMORY_PROTOCOL, agent_memory, inherited_memory
 from agent.api.core.memory import MEMORY_DIRECTIVE, MemoryScope, live_memory_tools, memory_manager_config
 from agent.api.core.panel_runtime import is_model_timeout
 from agent.api.core.panel_storage import ThreadSessionManager, get_user_session_storage, thread_agent_id
@@ -1372,8 +1372,8 @@ def create_panel_agent(
             # with no host shell/editor, no MCP servers, no A2A/specialist/music tools, and no repo AGENTS.md injection.
             core = build_core_tools(tools_dir, names=DOCUMENT_TOOL_NAMES)
             catalog.add_tools([*core, *research_tools])
-            memory = {"stores": agent_memory(user_id, agent_scope)}
-            system_prompt += JOURNAL_DIRECTIVE
+            memory = {"stores": agent_memory(user_id, agent_scope), "injection": INDEX_INJECTION}
+            system_prompt += MEMORY_PROTOCOL
             plugins: list[Any] = []
         else:
             core = build_core_tools(tools_dir)
@@ -1403,7 +1403,6 @@ def create_panel_agent(
 
             def build_panel_subagent_child(spec: AgentSpec) -> Agent:
                 from strands.models.model import Model
-                from agent.api.core.dreaming import inherited_memory
 
                 pool = subagent_tools_map()
                 if spec.tools is None:
@@ -1421,7 +1420,7 @@ def create_panel_agent(
                     name=spec.name,
                     model=spec.model if isinstance(spec.model, Model) else model_factory(spec.name),
                     system_prompt=(spec.instructions or GENERALIST.instructions or "")
-                    + (JOURNAL_DIRECTIVE if inherited else ""),
+                    + (MEMORY_PROTOCOL if inherited else ""),
                     tools=[*selected, *inherited],
                     background_tasks={
                         "always": ["*"],

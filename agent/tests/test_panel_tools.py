@@ -283,8 +283,8 @@ def test_native_formations_execute_each_stream_once_and_serialize(kind, monkeypa
         events, result = await call_tool(value, {"prompt": "do work"}, agent=parent)
         assert result["status"] == "success", result
         called = [call for model in models for call in model.calls]
-        assert all({"search_memory", "journal"} <= {tool["name"] for tool in call["tools"]} for call in called)
-        assert all(call["prompt"].endswith(dreaming.JOURNAL_DIRECTIVE) for call in called)
+        assert all({"search_memory", "memory", "journal"} <= {tool["name"] for tool in call["tools"]} for call in called)
+        assert all(call["prompt"].endswith(dreaming.MEMORY_PROTOCOL) for call in called)
         payload = result["content"][0]["json"]["result"]
         recovered = MultiAgentResult.from_dict(payload)
         assert recovered.status is Status.COMPLETED
