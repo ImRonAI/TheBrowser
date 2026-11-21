@@ -1,8 +1,8 @@
 """Deep Research: one Strands Graph of Swarms and Graphs, run in the background.
 
 The formation is ``FORMATION_TOPOLOGY``: an outer Graph, research_swarm -> data_analysis_graph ->
-writing_swarm -> production_graph -> build_swarm, of which each outcome's team keeps its own agents
-(``outcome_topology``), built as the Strands docs build it:
+writing_swarm -> production_graph, of which each outcome's team keeps its own agents (``outcome_topology``; an app's
+or a website's ends in ``BUILD_SWARM`` after the research swarm), built as the Strands docs build it:
 
 - Swarm: ``Swarm(agents, id=...)`` with repetitive handoff detection on; its agents hand off with the built-in
   ``handoff_to_agent`` and the Swarm ends when an agent finishes without one
@@ -337,36 +337,38 @@ FORMATION_TOPOLOGY: Final[Topology] = {
             ],
             "edges": [_edge("pdf_publisher", "pdf_qa"), _edge("deck_producer", "deck_build_qa")],
         },
-        {
-            "id": "build_swarm",
-            "label": "Build Swarm",
-            "kind": "swarm",
-            "description": "Has OpenCode build the app or website on Ren's workspace computer, checks it and lists it "
-            "under Applications.",
-            "children": [
-                _agent(
-                    "app_builder",
-                    "App Builder",
-                    "theme-factory",
-                    "Writes the brief from the inquiry and research.md, has OpenCode build, deploy and check the app or "
-                    "website on Ren's workspace computer, and lists it under the user's Applications.",
-                ),
-                _agent(
-                    "app_qa",
-                    "App QA",
-                    "verification-before-completion",
-                    "Checks what OpenCode built against the brief and research.md: opens the deployed site, or has the "
-                    "APK built again, and sends what fails back to the App Builder.",
-                ),
-            ],
-            "edges": [],
-        },
     ],
     "edges": [
         _edge("research_swarm", "data_analysis_graph"),
         _edge("data_analysis_graph", "writing_swarm"),
         _edge("writing_swarm", "production_graph"),
     ],
+}
+
+#: The formation an app's or a website's team ends in, after the research swarm.
+BUILD_SWARM: Final[FormationSpec] = {
+    "id": "build_swarm",
+    "label": "Build Swarm",
+    "kind": "swarm",
+    "description": "Has OpenCode build the app or website on Ren's workspace computer, checks it and lists it under "
+    "Applications.",
+    "children": [
+        _agent(
+            "app_builder",
+            "App Builder",
+            "theme-factory",
+            "Writes the brief from the inquiry and research.md, has OpenCode build, deploy and check the app or "
+            "website on Ren's workspace computer, and lists it under the user's Applications.",
+        ),
+        _agent(
+            "app_qa",
+            "App QA",
+            "verification-before-completion",
+            "Checks what OpenCode built against the brief and research.md: opens the deployed site, or has the APK "
+            "built again, and sends what fails back to the App Builder.",
+        ),
+    ],
+    "edges": [],
 }
 
 
@@ -460,10 +462,11 @@ def build_note(outcome: Outcome, user_id: str) -> str:
 
 
 def outcome_topology(outcome: Outcome) -> Topology:
-    """``FORMATION_TOPOLOGY`` with only the outcome's team: its formations in order, each with its kept agents."""
+    """``FORMATION_TOPOLOGY`` and ``BUILD_SWARM`` with only the outcome's team: its formations in order, each with
+    its kept agents."""
     kept = OUTCOME_AGENTS[outcome]
     nodes: list[FormationSpec] = []
-    for formation in FORMATION_TOPOLOGY["nodes"]:
+    for formation in (*FORMATION_TOPOLOGY["nodes"], BUILD_SWARM):
         children = [child for child in formation["children"] if child["id"] in kept]
         if children:
             ids = {child["id"] for child in children}
@@ -913,7 +916,7 @@ def build_deep_research_graph(
         skill = skills[spec["skill"]]
         handoff = handoffs.get(spec["id"])
         sections = SKILL_SECTIONS.get(spec["id"])
-        builds = spec["id"] in {"app_builder", "app_qa"}
+        builds = spec in BUILD_SWARM["children"]
         note = build_note(outcome, user_id) if builds else ROLE_NOTES.get(spec["id"])
         budget = TurnBudget(LEVELS[depth]["turns"], node_ids)
         tools = [*research_tools(), *connected]

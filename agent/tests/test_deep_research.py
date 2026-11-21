@@ -142,8 +142,12 @@ def isolated(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.setattr(deep_research, "_RUNS", {})
 
 
+def _formations() -> list[deep_research.FormationSpec]:
+    return [*deep_research.FORMATION_TOPOLOGY["nodes"], deep_research.BUILD_SWARM]
+
+
 def _agents() -> list[deep_research.AgentSpec]:
-    return [agent for formation in deep_research.FORMATION_TOPOLOGY["nodes"] for agent in formation["children"]]
+    return [agent for formation in _formations() for agent in formation["children"]]
 
 
 def test_every_agent_has_its_skill_and_swarms_have_no_edges() -> None:
@@ -152,7 +156,7 @@ def test_every_agent_has_its_skill_and_swarms_have_no_edges() -> None:
     assert len(agents) == 21
     assert len({agent["id"] for agent in agents}) == len(agents)
     assert {agent["skill"] for agent in agents} <= skills
-    for formation in deep_research.FORMATION_TOPOLOGY["nodes"]:
+    for formation in _formations():
         if formation["kind"] == "swarm":
             assert formation["edges"] == []
 
@@ -229,9 +233,16 @@ def computer(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_build_outcomes_are_offered_only_with_the_workspace_computer(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(app_config, "COMPUTER_MCP_URL", "")
     assert deep_research.available_outcomes() == ("report", "deck")
+    assert asyncio.run(deep_research_endpoints.get_deep_research_status())["outcomes"] == ["report", "deck"]
     monkeypatch.setattr(app_config, "COMPUTER_MCP_URL", "http://computer:8080/computer/mcp")
     monkeypatch.setattr(app_config, "COMPUTER_MCP_TOKEN", "token")
     assert deep_research.available_outcomes() == deep_research.VALID_OUTCOMES
+    status = asyncio.run(deep_research_endpoints.get_deep_research_status())
+    assert status["outcomes"] == list(deep_research.VALID_OUTCOMES)
+    assert status["topologies"] == {
+        outcome: deep_research.outcome_topology(outcome) for outcome in deep_research.VALID_OUTCOMES
+    }
+    assert status["topology"] == deep_research.FORMATION_TOPOLOGY
 
 
 def _has_turn_budget(agent: Agent) -> bool:
