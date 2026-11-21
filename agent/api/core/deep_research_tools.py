@@ -28,9 +28,10 @@ def is_deep_research_tool(name: str) -> bool:
 
 DEEP_RESEARCH_DIRECTIVE: str = (
     "\n\n## Squad\n"
-    "- For an investigation that needs many sources, fact checks and charts, ending in a cited report (a Document "
-    "printed to PDF from it) or a Slidev deck written from that report, call `deep_research_start(query, "
-    "context=\"\", depth=\"medium\", outcome=\"report\")` (`outcome`: `\"report\"` or `\"deck\"`; `depth`, fastest "
+    "- For work that needs many sources and fact checks, ending in a cited report (a Document printed to PDF from "
+    "it), a Slidev deck written from that report, or a web app, website or Android app OpenCode builds from the "
+    "research, call `deep_research_start(query, context=\"\", depth=\"medium\", outcome=\"report\")` "
+    "(`outcome`: `\"report\"`, `\"deck\"`, `\"web_app\"`, `\"website\"` or `\"mobile_app\"`; `depth`, fastest "
     "to most complete: "
     "`\"fast\"` (a 5 to 8 page report), `\"low\"`, `\"medium\"`, `\"high\"`, `\"xhigh\"` or `\"ultra\"` (30 to 40 "
     "pages)). It runs in the background and returns `session_id` and `ron://research/<session_id>` at once.\n"
@@ -47,16 +48,21 @@ def deep_research_tools(*, user_id: str = "default") -> list[AgentTool]:
 
     @tool
     async def deep_research_start(
-        query: str, context: str = "", depth: str = "medium", outcome: Literal["report", "deck"] = "report"
+        query: str,
+        context: str = "",
+        depth: str = "medium",
+        outcome: Literal["report", "deck", "web_app", "website", "mobile_app"] = "report",
     ) -> dict[str, object]:
-        """Start a Squad run in the background: research, charts and a cited report, or a Slidev deck from it.
+        """Start a Squad run in the background: research, then a cited report, a Slidev deck, or an app or website.
 
         Args:
             query: The research question.
             context: Background, constraints or prior findings.
             depth: fastest to most complete: "fast" (a 5 to 8 page report), "low", "medium" (default), "high",
                 "xhigh" or "ultra" (30 to 40 pages).
-            outcome: "report" (a Document, printed to PDF from it) or "deck" (a Slidev deck written from the report).
+            outcome: "report" (a Document, printed to PDF from it), "deck" (a Slidev deck written from the report),
+                "web_app" or "website" (built and deployed by OpenCode, opened in Ren's browser from Applications) or
+                "mobile_app" (an Android app OpenCode builds, installed from Applications on the phone).
         """
         from agent.api.core import deep_research
 

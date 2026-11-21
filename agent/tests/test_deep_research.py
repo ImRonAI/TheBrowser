@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
-from collections.abc import AsyncGenerator, AsyncIterator, Iterator
+from collections.abc import AsyncGenerator, AsyncIterator, Callable, Iterator
 import io
 import json
 from pathlib import Path
@@ -149,7 +149,7 @@ def _agents() -> list[deep_research.AgentSpec]:
 def test_every_agent_has_its_skill_and_swarms_have_no_edges() -> None:
     skills = {skill.name for skill in deep_research.Skill.from_directory(deep_research.DEEP_RESEARCH_SKILLS_DIR)}
     agents = _agents()
-    assert len(agents) == 19
+    assert len(agents) == 21
     assert len({agent["id"] for agent in agents}) == len(agents)
     assert {agent["skill"] for agent in agents} <= skills
     for formation in deep_research.FORMATION_TOPOLOGY["nodes"]:
@@ -207,6 +207,90 @@ def test_each_outcome_keeps_its_team_and_chains_its_formations() -> None:
     production = deck["nodes"][-1]
     assert [agent["id"] for agent in production["children"]] == ["deck_producer", "deck_build_qa"]
     assert production["edges"] == [{"from": "deck_producer", "to": "deck_build_qa"}]
+
+
+@tool
+def computer_start_process(command: str) -> str:
+    """Start a process on the workspace computer.
+
+    Args:
+        command: The command.
+    """
+    return command
+
+
+@pytest.fixture
+def computer(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(app_config, "COMPUTER_MCP_URL", "http://computer:8080/computer/mcp")
+    monkeypatch.setattr(app_config, "COMPUTER_MCP_TOKEN", "token")
+    monkeypatch.setattr(deep_research, "computer_tools", lambda: [computer_start_process])
+
+
+def test_build_outcomes_are_offered_only_with_the_workspace_computer(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(app_config, "COMPUTER_MCP_URL", "")
+    assert deep_research.available_outcomes() == ("report", "deck")
+    monkeypatch.setattr(app_config, "COMPUTER_MCP_URL", "http://computer:8080/computer/mcp")
+    monkeypatch.setattr(app_config, "COMPUTER_MCP_TOKEN", "token")
+    assert deep_research.available_outcomes() == deep_research.VALID_OUTCOMES
+
+
+def _has_turn_budget(agent: Agent) -> bool:
+    return any(isinstance(plugin, deep_research.TurnBudget) for plugin in agent._plugin_registry._plugins.values())
+
+
+@pytest.mark.parametrize("outcome", sorted(deep_research.BUILD_OUTCOMES))
+def test_a_build_outcome_researches_then_has_opencode_build_it(
+    isolated: None, computer: None, outcome: deep_research.Outcome
+) -> None:
+    topology = deep_research.outcome_topology(outcome)
+    assert [node["id"] for node in topology["nodes"]] == ["research_swarm", "build_swarm"]
+    assert topology["edges"] == [{"from": "research_swarm", "to": "build_swarm"}]
+    graph = deep_research.build_deep_research_graph(
+        session_id="dr-app", user_id="u1", model=ScriptedModel(), depth="fast", outcome=outcome
+    )
+    agents = _formation_agents(graph)
+    assert set(agents) == deep_research.OUTCOME_AGENTS[outcome]
+    for agent_id in ("app_builder", "app_qa"):
+        agent = agents[agent_id]
+        prompt = agent.system_prompt or ""
+        assert deep_research.BUILD_NOTES[outcome] in prompt
+        assert "REN_USER_ID=u1 opencode run" in prompt and "--continue" in prompt and "- report.md:" not in prompt
+        assert "computer_start_process" in agent.tool_names
+        assert ("register_application" in agent.tool_names) == (agent_id == "app_builder")
+        assert not _has_turn_budget(agent)
+    assert _has_turn_budget(agents["researcher"])
+
+
+@pytest.mark.asyncio
+async def test_a_build_outcome_needs_the_computer_and_keeps_the_app_it_listed(
+    isolated: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(app_config, "COMPUTER_MCP_URL", "")
+    with pytest.raises(ValueError, match="workspace computer"):
+        await deep_research.start_run(user_id="u1", query="A tide-table app", outcome="mobile_app")
+    monkeypatch.setattr(app_config, "COMPUTER_MCP_URL", "http://computer:8080/computer/mcp")
+    monkeypatch.setattr(app_config, "COMPUTER_MCP_TOKEN", "token")
+    monkeypatch.setattr(deep_research, "computer_tools", lambda: [computer_start_process])
+    monkeypatch.setattr(deep_research, "build_model", lambda *args, **kwargs: ScriptedModel())
+    monkeypatch.setattr(deep_research, "resolve_selection", lambda *args: ("gemini", "scripted"))
+    listeners: list[Callable[[deep_research.Application], None]] = []
+    build = deep_research.build_deep_research_graph
+
+    def capture(**kwargs: Any) -> Graph:
+        listeners.append(kwargs["on_application"])
+        return build(**kwargs)
+
+    async def hold(run: Any, graph: Graph, task: str) -> None:
+        del run, graph, task
+
+    monkeypatch.setattr(deep_research, "build_deep_research_graph", capture)
+    monkeypatch.setattr(deep_research, "_execute", hold)
+    meta = await deep_research.start_run(user_id="u1", query="A tide-table app", depth="fast", outcome="mobile_app")
+    app = deep_research.Application(id="app-1", name="Tides", kind="android",
+                                    location="/config/workspace/tides/app-debug.apk", description="Tide tables.",
+                                    created_at=1.0)
+    listeners[0](app)
+    assert meta.get("application") == app.model_dump()
 
 
 def test_the_formation_is_a_graph_of_swarms_and_graphs(isolated: None) -> None:

@@ -1,7 +1,8 @@
 """Deep Research: one Strands Graph of Swarms and Graphs, run in the background.
 
 The formation is ``FORMATION_TOPOLOGY``: an outer Graph, research_swarm -> data_analysis_graph ->
-writing_swarm -> production_graph, built as the Strands docs build it:
+writing_swarm -> production_graph -> build_swarm, of which each outcome's team keeps its own agents
+(``outcome_topology``), built as the Strands docs build it:
 
 - Swarm: ``Swarm(agents, id=...)`` with repetitive handoff detection on; its agents hand off with the built-in
   ``handoff_to_agent`` and the Swarm ends when an agent finishes without one
@@ -21,7 +22,8 @@ Every agent is ``strands_harness.create_harness(...)`` with the level's prompt (
 Agent API's effort levels, https://docs.perplexity.ai/docs/agent-api/effort.md), its role, the sections of its skill's
 ``SKILL.md`` that fit the role (``SKILL_SECTIONS``) and the same tools as every other agent. The Slidev agents load
 their Slidev skills with the harness's ``skills`` tool instead (``SLIDEV_SKILLS``). Each agent and each subagent it
-starts has the level's turn budget (``TurnBudget``).
+starts has the level's turn budget (``TurnBudget``), except the build agents, which have OpenCode build the app or
+website on Ren's workspace computer as the Context Agent does (``OPENCODE_BUILD``) and wait on it.
 """
 
 from __future__ import annotations
@@ -65,6 +67,7 @@ from strands_harness import create_harness
 
 from agent.api.core import config as app_config
 from agent.api.core.brave_tools import brave_tools
+from agent.api.core.context_agent import OPENCODE_BUILD, Application, computer_tools, register_application_tool
 from agent.api.core.dreaming import MEMORY_PROTOCOL, brain_memory
 from agent.api.core.media_understanding import EMBED_TABS_MARKDOWN, markdown_to_html
 from agent.api.core.panel_agent import (
@@ -92,8 +95,10 @@ DEFAULT_DEPTH: Final[ResearchDepth] = "medium"
 LEGACY_DEPTHS: Final[dict[str, ResearchDepth]] = {"standard": "low", "deep": "medium", "exhaustive": "ultra"}
 RunStatus = Literal["running", "completed", "failed", "cancelled"]
 #: What a Squad run ends in: a report is a Document; a deck is a Slidev deck beside the report it is written from.
-Outcome = Literal["report", "deck"]
-VALID_OUTCOMES: Final[tuple[Outcome, ...]] = ("report", "deck")
+Outcome = Literal["report", "deck", "web_app", "website", "mobile_app"]
+VALID_OUTCOMES: Final[tuple[Outcome, ...]] = ("report", "deck", "web_app", "website", "mobile_app")
+#: The outcomes OpenCode builds on Ren's workspace computer, offered only while it is configured.
+BUILD_OUTCOMES: Final[frozenset[Outcome]] = frozenset({"web_app", "website", "mobile_app"})
 DEFAULT_OUTCOME: Final[Outcome] = "report"
 JsonDict = dict[str, object]
 
@@ -332,6 +337,30 @@ FORMATION_TOPOLOGY: Final[Topology] = {
             ],
             "edges": [_edge("pdf_publisher", "pdf_qa"), _edge("deck_producer", "deck_build_qa")],
         },
+        {
+            "id": "build_swarm",
+            "label": "Build Swarm",
+            "kind": "swarm",
+            "description": "Has OpenCode build the app or website on Ren's workspace computer, checks it and lists it "
+            "under Applications.",
+            "children": [
+                _agent(
+                    "app_builder",
+                    "App Builder",
+                    "theme-factory",
+                    "Writes the brief from the inquiry and research.md, has OpenCode build, deploy and check the app or "
+                    "website on Ren's workspace computer, and lists it under the user's Applications.",
+                ),
+                _agent(
+                    "app_qa",
+                    "App QA",
+                    "verification-before-completion",
+                    "Checks what OpenCode built against the brief and research.md: opens the deployed site, or has the "
+                    "APK built again, and sends what fails back to the App Builder.",
+                ),
+            ],
+            "edges": [],
+        },
     ],
     "edges": [
         _edge("research_swarm", "data_analysis_graph"),
@@ -358,6 +387,9 @@ SWARM_HANDOFFS: Final[dict[str, str]] = {
     "deck_writer": "When deck-copy.md is written, hand off to deck_qa.",
     "deck_qa": "If deck-copy.md fails your check, hand off to deck_writer. When it passes, reply with your verdict "
     "without handing off: that ends the writing.",
+    "app_builder": "When OpenCode has built it, it works and register_application has listed it, hand off to app_qa.",
+    "app_qa": "If it fails your check, hand off to app_builder with exactly what fails. When it passes, reply with "
+    "your verdict and where it is without handing off: that ends the build.",
 }
 
 #: The agents each outcome's team keeps from ``FORMATION_TOPOLOGY``; a formation left with none drops out. The PDF is
@@ -366,9 +398,15 @@ _RESEARCH_AGENTS: Final[frozenset[str]] = frozenset(
     {"researcher", "fact_checker", "citation_manager", "research_qa", "visual_planner", "data_analyst",
      "visual_citation", "visual_qa", "report_designer", "layout_qa", "report_writer", "report_qa"}
 )
+_BUILD_AGENTS: Final[frozenset[str]] = frozenset(
+    {"researcher", "fact_checker", "citation_manager", "research_qa", "app_builder", "app_qa"}
+)
 OUTCOME_AGENTS: Final[dict[Outcome, frozenset[str]]] = {
     "report": _RESEARCH_AGENTS,
     "deck": _RESEARCH_AGENTS | {"deck_designer", "deck_writer", "deck_qa", "deck_producer", "deck_build_qa"},
+    "web_app": _BUILD_AGENTS,
+    "website": _BUILD_AGENTS,
+    "mobile_app": _BUILD_AGENTS,
 }
 
 #: Handoffs that differ from ``SWARM_HANDOFFS`` where an outcome's team leaves agents out.
@@ -381,7 +419,44 @@ OUTCOME_HANDOFFS: Final[dict[Outcome, dict[str, str]]] = {
         "verdict without handing off: that ends the writing.",
     },
     "deck": {},
+    "web_app": {},
+    "website": {},
+    "mobile_app": {},
 }
+
+#: What each build outcome's App Builder has OpenCode make; App QA reads the same.
+BUILD_NOTES: Final[dict[Outcome, str]] = {
+    "web_app": "Build a web app: an interactive tool that does what the inquiry asks, for the person who asked, its "
+    "features and data grounded in research.md. It opens in Ren's browser from Applications.",
+    "website": "Build a website: the pages the inquiry asks for, their copy written from research.md (every fact as "
+    "the research states it, the sources from references.md linked where a fact appears), designed for its "
+    "subject. It opens in Ren's browser from Applications.",
+    "mobile_app": "Build an Android app that does what the inquiry asks, its features and data grounded in "
+    "research.md. Register it with the APK's full path: it shows under Applications on Ren's home on the user's "
+    "phone, where a tap installs it.",
+}
+
+
+def available_outcomes() -> tuple[Outcome, ...]:
+    """The outcomes a run can have now: the build outcomes only while Ren's workspace computer is configured."""
+    computer = bool(app_config.COMPUTER_MCP_URL and app_config.COMPUTER_MCP_TOKEN)
+    return tuple(outcome for outcome in VALID_OUTCOMES if computer or outcome not in BUILD_OUTCOMES)
+
+
+def build_note(outcome: Outcome, user_id: str) -> str:
+    """The App Builder's and App QA's instructions for a build outcome: what to make and how OpenCode builds it.
+
+    A fix goes to the OpenCode session that built it: ``opencode run --continue`` continues the last session of the
+    folder it runs in (https://opencode.ai/docs/cli/commands/).
+    """
+    return (
+        f"{BUILD_NOTES[outcome]}\n"
+        "OpenCode can't read this run's workspace: copy research.md and references.md into the project folder with "
+        "computer_write_file and have the brief point OpenCode at them. computer_read_process_output waits up to 50 s "
+        "a call, so keep reading until OpenCode exits. A fix after App QA's check goes to the session that built it: "
+        "the same command in the project folder with --continue before the message, which says exactly what fails.\n"
+        + OPENCODE_BUILD.replace("{user_id}", user_id)
+    )
 
 
 def outcome_topology(outcome: Outcome) -> Topology:
@@ -594,15 +669,22 @@ LEVELS: Final[dict[ResearchDepth, Level]] = {
 WORDS_PER_PAGE: Final[int] = 450
 
 
-def level_prompt(depth: ResearchDepth, today: str) -> str:
-    """The level's prompt with its size and the way every agent works through its turns."""
+def level_prompt(depth: ResearchDepth, today: str, outcome: Outcome = DEFAULT_OUTCOME) -> str:
+    """The level's prompt with the outcome's size and the way every agent works through its turns."""
     level = LEVELS[depth]
     low, high = level["pages"]
+    if outcome in BUILD_OUTCOMES:
+        size = f"- research.md: at least {level['sources']} distinct, good sources.\n"
+    else:
+        size = (
+            f"- report.md: {low} to {high} pages (about {low * WORDS_PER_PAGE:,} to {high * WORDS_PER_PAGE:,} words), "
+            f"with {level['figures']} figures or more and at least {level['sources']} distinct, good sources cited in "
+            "it.\n"
+        )
+    if outcome == "deck":
+        size += f"- The deck: {level['slides']} slides.\n"
     return level["prompt"].format(label=level["label"], today=today) + (
-        "\n## Size\n"
-        f"- report.md: {low} to {high} pages (about {low * WORDS_PER_PAGE:,} to {high * WORDS_PER_PAGE:,} words), with "
-        f"{level['figures']} figures or more and at least {level['sources']} distinct, good sources cited in it.\n"
-        f"- The deck: {level['slides']} slides.\n\n"
+        f"\n## Size\n{size}\n"
         "## How you work\n"
         "- Use `subagent` for the independent parts (a question, a source, a chart, a section each), several in "
         "parallel, each told the exact files to read and the result to bring back. Each one's full findings come back "
@@ -702,6 +784,8 @@ class RunMeta(TypedDict):
     selection: Selection
     error: str | None
     document_id: str | None
+    #: The app a build outcome's run listed under Applications (``Application``), once it has.
+    application: NotRequired[JsonDict]
 
 
 @dataclass
@@ -795,6 +879,7 @@ def build_deep_research_graph(
     depth: ResearchDepth,
     outcome: Outcome = DEFAULT_OUTCOME,
     on_node_event: Callable[[JsonDict], None] | None = None,
+    on_application: Callable[[Application], None] | None = None,
 ) -> Graph:
     """Build the outcome's team as a Strands Graph whose nodes are Swarms and Graphs of harness agents."""
     topology = outcome_topology(outcome)
@@ -808,7 +893,7 @@ def build_deep_research_graph(
     # every agent's runs; Monty reuses only its configuration per feed.
     workspace_mount = MountDir(host_path=workspace, virtual_path=str(workspace), mode="read-write")
     skills = _skills()
-    level = level_prompt(depth, datetime.now().astimezone().strftime("%A, %B %d, %Y"))
+    level = level_prompt(depth, datetime.now().astimezone().strftime("%A, %B %d, %Y"), outcome)
     workspace_note = (
         "## Workspace\n"
         f"Every file of this run is in {workspace}. Read what the other agents saved there and save your work "
@@ -828,8 +913,16 @@ def build_deep_research_graph(
         skill = skills[spec["skill"]]
         handoff = handoffs.get(spec["id"])
         sections = SKILL_SECTIONS.get(spec["id"])
-        note = ROLE_NOTES.get(spec["id"])
+        builds = spec["id"] in {"app_builder", "app_qa"}
+        note = build_note(outcome, user_id) if builds else ROLE_NOTES.get(spec["id"])
         budget = TurnBudget(LEVELS[depth]["turns"], node_ids)
+        tools = [*research_tools(), *connected]
+        if spec["id"] == "report_writer":
+            tools.append(render_workflow)
+        if builds:
+            tools.extend(computer_tools())
+        if spec["id"] == "app_builder":
+            tools.append(register_application_tool(user_id, on_application))
 
         agent_holder: list[Agent] = []
 
@@ -877,8 +970,11 @@ def build_deep_research_graph(
                 + MEMORY_PROTOCOL
             ),
             skills=[*SLIDEV_SKILLS] if spec["id"] in SLIDEV_AGENTS else False,
-            tools=[*research_tools(), *connected, *([render_workflow] if spec["id"] == "report_writer" else [])],
-            plugins=[budget, ContextInjector(budget.reminder, name="deep-research:wrap-up", trigger="everyTurn")],
+            tools=tools,
+            # A build agent's work is waiting on OpenCode, so it runs without the turn budget, as Strands has it.
+            plugins=[] if builds else [
+                budget, ContextInjector(budget.reminder, name="deep-research:wrap-up", trigger="everyTurn")
+            ],
             builtin_tools={
                 "*": False,
                 "shell": True,
@@ -1131,6 +1227,8 @@ async def start_run(
     Raises:
         ValueError: When no model provider is configured.
     """
+    if outcome not in available_outcomes():
+        raise ValueError("Ren's workspace computer isn't configured, so Squad can't build apps or websites.")
     selection = resolve_selection(provider, model_id)
     if selection is None:
         raise ValueError("No model provider is configured for Squad.")
@@ -1168,9 +1266,12 @@ async def start_run(
         else:
             loop.call_soon_threadsafe(_append, run, wrapped)
 
+    def on_application(application: Application) -> None:
+        run.meta["application"] = application.model_dump()
+
     graph = build_deep_research_graph(
         session_id=session_id, user_id=user_id, model=model, depth=depth, outcome=outcome,
-        on_node_event=on_node_event,
+        on_node_event=on_node_event, on_application=on_application,
     )
     _RUNS[(user_id, session_id)] = run
     await _save(run)

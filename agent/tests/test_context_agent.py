@@ -200,7 +200,8 @@ def test_registered_applications_list_newest_first_and_replace_by_name(client: T
                                                                     monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(ctx, "APPS_DIR", "/config/workspace")
     user = "6f1c2d3e-4a5b-4c6d-8e7f-0123456789ab"
-    register = ctx.register_application_tool(user)
+    heard: list[ctx.Application] = []
+    register = ctx.register_application_tool(user, heard.append)
     with pytest.raises(ValueError):
         asyncio.run(register(name="Tide", kind="web", location="/config/workspace/tide/dist", description="Tides."))
     asyncio.run(register(name="Tide", kind="web", location="https://tide-one.vercel.app", description="Tides."))
@@ -209,6 +210,7 @@ def test_registered_applications_list_newest_first_and_replace_by_name(client: T
     listed = client.get("/context/applications", params={"user_id": user}).json()["applications"]
     assert [(item["name"], item["location"]) for item in listed] == [
         ("tide", "https://tide-two.vercel.app"), ("Pager", "/config/workspace/pager/app.apk")]
+    assert [item.name for item in heard] == ["Tide", "Pager", "tide"]
     removed = client.delete(f"/context/applications/{listed[1]['id']}", params={"user_id": user}).json()
     assert [item["name"] for item in removed["applications"]] == ["tide"]
     assert client.delete("/context/applications/app-missing", params={"user_id": user}).status_code == 404

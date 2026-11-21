@@ -40,6 +40,7 @@ import os
 import re
 import secrets
 import time
+from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any, Final, Literal
 
@@ -168,6 +169,29 @@ two short sentences after tool calls; the widget shows the graph, reply drafts a
 """
 
 
+#: How an agent has OpenCode build an app on the workspace computer and lists it under Applications: the Context Agent
+#: on an approved app, and Squad's app builder.
+OPENCODE_BUILD: Final = """1. computer_create_directory /config/workspace/<project> (a short kebab-case name).
+2. computer_start_process with
+   `cd /config/workspace/<project> && REN_USER_ID={user_id} opencode run --standalone --auto "<brief>"`
+   (REN_USER_ID gives OpenCode the user's long-term memory and its own journal), then computer_read_process_output
+   until it exits.
+3. Check what it reports with computer_list_directory and computer_read_file, and tell the user where it is.
+4. Put it in the user's Applications (register_application): a web app once OpenCode has deployed dist/ with
+   `vercel deploy dist --prod --yes` (the Vercel CLI is signed in on the computer), with the URL it printed and its
+   icon at <url>/icon.png; an Android app with the APK's full path.
+The brief says what to build and for whom, the stack, where the result goes and how OpenCode checks it works:
+- Web app: a static site or a Vite app the browser opens on a desktop and on a phone, built to dist/, with its own
+  index.html and a 512x512 icon.png at the root of dist/ that index.html links as its icon and apple-touch-icon.
+- Android app: Kotlin and Jetpack Compose in Ren's Ink & Volt look (volt #5543FF in light and #8D98FE in dark,
+  ink #0B0C17, flat surfaces, 10 dp controls, 12 dp cards, Bricolage Grotesque, Inter and JetBrains Mono), with a
+  launcher icon. The computer has JDK 21 (JAVA_HOME), the Android SDK with platform 36 and build-tools 36.0.0
+  (ANDROID_HOME, /config/Android/Sdk) and Gradle 8.14.3 on PATH: the project uses AGP 8.13.2 and Kotlin 2.3.21,
+  compileSdk and targetSdk 36, minSdk 29, applicationId com.ren.apps.<project without dashes>, and a wrapper made
+  with `gradle wrapper --gradle-version 8.14.3`; `./gradlew assembleDebug` builds
+  app/build/outputs/apk/debug/app-debug.apk, whose full path OpenCode reports.
+"""
+
 OPENCODE_PROMPT: Final = """
 Apps: Ren can build the user small apps of their own. When what the user does (browsing, searches, chats,
 notifications, the apps on their phone, saved context) shows a recurring need that an app would serve better than
@@ -191,26 +215,7 @@ starter issues. Fold OpenCode's sharpest ideas into your recommendations.
 Building software: OpenCode, a coding agent, runs on Ren's workspace computer (its computer_* tools, Desktop
 Commander, in the home /config). When the user approves an app, wants a web app for their browser or an Android app,
 or a specialist needs code no library tool provides, hand the build to OpenCode instead of writing the code yourself:
-1. computer_create_directory /config/workspace/<project> (a short kebab-case name).
-2. computer_start_process with
-   `cd /config/workspace/<project> && REN_USER_ID={user_id} opencode run --standalone --auto "<brief>"`
-   (REN_USER_ID gives OpenCode the user's long-term memory and its own journal), then computer_read_process_output
-   until it exits.
-3. Check what it reports with computer_list_directory and computer_read_file, and tell the user where it is.
-4. Put it in the user's Applications (register_application): a web app once OpenCode has deployed dist/ with
-   `vercel deploy dist --prod --yes` (the Vercel CLI is signed in on the computer), with the URL it printed and its
-   icon at <url>/icon.png; an Android app with the APK's full path.
-The brief says what to build and for whom, the stack, where the result goes and how OpenCode checks it works:
-- Web app: a static site or a Vite app the browser opens on a desktop and on a phone, built to dist/, with its own
-  index.html and a 512x512 icon.png at the root of dist/ that index.html links as its icon and apple-touch-icon.
-- Android app: Kotlin and Jetpack Compose in Ren's Ink & Volt look (volt #5543FF in light and #8D98FE in dark,
-  ink #0B0C17, flat surfaces, 10 dp controls, 12 dp cards, Bricolage Grotesque, Inter and JetBrains Mono), with a
-  launcher icon. The computer has JDK 21 (JAVA_HOME), the Android SDK with platform 36 and build-tools 36.0.0
-  (ANDROID_HOME, /config/Android/Sdk) and Gradle 8.14.3 on PATH: the project uses AGP 8.13.2 and Kotlin 2.3.21,
-  compileSdk and targetSdk 36, minSdk 29, applicationId com.ren.apps.<project without dashes>, and a wrapper made
-  with `gradle wrapper --gradle-version 8.14.3`; `./gradlew assembleDebug` builds
-  app/build/outputs/apk/debug/app-debug.apk, whose full path OpenCode reports.
-- Code for a specialist: a Strands @tool module the specialist's config lists in tools, nothing else.
+""" + OPENCODE_BUILD + """- Code for a specialist: a Strands @tool module the specialist's config lists in tools, nothing else.
 Specialists themselves are always create_harness configs with schedule_agent run times, never code OpenCode writes.
 """
 
@@ -444,8 +449,11 @@ async def write_applications(user_id: str, applications: list[Application]) -> N
         APPLICATIONS_KEY, Applications(applications=applications).model_dump_json().encode())
 
 
-def register_application_tool(user_id: str) -> AgentTool:
-    """``register_application`` bound to one signed-in user: the apps listed under Applications in the sidebar."""
+def register_application_tool(
+    user_id: str, on_register: Callable[[Application], None] | None = None
+) -> AgentTool:
+    """``register_application`` bound to one signed-in user: the apps listed under Applications in the sidebar.
+    ``on_register`` hears each app it lists (a Squad run keeps the app it built)."""
 
     @tool
     async def register_application(name: str, kind: Literal["web", "android"], location: str,
@@ -470,6 +478,8 @@ def register_application_tool(user_id: str) -> AgentTool:
                                   description=description.strip(), created_at=time.time(), icon=icon.strip())
         others = [item for item in await read_applications(user_id) if item.name.casefold() != clean.casefold()]
         await write_applications(user_id, [application, *others])
+        if on_register is not None:
+            on_register(application)
         return {"status": "success", "content": [
             {"json": {"application": application.model_dump()}},
             {"text": f"{application.name} is under Applications in the sidebar."},
