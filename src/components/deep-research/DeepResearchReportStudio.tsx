@@ -410,7 +410,7 @@ export function DeepResearchReportStudio({ snapshot, userId }: DeepResearchRepor
       const client = createContextClient(API_BASE_URL, userId || 'default')
       await client.add({
         kind: 'document',
-        title: snapshot.title || snapshot.query || 'Deep Research Dossier',
+        title: snapshot.title || snapshot.query || 'Squad report',
         text: markdown,
         url: researchUrl(snapshot.session_id),
       })
@@ -540,8 +540,8 @@ export function DeepResearchReportStudio({ snapshot, userId }: DeepResearchRepor
                   documentState === 'error'
                     ? documentError
                     : snapshot.document_id
-                      ? 'Open the report in Documents › Deep Research'
-                      : 'Saving the report to Documents › Deep Research'
+                      ? 'Open the report in Documents › Squad'
+                      : 'Saving the report to Documents › Squad'
                 }
                 className="inline-flex h-7 items-center gap-1.5 rounded-lg border border-blurple-600/35 bg-blurple-600/10 px-2.5 font-sans text-[11.5px] font-medium text-volt transition-colors hover:bg-blurple-600/15 disabled:opacity-60 dark:border-blurple-400/35 dark:bg-blurple-400/15 dark:hover:bg-blurple-400/25"
               >

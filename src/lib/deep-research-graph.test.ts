@@ -61,7 +61,7 @@ test('resolveScope walks into nested formations and refuses agents and unknown i
 
   assert.deepEqual(
     scopeTrail(topology, ['data_analysis_graph']).map((crumb) => crumb.label),
-    ['Deep Research', 'Data Analysis Graph'],
+    ['Squad', 'Data Analysis Graph'],
   )
   // A stale path stops at the last formation that exists.
   assert.equal(scopeTrail(topology, ['data_analysis_graph', 'gone']).length, 2)

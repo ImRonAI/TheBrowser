@@ -16,6 +16,10 @@ import { API_BASE_URL } from './api-base.ts'
 export type ResearchDepth = 'fast' | 'low' | 'medium' | 'high' | 'xhigh' | 'ultra'
 export const RESEARCH_DEPTHS: readonly ResearchDepth[] = ['fast', 'low', 'medium', 'high', 'xhigh', 'ultra']
 export const DEFAULT_RESEARCH_DEPTH: ResearchDepth = 'medium'
+/** What a Squad run ends in (`Outcome` in `agent/api/core/deep_research.py`). */
+export type SquadOutcome = 'report' | 'deck'
+export const SQUAD_OUTCOMES: readonly SquadOutcome[] = ['report', 'deck']
+export const DEFAULT_SQUAD_OUTCOME: SquadOutcome = 'report'
 
 export interface DepthMetadata {
   id: ResearchDepth
@@ -61,7 +65,7 @@ export interface FormationTopology {
 /** `FORMATION_TOPOLOGY` in `agent/api/core/deep_research.py`, drawn until `/deep-research/status` answers. */
 export const DEFAULT_FORMATION_TOPOLOGY: FormationTopology = {
   id: 'deep_research_graph',
-  label: 'Deep Research',
+  label: 'Squad',
   kind: 'graph',
   nodes: [
     {
@@ -353,6 +357,8 @@ export interface DeepResearchSnapshot {
   context: string
   title: string
   depth: ResearchDepth
+  /** Null for a run saved before outcomes, which ran the whole formation. */
+  outcome: SquadOutcome | null
   status: DeepResearchRunStatus
   active: boolean
   created_at: string
@@ -391,6 +397,8 @@ export interface DeepResearchStatusResponse {
   default_selection: DeepResearchSelection
   depths: ResearchDepth[]
   topology: FormationTopology
+  outcomes: SquadOutcome[]
+  topologies: Partial<Record<SquadOutcome, FormationTopology>>
 }
 
 export interface StartDeepResearchInput {
@@ -398,6 +406,7 @@ export interface StartDeepResearchInput {
   user_id?: string | undefined
   context?: string | null | undefined
   depth?: ResearchDepth | undefined
+  outcome?: SquadOutcome | undefined
   provider?: string | null | undefined
   model_id?: string | null | undefined
   reasoning_effort?: string | null | undefined
@@ -589,8 +598,9 @@ export function emptyDeepResearchSnapshot(sessionId: string, init?: Partial<Deep
     user_id: 'default',
     query: '',
     context: '',
-    title: 'Deep Research',
+    title: 'Squad',
     depth: DEFAULT_RESEARCH_DEPTH,
+    outcome: null,
     status: 'running',
     active: false,
     created_at: now,
@@ -631,6 +641,7 @@ function withMeta(snapshot: DeepResearchSnapshot, raw: Json): DeepResearchSnapsh
     context: asString(raw["context"]) || snapshot.context,
     title: asString(raw["title"]) || snapshot.title,
     depth: RESEARCH_DEPTHS.find((value) => value === raw["depth"]) ?? snapshot.depth,
+    outcome: SQUAD_OUTCOMES.find((value) => value === raw["outcome"]) ?? snapshot.outcome,
     status,
     active: typeof raw["active"] === 'boolean' ? raw["active"] : snapshot.active,
     created_at: asString(raw["created_at"]) || snapshot.created_at,
@@ -1229,6 +1240,12 @@ export async function fetchDeepResearchStatus(options: RequestOptions = {}): Pro
     },
     depths: depths.length > 0 ? depths : [...RESEARCH_DEPTHS],
     topology: normalizeFormationTopology(raw["topology"]),
+    outcomes: asArray(raw["outcomes"]).filter((value): value is SquadOutcome => SQUAD_OUTCOMES.some((outcome) => outcome === value)),
+    topologies: Object.fromEntries(
+      Object.entries(asRecord(raw["topologies"]))
+        .filter((entry): entry is [SquadOutcome, unknown] => SQUAD_OUTCOMES.some((outcome) => outcome === entry[0]))
+        .map(([outcome, topology]) => [outcome, normalizeFormationTopology(topology)]),
+    ),
   }
 }
 
@@ -1237,6 +1254,7 @@ export async function startDeepResearchRun(input: StartDeepResearchInput, option
     query: input.query.trim(),
     user_id: input.user_id || 'default',
     depth: input.depth ?? DEFAULT_RESEARCH_DEPTH,
+    outcome: input.outcome ?? DEFAULT_SQUAD_OUTCOME,
     context: input.context?.trim() ?? '',
     provider: input.provider || null,
     model_id: input.model_id || null,
@@ -1318,7 +1336,7 @@ export async function streamDeepResearchEvents(
     { headers: { Accept: 'text/event-stream' }, ...(options.signal ? { signal: options.signal } : {}) },
   )
   if (!response.ok) throw new Error(`HTTP ${response.status}: ${await response.text()}`)
-  if (!response.body) throw new Error('Deep Research SSE response has no body')
+  if (!response.body) throw new Error('Squad SSE response has no body')
 
   let finished = false
   let lastSequence = options.after ?? 0
