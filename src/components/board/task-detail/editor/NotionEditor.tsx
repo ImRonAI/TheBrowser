@@ -26,7 +26,7 @@ import {
   Underline as UnderlineIcon, 
   Code as CodeIcon
 } from 'lucide-react'
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 
 const lowlight = createLowlight(common)
 
@@ -61,7 +61,9 @@ export function NotionEditor({
   editorClassName = 'prose prose-lg dark:prose-invert max-w-none focus:outline-none min-h-[200px] p-6',
   preview = false,
 }: NotionEditorProps) {
-  
+  /** What the editor gave `onChange` and `content` has not handed back yet, oldest first. */
+  const emitted = useRef<string[]>([])
+
   const editor = useEditor({
     editable: !readOnly,
     extensions: [
@@ -112,7 +114,9 @@ export function NotionEditor({
     content,
     shouldRerenderOnTransaction: false,
     onUpdate: ({ editor }) => {
-      onChange(editor.getHTML())
+      const html = editor.getHTML()
+      emitted.current = [...emitted.current.slice(-7), html]
+      onChange(html)
     },
     editorProps: {
       attributes: {
@@ -144,6 +148,14 @@ export function NotionEditor({
     if (!editor) return
 
     const nextContent = content || ''
+    // The editor's own text handed back is not new content, and by now the editor may hold later typing, which
+    // setting this text again would drop.
+    const echo = emitted.current.lastIndexOf(nextContent)
+    if (echo >= 0) {
+      emitted.current = emitted.current.slice(echo + 1)
+      return
+    }
+    emitted.current = []
     if (nextContent !== editor.getHTML()) {
       editor.commands.setContent(nextContent, { emitUpdate: false })
     }
