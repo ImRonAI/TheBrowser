@@ -6,6 +6,7 @@
  * version-checked: a stale version answers 409.
  * Pure (relative imports) so node:test can run it.
  */
+import type { Grid, GridCell } from './grid.ts'
 import { allProjectPages, type ProjectsRequest } from './projects-api.ts'
 
 type Row = Record<string, any>
@@ -65,6 +66,26 @@ export interface ExportedDocument { filename: string; media_type: string; data: 
 export const exportDocument = (request: ProjectsRequest, id: string, format: DocumentExportFormat) =>
   request<ExportedDocument>(`/documents/${encodeURIComponent(id)}/export?format=${format}`)
 
+/** A spreadsheet as an Excel file: each formula with the result it has in `values`, by sheet, row and cell. */
+export const exportGrid = (request: ProjectsRequest, grid: Grid, values: GridCell[][][]) =>
+  request<ExportedDocument>('/grids/export', 'POST', { grid, values })
+
+/** Hand the browser `blob` as a download named `filename`. */
+export function saveFile(filename: string, blob: Blob): void {
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000)
+}
+
+/** Save a file the backend made: a printed page, or a spreadsheet's Excel file. */
+export const saveExported = (file: ExportedDocument) =>
+  saveFile(file.filename, new Blob([Uint8Array.from(atob(file.data), (char) => char.charCodeAt(0))], { type: file.media_type }))
+
 /** The Documents library (`ron://documents`), optionally opened on one page. */
 export const documentsLibraryUrl = (documentId?: string | null) =>
   documentId ? `ron://documents/${documentId}` : 'ron://documents'
@@ -117,11 +138,15 @@ export function createProjectFromDocumentPrompt(document: { id: string; title: s
   ].join('\n')
 }
 
-/** A failed Projects request as the page says it: a lost sign-in reads as one instead of a bare status. */
+/**
+ * A failed Projects request as the page says it: a lost sign-in reads as one instead of a bare status, and a page
+ * past what the server holds (`DocumentCreate.content`, 2,000,000 characters) as one too large to save.
+ */
 export function documentErrorMessage(error: unknown, fallback: string): string {
   if ((error as { status?: number } | null)?.status === 401) return 'You’re signed out. Sign in again to open and save documents.'
   const message = error instanceof Error ? error.message : ''
   if (message === 'Session changed; reload Projects.') return 'You signed in or out. Reload Documents to continue as this account.'
+  if (message.includes('at most 2000000 characters')) return 'This page is too large to save: a page holds 2,000,000 characters. Make its spreadsheets or pictures smaller.'
   return message || fallback
 }
 

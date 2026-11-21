@@ -20,7 +20,7 @@ import {
   type WheelEvent,
 } from 'react'
 import { motion, useReducedMotion } from 'framer-motion'
-import { AppWindow, ArrowUp, FileText, Globe, Loader2, Presentation, Smartphone, type LucideIcon } from 'lucide-react'
+import { AppWindow, ArrowUp, FileText, Globe, Loader2, Presentation, Sheet, Smartphone, type LucideIcon } from 'lucide-react'
 import { Suggestions, Suggestion } from '@/components/ai-elements/suggestion'
 import { Marker } from '@/components/brand'
 import { ContextMentionList, ContextPicker } from '@/components/agent-panel/ContextPicker'
@@ -41,8 +41,8 @@ import {
   type ContextItem,
 } from '@/lib/chat-context'
 import {
-  BUILD_OUTCOMES,
   DEPTH_METADATA,
+  REPORT_OUTCOMES,
   type DeepResearchSelection,
   type FormationTopology,
   type ResearchDepth,
@@ -57,14 +57,15 @@ import { cn } from '@/utils/cn'
 const OUTCOME_METADATA: readonly { id: SquadOutcome; label: string; icon: LucideIcon; description: string }[] = [
   { id: 'report', label: 'Report', icon: FileText, description: 'A cited report as a ren Document, printed to PDF from it.' },
   { id: 'deck', label: 'Slide Deck', icon: Presentation, description: 'A Slidev deck, written from a cited report.' },
+  { id: 'datagrid', label: 'DataGrid', icon: Sheet, description: 'A spreadsheet of the researched data with formulas, sorting and filters, as a ren Document that downloads as Excel or CSV.' },
   { id: 'web_app', label: 'Web App', icon: AppWindow, description: 'A web app OpenCode builds from the research and deploys, opened in Ren.' },
   { id: 'website', label: 'Website', icon: Globe, description: 'A website OpenCode builds from the research and deploys, opened in Ren.' },
   { id: 'mobile_app', label: 'Mobile App', icon: Smartphone, description: 'An Android app OpenCode builds from the research, installed from Applications on your phone.' },
 ]
 
-/** What a build outcome's run makes, as the picker names and draws it; undefined for a report's or a deck's run. */
-export function builtOutcome(outcome: SquadOutcome | null | undefined) {
-  return OUTCOME_METADATA.find((item) => item.id === outcome && BUILD_OUTCOMES.includes(item.id))
+/** What a run that writes no report makes, as the picker names and draws it; undefined for a report's or a deck's run. */
+export function madeOutcome(outcome: SquadOutcome | null | undefined) {
+  return OUTCOME_METADATA.find((item) => item.id === outcome && !REPORT_OUTCOMES.includes(item.id))
 }
 
 const EASE = [0.16, 1, 0.3, 1] as const

@@ -41,6 +41,7 @@ import yaml
 from bs4 import BeautifulSoup, NavigableString, Tag
 from markdownify import MarkdownConverter
 
+from agent.api.core.grid import grid_from_json, grid_markdown
 from agent.api.core.projects import ProjectIdentity, ProjectService
 from agent.api.core.teaching import GroupMember, GroupStep, Step, TeachingService, ToolGroup, _configured_skills, _scope
 
@@ -138,14 +139,18 @@ def embed_tabs_markdown(block: Tag) -> str:
 
 
 class _PageMarkdown(MarkdownConverter):
-    """markdownify, with ReferenceMention chips written as ``@[label](ron://kind/id)`` (unescaped) and Embed tabs
-    blocks as their ```embeds fence."""
+    """markdownify, with ReferenceMention chips written as ``@[label](ron://kind/id)`` (unescaped), Embed tabs
+    blocks as their ```embeds fence and grid blocks as their ```grid fence."""
 
     def convert_div(self, el: Tag, text: str, parent_tags: set[str]) -> str:
         if el.get("data-type") == "embed-tabs":
             fence = embed_tabs_markdown(el)
             return f"\n\n{fence}\n\n" if fence else ""
         return str(super().convert_div(el, text, parent_tags))
+
+    def convert_grid_block(self, el: Tag, text: str, parent_tags: set[str]) -> str:
+        grid = grid_from_json(str(el.get("data-grid") or ""))
+        return f"\n\n{grid_markdown(grid)}\n\n" if grid else text
 
     def convert_span(self, el: Tag, text: str, parent_tags: set[str]) -> str:
         if el.get("data-type") == "reference":

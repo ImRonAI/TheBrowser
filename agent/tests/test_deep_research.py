@@ -33,6 +33,7 @@ from strands.vended_plugins.context_injector import ContextInjector
 
 from agent.api.core import config as app_config
 from agent.api.core import deep_research, panel_storage
+from agent.api.core.deep_research_tools import deep_research_tools
 from agent.api.endpoints import deep_research as deep_research_endpoints
 
 _ROLE_RE = re.compile(r"^## Your role: (.+)$", re.MULTILINE)
@@ -143,7 +144,7 @@ def isolated(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
 
 
 def _formations() -> list[deep_research.FormationSpec]:
-    return [*deep_research.FORMATION_TOPOLOGY["nodes"], deep_research.BUILD_SWARM]
+    return [*deep_research.FORMATION_TOPOLOGY["nodes"], deep_research.BUILD_SWARM, deep_research.GRID_SWARM]
 
 
 def _agents() -> list[deep_research.AgentSpec]:
@@ -153,7 +154,7 @@ def _agents() -> list[deep_research.AgentSpec]:
 def test_every_agent_has_its_skill_and_swarms_have_no_edges() -> None:
     skills = {skill.name for skill in deep_research.Skill.from_directory(deep_research.DEEP_RESEARCH_SKILLS_DIR)}
     agents = _agents()
-    assert len(agents) == 21
+    assert len(agents) == 23
     assert len({agent["id"] for agent in agents}) == len(agents)
     assert {agent["skill"] for agent in agents} <= skills
     for formation in _formations():
@@ -232,8 +233,8 @@ def computer(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_build_outcomes_are_offered_only_with_the_workspace_computer(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(app_config, "COMPUTER_MCP_URL", "")
-    assert deep_research.available_outcomes() == ("report", "deck")
-    assert asyncio.run(deep_research_endpoints.get_deep_research_status())["outcomes"] == ["report", "deck"]
+    assert deep_research.available_outcomes() == ("report", "deck", "datagrid")
+    assert asyncio.run(deep_research_endpoints.get_deep_research_status())["outcomes"] == ["report", "deck", "datagrid"]
     monkeypatch.setattr(app_config, "COMPUTER_MCP_URL", "http://computer:8080/computer/mcp")
     monkeypatch.setattr(app_config, "COMPUTER_MCP_TOKEN", "token")
     assert deep_research.available_outcomes() == deep_research.VALID_OUTCOMES
@@ -305,6 +306,56 @@ async def test_a_build_outcome_needs_the_computer_a_mobile_app_an_account_and_th
                                     created_at=1.0)
     listeners[0](app)
     assert meta.get("application") == app.model_dump()
+
+
+def test_a_spreadsheet_outcome_researches_then_builds_the_grid_and_checks_it(isolated: None) -> None:
+    topology = deep_research.outcome_topology("datagrid")
+    assert [node["id"] for node in topology["nodes"]] == ["research_swarm", "grid_swarm"]
+    assert topology["edges"] == [{"from": "research_swarm", "to": "grid_swarm"}]
+    assert "datagrid" in deep_research.available_outcomes()
+    graph = deep_research.build_deep_research_graph(
+        session_id="dr-grid", user_id="u1", model=ScriptedModel(), depth="fast", outcome="datagrid"
+    )
+    agents = _formation_agents(graph)
+    assert set(agents) == deep_research.OUTCOME_AGENTS["datagrid"]
+    for agent_id in ("grid_builder", "grid_qa"):
+        prompt = agents[agent_id].system_prompt or ""
+        assert "grid.json" in prompt and "- research.md: at least 15" in prompt and "- report.md:" not in prompt
+        assert _has_turn_budget(agents[agent_id])
+    assert deep_research.GRID_JSON in (agents["grid_builder"].system_prompt or "")
+    # The tool Ren's agents start a run with names every outcome a run can make.
+    start = deep_research_tools(user_id="u1")[0]
+    assert tuple(start.tool_spec["inputSchema"]["json"]["properties"]["outcome"]["enum"]) == deep_research.VALID_OUTCOMES
+
+
+@pytest.mark.asyncio
+async def test_a_spreadsheet_run_gives_its_grid_and_opens_as_a_document(
+    isolated: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    model = ScriptedModel()
+    monkeypatch.setattr(deep_research, "build_model", lambda *args, **kwargs: model)
+    monkeypatch.setattr(deep_research, "resolve_selection", lambda *args: ("gemini", "scripted"))
+    meta = await deep_research.start_run(user_id="u1", query="EV range by model", depth="fast", outcome="datagrid")
+    session_id = meta["session_id"]
+    run = await _wait_until_done("u1", session_id)
+    assert run["status"] == "completed" and run["grid_json"] == ""
+    assert model.roles[-2:] == ["Grid Builder", "Grid QA"]
+    assert await deep_research.report_document(user_id="u1", session_id=session_id) is None
+    grid = {"title": "EV range", "sheets": [
+        {"name": "Models", "rows": [["Model", "Range (km)", "Price (USD)", "USD per km", "Source"],
+                                    ["Atlas", 520, 41000, "=C2/B2", "[1]"]], "formats": {"D": "$#,##0.00"}},
+        {"name": "Sources", "rows": [["Number", "Title", "URL"], [1, "Atlas specifications", "https://example.com/atlas"]]},
+    ]}
+    (deep_research.artifacts_dir(session_id) / "grid.json").write_text(json.dumps(grid), encoding="utf-8")
+    run = await deep_research.get_run(user_id="u1", session_id=session_id)
+    assert run is not None and json.loads(str(run["grid_json"])) == grid
+    document = await deep_research.report_document(user_id="u1", session_id=session_id)
+    assert document is not None and document["title"] == "EV range"
+    content = str(document["content"])
+    assert content.startswith('<grid-block data-grid="{&quot;title&quot;: &quot;EV range&quot;')
+    assert "<caption>Models</caption>" in content and "<th>Range (km)</th>" in content and "<td>=C2/B2</td>" in content
+    (deep_research.artifacts_dir(session_id) / "grid.json").write_text("{not json", encoding="utf-8")
+    assert await deep_research.report_document(user_id="u1", session_id=session_id) is None
 
 
 def test_the_formation_is_a_graph_of_swarms_and_graphs(isolated: None) -> None:

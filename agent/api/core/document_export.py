@@ -55,12 +55,15 @@ table { border-collapse: separate; border-spacing: 0; width: 100%; margin: 1.2em
 th, td { padding: 0.55em 0.75em; text-align: left; vertical-align: top; border-bottom: 1px solid var(--rule); }
 tr:last-child td { border-bottom: none; }
 th { background: var(--surface); font-weight: 600; font-size: 0.92em; }
+caption { caption-side: top; text-align: left; padding: 0 0.94em 0.5em; font-family: "JetBrains Mono", Menlo, monospace;
+          font-size: 0.8em; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
 blockquote { border-left: 3px solid var(--volt); margin: 1.2em 0; padding: 0.3em 1.1em; color: var(--ink-2); }
 pre { background: var(--surface); padding: 0.9em 1.1em; border-radius: 12px; overflow-x: auto; font-size: 0.86em; }
 code { font-family: "JetBrains Mono", Menlo, Consolas, monospace; }
 a { color: var(--volt); text-decoration: none; }
 hr { border: none; border-top: 1px solid var(--rule); margin: 2em 0; }
 img, table, pre, blockquote, workflow-block { page-break-inside: avoid; }
+grid-block { display: block; } grid-block table { page-break-inside: auto; } grid-block tr { page-break-inside: avoid; }
 @page { margin: 18mm 16mm 20mm; }
 @media print { body { margin: 0 auto; font-size: 10.5pt; } }
 """

@@ -470,10 +470,13 @@ EMBED_TABS_MARKDOWN = (
 
 
 def markdown_to_html(markdown: str) -> str:
-    """Markdown an agent writes, as the HTML the issue/page editor stores (CommonMark + tables)."""
+    """Markdown an agent writes, as the HTML the issue/page editor stores (CommonMark + tables), each ```grid fence
+    as the editor's grid block."""
     from markdown_it import MarkdownIt
 
-    return MarkdownIt("commonmark", {"html": False}).enable("table").render(markdown or "")
+    from agent.api.core.grid import with_grid_blocks
+
+    return with_grid_blocks(MarkdownIt("commonmark", {"html": False}).enable("table").render(markdown or ""))
 
 
 __all__ = ["CONTEXT_READING", "EMBED_TABS_MARKDOWN", "MEDIA_MODEL", "Media", "build_media_model", "describe_media", "download_attachment",

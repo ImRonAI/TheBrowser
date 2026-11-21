@@ -1,4 +1,4 @@
-export { DeepResearchHero, builtOutcome } from './DeepResearchHero'
+export { DeepResearchHero, madeOutcome } from './DeepResearchHero'
 export { DeepResearchFormationView, formatDurationMs } from './DeepResearchFormationView'
 export { DeepResearchFormationWorkbench, type FormationViewMode } from './DeepResearchFormationWorkbench'
 export { DeepResearchReportStudio, type ResearchStudioTab } from './DeepResearchReportStudio'

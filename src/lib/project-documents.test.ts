@@ -225,9 +225,10 @@ test('Create project with Ren names the page and the workspace tools for each st
     /in the Apollo \(APL\) project now; adding it moves it, with the pages under it, into the new project/)
 })
 
-test('a lost sign-in reads as one; other failures keep the server’s words', () => {
+test('a lost sign-in and a page too large read as what they are; other failures keep the server’s words', () => {
   assert.match(documentErrorMessage(Object.assign(new Error('Missing bearer token'), { status: 401 }), 'x'), /signed out\. Sign in again/)
   assert.match(documentErrorMessage(new Error('Session changed; reload Projects.'), 'x'), /signed in or out/)
+  assert.match(documentErrorMessage(Object.assign(new Error('String should have at most 2000000 characters'), { status: 422 }), 'x'), /too large to save: a page holds 2,000,000 characters/)
   assert.equal(documentErrorMessage(Object.assign(new Error('Project not accessible'), { status: 403 }), 'x'), 'Project not accessible')
   assert.equal(documentErrorMessage('nope', 'The page could not be saved.'), 'The page could not be saved.')
   assert.equal(documentErrorMessage(new Error(''), 'Fallback'), 'Fallback')

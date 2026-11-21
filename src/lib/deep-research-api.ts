@@ -18,8 +18,10 @@ export type ResearchDepth = 'fast' | 'low' | 'medium' | 'high' | 'xhigh' | 'ultr
 export const RESEARCH_DEPTHS: readonly ResearchDepth[] = ['fast', 'low', 'medium', 'high', 'xhigh', 'ultra']
 export const DEFAULT_RESEARCH_DEPTH: ResearchDepth = 'medium'
 /** What a Squad run ends in (`Outcome` in `agent/api/core/deep_research.py`). */
-export type SquadOutcome = 'report' | 'deck' | 'web_app' | 'website' | 'mobile_app'
-export const SQUAD_OUTCOMES: readonly SquadOutcome[] = ['report', 'deck', 'web_app', 'website', 'mobile_app']
+export type SquadOutcome = 'report' | 'deck' | 'datagrid' | 'web_app' | 'website' | 'mobile_app'
+export const SQUAD_OUTCOMES: readonly SquadOutcome[] = ['report', 'deck', 'datagrid', 'web_app', 'website', 'mobile_app']
+/** The outcomes whose team writes a report (`REPORT_OUTCOMES` there). */
+export const REPORT_OUTCOMES: readonly SquadOutcome[] = ['report', 'deck']
 /** The outcomes OpenCode builds (`BUILD_OUTCOMES` there): offered only while Ren's workspace computer is configured. */
 export const BUILD_OUTCOMES: readonly SquadOutcome[] = ['web_app', 'website', 'mobile_app']
 export const DEFAULT_SQUAD_OUTCOME: SquadOutcome = 'report'
@@ -384,6 +386,8 @@ export interface DeepResearchSnapshot {
   files: string[]
   report_markdown: string
   slidev_markdown: string
+  /** A spreadsheet's run: grid.json as its team wrote it (`gridFromJson` reads it). */
+  grid_json: string
   artifacts: DeepResearchArtifacts
   /** The Document the report was saved as (`ron://documents/<id>`), once it is saved. */
   document_id: string | null
@@ -627,6 +631,7 @@ export function emptyDeepResearchSnapshot(sessionId: string, init?: Partial<Deep
     files: [],
     report_markdown: '',
     slidev_markdown: '',
+    grid_json: '',
     artifacts: {},
     document_id: null,
     application: null,
@@ -705,6 +710,7 @@ export function normalizeDeepResearchSnapshot(raw: unknown, previous?: DeepResea
       artifacts: artifactsFor(sessionId, files),
       report_markdown: asString(obj["report_markdown"]),
       slidev_markdown: asString(obj["slidev_markdown"]),
+      grid_json: asString(obj["grid_json"]),
     },
     obj,
   )

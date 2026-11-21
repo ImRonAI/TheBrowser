@@ -15,6 +15,7 @@ import { PageLink } from './PageLink'
 import { IssueEmbed } from './IssueEmbed'
 import { ChatReference } from './ChatReference'
 import { RonButton } from './RonButton'
+import { GridBlock } from './GridBlock'
 
 /**
  * Every block the "/" menu can insert, in every NotionEditor (pages, issue descriptions, read-only previews),
@@ -26,5 +27,5 @@ export const BLOCK_EXTENSIONS: Extensions = [
   Callout, CardTitle, Card, Column, Columns, TableOfContentsBlock,
   RonBlockMath, RonInlineMath, MathEditing,
   RonTextStyle, RonColor, RonHighlight,
-  DateChip, PageLink, IssueEmbed, ChatReference, RonButton,
+  DateChip, PageLink, IssueEmbed, ChatReference, RonButton, GridBlock,
 ]

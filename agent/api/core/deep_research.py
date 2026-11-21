@@ -69,6 +69,7 @@ from agent.api.core import config as app_config
 from agent.api.core.brave_tools import brave_tools
 from agent.api.core.context_agent import OPENCODE_BUILD, Application, computer_tools, register_application_tool
 from agent.api.core.dreaming import MEMORY_PROTOCOL, brain_memory
+from agent.api.core.grid import GRID_JSON, GRID_MARKDOWN, grid_block_html, grid_from_json
 from agent.api.core.media_understanding import EMBED_TABS_MARKDOWN, markdown_to_html
 from agent.api.core.panel_agent import (
     DEFAULT_PROVIDER,
@@ -95,9 +96,12 @@ DEFAULT_DEPTH: Final[ResearchDepth] = "medium"
 #: The levels runs were saved with before these: the lowest, the default and the highest.
 LEGACY_DEPTHS: Final[dict[str, ResearchDepth]] = {"standard": "low", "deep": "medium", "exhaustive": "ultra"}
 RunStatus = Literal["running", "completed", "failed", "cancelled"]
-#: What a Squad run ends in: a report is a Document; a deck is a Slidev deck beside the report it is written from.
-Outcome = Literal["report", "deck", "web_app", "website", "mobile_app"]
-VALID_OUTCOMES: Final[tuple[Outcome, ...]] = ("report", "deck", "web_app", "website", "mobile_app")
+#: What a Squad run ends in: a report is a Document; a deck is a Slidev deck beside the report it is written from; a
+#: datagrid is a spreadsheet, which opens as a Document too.
+Outcome = Literal["report", "deck", "datagrid", "web_app", "website", "mobile_app"]
+VALID_OUTCOMES: Final[tuple[Outcome, ...]] = ("report", "deck", "datagrid", "web_app", "website", "mobile_app")
+#: The outcomes whose team writes report.md.
+REPORT_OUTCOMES: Final[frozenset[Outcome]] = frozenset({"report", "deck"})
 #: The outcomes OpenCode builds on Ren's workspace computer, offered only while it is configured.
 BUILD_OUTCOMES: Final[frozenset[Outcome]] = frozenset({"web_app", "website", "mobile_app"})
 DEFAULT_OUTCOME: Final[Outcome] = "report"
@@ -372,6 +376,32 @@ BUILD_SWARM: Final[FormationSpec] = {
     "edges": [],
 }
 
+#: The formation a spreadsheet's team ends in, after the research swarm.
+GRID_SWARM: Final[FormationSpec] = {
+    "id": "grid_swarm",
+    "label": "Grid Swarm",
+    "kind": "swarm",
+    "description": "Builds the spreadsheet from the research, every value with its source and every result a "
+    "formula, and checks it.",
+    "children": [
+        _agent(
+            "grid_builder",
+            "Grid Builder",
+            "data-visualization",
+            "Builds the spreadsheet the inquiry asks for from research.md and references.md and writes it as "
+            "grid.json: its sheets, a row per item, numbers as numbers, every result a formula and every row's source.",
+        ),
+        _agent(
+            "grid_qa",
+            "Grid QA",
+            "verification-before-completion",
+            "Checks grid.json with Python: its shape, every formula's cells, every value against research.md and "
+            "every source against references.md, and sends what fails back to the Grid Builder.",
+        ),
+    ],
+    "edges": [],
+}
+
 
 #: When each Swarm agent hands off. An agent that replies without handing off ends its Swarm, so only each Swarm's
 #: last check ends it.
@@ -393,6 +423,9 @@ SWARM_HANDOFFS: Final[dict[str, str]] = {
     "app_builder": "When OpenCode has built it, it works and register_application has listed it, hand off to app_qa.",
     "app_qa": "If it fails your check, hand off to app_builder with exactly what fails. When it passes, reply with "
     "your verdict and where it is without handing off: that ends the build.",
+    "grid_builder": "When grid.json is written, hand off to grid_qa.",
+    "grid_qa": "If grid.json fails your check, hand off to grid_builder with exactly what fails. When it passes, reply "
+    "with your verdict without handing off: that ends the spreadsheet.",
 }
 
 #: The agents each outcome's team keeps from ``FORMATION_TOPOLOGY``; a formation left with none drops out. The PDF is
@@ -407,6 +440,7 @@ _BUILD_AGENTS: Final[frozenset[str]] = frozenset(
 OUTCOME_AGENTS: Final[dict[Outcome, frozenset[str]]] = {
     "report": _RESEARCH_AGENTS,
     "deck": _RESEARCH_AGENTS | {"deck_designer", "deck_writer", "deck_qa", "deck_producer", "deck_build_qa"},
+    "datagrid": frozenset({"researcher", "fact_checker", "citation_manager", "research_qa", "grid_builder", "grid_qa"}),
     "web_app": _BUILD_AGENTS,
     "website": _BUILD_AGENTS,
     "mobile_app": _BUILD_AGENTS,
@@ -422,6 +456,7 @@ OUTCOME_HANDOFFS: Final[dict[Outcome, dict[str, str]]] = {
         "verdict without handing off: that ends the writing.",
     },
     "deck": {},
+    "datagrid": {},
     "web_app": {},
     "website": {},
     "mobile_app": {},
@@ -463,11 +498,11 @@ def build_note(outcome: Outcome, user_id: str) -> str:
 
 
 def outcome_topology(outcome: Outcome) -> Topology:
-    """``FORMATION_TOPOLOGY`` and ``BUILD_SWARM`` with only the outcome's team: its formations in order, each with
-    its kept agents."""
+    """``FORMATION_TOPOLOGY``, ``BUILD_SWARM`` and ``GRID_SWARM`` with only the outcome's team: its formations in
+    order, each with its kept agents."""
     kept = OUTCOME_AGENTS[outcome]
     nodes: list[FormationSpec] = []
-    for formation in (*FORMATION_TOPOLOGY["nodes"], BUILD_SWARM):
+    for formation in (*FORMATION_TOPOLOGY["nodes"], BUILD_SWARM, GRID_SWARM):
         children = [child for child in formation["children"] if child["id"] in kept]
         if children:
             ids = {child["id"] for child in children}
@@ -510,6 +545,24 @@ ROLE_NOTES: Final[dict[str, str]] = {
         "write the same title, steps and connections into report.md as a ```workflow fence holding "
         "{\"title\": ..., \"steps\": [...], \"connections\": [...]}.\n"
         f"- {EMBED_TABS_MARKDOWN} A YouTube video is a YouTube tab in such a fence, from a real URL a tool returned.\n"
+        f"- {GRID_MARKDOWN}\n"
+    ),
+    "grid_builder": (
+        "grid.json is the spreadsheet the user gets: it opens in Ren as a sheet to sort, filter and calculate with, "
+        "and downloads as an Excel file. Write it with Python (`json.dump`), so it is valid JSON:\n"
+        f"{GRID_JSON}\n"
+        "- One row per item the inquiry asks about and one column per fact, so every row reads on its own.\n"
+        "- Numbers are numbers, never text with a unit or a separator: the unit goes in the header (\"Price (USD)\") "
+        "and the column's number format shows it. A date is text as 2026-11-21.\n"
+        "- Whatever follows from other cells is a formula, never a typed result: totals, shares, differences, ranks, "
+        "and a summary sheet that reads the data sheet.\n"
+        "- Every data row ends with a Source column holding the reference numbers its facts came from, and the last "
+        "sheet, Sources, lists references.md: number, title, URL.\n"
+    ),
+    "grid_qa": (
+        "Load grid.json with Python and check it: every sheet has a header and rows no wider than it, numbers are "
+        "numbers, every formula points at cells that exist and hold what it needs, and nothing that follows from "
+        "other cells is typed in. Then compare every value with research.md and every Source with references.md.\n"
     ),
     "deck_designer": (
         "Load your Slidev skills with the `skills` tool before you design (Deckcraft's references/art-direction.md, "
@@ -677,14 +730,14 @@ def level_prompt(depth: ResearchDepth, today: str, outcome: Outcome = DEFAULT_OU
     """The level's prompt with the outcome's size and the way every agent works through its turns."""
     level = LEVELS[depth]
     low, high = level["pages"]
-    if outcome in BUILD_OUTCOMES:
-        size = f"- research.md: at least {level['sources']} distinct, good sources.\n"
-    else:
+    if outcome in REPORT_OUTCOMES:
         size = (
             f"- report.md: {low} to {high} pages (about {low * WORDS_PER_PAGE:,} to {high * WORDS_PER_PAGE:,} words), "
             f"with {level['figures']} figures or more and at least {level['sources']} distinct, good sources cited in "
             "it.\n"
         )
+    else:
+        size = f"- research.md: at least {level['sources']} distinct, good sources.\n"
     if outcome == "deck":
         size += f"- The deck: {level['slides']} slides.\n"
     return level["prompt"].format(label=level["label"], today=today) + (
@@ -1325,14 +1378,14 @@ def workspace_files(session_id: str) -> list[str]:
 
 
 async def get_run(*, user_id: str, session_id: str) -> JsonDict | None:
-    """The run's meta, every kept event, its workspace files and the text of report.md and slides.md."""
+    """The run's meta, every kept event, its workspace files and the text of report.md, slides.md and grid.json."""
     run = await _load(user_id, session_id)
     if run is None:
         return None
     workspace = artifacts_dir(session_id)
     texts = {
         key: (workspace / name).read_text(encoding="utf-8") if (workspace / name).is_file() else ""
-        for key, name in (("report_markdown", "report.md"), ("slidev_markdown", "slides.md"))
+        for key, name in (("report_markdown", "report.md"), ("slidev_markdown", "slides.md"), ("grid_json", "grid.json"))
     }
     return {**run.meta, "events": list(run.events), "files": workspace_files(session_id), **texts}
 
@@ -1379,11 +1432,19 @@ def _inline_image(workspace: Path, match: re.Match[str]) -> str:
 async def report_document(*, user_id: str, session_id: str) -> JsonDict | None:
     """report.md as the page editor stores it (``markdown_to_html``, as Ren's workspace tools save a page): its
     first heading as the title, its workflows as workflow blocks, its ```embeds fences left for the editor's Embed
-    tabs, its figures inline."""
+    tabs, its figures inline. A spreadsheet's run gives grid.json as the editor's grid block."""
     run = await _load(user_id, session_id)
+    if run is None:
+        return None
     workspace = artifacts_dir(session_id).resolve()
+    if run.meta.get("outcome") == "datagrid":
+        sheet = workspace / "grid.json"
+        grid = grid_from_json(sheet.read_text(encoding="utf-8")) if sheet.is_file() else None
+        if grid is None:
+            return None
+        return {"title": grid["title"], "content": grid_block_html(grid), "document_id": run.meta.get("document_id")}
     report = workspace / "report.md"
-    if run is None or not report.is_file():
+    if not report.is_file():
         return None
     content = markdown_to_html(report.read_text(encoding="utf-8"))
     content = _WORKFLOW_BLOCK.sub(_workflow_block, content)
