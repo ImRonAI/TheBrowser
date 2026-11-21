@@ -44,7 +44,7 @@ from strands.tools.registry import ToolRegistry
 from strands.types.tools import AgentTool, ToolContext
 from strands.vended_plugins.skills import AgentSkills
 
-from agent.api.core.dreaming import JOURNAL_DIRECTIVE, inherited_memory
+from agent.api.core.dreaming import MEMORY_PROTOCOL, inherited_memory
 
 ModelFactory: TypeAlias = Callable[[str], Model]
 AsyncToolLoader: TypeAlias = Callable[[], Awaitable[Sequence[AgentTool]]]
@@ -1037,7 +1037,7 @@ async def create_child_agent(
             name=spec.name,
             description=spec.description,
             model=model,
-            system_prompt=spec.system_prompt + (JOURNAL_DIRECTIVE if inherited else ""),
+            system_prompt=spec.system_prompt + (MEMORY_PROTOCOL if inherited else ""),
             tools=[*spec.tools, *inherited],
             plugins=list(plugins),
             background_tasks={

@@ -38,10 +38,9 @@ import logging
 import time
 from typing import Any
 
-from strands.memory import MemoryManager
 
 from agent.api.core import config as app_config
-from agent.api.core.dreaming import JOURNAL_DIRECTIVE, agent_memory
+from agent.api.core.dreaming import MEMORY_PROTOCOL, brain_memory
 from agent.api.core.panel_agent import (
     NIM_REASONING_EFFORTS_BY_MODEL,
     build_model,
@@ -249,7 +248,7 @@ def create_build_agent(*, user_id: str, session_id: str, model: Any, side_model_
     agent = create_harness(
         model=model,
         caching=False,
-        instructions=build_agent_prompt(workspace).strip() + JOURNAL_DIRECTIVE,
+        instructions=build_agent_prompt(workspace).strip() + MEMORY_PROTOCOL,
         tools=[
             _installed_tool(shell, "shell"),
             _installed_tool(editor, "editor"),
@@ -270,7 +269,7 @@ def create_build_agent(*, user_id: str, session_id: str, model: Any, side_model_
         background_tasks=_background(options),
         session=False,
         skills=False,
-        memory=MemoryManager(stores=agent_memory(user_id, "build")),
+        memory=brain_memory(user_id, "build"),
         interventions=None,
         name="Ren Build Agent",
         description="Ren's Build Agent: builds software in the session's private workspace",

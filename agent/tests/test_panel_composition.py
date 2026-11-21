@@ -171,14 +171,15 @@ def test_real_constructor_defaults_stream_and_complete_cleanup(offline):
     assert len(models) == 1
     result = asyncio.run(agent.invoke_async("hello"))
     assert result.stop_reason == "end_turn"
-    # Memory is the SDK's (core/memory.py, core/dreaming.py): native search_memory/add_memory, the journal
-    # tool, and userTurn injection that found nothing so the model saw only the message. Nothing is
-    # distilled during the conversation: only the journal takes the turn, for the dream.
-    assert {"search_memory", "add_memory", "journal", "remember_person", "list_learned_skills", "use_skill"} <= names
+    # Memory is the SDK's (core/memory.py, core/dreaming.py): native search_memory/add_memory, the memory and
+    # journal tools, and the index injection, which an empty brain skips so the model saw only the message.
+    # Nothing is distilled during the conversation: only the journal takes the turn, for the dream.
+    assert {"search_memory", "add_memory", "memory", "journal", "remember_person", "list_learned_skills",
+            "use_skill"} <= names
     assert "recall" not in names and "search_memories" not in names
     assert len(build.memory_models) == 1 and agent.aux_model is build.memory_models[0]
     assert [s.name for s in agent.memory_manager._stores] == [
-        "facts", "remember", "people", "feedback", "context", "tasks", "learned-skills", "brain", "journal/panel"]
+        "brain/people", "context", "tasks", "learned-skills", "brain", "journal/panel"]
     assert [s.name for s in agent.memory_manager._stores if s.extraction] == ["journal/panel"]
     texts = [b["text"] for m in models[0].calls[-1] for b in m["content"] if "text" in b]
     # No harness environment block: the server's cwd is Ren's own repository.

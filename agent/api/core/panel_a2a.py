@@ -17,6 +17,7 @@ from strands.tools.mcp import MCPClient
 
 from strands.types.tools import AgentTool
 
+from agent.api.core.dreaming import INDEX_INJECTION
 from agent.api.core.panel_tools import PanelToolCatalog
 
 __all__ = [
@@ -80,7 +81,7 @@ def create_a2a_agent_factory(
             session_manager=None,
             checkpointing=False,
             load_tools_from_directory=True,
-            memory_manager=MemoryManager(stores=list(memory())) if memory is not None else None,
+            memory_manager=MemoryManager(stores=list(memory()), injection=INDEX_INJECTION) if memory is not None else None,
         )
         try:
             for value in tools:

@@ -4,13 +4,12 @@ Identity is the Projects path (``project_identity``): the owner is the verified 
 a ``user_id`` from the request. Every store is a native ``FileMemoryStore``; this surface reads and
 writes the same storage namespace the store uses (``<user scope>/memory/<store>/``). A folder of the
 second brain is the store ``brain/<agent>`` (``core/dreaming.py``), and ``/memory/dreams`` lists and
-undoes the versions the dream wrote.
+undoes the dreams the user approved.
 Loopback only: never add ``/memory`` to the ngrok allowlist.
 """
 
 from __future__ import annotations
 
-import json
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -21,8 +20,20 @@ from strands.storage import Storage
 from strands.types.exceptions import StorageError
 from strands.vended_memory_stores.file_memory_store import FileMemoryStore
 
-from agent.api.core.dreaming import agent_memory, dream, folder, undo_dream
-from agent.api.core.memory import CATEGORIES, DESCRIPTIONS, PEOPLE_STORE, scope_store_name, user_stores
+from agent.api.core.dreaming import (
+    agent_memory,
+    dream,
+    dream_versions,
+    folder,
+    undo_dream,
+)
+from agent.api.core.memory import (
+    CATEGORIES,
+    DESCRIPTIONS,
+    scope_store_name,
+    user_stores,
+)
+from agent.api.core.migrate_brain import FOLDS
 from agent.api.core.panel_storage import get_user_session_storage
 from agent.api.core.projects import ProjectIdentity, project_identity
 
@@ -44,9 +55,14 @@ def _owner(request: Request, identity: ProjectIdentity) -> str:
     return identity.user_id
 
 
+#: The stores folded into the brain, under the names the Memory panel still opens.
+FOLDED = {old: f"brain/{new}" for old, new in FOLDS.items()}
+
+
 def _store_name(store: str) -> str:
-    if store in CATEGORIES or store == PEOPLE_STORE:
+    if store in CATEGORIES:
         return store
+    store = FOLDED.get(store, store)
     try:
         if store.startswith("brain/"):
             return f"brain/{folder(store[6:])}"
@@ -165,26 +181,24 @@ async def memory_search(request: Request, identity: Identity, q: str, max_result
 
 @router.get("/memory/dreams")
 async def memory_dreams(request: Request, identity: Identity) -> dict[str, Any]:
-    """The versions the dream wrote, newest first: each topic it changed and how it read before."""
+    """The dreams the user approved, newest first: each topic that reached memory and how it read before."""
     storage = get_user_session_storage(_owner(request, identity))
-    dreams = []
-    for key in sorted(await storage.list("memory/dreams/"), reverse=True):
-        before: dict[str, str | None] = json.loads(await storage.read(key) or b"{}")
-        dreams.append({"version": key.rsplit("/", 1)[-1].removesuffix(".json"),
-                       "changed": [{"key": topic, "before": text} for topic, text in before.items()]})
-    return {"dreams": dreams}
+    return {"dreams": [{"version": version, "changed": [{"key": key, "before": record["topics"][key]["before"]}
+                                                         for key in record["applied"]]}
+                       for version, record in reversed(await dream_versions(storage)) if record["status"] == "applied"]}
 
 
 @router.post("/memory/dreams")
 async def memory_dream(request: Request, identity: Identity) -> dict[str, Any]:
-    """File the journals into the brain now, without waiting for the user to be idle."""
+    """Dream now, without waiting for the user to be idle: a version for the user to review."""
     return {"version": await dream(_owner(request, identity))}
 
 
 @router.delete("/memory/dreams")
-async def memory_dream_undo(request: Request, identity: Identity) -> dict[str, Any]:
-    """Undo the newest dream: every topic it changed reads as it did before, and the version is dropped."""
-    version = await undo_dream(_owner(request, identity))
-    if version is None:
+async def memory_dream_undo(request: Request, identity: Identity, version: str | None = None) -> dict[str, Any]:
+    """Undo an approved dream, the newest unless ``version`` names one: every topic it changed that still reads as
+    the dream wrote it reads as it did before."""
+    undone = await undo_dream(_owner(request, identity), version)
+    if undone is None:
         raise HTTPException(404, "there is no dream to undo")
-    return {"undone": version}
+    return {"undone": undone}

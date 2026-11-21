@@ -47,7 +47,6 @@ import uuid
 from PIL import Image
 from pydantic_monty import MountDir
 from strands import Agent
-from strands.memory import MemoryManager
 from strands.models import Model, ModelRouter
 from strands.models.routing import FallbackStrategy, RoutingCandidate
 from strands.multiagent import GraphBuilder, Swarm
@@ -66,7 +65,7 @@ from strands_harness import create_harness
 
 from agent.api.core import config as app_config
 from agent.api.core.brave_tools import brave_tools
-from agent.api.core.dreaming import JOURNAL_DIRECTIVE, agent_memory
+from agent.api.core.dreaming import MEMORY_PROTOCOL, brain_memory
 from agent.api.core.media_understanding import EMBED_TABS_MARKDOWN, markdown_to_html
 from agent.api.core.panel_agent import (
     DEFAULT_PROVIDER,
@@ -869,7 +868,7 @@ def build_deep_research_graph(
                     f"{skill_sections(skill.instructions, sections)}"
                     if sections else ""
                 )
-                + JOURNAL_DIRECTIVE
+                + MEMORY_PROTOCOL
             ),
             skills=[*SLIDEV_SKILLS] if spec["id"] in SLIDEV_AGENTS else False,
             tools=[*research_tools(), render_workflow] if spec["id"] == "report_writer" else research_tools(),
@@ -886,7 +885,7 @@ def build_deep_research_graph(
             builtin_plugins=["todos"],
             caching=False,
             session=False,
-            memory=MemoryManager(stores=agent_memory(user_id, "deep-research")),
+            memory=brain_memory(user_id, "deep-research"),
             # The SDK's own policy (background_tasks/_types.py): the model picks background execution per call
             # (``agentic``), so a search returns its result inline unless the model asks otherwise; ``subagent``
             # is backgrounded by the harness itself. ``handoff_to_agent`` never runs in the background, so the
