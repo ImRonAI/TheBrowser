@@ -92,7 +92,7 @@ export function DeepResearchHeaderBar({
             <span aria-hidden className="text-surface-300 dark:text-surface-700">/</span>
             <RenMark className="h-4 w-4 shrink-0" />
             <span className="truncate font-sans text-[13px] font-semibold text-ink dark:text-ink-inverse">
-              {activeSnapshot.title || activeSnapshot.query || 'Deep Research'}
+              {activeSnapshot.title || activeSnapshot.query || 'Squad'}
             </span>
             {!compact && (
               <span className="shrink-0 rounded-full bg-surface-100 px-2 py-0.5 font-sans text-[11px] font-medium text-ink-secondary dark:bg-surface-800 dark:text-ink-inverse-secondary">
@@ -147,7 +147,7 @@ export function DeepResearchRunsRail({
 }: DeepResearchRunsRailProps) {
   return (
     <aside
-      aria-label="Deep Research runs"
+      aria-label="Squad runs"
       className={cn(
         'ron-glass-panel flex h-full w-[288px] shrink-0 flex-col border-r border-surface-200 bg-surface-50/90 font-sans backdrop-blur-xl dark:border-surface-800 dark:bg-surface-900/90',
         overlay && 'ron-popover absolute inset-y-0 left-0 z-30 shadow-float',

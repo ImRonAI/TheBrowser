@@ -111,7 +111,7 @@ test('the REST helpers call /deep-research/* and read the run back', async () =>
   assert.deepEqual(status.topology, DEFAULT_FORMATION_TOPOLOGY)
 
   const started = await startDeepResearchRun(
-    { query: '  Solid-state battery supply chain 2026  ', user_id: 'user-7', depth: 'ultra', context: ' Focus ' },
+    { query: '  Solid-state battery supply chain 2026  ', user_id: 'user-7', depth: 'ultra', outcome: 'deck', context: ' Focus ' },
     options,
   )
   assert.deepEqual([started.session_id, started.depth, started.status, started.active], ['dr-101', 'ultra', 'running', true])
@@ -120,6 +120,7 @@ test('the REST helpers call /deep-research/* and read the run back', async () =>
     query: 'Solid-state battery supply chain 2026',
     user_id: 'user-7',
     depth: 'ultra',
+    outcome: 'deck',
     context: 'Focus',
     provider: null,
     model_id: null,
