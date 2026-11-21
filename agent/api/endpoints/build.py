@@ -17,6 +17,7 @@ from fastapi.responses import FileResponse, RedirectResponse
 from pydantic import BaseModel, Field
 
 from agent.api.core import build_workspace as workspace
+from agent.api.core.tenancy import TenantId, tenant_id
 
 
 def require_loopback(request: Request) -> None:
@@ -30,7 +31,6 @@ router = APIRouter(prefix="/build", dependencies=[Depends(require_loopback)])
 #: The panel's identifiers (``chat.Identifier``): a workspace is keyed by exactly what ``/chat`` received, and
 #: ``user_id`` defaults to ``"default"`` there too.
 _IDENTIFIER = r"^[A-Za-z0-9][A-Za-z0-9_.-]*$"
-UserId = Annotated[str, Query(min_length=1, max_length=128, pattern=_IDENTIFIER)]
 SessionId = Annotated[str, Query(min_length=1, max_length=128, pattern=_IDENTIFIER)]
 WorkspacePath = Annotated[str, Query(min_length=1, max_length=4096)]
 
@@ -54,6 +54,11 @@ class FileWrite(BaseModel):
     base_sha256: str | None = None
 
 
+async def _file_write(request: Request, body: FileWrite) -> FileWrite:
+    body.user_id = await tenant_id(request, body.user_id)
+    return body
+
+
 @contextmanager
 def _http_errors() -> Iterator[None]:
     try:
@@ -73,7 +78,7 @@ def _http_errors() -> Iterator[None]:
 
 
 @router.get("/workspace")
-def get_workspace(session_id: SessionId, user_id: UserId = "default") -> dict[str, Any]:
+def get_workspace(session_id: SessionId, user_id: TenantId) -> dict[str, Any]:
     """The workspace's tree and facts; read-only (a workspace that does not exist yet reports ``exists: false``)."""
     root = workspace.workspace_root(user_id, session_id)
     exists = root.is_dir()
@@ -83,27 +88,27 @@ def get_workspace(session_id: SessionId, user_id: UserId = "default") -> dict[st
 
 
 @router.get("/file")
-def get_file(session_id: SessionId, path: WorkspacePath, user_id: UserId = "default") -> dict[str, Any]:
+def get_file(session_id: SessionId, path: WorkspacePath, user_id: TenantId) -> dict[str, Any]:
     with _http_errors():
         return workspace.read_file(workspace.workspace_root(user_id, session_id), path)
 
 
 @router.put("/file")
-def put_file(body: FileWrite) -> dict[str, Any]:
+def put_file(body: Annotated[FileWrite, Depends(_file_write)]) -> dict[str, Any]:
     with _http_errors():
         return workspace.write_file(workspace.workspace_root(body.user_id, body.session_id), body.path,
                                     body.content, body.base_sha256)
 
 
 @router.delete("/file", status_code=204)
-def delete_file(session_id: SessionId, path: WorkspacePath, user_id: UserId = "default") -> Response:
+def delete_file(session_id: SessionId, path: WorkspacePath, user_id: TenantId) -> Response:
     with _http_errors():
         workspace.delete_file(workspace.workspace_root(user_id, session_id), path)
     return Response(status_code=204)
 
 
 @router.get("/git")
-async def get_git(session_id: SessionId, user_id: UserId = "default",
+async def get_git(session_id: SessionId, user_id: TenantId,
                   limit: Annotated[int, Query(ge=1, le=200)] = 30) -> dict[str, Any]:
     try:
         return await workspace.git_summary(workspace.workspace_root(user_id, session_id), limit)

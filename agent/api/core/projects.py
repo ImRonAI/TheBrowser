@@ -29,13 +29,16 @@ class ProjectIdentity:
     guest: bool = False
 
 
-async def project_identity(request: Request) -> ProjectIdentity:
-    authorization = request.headers.get("authorization", "")
-    if not authorization:
-        capability = request.headers.get("x-ron-workspace", "")
-        if re.fullmatch(r"[a-f0-9]{64}", capability):
-            digest = hashlib.sha256(capability.encode()).hexdigest()
-            return ProjectIdentity(str(uuid5(NAMESPACE_URL, f"ron-guest:{digest}")), digest, "", "", guest=True)
+def guest_identity(capability: str) -> ProjectIdentity | None:
+    """The account-free workspace an ``X-Ron-Workspace`` capability names, or None when it is not one."""
+    if not re.fullmatch(r"[a-f0-9]{64}", capability):
+        return None
+    digest = hashlib.sha256(capability.encode()).hexdigest()
+    return ProjectIdentity(str(uuid5(NAMESPACE_URL, f"ron-guest:{digest}")), digest, "", "", guest=True)
+
+
+async def verify_bearer(authorization: str) -> ProjectIdentity:
+    """The Supabase user an ``Authorization: Bearer`` header proves, checked against Supabase Auth."""
     if not authorization.startswith("Bearer ") or not authorization[7:].strip():
         raise HTTPException(401, "Workspace credential is missing or invalid")
     url = (os.getenv("SUPABASE_URL") or os.getenv("VITE_SUPABASE_URL", "")).rstrip("/")
@@ -53,6 +56,15 @@ async def project_identity(request: Request) -> ProjectIdentity:
     except (httpx.HTTPError, KeyError, ValueError) as error:
         raise HTTPException(503, "Unable to verify project access") from error
     return ProjectIdentity(user_id, token, url, key)
+
+
+async def project_identity(request: Request) -> ProjectIdentity:
+    authorization = request.headers.get("authorization", "")
+    if not authorization:
+        guest = guest_identity(request.headers.get("x-ron-workspace", ""))
+        if guest is not None:
+            return guest
+    return await verify_bearer(authorization)
 
 
 class ProjectService:

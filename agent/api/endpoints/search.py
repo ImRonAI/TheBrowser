@@ -66,6 +66,7 @@ from agent.api.core.brave_answers_tool import answers_client
 
 # Discover owns the process-wide BraveClient (one shared token bucket).
 from agent.api.endpoints.discover import get_client as get_brave_client
+from agent.api.core.tenancy import tenant_id
 
 router = APIRouter()
 
@@ -155,6 +156,7 @@ async def search_status(request: Request):
 
 @router.post("/search/stream")
 async def search_stream(body: SearchRequest, request: Request) -> StreamingResponse:
+    body.user_id = await tenant_id(request, body.user_id)
     level: SearchLevel = (body.level or RON_SEARCH_DEFAULT_LEVEL)  # type: ignore[assignment]
     if level not in SEARCH_LEVELS:
         raise HTTPException(

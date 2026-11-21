@@ -250,7 +250,7 @@ async def get_config():
 
 
 def run() -> None:
-    """Serve the API on API_HOST/API_PORT (defaults 0.0.0.0:8765; systemd pins 127.0.0.1)."""
+    """Serve the API on API_HOST/API_PORT (defaults 127.0.0.1:8765; a container sets API_HOST=0.0.0.0)."""
     import uvicorn
 
     from agent.api.core.config import API_HOST, API_PORT

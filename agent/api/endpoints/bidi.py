@@ -14,7 +14,7 @@ import json
 import logging
 from typing import Any, Literal
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
 from strands.bidi.models.google import GoogleGeminiLiveModel
 
 from agent.api.core import config
@@ -22,6 +22,7 @@ from agent.api.core.dreaming import index_block
 from agent.api.core.live_io import LiveSocketInput, WebSocketOutput, context_text, local_origin
 from agent.api.core.live_takeover import pending_work, start_takeover
 from agent.api.core.live_tools import close_live_music, create_live_agent, live_id_of
+from agent.api.core.tenancy import tenant_id
 
 logger = logging.getLogger(__name__)
 
@@ -89,6 +90,11 @@ async def bidi(
     conversation_id: str = "",
 ) -> None:
     if not local_origin(websocket):
+        await websocket.close(code=1008)
+        return
+    try:
+        user_id = await tenant_id(websocket, user_id)
+    except HTTPException:
         await websocket.close(code=1008)
         return
     await websocket.accept()

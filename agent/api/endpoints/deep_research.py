@@ -17,6 +17,7 @@ from pydantic import BaseModel, field_validator
 
 from agent.api.core import config as app_config
 from agent.api.core import deep_research
+from agent.api.core.tenancy import tenant_id
 
 
 def require_loopback(request: Request) -> None:
@@ -109,8 +110,9 @@ async def get_deep_research_status() -> dict[str, object]:
 
 
 @router.post("/runs")
-async def start_deep_research_run(body: StartDeepResearchRequest) -> deep_research.RunMeta:
+async def start_deep_research_run(request: Request, body: StartDeepResearchRequest) -> deep_research.RunMeta:
     """Start a run in the background and return its meta."""
+    body.user_id = await tenant_id(request, body.user_id)
     if not app_config.deep_research_enabled():
         raise HTTPException(status_code=503, detail="Squad is disabled")
     try:
@@ -130,16 +132,19 @@ async def start_deep_research_run(body: StartDeepResearchRequest) -> deep_resear
 
 @router.get("/runs")
 async def list_deep_research_runs(
+    request: Request,
     user_id: str = "default",
     limit: Annotated[int, Query(ge=1, le=200)] = 50,
 ) -> dict[str, list[deep_research.RunMeta]]:
     """The user's runs, newest first."""
+    user_id = await tenant_id(request, user_id)
     return {"runs": await deep_research.list_runs(user_id=user_id, limit=limit)}
 
 
 @router.get("/runs/{session_id}")
-async def get_deep_research_run(session_id: str, user_id: str = "default") -> dict[str, object]:
+async def get_deep_research_run(request: Request, session_id: str, user_id: str = "default") -> dict[str, object]:
     """The run's meta, its events and its workspace files (404 when unknown)."""
+    user_id = await tenant_id(request, user_id)
     run = await deep_research.get_run(user_id=user_id, session_id=session_id)
     if run is None:
         raise HTTPException(status_code=404, detail="Deep Research run not found")
@@ -165,12 +170,14 @@ async def get_deep_research_artifact(session_id: str, artifact_path: str, downlo
 
 @router.get("/runs/{session_id}/events")
 async def stream_deep_research_events(
+    request: Request,
     session_id: str,
     user_id: str = "default",
     after: Annotated[int | None, Query(ge=0)] = None,
     last_event_id: Annotated[str | None, Header()] = None,
 ) -> StreamingResponse:
     """The run's events as SSE, from position ``after`` (or ``Last-Event-ID``), then ``event: run``."""
+    user_id = await tenant_id(request, user_id)
     if await deep_research.get_run(user_id=user_id, session_id=session_id) is None:
         raise HTTPException(status_code=404, detail="Deep Research run not found")
     cursor = after if after is not None else int(last_event_id) if last_event_id and last_event_id.isdigit() else 0
@@ -182,8 +189,9 @@ async def stream_deep_research_events(
 
 
 @router.get("/runs/{session_id}/document")
-async def get_deep_research_document(session_id: str, user_id: str = "default") -> dict[str, object]:
+async def get_deep_research_document(request: Request, session_id: str, user_id: str = "default") -> dict[str, object]:
     """report.md as a Document's title and content, and the Document it was saved as (404 without a report)."""
+    user_id = await tenant_id(request, user_id)
     document = await deep_research.report_document(user_id=user_id, session_id=session_id)
     if document is None:
         raise HTTPException(status_code=404, detail="Deep Research report not found")
@@ -196,9 +204,11 @@ class ReportDocument(BaseModel):
 
 @router.post("/runs/{session_id}/document")
 async def set_deep_research_document(
+    request: Request,
     session_id: str, body: ReportDocument, user_id: str = "default"
 ) -> deep_research.RunMeta:
     """Record the Document the renderer saved the report as."""
+    user_id = await tenant_id(request, user_id)
     meta = await deep_research.set_report_document(user_id=user_id, session_id=session_id,
                                                    document_id=body.document_id)
     if meta is None:
@@ -207,8 +217,9 @@ async def set_deep_research_document(
 
 
 @router.post("/runs/{session_id}/cancel")
-async def cancel_deep_research_run(session_id: str, user_id: str = "default") -> deep_research.RunMeta:
+async def cancel_deep_research_run(request: Request, session_id: str, user_id: str = "default") -> deep_research.RunMeta:
     """Cancel an active run (404 when unknown)."""
+    user_id = await tenant_id(request, user_id)
     meta = await deep_research.cancel_run(user_id=user_id, session_id=session_id)
     if meta is None:
         raise HTTPException(status_code=404, detail="Deep Research run not found")
@@ -216,8 +227,9 @@ async def cancel_deep_research_run(session_id: str, user_id: str = "default") ->
 
 
 @router.delete("/runs/{session_id}")
-async def delete_deep_research_run(session_id: str, user_id: str = "default") -> dict[str, object]:
+async def delete_deep_research_run(request: Request, session_id: str, user_id: str = "default") -> dict[str, object]:
     """Delete a run, its events and its workspace (404 when unknown)."""
+    user_id = await tenant_id(request, user_id)
     if not await deep_research.delete_run(user_id=user_id, session_id=session_id):
         raise HTTPException(status_code=404, detail="Deep Research run not found")
     return {"deleted": True, "session_id": session_id}
