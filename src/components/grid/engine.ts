@@ -4,7 +4,7 @@
  * (https://docs.univer.ai/guides/sheets/getting-started/installation.md, "Mobile support"): formulas, number
  * formats, filter, sort, conditional formatting, data validation, find and replace, tables and links. Charts, pivot
  * tables and Excel import and export are in Univer's paid packages (https://docs.univer.ai/server/license.md), so
- * they are not here.
+ * they are not here: a grid's Excel file is written by Ren's backend.
  */
 import { LocaleType, mergeLocales, Univer, UniverInstanceType, type IWorkbookData } from '@univerjs/core'
 import { FUniver } from '@univerjs/core/facade'

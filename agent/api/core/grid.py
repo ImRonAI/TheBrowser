@@ -1,19 +1,21 @@
 """Spreadsheets in Documents and Squad's DataGrid outcome.
 
-A grid is what agents write and read: JSON with sheets of rows, in a ```grid fence. A page keeps it as the editor's
-grid block, ``<grid-block data-grid="{…}">`` with a table per sheet, which is what prints and what a reader without
-the editor sees (``src/lib/grid.ts`` reads and writes the same block). Once the editor's spreadsheet has calculated a
-grid, the block is marked ``data-calculated`` and its tables hold what each cell shows; once the grid has been changed
-there, the block also carries the workbook the spreadsheet keeps (``data-workbook``). Agents still read and write the
-grid.
+A grid is what agents write and read: JSON with sheets of rows, in a ```grid fence (``GRID_MARKDOWN``). A page keeps
+it as the editor's grid block, ``<grid-block data-grid="{…}">`` with a table per sheet, which is what prints and what
+a reader without the editor sees (``src/lib/grid.ts`` reads and writes the same block). Once the editor's spreadsheet
+has calculated a grid, the block is marked ``data-calculated`` and its tables hold what each cell shows; once the grid
+has been changed there, the block also carries the workbook the spreadsheet keeps (``data-workbook``). Agents still
+read and write the grid.
 """
 
 from __future__ import annotations
 
 import html
+import io
 import json
 import math
 import re
+from collections.abc import Sequence
 from typing import Final, NotRequired, TypedDict
 
 GridCell = str | int | float | bool | None
@@ -38,11 +40,27 @@ GRID_JSON: Final[str] = (
     'notation ("=SUM(B2:B9)", "=Sheet2!B4*0.2"); "formats" is optional and gives a column\'s Excel number format by '
     "its letter."
 )
+#: How agents write a spreadsheet (the editor's "/" Spreadsheet): read back the same way by ``html_to_markdown``.
+GRID_MARKDOWN: Final[str] = (
+    f"A spreadsheet is one ```grid fence holding JSON: {GRID_JSON} Use it for data to sort, filter and calculate with; "
+    "a small table of text stays a Markdown table."
+)
+
+XLSX_MEDIA_TYPE: Final[str] = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
 #: What Excel refuses in a sheet's name, which is 31 characters at most; runs of spaces read as one.
 _SHEET_NAME_CHARS: Final[re.Pattern[str]] = re.compile(r"[\[\]:*?/\\\s]+")
 _COLUMN: Final[re.Pattern[str]] = re.compile(r"[A-Z]+")
 _GRID_FENCE: Final[re.Pattern[str]] = re.compile(r'<pre><code class="language-grid">(.*?)</code></pre>', re.DOTALL)
+
+
+def column_letter(index: int) -> str:
+    """"A" for 0, "Z" for 25, "AA" for 26."""
+    letters = ""
+    while index >= 0:
+        letters = chr(65 + index % 26) + letters
+        index = index // 26 - 1
+    return letters
 
 
 def _cell(value: object) -> GridCell:
@@ -149,3 +167,40 @@ def with_grid_blocks(page_html: str) -> str:
         return grid_block_html(grid) if grid else match.group(0)
 
     return _GRID_FENCE.sub(block, page_html)
+
+
+def grid_xlsx(grid: Grid, values: Sequence[Sequence[Sequence[GridCell]]] = ()) -> bytes:
+    """The grid as an Excel workbook: every formula as a formula with the result it had in ``values`` (by sheet, row
+    and cell), the header row bold and frozen, each column's number format on its cells, columns as wide as their text.
+
+    XlsxWriter doesn't calculate; a formula written with its result shows it in readers that don't calculate either,
+    and Excel calculates again when it opens the file
+    (https://xlsxwriter.readthedocs.io/working_with_formulas.html#formula-results). ``use_future_functions`` writes
+    the functions Excel added after 2007 (XLOOKUP, IFS, TEXTJOIN) the way the file format wants them.
+    """
+    import xlsxwriter
+
+    buffer = io.BytesIO()
+    workbook = xlsxwriter.Workbook(buffer, {"in_memory": True, "use_future_functions": True})
+    header = workbook.add_format({"bold": True})
+    for index, sheet in enumerate(grid["sheets"]):
+        worksheet = workbook.add_worksheet(sheet["name"])
+        formats = {
+            letter: workbook.add_format({"num_format": pattern}) for letter, pattern in sheet.get("formats", {}).items()
+        }
+        results = values[index] if index < len(values) else ()
+        for r, row in enumerate(sheet["rows"]):
+            for c, cell in enumerate(row):
+                if cell is None or cell == "":
+                    continue
+                style = header if r == 0 else formats.get(column_letter(c))
+                if isinstance(cell, str) and cell.startswith("="):
+                    result = results[r][c] if r < len(results) and c < len(results[r]) else None
+                    worksheet.write_formula(r, c, cell, style, "" if result is None else result)
+                elif worksheet.write(r, c, cell, style) != 0 and isinstance(cell, str):
+                    # A link Excel can't keep (longer than it allows, or past a sheet's limit) stays as its text.
+                    worksheet.write_string(r, c, cell, style)
+        worksheet.freeze_panes(1, 0)
+        worksheet.autofit()
+    workbook.close()
+    return buffer.getvalue()

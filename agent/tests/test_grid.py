@@ -1,17 +1,22 @@
-"""Spreadsheets: the grid agents write, the block a page keeps and the fence agents read back."""
+"""Spreadsheets: the grid agents write, the block a page keeps, the fence agents read back and the Excel file."""
 from __future__ import annotations
 
+import base64
 import io
 import json
 import zipfile
 
+from fastapi import HTTPException
 from pydantic import ValidationError
 import pytest
 
 from agent.api.core.document_export import export_document
-from agent.api.core.grid import grid_block_html, grid_from_json, grid_markdown, normalize_grid
+from agent.api.core.grid import (
+    GRID_MARKDOWN, XLSX_MEDIA_TYPE, column_letter, grid_block_html, grid_from_json, grid_markdown, grid_xlsx,
+    normalize_grid,
+)
 from agent.api.core.media_understanding import html_to_markdown, markdown_to_html
-from agent.api.endpoints.projects import DocumentUpdate
+from agent.api.endpoints.projects import DocumentUpdate, GridExport, export_grid
 
 _GRID = {"title": "Fleet costs", "sheets": [
     {"name": "Fleet", "rows": [
@@ -22,6 +27,13 @@ _GRID = {"title": "Fleet costs", "sheets": [
     ], "formats": {"B": "#,##0", "C": "$#,##0.00", "D": "$#,##0.00", "E": "0.0%"}},
     {"name": "Notes", "rows": [["Note"], ["Costs are per unit."]]},
 ]}
+#: What the spreadsheet calculated for the first sheet's formulas.
+_VALUES = [[[], [None, None, None, 4500, 0.595], [None, None, None, 3062.5, 0.405], [None, 1250, None, 7562.5]]]
+
+
+def test_column_letters() -> None:
+    assert [column_letter(index) for index in (0, 25, 26, 27, 701, 702)] == ["A", "Z", "AA", "AB", "ZZ", "AAA"]
+
 
 def test_a_grid_is_normalized_to_named_sheets_of_plain_cells() -> None:
     grid = normalize_grid({"title": "  Costs  ", "sheets": [
@@ -71,6 +83,35 @@ def test_a_fence_that_holds_no_grid_stays_code_and_a_broken_block_reads_as_its_t
     assert "language-grid" in markdown_to_html('```grid\n{"sheets": []}\n```\n')
     broken = '<grid-block data-grid="{">' "<table><tbody><tr><th>Model</th></tr><tr><td>Atlas</td></tr></tbody></table></grid-block>"
     assert "| Model |" in html_to_markdown(broken) and "| Atlas |" in html_to_markdown(broken)
+    assert "```grid" in GRID_MARKDOWN
+
+
+def test_the_excel_file_keeps_formulas_with_their_results_formats_and_a_frozen_header() -> None:
+    archive = zipfile.ZipFile(io.BytesIO(grid_xlsx(_GRID, _VALUES)))
+    workbook = archive.read("xl/workbook.xml").decode()
+    assert '<sheet name="Fleet" sheetId="1"' in workbook and '<sheet name="Notes" sheetId="2"' in workbook
+    assert 'fullCalcOnLoad="1"' in workbook
+    sheet = archive.read("xl/worksheets/sheet1.xml").decode()
+    assert '<pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/>' in sheet
+    assert "<f>B2*C2</f><v>4500</v>" in sheet and "<f>SUM(D2:D3)</f><v>7562.5</v>" in sheet
+    assert '<c r="B2" s="2"><v>1000</v></c>' in sheet and '<c r="F3" t="b"><v>1</v></c>' in sheet
+    styles = archive.read("xl/styles.xml").decode()
+    assert 'formatCode="$#,##0.00"' in styles and 'formatCode="0.0%"' in styles and "<b/>" in styles
+    assert "https://example.com/atlas" in archive.read("xl/worksheets/_rels/sheet1.xml.rels").decode()
+    # A formula with no result given is left for the reader to calculate.
+    bare = zipfile.ZipFile(io.BytesIO(grid_xlsx(_GRID))).read("xl/worksheets/sheet1.xml").decode()
+    assert "<f>B2*C2</f><v></v>" in bare
+
+
+@pytest.mark.asyncio
+async def test_the_export_endpoint_answers_the_file_as_a_page_export_does() -> None:
+    exported = await export_grid(GridExport(grid=_GRID, values=_VALUES))
+    assert exported["filename"] == "Fleet costs.xlsx" and exported["media_type"] == XLSX_MEDIA_TYPE
+    archive = zipfile.ZipFile(io.BytesIO(base64.b64decode(exported["data"])))
+    assert "<f>B2*C2</f><v>4500</v>" in archive.read("xl/worksheets/sheet1.xml").decode()
+    with pytest.raises(HTTPException) as refused:
+        await export_grid(GridExport(grid={"title": "Empty", "sheets": []}))
+    assert refused.value.status_code == 422
 
 
 @pytest.mark.asyncio

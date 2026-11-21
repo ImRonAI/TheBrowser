@@ -187,7 +187,10 @@ test('the build outcomes come from the backend with their team, and a run carrie
         id: 'build_swarm',
         label: 'Build Swarm',
         kind: 'swarm',
-        children: [{ id: 'app_builder', label: 'App Builder', kind: 'agent' }],
+        children: [
+          { id: 'app_builder', label: 'App Builder', kind: 'agent' },
+          { id: 'app_qa', label: 'App QA', kind: 'agent' },
+        ],
         edges: [],
       },
     ],
@@ -230,7 +233,7 @@ test('the build outcomes come from the backend with their team, and a run carrie
     ['research_swarm', 'swarm'],
     ['build_swarm', 'swarm'],
   ])
-  assert.deepEqual(status.topologies.mobile_app?.nodes[1]?.children?.map((node) => node.id), ['app_builder'])
+  assert.deepEqual(status.topologies.mobile_app?.nodes[1]?.children?.map((node) => node.id), ['app_builder', 'app_qa'])
 
   const opened = await getDeepResearchRun('dr-101', 'user-7', options)
   assert.equal(opened.outcome, 'mobile_app')

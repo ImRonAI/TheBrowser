@@ -9,8 +9,9 @@ import { Download, Loader2, Maximize2, Sheet } from 'lucide-react'
 import { BlockHeader } from '@/components/board/task-detail/editor/extensions/blocks/ui'
 import { Button } from '@/components/ui/button'
 import { gridDisplay, gridWorkbook, readGrid, sheetCsv, type GridValue } from '@/lib/grid'
-import { saveFile } from '@/lib/project-documents'
+import { documentErrorMessage, exportGrid, saveExported, saveFile } from '@/lib/project-documents'
 import { cn } from '@/lib/utils'
+import { getProjectsState, projectsRequestFor } from '@/stores/projectsStore'
 import type { GridEngine, GridReading } from './engine'
 
 /** The rows a page shows of a sheet, its header among them; the rest are in the open spreadsheet. */
@@ -158,7 +159,7 @@ function OpenGrid({ value, editable, onClose }: {
   const engine = useRef<GridEngine | null>(null)
   const [title, setTitle] = useState(value.grid.title)
   const [ready, setReady] = useState(false)
-  const [busy, setBusy] = useState<'csv' | 'closing' | null>(null)
+  const [busy, setBusy] = useState<'csv' | 'xlsx' | 'closing' | null>(null)
   const [error, setError] = useState('')
 
   useEffect(() => {
@@ -196,20 +197,26 @@ function OpenGrid({ value, editable, onClose }: {
     return () => window.removeEventListener('popstate', back)
   }, [editable, title])
 
-  const download = async () => {
+  const download = async (format: 'csv' | 'xlsx') => {
     const opened = engine.current
     if (!opened) return
-    setBusy('csv')
+    setBusy(format)
     setError('')
     try {
       const reading = await opened.read()
-      const { grid, display } = readGrid(title, reading.sheets)
+      const { grid, values, display } = readGrid(title, reading.sheets)
       const sheet = display[reading.active]
-      saveFile(`${display.length > 1 && sheet ? `${grid.title} - ${sheet.name}` : grid.title}.csv`,
-        // The byte order mark tells Excel the file is UTF-8.
-        new Blob(['﻿', sheetCsv(sheet?.rows ?? [])], { type: 'text/csv;charset=utf-8' }))
-    } catch {
-      setError('The spreadsheet could not be downloaded.')
+      if (format === 'csv') {
+        saveFile(`${display.length > 1 && sheet ? `${grid.title} - ${sheet.name}` : grid.title}.csv`,
+          // The byte order mark tells Excel the file is UTF-8.
+          new Blob(['﻿', sheetCsv(sheet?.rows ?? [])], { type: 'text/csv;charset=utf-8' }))
+      } else {
+        const userId = getProjectsState().userId
+        if (!userId) throw new Error()
+        saveExported(await exportGrid(projectsRequestFor(userId), grid, values))
+      }
+    } catch (err) {
+      setError(documentErrorMessage(err, 'The spreadsheet could not be downloaded.'))
     } finally {
       setBusy(null)
     }
@@ -224,10 +231,13 @@ function OpenGrid({ value, editable, onClose }: {
               className="min-w-0 flex-1 truncate rounded-md bg-transparent px-1.5 py-1 text-sm font-semibold outline-none focus:bg-surface-100 dark:focus:bg-surface-800" />
           : <p className="min-w-0 flex-1 truncate px-1.5 text-sm font-semibold">{title}</p>}
         {error && <p role="alert" className="min-w-0 truncate text-[12px] text-red-600 dark:text-red-400">{error}</p>}
-        <Button type="button" size="sm" variant="ghost" className="h-8 gap-1.5 rounded-full px-2.5"
-          disabled={!ready || busy !== null} onClick={() => void download()} title="Download the sheet in view as CSV">
-          {busy === 'csv' ? <Loader2 className="animate-spin" /> : <Download />}CSV
-        </Button>
+        {(['csv', 'xlsx'] as const).map((format) => (
+          <Button key={format} type="button" size="sm" variant="ghost" className="h-8 gap-1.5 rounded-full px-2.5"
+            disabled={!ready || busy !== null} onClick={() => void download(format)}
+            title={format === 'csv' ? 'Download the sheet in view as CSV' : 'Download every sheet as an Excel file, formulas included'}>
+            {busy === format ? <Loader2 className="animate-spin" /> : <Download />}{format === 'csv' ? 'CSV' : 'Excel'}
+          </Button>
+        ))}
         <Button type="button" size="sm" className="h-8 rounded-full" disabled={busy !== null} onClick={() => window.history.back()}>
           {busy === 'closing' ? <Loader2 className="animate-spin" /> : null}{editable ? 'Done' : 'Close'}
         </Button>
