@@ -20,7 +20,7 @@ import {
   type WheelEvent,
 } from 'react'
 import { motion, useReducedMotion } from 'framer-motion'
-import { ArrowUp, FileText, Loader2, Presentation, type LucideIcon } from 'lucide-react'
+import { AppWindow, ArrowUp, FileText, Globe, Loader2, Presentation, Smartphone, type LucideIcon } from 'lucide-react'
 import { Suggestions, Suggestion } from '@/components/ai-elements/suggestion'
 import { Marker } from '@/components/brand'
 import { ContextMentionList, ContextPicker } from '@/components/agent-panel/ContextPicker'
@@ -41,12 +41,14 @@ import {
   type ContextItem,
 } from '@/lib/chat-context'
 import {
+  BUILD_OUTCOMES,
   DEPTH_METADATA,
   type DeepResearchSelection,
   type FormationTopology,
   type ResearchDepth,
   type SquadOutcome,
 } from '@/lib/deep-research-api'
+import { isGuestUserId } from '@/lib/sign-in'
 import { articleDraftKey, useArticleDraftStore } from '@/stores/articleDraftStore'
 import { useAuthStore } from '@/stores/authStore'
 import { cn } from '@/utils/cn'
@@ -55,7 +57,15 @@ import { cn } from '@/utils/cn'
 const OUTCOME_METADATA: readonly { id: SquadOutcome; label: string; icon: LucideIcon; description: string }[] = [
   { id: 'report', label: 'Report', icon: FileText, description: 'A cited report as a ren Document, printed to PDF from it.' },
   { id: 'deck', label: 'Slide Deck', icon: Presentation, description: 'A Slidev deck, written from a cited report.' },
+  { id: 'web_app', label: 'Web App', icon: AppWindow, description: 'A web app OpenCode builds from the research and deploys, opened in Ren.' },
+  { id: 'website', label: 'Website', icon: Globe, description: 'A website OpenCode builds from the research and deploys, opened in Ren.' },
+  { id: 'mobile_app', label: 'Mobile App', icon: Smartphone, description: 'An Android app OpenCode builds from the research, installed from Applications on your phone.' },
 ]
+
+/** What a build outcome's run makes, as the picker names and draws it; undefined for a report's or a deck's run. */
+export function builtOutcome(outcome: SquadOutcome | null | undefined) {
+  return OUTCOME_METADATA.find((item) => item.id === outcome && BUILD_OUTCOMES.includes(item.id))
+}
 
 const EASE = [0.16, 1, 0.3, 1] as const
 
@@ -276,7 +286,9 @@ export function DeepResearchHero({
   const busy = starting || resolvingContext
   const compactControls = containerWidth > 0 && containerWidth < 560
   const effectivePrompt = attachments.messageFor(query).trim()
-  const canLaunch = Boolean(effectivePrompt) && !busy && available
+  // A mobile app's APK is served from the account's Applications, so a guest can't have one (`start_run` refuses it too).
+  const signInNeeded = outcome === 'mobile_app' && isGuestUserId(resolvedUserId)
+  const canLaunch = Boolean(effectivePrompt) && !busy && available && !signInNeeded
   const activeDepthMeta = DEPTH_METADATA.find((d) => d.id === depth) ?? DEPTH_METADATA[2]
 
   const chooseMention = (item: ContextItem) => {
@@ -306,7 +318,7 @@ export function DeepResearchHero({
 
   const triggerSubmit = async () => {
     const finalQuery = attachments.messageFor(query).trim()
-    if (!finalQuery || busy || !available) return
+    if (!finalQuery || busy || !available || signInNeeded) return
     setLocalError(null)
 
     let contextMarkdown: string | undefined
@@ -414,7 +426,10 @@ export function DeepResearchHero({
           transition: { duration: 0.55, ease: EASE, delay },
         }
 
-  const displayError = localError || error
+  const displayError =
+    (signInNeeded && "Sign in to Ren to have Squad build a mobile app: it installs from your account's Applications.") ||
+    localError ||
+    error
 
   return (
     <div className="relative h-full overflow-y-auto px-6 pb-14 pt-[9vh] font-sans text-ink scrollbar-thin dark:text-ink-inverse">
@@ -434,8 +449,8 @@ export function DeepResearchHero({
             </span>
           </h1>
           <p className="relative mt-4 max-w-[40rem] font-sans text-[15.5px] leading-relaxed text-ink-secondary dark:text-ink-inverse-secondary">
-            Pick what you want made. A Squad researches it, builds it and checks every claim: a cited report as a
-            ren Document you can print, or a Slidev deck written from it.
+            Pick what you want made. A Squad researches it, builds it and checks every claim.{' '}
+            {OUTCOME_METADATA.find((item) => item.id === outcome)?.description}
           </p>
         </motion.section>
 
@@ -532,7 +547,7 @@ export function DeepResearchHero({
                 onKeyDown={handleKeyDown}
                 aria-expanded={mention ? true : undefined}
                 disabled={busy || !available}
-                placeholder="Ask a research question, or type @ to attach Context, tabs, chats, issues, and files…"
+                placeholder="Say what you want made, or type @ to attach Context, tabs, chats, issues, and files…"
                 className="w-full resize-none bg-transparent font-sans text-[15.5px] leading-relaxed text-ink outline-none placeholder:text-ink-muted focus-visible:ring-0 focus-visible:ring-offset-0 dark:text-ink-inverse dark:placeholder:text-ink-inverse-muted"
               />
             </label>

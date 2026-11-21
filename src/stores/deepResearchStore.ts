@@ -7,6 +7,7 @@ import { createJSONStorage, persist } from 'zustand/middleware'
 import { DEFAULT_AGENT_MODEL, type AgentModelSelection } from '@/components/agent-panel/ModelSelector'
 import { openInternalUrl } from '@/components/board/task-detail/editor/extensions/blocks/workspace'
 import {
+  BUILD_OUTCOMES,
   DEFAULT_FORMATION_TOPOLOGY,
   DEFAULT_RESEARCH_DEPTH,
   DEFAULT_SQUAD_OUTCOME,
@@ -219,7 +220,7 @@ export const useDeepResearchStore = create<DeepResearchState>()(
         defaultSelection: { provider: null, model_id: null, reasoning_effort: null },
         topology: DEFAULT_FORMATION_TOPOLOGY,
         topologies: {},
-        outcomes: [...SQUAD_OUTCOMES],
+        outcomes: SQUAD_OUTCOMES.filter((outcome) => !BUILD_OUTCOMES.includes(outcome)),
         preferredOutcome: DEFAULT_SQUAD_OUTCOME,
         depths: [...RESEARCH_DEPTHS],
         preferredDepth: DEFAULT_RESEARCH_DEPTH,

@@ -11,14 +11,17 @@
  * Pure module (relative `.ts` imports only) so `node --experimental-strip-types --test` runs it.
  */
 import { API_BASE_URL } from './api-base.ts'
+import type { Application } from './context-api.ts'
 
 /** The levels of `LEVELS` in `agent/api/core/deep_research.py`, as Perplexity's Agent API names its efforts. */
 export type ResearchDepth = 'fast' | 'low' | 'medium' | 'high' | 'xhigh' | 'ultra'
 export const RESEARCH_DEPTHS: readonly ResearchDepth[] = ['fast', 'low', 'medium', 'high', 'xhigh', 'ultra']
 export const DEFAULT_RESEARCH_DEPTH: ResearchDepth = 'medium'
 /** What a Squad run ends in (`Outcome` in `agent/api/core/deep_research.py`). */
-export type SquadOutcome = 'report' | 'deck'
-export const SQUAD_OUTCOMES: readonly SquadOutcome[] = ['report', 'deck']
+export type SquadOutcome = 'report' | 'deck' | 'web_app' | 'website' | 'mobile_app'
+export const SQUAD_OUTCOMES: readonly SquadOutcome[] = ['report', 'deck', 'web_app', 'website', 'mobile_app']
+/** The outcomes OpenCode builds (`BUILD_OUTCOMES` there): offered only while Ren's workspace computer is configured. */
+export const BUILD_OUTCOMES: readonly SquadOutcome[] = ['web_app', 'website', 'mobile_app']
 export const DEFAULT_SQUAD_OUTCOME: SquadOutcome = 'report'
 
 export interface DepthMetadata {
@@ -384,6 +387,8 @@ export interface DeepResearchSnapshot {
   artifacts: DeepResearchArtifacts
   /** The Document the report was saved as (`ron://documents/<id>`), once it is saved. */
   document_id: string | null
+  /** The app a build outcome's run listed under Applications, once it has. */
+  application: Application | null
 }
 
 /** One kept Strands stream event and its position in the run (the SSE `id`). */
@@ -624,11 +629,30 @@ export function emptyDeepResearchSnapshot(sessionId: string, init?: Partial<Deep
     slidev_markdown: '',
     artifacts: {},
     document_id: null,
+    application: null,
     ...init,
   }
 }
 
 const RUN_STATUSES: readonly DeepResearchRunStatus[] = ['running', 'completed', 'failed', 'cancelled']
+
+/** A run's `application` (`Application` in `agent/api/core/context_agent.py`). */
+function applicationOf(raw: unknown): Application | null {
+  const obj = asRecord(raw)
+  const kind = (['web', 'android'] as const).find((value) => value === obj["kind"])
+  const id = asString(obj["id"])
+  const icon = asString(obj["icon"])
+  if (!kind || !id) return null
+  return {
+    id,
+    name: asString(obj["name"]),
+    kind,
+    location: asString(obj["location"]),
+    description: asString(obj["description"]),
+    created_at: typeof obj["created_at"] === 'number' ? obj["created_at"] : 0,
+    ...(icon ? { icon } : {}),
+  }
+}
 
 /** The run's own fields (`RunMeta` in the backend) over `snapshot`. */
 function withMeta(snapshot: DeepResearchSnapshot, raw: Json): DeepResearchSnapshot {
@@ -657,6 +681,7 @@ function withMeta(snapshot: DeepResearchSnapshot, raw: Json): DeepResearchSnapsh
     error: raw["error"] === undefined ? snapshot.error : asString(raw["error"]) || null,
     active_node_path: status === 'running' ? snapshot.active_node_path : [],
     document_id: raw["document_id"] === undefined ? snapshot.document_id : asString(raw["document_id"]) || null,
+    application: raw["application"] === undefined ? snapshot.application : applicationOf(raw["application"]),
   }
 }
 

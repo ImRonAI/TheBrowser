@@ -84,6 +84,7 @@ from agent.api.core.panel_agent import (
 from agent.api.core.panel_storage import get_user_session_storage
 from agent.api.core.panel_tools import installed_http_request
 from agent.api.core.render_ui_tool import render_workflow, workflow_block_html, workflow_graph
+from agent.api.core.threads import owner_uuid
 from agent.api.core.web_tools import web_tools
 
 logger = logging.getLogger(__name__)
@@ -1228,10 +1229,13 @@ async def start_run(
     """Build the formation and run it in the background; the returned meta names the run.
 
     Raises:
-        ValueError: When no model provider is configured.
+        ValueError: When no model provider is configured, or the outcome can't be made: an app or a website without
+            the workspace computer, a mobile app for a guest (its APK is served from the account's Applications).
     """
     if outcome not in available_outcomes():
         raise ValueError("Ren's workspace computer isn't configured, so Squad can't build apps or websites.")
+    if outcome == "mobile_app" and owner_uuid(user_id) is None:
+        raise ValueError("Sign in to Ren to have Squad build a mobile app: it installs from your account's Applications.")
     selection = resolve_selection(provider, model_id)
     if selection is None:
         raise ValueError("No model provider is configured for Squad.")

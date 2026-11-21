@@ -64,7 +64,7 @@ export function DeepResearchHeaderBar({
           type="button"
           onClick={onToggleRail}
           aria-expanded={railOpen}
-          aria-label="Toggle research runs history"
+          aria-label="Toggle Squad runs history"
           className={cn(
             'inline-flex h-8 shrink-0 items-center gap-2 rounded-full border px-3 font-sans text-[12.5px] font-medium transition-colors duration-150',
             railOpen
@@ -104,7 +104,7 @@ export function DeepResearchHeaderBar({
           <div className="flex min-w-0 items-center gap-2">
             <RenMark className="h-4 w-4 shrink-0" />
             <span className="truncate font-sans text-[13px] font-medium text-ink-secondary dark:text-ink-inverse-secondary">
-              Research
+              Squad
             </span>
           </div>
         )}
@@ -118,7 +118,7 @@ export function DeepResearchHeaderBar({
             className="inline-flex h-8 items-center gap-1.5 rounded-full bg-blurple-600 px-3.5 font-sans text-[12.5px] font-medium text-white transition-colors duration-150 hover:bg-blurple-700 active:bg-blurple-800 dark:bg-blurple-400 dark:text-ink dark:hover:bg-blurple-300"
           >
             <Plus className="h-3.5 w-3.5" strokeWidth={2.25} aria-hidden />
-            <span>{compact ? 'New' : 'New research'}</span>
+            <span>{compact ? 'New' : 'New run'}</span>
           </button>
         )}
       </div>
@@ -155,7 +155,7 @@ export function DeepResearchRunsRail({
     >
       <div className="flex h-11 shrink-0 items-center justify-between border-b border-surface-200 px-3.5 dark:border-surface-800">
         <span className="font-sans text-[12.5px] font-semibold text-ink dark:text-ink-inverse">
-          Research runs
+          Squad runs
         </span>
         <div className="flex items-center gap-1">
           <button
@@ -181,7 +181,7 @@ export function DeepResearchRunsRail({
         {runs.length === 0 ? (
           <div className="rounded-xl border border-dashed border-surface-200 px-3.5 py-6 text-center dark:border-surface-800">
             <p className="font-sans text-[12.5px] font-medium text-ink-secondary dark:text-ink-inverse-secondary">
-              No research runs yet.
+              No Squad runs yet.
             </p>
             <p className="mt-1 font-sans text-[11.5px] leading-relaxed text-ink-muted dark:text-ink-inverse-muted">
               Runs started here or asynchronously by Ren appear automatically.
@@ -207,7 +207,7 @@ export function DeepResearchRunsRail({
                     <div className="flex items-center gap-2">
                       <RunStatusDot status={run.status} active={run.active} />
                       <span className="min-w-0 flex-1 truncate font-sans text-[12.5px] font-medium text-ink dark:text-ink-inverse">
-                        {run.title || run.query || 'Untitled research'}
+                        {run.title || run.query || 'Untitled run'}
                       </span>
                     </div>
                     <div className="flex flex-wrap items-center gap-1.5 pl-4 font-sans text-[11px] text-ink-muted dark:text-ink-inverse-muted">
@@ -224,8 +224,8 @@ export function DeepResearchRunsRail({
                       e.stopPropagation()
                       onDeleteRun(run.session_id)
                     }}
-                    title="Delete research run"
-                    aria-label={`Delete ${run.title || run.query || 'research run'}`}
+                    title="Delete run"
+                    aria-label={`Delete ${run.title || run.query || 'run'}`}
                     className="absolute right-2 top-2.5 flex h-6 w-6 items-center justify-center rounded-md text-ink-muted opacity-0 transition-opacity hover:bg-rose-500/10 hover:text-rose-600 focus-visible:opacity-100 group-hover:opacity-100 dark:text-ink-inverse-muted dark:hover:text-rose-400"
                   >
                     <Trash2 className="h-3.5 w-3.5" aria-hidden />

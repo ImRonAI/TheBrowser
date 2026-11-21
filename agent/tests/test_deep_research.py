@@ -273,7 +273,7 @@ def test_a_build_outcome_researches_then_has_opencode_build_it(
 
 
 @pytest.mark.asyncio
-async def test_a_build_outcome_needs_the_computer_and_keeps_the_app_it_listed(
+async def test_a_build_outcome_needs_the_computer_a_mobile_app_an_account_and_the_run_keeps_its_app(
     isolated: None, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(app_config, "COMPUTER_MCP_URL", "")
@@ -281,6 +281,8 @@ async def test_a_build_outcome_needs_the_computer_and_keeps_the_app_it_listed(
         await deep_research.start_run(user_id="u1", query="A tide-table app", outcome="mobile_app")
     monkeypatch.setattr(app_config, "COMPUTER_MCP_URL", "http://computer:8080/computer/mcp")
     monkeypatch.setattr(app_config, "COMPUTER_MCP_TOKEN", "token")
+    with pytest.raises(ValueError, match="Sign in to Ren"):
+        await deep_research.start_run(user_id="u1", query="A tide-table app", outcome="mobile_app")
     monkeypatch.setattr(deep_research, "computer_tools", lambda: [computer_start_process])
     monkeypatch.setattr(deep_research, "build_model", lambda *args, **kwargs: ScriptedModel())
     monkeypatch.setattr(deep_research, "resolve_selection", lambda *args: ("gemini", "scripted"))
@@ -296,7 +298,8 @@ async def test_a_build_outcome_needs_the_computer_and_keeps_the_app_it_listed(
 
     monkeypatch.setattr(deep_research, "build_deep_research_graph", capture)
     monkeypatch.setattr(deep_research, "_execute", hold)
-    meta = await deep_research.start_run(user_id="u1", query="A tide-table app", depth="fast", outcome="mobile_app")
+    meta = await deep_research.start_run(user_id="6f1c2d3e-4a5b-4c6d-8e7f-90a1b2c3d4e5", query="A tide-table app",
+                                         depth="fast", outcome="mobile_app")
     app = deep_research.Application(id="app-1", name="Tides", kind="android",
                                     location="/config/workspace/tides/app-debug.apk", description="Tide tables.",
                                     created_at=1.0)

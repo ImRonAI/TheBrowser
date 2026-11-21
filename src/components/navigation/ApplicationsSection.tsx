@@ -15,12 +15,13 @@ import { useTabStore } from '@/stores/tabStore'
 
 const REFRESH_MS = 60_000
 
-function endpoint(path: string, userId: string): string {
+/** `/context/applications<path>` for the account: the list, one app (`/<id>`) or an Android app's APK (`/<id>/apk`). */
+export function applicationsUrl(path: string, userId: string): string {
   return `${API_BASE_URL.replace(/\/$/, '')}/context/applications${path}?user_id=${encodeURIComponent(userId)}`
 }
 
 /** The app's icon, then its site's favicon, then its initial on volt. */
-function AppIcon({ application }: { application: Application }) {
+export function AppIcon({ application }: { application: Application }) {
   const sources = [application.icon, faviconFor(application.location)].filter((source): source is string => Boolean(source))
   const [failed, setFailed] = useState(0)
   const source = sources[failed]
@@ -44,7 +45,7 @@ export function ApplicationsSection({ label }: { label: React.ReactNode }) {
     const controller = new AbortController()
     const load = async () => {
       try {
-        const response = await fetch(endpoint('', userId), { signal: controller.signal })
+        const response = await fetch(applicationsUrl('', userId), { signal: controller.signal })
         if (response.ok) setApplications((await response.json() as { applications: Application[] }).applications)
       } catch (error) {
         if (!controller.signal.aborted) console.warn('[Applications] list failed', error)
@@ -63,7 +64,7 @@ export function ApplicationsSection({ label }: { label: React.ReactNode }) {
   }, [userId])
 
   const remove = async (application: Application) => {
-    const response = await fetch(endpoint(`/${encodeURIComponent(application.id)}`, userId), { method: 'DELETE' })
+    const response = await fetch(applicationsUrl(`/${encodeURIComponent(application.id)}`, userId), { method: 'DELETE' })
     if (response.ok) setApplications((await response.json() as { applications: Application[] }).applications)
   }
 
