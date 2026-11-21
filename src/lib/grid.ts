@@ -30,6 +30,9 @@ export interface SheetReading { name: string; formulas: string[][]; values: unkn
 
 export const GRID_FENCE = 'grid'
 
+/** How agents are told to write a spreadsheet (`GRID_MARKDOWN` on the server, word for word). */
+export const GRID_RULE = 'A spreadsheet is one ```grid fence holding JSON: {"title": ..., "sheets": [{"name": ..., "rows": [[...], ...], "formats": {"B": "#,##0"}}]}. The first row of a sheet is its header; a cell is a number, true or false, text, or a formula as text starting with "=" in A1 notation ("=SUM(B2:B9)", "=Sheet2!B4*0.2"); "formats" is optional and gives a column\'s Excel number format by its letter. Use it for data to sort, filter and calculate with; a small table of text stays a Markdown table.'
+
 /** Spare rows and columns below and beside the data, so there is room to add to a sheet. */
 const SPARE_ROWS = 50
 const SPARE_COLUMNS = 6
@@ -97,6 +100,11 @@ export function gridMarkdown(grid: Grid): string {
   return `\`\`\`${GRID_FENCE}\n{"title": ${JSON.stringify(grid.title)}, "sheets": [\n${sheets}\n]}\n\`\`\``
 }
 
+/** A new grid with a header row to type over. */
+export function starterGrid(): Grid {
+  return { title: 'Spreadsheet', sheets: [{ name: 'Sheet1', rows: [['Name', 'Amount', 'Notes']] }] }
+}
+
 /**
  * The workbook a grid opens as: each sheet's cells, its header row bold and frozen, a column's number format on its
  * data cells and each column as wide as its longest text: what its cells show (`display`) once a spreadsheet has
@@ -138,9 +146,10 @@ export function gridWorkbook(grid: Grid, display?: readonly GridDisplaySheet[] |
 
 /**
  * What the spreadsheet read back, cut to the cells in use: the grid agents read (a formula where a cell has one, a
- * column's number format where its cells share one) and what each cell shows.
+ * column's number format where its cells share one), each cell's value by sheet, row and cell (a formula's result,
+ * which an Excel file keeps beside the formula) and what each cell shows.
  */
-export function readGrid(title: string, sheets: readonly SheetReading[]): { grid: Grid; display: GridDisplaySheet[] } {
+export function readGrid(title: string, sheets: readonly SheetReading[]): { grid: Grid; values: GridCell[][][]; display: GridDisplaySheet[] } {
   const read = sheets.map((sheet) => {
     const cells = sheet.values.map((row, r) => row.map((value, c): GridCell => {
       const written = sheet.formulas[r]?.[c] || cell(value)
@@ -158,10 +167,11 @@ export function readGrid(title: string, sheets: readonly SheetReading[]): { grid
     }
     return {
       sheet: { name: sheet.name, rows, ...(Object.keys(formats).length > 0 ? { formats } : {}) },
+      values: cut((r, c) => cell(sheet.values[r]?.[c])),
       display: { name: sheet.name, rows: cut((r, c) => sheet.display[r]?.[c] ?? '') },
     }
   })
-  return { grid: { title: titled(title), sheets: read.map((item) => item.sheet) }, display: read.map((item) => item.display) }
+  return { grid: { title: titled(title), sheets: read.map((item) => item.sheet) }, values: read.map((item) => item.values), display: read.map((item) => item.display) }
 }
 
 const isDisplay = (value: unknown): value is GridDisplaySheet[] => Array.isArray(value) && value.every((sheet) =>

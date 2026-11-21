@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import {
-  columnLetter, gridDisplay, gridFromJson, gridMarkdown, gridValue, gridWorkbook, normalizeGrid, readGrid, sheetCsv,
+  columnLetter, gridDisplay, gridFromJson, gridMarkdown, gridValue, gridWorkbook, normalizeGrid, readGrid, sheetCsv, starterGrid,
   type Grid,
 } from './grid.ts'
 
@@ -45,6 +45,7 @@ test('a grid is normalized to named sheets of plain cells, as the server does', 
   assert.equal(normalizeGrid({ title: 'x', sheets: [] }), null)
   assert.equal(normalizeGrid([1]), null)
   assert.deepEqual(normalizeGrid({ sheets: [{ rows: [] }] }), { title: 'Spreadsheet', sheets: [{ name: 'Sheet1', rows: [] }] })
+  assert.deepEqual(normalizeGrid(starterGrid()), starterGrid())
 })
 
 test('a grid reads as a fence with a row a line and parses back', () => {
@@ -85,7 +86,7 @@ test('a grid opens as a workbook: formulas, a bold frozen header, column formats
   assert.equal(gridWorkbook(GRID, shown).sheets?.['sheet-1']?.columnData?.[3]?.w, 96)
 })
 
-test('what the spreadsheet reads back becomes the grid and what it shows', () => {
+test('what the spreadsheet reads back becomes the grid, its formulas\' results and what it shows', () => {
   const money = '$#,##0.00'
   const read = readGrid('Fleet costs', [{
     name: 'Fleet',
@@ -102,6 +103,7 @@ test('what the spreadsheet reads back becomes the grid and what it shows', () =>
       formats: { C: money, D: money },
     }],
   })
+  assert.deepEqual(read.values, [[['Vehicle', 'Units', 'Unit cost', 'Total'], ['Van', 3, 1500, 4500], ['Truck', 1.5, 2041.67, 3062.505], ['', 4.5, null, 7562.505]]])
   assert.deepEqual(read.display[0]?.rows[3], ['', '4.5', '', '$7,562.51'])
   assert.deepEqual(normalizeGrid(read.grid), read.grid)
   const empty = readGrid('  ', [{ name: 'Sheet1', formulas: [['']], values: [[null]], formats: [['']], display: [['']] }])

@@ -10,7 +10,7 @@
  */
 import { normalizeWorkflow, type WorkflowGraph } from './workflow.ts'
 import { EMBED_PROVIDERS, isHttpsUrl, nameFromUrl, normalizeEmbed, parseHttpsUrl, pdfSource, safeEmbedSrc, type EmbedProvider, type Result } from './editor-blocks.ts'
-import { GRID_FENCE, gridFromJson } from './grid.ts'
+import { GRID_FENCE, GRID_RULE, gridFromJson } from './grid.ts'
 import type { RonSegment } from './ron-run.ts'
 
 /** The page text Ron receives as context is capped so one prompt never carries a whole wiki. */
@@ -53,6 +53,7 @@ export function documentRonMessage({ target, intent, currentMarkdown }: {
       'When images are requested or add visual clarity, embed real https:// image URLs from attached reference material or brave_image_search using ![Descriptive caption](https://...) (never invent image URLs). When an embedded video is requested or helpful, place a real https://www.youtube.com/watch?v=VIDEO_ID URL (from attached context or brave_video_search) alone on its own line so the editor renders a playable YouTube embed (never invent video IDs).',
       'When a process, plan, pipeline, approval path or decision flow would help, call render_workflow at the point in the content where the diagram belongs (write the text before it first, then call the tool, then continue). Choose each step\'s shape (kind) and label the arrows out of decisions. Existing workflows appear above as ```workflow JSON fences: to keep one unchanged, repeat its fence exactly; to change it, call render_workflow with the whole new version.',
       EMBED_TABS_RULE,
+      GRID_RULE,
       'When the topic needs facts you are not sure of, research it first with brave_web_search, brave_news_search, brave_image_search, brave_video_search or brave_answer and cite what you used as Markdown links.',
       `Write only what the request asks for. When it adds to the ${target.kind === 'page' ? 'page' : 'description'} (a section, a list, a summary, a workflow), write just that new content and do not repeat what is already there: the user inserts it where they choose. When it asks for the whole ${target.kind === 'page' ? 'page' : 'description'} (draft it, rewrite it, restructure it), write all of it: the user overwrites the ${target.kind === 'page' ? 'page' : 'description'} with it.`,
       'Every word you write goes into the draft: do not announce or narrate your research or add a preamble. Your first words are the content itself.',

@@ -10,6 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from agent.api.core import document_export
 from agent.api.core.document_export import ExportFormat
+from agent.api.core.grid import XLSX_MEDIA_TYPE, GridCell, grid_xlsx, normalize_grid
 from agent.api.core.projects import ProjectIdentity, ProjectService, project_identity
 
 router = APIRouter(prefix="/projects")
@@ -439,6 +440,22 @@ async def export_document(document_id: UUID, format: ExportFormat, identity: Ide
     exported = await document_export.export_document(rows[0]["title"], rows[0]["content"] or "", format)
     return {"filename": exported["filename"], "media_type": exported["media_type"],
             "data": base64.b64encode(exported["data"]).decode("ascii")}
+
+
+class GridExport(StrictModel):
+    grid: dict[str, object]
+    #: Each formula's result, by sheet, row and cell, as the spreadsheet calculated it.
+    values: list[list[list[GridCell]]] = Field(default_factory=list)
+
+
+@router.post("/grids/export", dependencies=[Depends(project_identity)])
+async def export_grid(body: GridExport):
+    """A spreadsheet as an Excel file: its name, media type and bytes in base64, as a page's export answers."""
+    grid = normalize_grid(body.grid)
+    if grid is None:
+        raise HTTPException(422, "This isn't a spreadsheet: it has no sheets.")
+    return {"filename": document_export.filename(grid["title"], "xlsx"), "media_type": XLSX_MEDIA_TYPE,
+            "data": base64.b64encode(grid_xlsx(grid, body.values)).decode("ascii")}
 
 
 @router.get("/documents/{document_id}/skill")
