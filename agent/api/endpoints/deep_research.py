@@ -76,6 +76,7 @@ class StartDeepResearchRequest(BaseModel):
     user_id: str = "default"
     context: str = ""
     depth: deep_research.ResearchDepth = deep_research.DEFAULT_DEPTH
+    outcome: deep_research.Outcome = deep_research.DEFAULT_OUTCOME
     provider: str | None = None
     model_id: str | None = None
     reasoning_effort: str | None = None
@@ -91,7 +92,7 @@ class StartDeepResearchRequest(BaseModel):
 
 @router.get("/status")
 async def get_deep_research_status() -> dict[str, object]:
-    """Whether Deep Research is on, the default model, the depths and the formation."""
+    """Whether Squad is on, the default model, the depths, the outcomes and each outcome's formation."""
     selection = deep_research.resolve_selection()
     return {
         "available": app_config.deep_research_enabled(),
@@ -102,6 +103,8 @@ async def get_deep_research_status() -> dict[str, object]:
         },
         "depths": list(deep_research.VALID_DEPTHS),
         "topology": deep_research.FORMATION_TOPOLOGY,
+        "outcomes": list(deep_research.VALID_OUTCOMES),
+        "topologies": {outcome: deep_research.outcome_topology(outcome) for outcome in deep_research.VALID_OUTCOMES},
     }
 
 
@@ -109,13 +112,14 @@ async def get_deep_research_status() -> dict[str, object]:
 async def start_deep_research_run(body: StartDeepResearchRequest) -> deep_research.RunMeta:
     """Start a run in the background and return its meta."""
     if not app_config.deep_research_enabled():
-        raise HTTPException(status_code=503, detail="Deep Research is disabled")
+        raise HTTPException(status_code=503, detail="Squad is disabled")
     try:
         return await deep_research.start_run(
             user_id=body.user_id.strip() or "default",
             query=body.query,
             context=body.context.strip(),
             depth=body.depth,
+            outcome=body.outcome,
             provider=body.provider or None,
             model_id=body.model_id or None,
             reasoning_effort=body.reasoning_effort or None,

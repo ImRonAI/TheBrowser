@@ -176,21 +176,42 @@ def test_skill_sections_end_at_the_next_heading_of_their_level_and_skip_code_fen
         deep_research.skill_sections(body, ("Missing",))
 
 
-def test_every_swarm_agent_is_told_when_to_hand_off_and_only_the_last_check_ends_it() -> None:
-    for formation in deep_research.FORMATION_TOPOLOGY["nodes"]:
+@pytest.mark.parametrize("outcome", deep_research.VALID_OUTCOMES)
+def test_every_swarm_agent_is_told_when_to_hand_off_and_only_the_last_check_ends_it(
+    outcome: deep_research.Outcome,
+) -> None:
+    handoffs = {**deep_research.SWARM_HANDOFFS, **deep_research.OUTCOME_HANDOFFS[outcome]}
+    for formation in deep_research.outcome_topology(outcome)["nodes"]:
         ids = [agent["id"] for agent in formation["children"]]
         if formation["kind"] == "graph":
-            assert not set(ids) & set(deep_research.SWARM_HANDOFFS)
+            assert not set(ids) & set(handoffs)
             continue
         for agent_id in ids:
-            text = deep_research.SWARM_HANDOFFS[agent_id]
+            text = handoffs[agent_id]
             assert set(re.findall(r"hand off to (\w+)", text)) - {"the", "its"} <= set(ids)
             assert ("without handing off" in text) == (agent_id == ids[-1])
 
 
+def test_each_outcome_keeps_its_team_and_chains_its_formations() -> None:
+    report = deep_research.outcome_topology("report")
+    assert [node["id"] for node in report["nodes"]] == ["research_swarm", "data_analysis_graph", "writing_swarm"]
+    assert [agent["id"] for agent in report["nodes"][2]["children"]] == [
+        "report_designer", "layout_qa", "report_writer", "report_qa"
+    ]
+    assert report["edges"] == [
+        {"from": "research_swarm", "to": "data_analysis_graph"},
+        {"from": "data_analysis_graph", "to": "writing_swarm"},
+    ]
+    deck = deep_research.outcome_topology("deck")
+    assert [node["id"] for node in deck["nodes"]][-1] == "production_graph"
+    production = deck["nodes"][-1]
+    assert [agent["id"] for agent in production["children"]] == ["deck_producer", "deck_build_qa"]
+    assert production["edges"] == [{"from": "deck_producer", "to": "deck_build_qa"}]
+
+
 def test_the_formation_is_a_graph_of_swarms_and_graphs(isolated: None) -> None:
     graph = deep_research.build_deep_research_graph(
-        session_id="dr-build", user_id="u1", model=ScriptedModel(), depth="medium"
+        session_id="dr-build", user_id="u1", model=ScriptedModel(), depth="medium", outcome="deck"
     )
     assert isinstance(graph, Graph)
     kinds = {node_id: type(node.executor) for node_id, node in graph.nodes.items()}
@@ -205,7 +226,7 @@ def test_the_formation_is_a_graph_of_swarms_and_graphs(isolated: None) -> None:
     assert list(research.nodes) == ["researcher", "fact_checker", "citation_manager", "research_qa"]
     production = graph.nodes["production_graph"].executor
     assert isinstance(production, Graph)
-    assert {node.node_id for node in production.entry_points} == {"pdf_publisher", "deck_producer"}
+    assert {node.node_id for node in production.entry_points} == {"deck_producer"}
     for node in graph.nodes.values():
         assert getattr(node.executor, "_session_manager", None) is None
 
@@ -242,9 +263,9 @@ def test_six_levels_from_fast_to_ultra_each_with_its_prompt_and_size() -> None:
 
 def test_each_agent_has_the_level_prompt_its_budget_and_its_tools(isolated: None) -> None:
     graph = deep_research.build_deep_research_graph(session_id="dr-tools", user_id="u1", model=ScriptedModel(),
-                                                    depth="ultra")
+                                                    depth="ultra", outcome="deck")
     agents = _formation_agents(graph)
-    assert len(agents) == 19
+    assert set(agents) == deep_research.OUTCOME_AGENTS["deck"]
     for agent_id, agent in agents.items():
         assert (agent.system_prompt or "").count("# Deep Research: Ultra") == 1, agent_id
         tools = set(agent.tool_names)
@@ -437,7 +458,8 @@ async def test_a_run_streams_the_sdk_events_and_reopens_from_storage(
     monkeypatch.setattr(deep_research, "build_model", lambda *args, **kwargs: model)
     monkeypatch.setattr(deep_research, "resolve_selection", lambda *args: ("gemini", "scripted"))
 
-    meta = await deep_research.start_run(user_id="u1", query="Surface codes vs qLDPC", depth="fast")
+    meta = await deep_research.start_run(user_id="u1", query="Surface codes vs qLDPC", depth="fast", outcome="deck")
+    assert meta["outcome"] == "deck"
     session_id = meta["session_id"]
     run = await _wait_until_done("u1", session_id)
     assert run["status"] == "completed", run["error"]
@@ -459,7 +481,7 @@ async def test_a_run_streams_the_sdk_events_and_reopens_from_storage(
         "Deck Writer",
         "Deck QA",
     ]
-    assert set(model.roles[15:]) == {"PDF Publisher", "Slidev Producer", "PDF QA", "Slidev QA"}
+    assert set(model.roles[15:]) == {"Slidev Producer", "Slidev QA"}
 
     events = run["events"]
     assert isinstance(events, list)
@@ -746,7 +768,7 @@ async def test_transient_timeout_retries_and_model_router_fails_over_across_form
     meta_failover = await deep_research.start_run(user_id="u1", query="Failover test")
     run_failover = await _wait_until_done("u1", meta_failover["session_id"])
     assert run_failover["status"] == "completed", run_failover["error"]
-    assert len(healthy_mistral.roles) == 19
+    assert len(healthy_mistral.roles) == len(deep_research.OUTCOME_AGENTS["report"])
     assert dead_nim.attempts >= 2
 
 
@@ -899,7 +921,7 @@ async def test_hung_or_failing_background_tool_is_polled_cancelled_and_formation
     assert run["status"] == "completed", run["error"]
     assert polled_modes == ["list", "get", "cancel"]
     assert hung_cancelled.is_set()
-    assert len(model.roles) == 19
+    assert len(model.roles) == len(deep_research.OUTCOME_AGENTS["report"])
 
 
 def test_hosted_mcp_sets_native_tasks_config_and_request_timeout_and_recovers_dead_session(
@@ -1012,7 +1034,7 @@ def test_deep_research_defaults_have_no_timeout_dependencies(
     )
     assert graph.execution_timeout is None
     assert graph.node_timeout is None
-    assert len(captured_ptc_configs) == 19
+    assert len(captured_ptc_configs) == len(deep_research.OUTCOME_AGENTS["report"])
     assert all(
         {k: v for k, v in cfg.items() if k != "mount"} == {"hot_reload": True, "timeout": None}
         for cfg in captured_ptc_configs

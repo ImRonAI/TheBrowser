@@ -37,12 +37,16 @@ export function DeepResearchPage({ sessionId = null }: { sessionId?: string | nu
     preferredModel,
     formationView,
     topology,
+    topologies,
+    outcomes,
+    preferredOutcome,
     runs,
     activeSessionId,
     snapshotsBySession,
     starting,
     error,
     setPreferredDepth,
+    setPreferredOutcome,
     setPreferredModel,
     setFormationView,
     setActiveSession,
@@ -172,6 +176,8 @@ export function DeepResearchPage({ sessionId = null }: { sessionId?: string | nu
               userId={userId}
               depth={preferredDepth}
               depths={depths}
+              outcome={preferredOutcome}
+              outcomes={outcomes}
               preferredModel={preferredModel}
               defaultSelection={defaultSelection}
               starting={starting}
@@ -180,13 +186,15 @@ export function DeepResearchPage({ sessionId = null }: { sessionId?: string | nu
               topology={topology}
               containerWidth={workspaceWidth || pageWidth}
               onDepthChange={setPreferredDepth}
+              onOutcomeChange={setPreferredOutcome}
               onModelChange={setPreferredModel}
-              onSubmit={({ query, depth, context, provider, modelId, reasoningEffort }) => {
+              onSubmit={({ query, depth, outcome, context, provider, modelId, reasoningEffort }) => {
                 setPane('formation')
                 void startRun({
                   query,
                   userId,
                   depth,
+                  outcome,
                   context,
                   provider,
                   modelId,
@@ -199,7 +207,7 @@ export function DeepResearchPage({ sessionId = null }: { sessionId?: string | nu
             <>
               <div
                   role="tablist"
-                  aria-label="Deep Research workbench panes"
+                  aria-label="Squad workbench panes"
                   className="flex h-11 shrink-0 items-center justify-center border-b border-surface-200 bg-surface-0 px-3 dark:border-surface-800 dark:bg-surface-900"
                 >
                   <div className="inline-flex items-center rounded-full bg-surface-100 p-0.5 dark:bg-surface-800">
@@ -249,7 +257,7 @@ export function DeepResearchPage({ sessionId = null }: { sessionId?: string | nu
                   {pane === 'formation' && (
                     <DeepResearchFormationWorkbench
                       snapshot={activeSnapshot}
-                      topology={topology}
+                      topology={(activeSnapshot.outcome && topologies[activeSnapshot.outcome]) || topology}
                       view={formationView}
                       onViewChange={setFormationView}
                       onCancel={() => void cancelRun(activeSnapshot.session_id, userId)}

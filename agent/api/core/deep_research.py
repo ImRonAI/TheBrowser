@@ -41,7 +41,7 @@ import shutil
 import sys
 import threading
 import time
-from typing import Final, Literal, TypedDict
+from typing import Final, Literal, NotRequired, TypedDict
 import uuid
 
 from PIL import Image
@@ -92,6 +92,10 @@ DEFAULT_DEPTH: Final[ResearchDepth] = "medium"
 #: The levels runs were saved with before these: the lowest, the default and the highest.
 LEGACY_DEPTHS: Final[dict[str, ResearchDepth]] = {"standard": "low", "deep": "medium", "exhaustive": "ultra"}
 RunStatus = Literal["running", "completed", "failed", "cancelled"]
+#: What a Squad run ends in: a report is a Document; a deck is a Slidev deck beside the report it is written from.
+Outcome = Literal["report", "deck"]
+VALID_OUTCOMES: Final[tuple[Outcome, ...]] = ("report", "deck")
+DEFAULT_OUTCOME: Final[Outcome] = "report"
 JsonDict = dict[str, object]
 
 #: The Deep Research skill library, installed by the Skills CLI (``skills-lock.json`` records each source).
@@ -149,7 +153,7 @@ def _edge(source: str, target: str) -> Edge:
 #: reading each other's descriptions. The renderer draws the same structure.
 FORMATION_TOPOLOGY: Final[Topology] = {
     "id": "deep_research_graph",
-    "label": "Deep Research",
+    "label": "Squad",
     "kind": "graph",
     "nodes": [
         {
@@ -255,7 +259,8 @@ FORMATION_TOPOLOGY: Final[Topology] = {
                     "layout_qa",
                     "Layout QA",
                     "verification-before-completion",
-                    "Checks report-layout.md and deck-layout.md against the inquiry, research.md and figures/.",
+                    "Checks the layouts the team's designers wrote (report-layout.md, and deck-layout.md when the team "
+                    "has a deck) against the inquiry, research.md and figures/.",
                 ),
                 _agent(
                     "report_writer",
@@ -356,6 +361,47 @@ SWARM_HANDOFFS: Final[dict[str, str]] = {
     "without handing off: that ends the writing.",
 }
 
+#: The agents each outcome's team keeps from ``FORMATION_TOPOLOGY``; a formation left with none drops out. The PDF is
+#: printed from the report's Document, so no team builds one.
+_RESEARCH_AGENTS: Final[frozenset[str]] = frozenset(
+    {"researcher", "fact_checker", "citation_manager", "research_qa", "visual_planner", "data_analyst",
+     "visual_citation", "visual_qa", "report_designer", "layout_qa", "report_writer", "report_qa"}
+)
+OUTCOME_AGENTS: Final[dict[Outcome, frozenset[str]]] = {
+    "report": _RESEARCH_AGENTS,
+    "deck": _RESEARCH_AGENTS | {"deck_designer", "deck_writer", "deck_qa", "deck_producer", "deck_build_qa"},
+}
+
+#: Handoffs that differ from ``SWARM_HANDOFFS`` where an outcome's team leaves agents out.
+OUTCOME_HANDOFFS: Final[dict[Outcome, dict[str, str]]] = {
+    "report": {
+        "report_designer": "When report-layout.md is written, hand off to layout_qa.",
+        "layout_qa": "If report-layout.md fails your check, hand off to report_designer. When it passes, hand off to "
+        "report_writer.",
+        "report_qa": "If report.md fails your check, hand off to report_writer. When it passes, reply with your "
+        "verdict without handing off: that ends the writing.",
+    },
+    "deck": {},
+}
+
+
+def outcome_topology(outcome: Outcome) -> Topology:
+    """``FORMATION_TOPOLOGY`` with only the outcome's team: its formations in order, each with its kept agents."""
+    kept = OUTCOME_AGENTS[outcome]
+    nodes: list[FormationSpec] = []
+    for formation in FORMATION_TOPOLOGY["nodes"]:
+        children = [child for child in formation["children"] if child["id"] in kept]
+        if children:
+            ids = {child["id"] for child in children}
+            edges = [edge for edge in formation["edges"] if edge["from"] in ids and edge["to"] in ids]
+            nodes.append({**formation, "children": children, "edges": edges})
+    return {
+        **FORMATION_TOPOLOGY,
+        "nodes": nodes,
+        "edges": [_edge(source["id"], target["id"]) for source, target in zip(nodes, nodes[1:])],
+    }
+
+
 #: The headings of each agent's ``SKILL.md`` whose sections it gets, each with its subsections. The skill files are
 #: general packs (manuscript peer review, BibTeX from paper databases, marketing copy, PowerPoint), so an agent gets
 #: only what fits its role; an agent missing here gets none of its skill, except the Slidev agents (``SLIDEV_AGENTS``).
@@ -379,7 +425,7 @@ SLIDEV_AGENTS: Final[frozenset[str]] = frozenset({"deck_designer", "deck_produce
 #: What the agents' roles need beyond their description.
 ROLE_NOTES: Final[dict[str, str]] = {
     "report_writer": (
-        "report.md becomes a Document in the user's Deep Research folder, so write it the way Ren's Document Agent "
+        "report.md becomes a Document in the user's Squad folder, so write it the way Ren's Document Agent "
         "writes a page:\n"
         "- Charts as ![Caption](figures/<name>.png); other images only from real https:// URLs a tool returned.\n"
         "- A process, plan, pipeline, timeline or decision flow as a workflow: draw it with `render_workflow`, then "
@@ -647,6 +693,8 @@ class RunMeta(TypedDict):
     context: str
     title: str
     depth: ResearchDepth
+    #: Missing on a run saved before outcomes, which ran the whole ``FORMATION_TOPOLOGY``.
+    outcome: NotRequired[Outcome]
     status: RunStatus
     active: bool
     created_at: str
@@ -746,9 +794,12 @@ def build_deep_research_graph(
     user_id: str,
     model: Model | ModelRouter,
     depth: ResearchDepth,
+    outcome: Outcome = DEFAULT_OUTCOME,
     on_node_event: Callable[[JsonDict], None] | None = None,
 ) -> Graph:
-    """Build ``FORMATION_TOPOLOGY`` as a Strands Graph whose nodes are Swarms and Graphs of harness agents."""
+    """Build the outcome's team as a Strands Graph whose nodes are Swarms and Graphs of harness agents."""
+    topology = outcome_topology(outcome)
+    handoffs = {**SWARM_HANDOFFS, **OUTCOME_HANDOFFS[outcome]}
     workspace = artifacts_dir(session_id).resolve()
     workspace.mkdir(parents=True, exist_ok=True)
     (workspace / "tools").mkdir(exist_ok=True)
@@ -765,12 +816,12 @@ def build_deep_research_graph(
         "there under absolute paths.\n"
         f"- Python: {sys.executable}"
     )
-    node_ids = frozenset(child["id"] for formation in FORMATION_TOPOLOGY["nodes"] for child in formation["children"])
+    node_ids = frozenset(child["id"] for formation in topology["nodes"] for child in formation["children"])
     from agent.api.core.build_agent import _context_kwargs
 
     def make_agent(spec: AgentSpec, formation_id: str) -> Agent:
         skill = skills[spec["skill"]]
-        handoff = SWARM_HANDOFFS.get(spec["id"])
+        handoff = handoffs.get(spec["id"])
         sections = SKILL_SECTIONS.get(spec["id"])
         note = ROLE_NOTES.get(spec["id"])
         budget = TurnBudget(LEVELS[depth]["turns"], node_ids)
@@ -903,11 +954,11 @@ def build_deep_research_graph(
         return builder.build()
 
     builder = GraphBuilder()
-    for formation in FORMATION_TOPOLOGY["nodes"]:
+    for formation in topology["nodes"]:
         builder.add_node(make_formation(formation), formation["id"])
-    for edge in FORMATION_TOPOLOGY["edges"]:
+    for edge in topology["edges"]:
         builder.add_edge(edge["from"], edge["to"], condition=_node_completed(edge["from"]))
-    builder.set_graph_id(FORMATION_TOPOLOGY["id"])
+    builder.set_graph_id(topology["id"])
     builder.set_session_manager(
         SnapshotSessionManager(session_id=session_id, storage=get_user_session_storage(user_id))
     )
@@ -1065,6 +1116,7 @@ async def start_run(
     query: str,
     context: str = "",
     depth: ResearchDepth = DEFAULT_DEPTH,
+    outcome: Outcome = DEFAULT_OUTCOME,
     provider: str | None = None,
     model_id: str | None = None,
     reasoning_effort: str | None = None,
@@ -1076,7 +1128,7 @@ async def start_run(
     """
     selection = resolve_selection(provider, model_id)
     if selection is None:
-        raise ValueError("No model provider is configured for Deep Research.")
+        raise ValueError("No model provider is configured for Squad.")
     chosen_provider, chosen_model = selection
     session_id = f"dr-{uuid.uuid4().hex[:16]}"
     model = build_research_model(chosen_provider, chosen_model, reasoning_effort)
@@ -1089,6 +1141,7 @@ async def start_run(
             "context": context,
             "title": query.splitlines()[0][:96],
             "depth": depth,
+            "outcome": outcome,
             "status": "running",
             "active": True,
             "created_at": created,
@@ -1111,7 +1164,8 @@ async def start_run(
             loop.call_soon_threadsafe(_append, run, wrapped)
 
     graph = build_deep_research_graph(
-        session_id=session_id, user_id=user_id, model=model, depth=depth, on_node_event=on_node_event
+        session_id=session_id, user_id=user_id, model=model, depth=depth, outcome=outcome,
+        on_node_event=on_node_event,
     )
     _RUNS[(user_id, session_id)] = run
     await _save(run)

@@ -9,7 +9,9 @@ import { openInternalUrl } from '@/components/board/task-detail/editor/extension
 import {
   DEFAULT_FORMATION_TOPOLOGY,
   DEFAULT_RESEARCH_DEPTH,
+  DEFAULT_SQUAD_OUTCOME,
   RESEARCH_DEPTHS,
+  SQUAD_OUTCOMES,
   cancelDeepResearchRun,
   deleteDeepResearchRun,
   fetchDeepResearchStatus,
@@ -28,6 +30,7 @@ import {
   type DeepResearchSnapshot,
   type FormationTopology,
   type ResearchDepth,
+  type SquadOutcome,
 } from '@/lib/deep-research-api'
 import { createDocument, listAllDocuments } from '@/lib/project-documents'
 import { useAuthStore } from '@/stores/authStore'
@@ -35,7 +38,7 @@ import { getProjectsState, projectsRequestFor } from '@/stores/projectsStore'
 import { useTabStore } from '@/stores/tabStore'
 
 /** The personal page every run's report is saved under, in the Documents library. */
-export const DEEP_RESEARCH_FOLDER = 'Deep Research'
+export const DEEP_RESEARCH_FOLDER = 'Squad'
 
 /** Resolve the active account's user id using the same convention as `usePanelChat` and `ThreadsList`. */
 export function resolveResearchUserId(explicit?: string | null): string {
@@ -51,6 +54,7 @@ interface StartRunParams {
   query: string
   userId?: string | undefined
   depth?: ResearchDepth | undefined
+  outcome?: SquadOutcome | undefined
   context?: string | undefined
   provider?: string | null | undefined
   modelId?: string | null | undefined
@@ -63,6 +67,10 @@ export interface DeepResearchState {
   statusChecked: boolean
   defaultSelection: DeepResearchSelection
   topology: FormationTopology
+  /** Each outcome's team, the formation a run with that outcome draws. */
+  topologies: Partial<Record<SquadOutcome, FormationTopology>>
+  outcomes: SquadOutcome[]
+  preferredOutcome: SquadOutcome
   depths: ResearchDepth[]
   preferredDepth: ResearchDepth
   preferredModel: AgentModelSelection
@@ -77,6 +85,7 @@ export interface DeepResearchState {
   error: string | null
 
   setPreferredDepth: (depth: ResearchDepth) => void
+  setPreferredOutcome: (outcome: SquadOutcome) => void
   setPreferredModel: (selection: AgentModelSelection) => void
   setFormationView: (view: 'graph' | 'list') => void
   clearError: () => void
@@ -87,7 +96,7 @@ export interface DeepResearchState {
   openRun: (sessionId: string, userId?: string, options?: { syncUrl?: boolean }) => Promise<void>
   cancelRun: (sessionId: string, userId?: string) => Promise<void>
   deleteRun: (sessionId: string, userId?: string) => Promise<void>
-  /** Save the finished run's report as a page under Deep Research in Documents; answers the page's id. */
+  /** Save the finished run's report as a page under Squad in Documents; answers the page's id. */
   saveReportAsDocument: (sessionId: string, userId?: string) => Promise<string | null>
   disconnectAllStreams: () => void
 }
@@ -209,6 +218,9 @@ export const useDeepResearchStore = create<DeepResearchState>()(
         statusChecked: false,
         defaultSelection: { provider: null, model_id: null, reasoning_effort: null },
         topology: DEFAULT_FORMATION_TOPOLOGY,
+        topologies: {},
+        outcomes: [...SQUAD_OUTCOMES],
+        preferredOutcome: DEFAULT_SQUAD_OUTCOME,
         depths: [...RESEARCH_DEPTHS],
         preferredDepth: DEFAULT_RESEARCH_DEPTH,
         preferredModel: { model: DEFAULT_AGENT_MODEL, provider: '', effort: '' },
@@ -222,6 +234,7 @@ export const useDeepResearchStore = create<DeepResearchState>()(
         error: null,
 
         setPreferredDepth: (depth) => set({ preferredDepth: depth }),
+        setPreferredOutcome: (outcome) => set({ preferredOutcome: outcome }),
         setPreferredModel: (selection) => set({ preferredModel: selection }),
         setFormationView: (view) => set({ formationView: view }),
         clearError: () => set({ error: null }),
@@ -242,6 +255,8 @@ export const useDeepResearchStore = create<DeepResearchState>()(
                   defaultSelection: status.default_selection,
                   depths: status.depths,
                   topology: status.topology,
+                  topologies: status.topologies,
+                  ...(status.outcomes.length > 0 ? { outcomes: status.outcomes } : {}),
                 })
               })
               .catch(() => {
@@ -292,6 +307,7 @@ export const useDeepResearchStore = create<DeepResearchState>()(
           if (!query || get().starting) return null
           const userId = resolveResearchUserId(params.userId)
           const depth = params.depth ?? get().preferredDepth
+          const outcome = params.outcome ?? get().preferredOutcome
           set({ starting: true, error: null })
           try {
             const context = params.context?.trim() || undefined
@@ -302,6 +318,7 @@ export const useDeepResearchStore = create<DeepResearchState>()(
               query,
               user_id: userId,
               depth,
+              outcome,
               ...(context !== undefined ? { context } : {}),
               ...(provider !== undefined ? { provider } : {}),
               ...(modelId !== undefined ? { model_id: modelId } : {}),
@@ -468,10 +485,12 @@ export const useDeepResearchStore = create<DeepResearchState>()(
         return {
           ...merged,
           preferredDepth: RESEARCH_DEPTHS.find((depth) => depth === merged.preferredDepth) ?? DEFAULT_RESEARCH_DEPTH,
+          preferredOutcome: SQUAD_OUTCOMES.find((outcome) => outcome === merged.preferredOutcome) ?? DEFAULT_SQUAD_OUTCOME,
         }
       },
       partialize: (state) => ({
         preferredDepth: state.preferredDepth,
+        preferredOutcome: state.preferredOutcome,
         preferredModel: state.preferredModel,
         formationView: state.formationView,
       }),
