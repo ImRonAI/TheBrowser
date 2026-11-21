@@ -4,6 +4,7 @@ import {
   BUILD_OUTCOMES,
   DEFAULT_FORMATION_TOPOLOGY,
   DeepResearchSSEParser,
+  REPORT_OUTCOMES,
   SQUAD_OUTCOMES,
   cancelDeepResearchRun,
   deleteDeepResearchRun,
@@ -212,13 +213,13 @@ test('the build outcomes come from the backend with their team, and a run carrie
         default_selection: meta.selection,
         depths: ['medium'],
         topology: DEFAULT_FORMATION_TOPOLOGY,
-        outcomes: [...SQUAD_OUTCOMES, 'datagrid'],
-        topologies: { mobile_app: team, datagrid: team },
+        outcomes: [...SQUAD_OUTCOMES, 'podcast'],
+        topologies: { mobile_app: team, podcast: team },
       })
     }
     if (url.includes('/runs/dr-101/cancel')) return jsonResponse(built)
     if (init?.method === 'POST') return jsonResponse({ ...built, application: { ...application, kind: 'ios' } })
-    return jsonResponse({ ...built, events: [], files: [], application })
+    return jsonResponse({ ...built, events: [], files: [], application, grid_json: '{"title": "Tides", "sheets": []}' })
   }
   const options = { baseUrl: 'http://localhost:8765/', fetcher }
 
@@ -226,6 +227,7 @@ test('the build outcomes come from the backend with their team, and a run carrie
   const status = await fetchDeepResearchStatus(options)
   assert.deepEqual(status.outcomes, SQUAD_OUTCOMES)
   assert.deepEqual(BUILD_OUTCOMES, ['web_app', 'website', 'mobile_app'])
+  assert.deepEqual(REPORT_OUTCOMES, ['report', 'deck'])
   assert.deepEqual(Object.keys(status.topologies), ['mobile_app'])
   assert.deepEqual(status.topologies.mobile_app?.nodes.map((node) => [node.id, node.kind]), [
     ['research_swarm', 'swarm'],
@@ -237,6 +239,9 @@ test('the build outcomes come from the backend with their team, and a run carrie
   assert.equal(opened.outcome, 'mobile_app')
   assert.deepEqual(opened.application, { ...application })
   assert.equal(emptyDeepResearchSnapshot('dr-102').application, null)
+  // A spreadsheet's run carries grid.json as its team wrote it.
+  assert.equal(opened.grid_json, '{"title": "Tides", "sheets": []}')
+  assert.equal(emptyDeepResearchSnapshot('dr-102').grid_json, '')
 
   // A meta without the app keeps the one the run had; an app of a kind Ren doesn't list is none.
   assert.deepEqual((await cancelDeepResearchRun('dr-101', 'user-7', options, opened)).application, application)

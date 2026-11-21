@@ -196,13 +196,13 @@ export const useDeepResearchStore = create<DeepResearchState>()(
               delete nextStreaming[sessionId]
               return { streamingSessions: nextStreaming }
             })
-            // The finished run's status, workspace files, report and deck. Its report is kept as a Document
-            // under Deep Research as soon as it finishes, whichever view is open (Report Studio also saves a
-            // run that finished while the app was closed).
+            // The finished run's status, workspace files, report, deck and spreadsheet. Its report or its
+            // spreadsheet is kept as a Document under Deep Research as soon as it finishes, whichever view is
+            // open (Report Studio also saves a run that finished while the app was closed).
             if (!controller.signal.aborted) {
               void refresh()
                 .then((fresh) =>
-                  fresh.status === 'completed' && fresh.report_markdown.trim() && !fresh.document_id
+                  fresh.status === 'completed' && (fresh.report_markdown.trim() || fresh.grid_json.trim()) && !fresh.document_id
                     ? get().saveReportAsDocument(sessionId, userId)
                     : null,
                 )

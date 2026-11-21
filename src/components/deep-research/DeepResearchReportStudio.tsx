@@ -1,8 +1,8 @@
 /**
  * DeepResearchReportStudio — the right-hand studio pane of the Deep Research workbench.
  *
- * Three studio views (a build outcome's run shows what OpenCode built, `DeepResearchApplication`, in the report's
- * place, and has no deck):
+ * Three studio views (a run that writes no report shows what it made in the report's place, the spreadsheet
+ * (`GridView`) or what OpenCode built (`DeepResearchApplication`), and has no deck):
  * - **PDF Report**: Embedded scholarly PDF viewer (`/deep-research/runs/{id}/artifacts/report.pdf`)
  *   when ready, with live streaming Markdown fallback (and PDF / Markdown toggle), **Download PDF**,
  *   **Copy Markdown**, and **Save to Context** (`POST /context/items`).
@@ -38,9 +38,11 @@ import {
 } from 'lucide-react'
 import { MARKDOWN_COMPONENTS, MessageResponse } from '@/components/ai-elements/response'
 import { RenMark } from '@/components/brand'
+import { GridView } from '@/components/grid/GridView'
 import { useElementWidth } from '@/hooks/useElementWidth'
 import { API_BASE_URL } from '@/lib/api-base'
 import { createContextClient } from '@/lib/context-api'
+import { gridFromJson, type GridValue } from '@/lib/grid'
 import { documentsLibraryUrl } from '@/lib/project-documents'
 import { openInternalUrl } from '@/components/board/task-detail/editor/extensions/blocks/workspace'
 import { useDeepResearchStore } from '@/stores/deepResearchStore'
@@ -55,7 +57,7 @@ import {
 import { useContextAgentStore } from '@/stores/contextAgentStore'
 import { cn } from '@/utils/cn'
 import { DeepResearchApplication } from './DeepResearchApplication'
-import { builtOutcome } from './DeepResearchHero'
+import { madeOutcome } from './DeepResearchHero'
 import { openSourceInNewTab } from './openSource'
 
 export type ResearchStudioTab = 'report' | 'deck' | 'trace'
@@ -312,8 +314,13 @@ export function DeepResearchReportStudio({ snapshot, userId }: DeepResearchRepor
   const twoColSources = studioWidth === 0 || studioWidth >= 680
 
   const [activeTab, setActiveTab] = useState<ResearchStudioTab>('report')
-  // A build outcome's run shows what OpenCode built where a report's run shows its report, and has no deck.
-  const made = builtOutcome(snapshot.outcome)
+  // A run that writes no report shows what it made where a report's run shows its report, and has no deck.
+  const made = madeOutcome(snapshot.outcome)
+  const sheet = useMemo((): GridValue | null => {
+    const grid = gridFromJson(snapshot.grid_json)
+    return grid ? { grid, display: null, workbook: null } : null
+  }, [snapshot.grid_json])
+  const kept = sheet ? 'spreadsheet' : 'report'
   const tab = made && activeTab === 'deck' ? 'report' : activeTab
   const [reportFormat, setReportFormat] = useState<'pdf' | 'markdown'>('pdf')
   const [deckFormat, setDeckFormat] = useState<'interactive' | 'markdown'>('interactive')
@@ -378,8 +385,8 @@ export function DeepResearchReportStudio({ snapshot, userId }: DeepResearchRepor
   const deckEmbedUrl = slidevPreviewUrl || slidevPdfUrl
   const showDeckIframe = Boolean(deckEmbedUrl) && (deckFormat === 'interactive' || !hasSlidevText)
 
-  // A finished run's report is kept as a Document under Deep Research, once.
-  const reportReady = snapshot.status === 'completed' && hasReportText
+  // A finished run's report, or its spreadsheet, is kept as a Document under Deep Research, once.
+  const reportReady = snapshot.status === 'completed' && (hasReportText || sheet !== null)
   const saveDocument = () => {
     setDocumentState('saving')
     setDocumentError('')
@@ -387,7 +394,7 @@ export function DeepResearchReportStudio({ snapshot, userId }: DeepResearchRepor
       .then(() => setDocumentState('idle'))
       .catch((err: unknown) => {
         setDocumentState('error')
-        setDocumentError(err instanceof Error ? err.message : 'Could not save the report as a Document')
+        setDocumentError(err instanceof Error ? err.message : `Could not save the ${kept} as a Document`)
       })
   }
   useEffect(() => {
@@ -455,7 +462,7 @@ export function DeepResearchReportStudio({ snapshot, userId }: DeepResearchRepor
                 label: made ? made.label : compact ? 'PDF' : 'PDF Report',
                 icon: made ? made.icon : FileText,
                 count: null,
-                readyDot: Boolean(made ? snapshot.application : reportPdfUrl),
+                readyDot: Boolean(made ? snapshot.application || sheet : reportPdfUrl),
               },
               {
                 id: 'deck',
@@ -504,7 +511,7 @@ export function DeepResearchReportStudio({ snapshot, userId }: DeepResearchRepor
         </nav>
 
         {/* Report Tab Actions */}
-        {tab === 'report' && (reportPdfUrl || hasReportText) && (
+        {tab === 'report' && (reportPdfUrl || hasReportText || sheet) && (
           <div className="flex shrink-0 flex-wrap items-center gap-1.5">
             {reportPdfUrl && hasReportText && (
               <div
@@ -546,8 +553,8 @@ export function DeepResearchReportStudio({ snapshot, userId }: DeepResearchRepor
                   documentState === 'error'
                     ? documentError
                     : snapshot.document_id
-                      ? 'Open the report in Documents › Squad'
-                      : 'Saving the report to Documents › Squad'
+                      ? `Open the ${kept} in Documents › Squad`
+                      : `Saving the ${kept} to Documents › Squad`
                 }
                 className="inline-flex h-7 items-center gap-1.5 rounded-lg border border-blurple-600/35 bg-blurple-600/10 px-2.5 font-sans text-[11.5px] font-medium text-volt transition-colors hover:bg-blurple-600/15 disabled:opacity-60 dark:border-blurple-400/35 dark:bg-blurple-400/15 dark:hover:bg-blurple-400/25"
               >
@@ -717,7 +724,7 @@ export function DeepResearchReportStudio({ snapshot, userId }: DeepResearchRepor
       <div className="min-h-0 flex-1 overflow-y-auto px-6 py-6 scrollbar-thin">
         {/* 1. PDF Report Tab */}
         {tab === 'report' && (
-          <div className={cn('mx-auto', showPdfIframe || snapshot.application ? 'max-w-[960px]' : 'max-w-[760px]')}>
+          <div className={cn('mx-auto', showPdfIframe || snapshot.application || sheet ? 'max-w-[960px]' : 'max-w-[760px]')}>
             {snapshot.error && (
               <div
                 role="alert"
@@ -730,6 +737,10 @@ export function DeepResearchReportStudio({ snapshot, userId }: DeepResearchRepor
 
             {snapshot.application ? (
               <DeepResearchApplication application={snapshot.application} userId={userId} />
+            ) : sheet ? (
+              <div className="overflow-hidden rounded-2xl border border-surface-200 bg-surface-0 dark:border-surface-800 dark:bg-surface-850/90">
+                <GridView value={sheet} editable={false} />
+              </div>
             ) : showPdfIframe && reportPdfUrl ? (
               <div className="flex flex-col gap-3">
                 <div className="flex items-center justify-between gap-2 rounded-xl border border-surface-200 bg-surface-50/80 px-3.5 py-2 dark:border-surface-800 dark:bg-surface-850/80">
@@ -802,9 +813,11 @@ export function DeepResearchReportStudio({ snapshot, userId }: DeepResearchRepor
                 </div>
 
                 <p className="mt-3 font-sans text-[13.5px] leading-relaxed text-ink-secondary dark:text-ink-inverse-secondary">
-                  {made
-                    ? "The research swarm researches and checks the sources, then the build swarm has OpenCode build it on Ren's workspace computer, checks it and lists it under Applications."
-                    : 'The research swarm researches and checks the sources, the data analysis graph builds the charts, the writing swarm writes the report and the deck, and the production graph publishes the PDF and the Slidev deck.'}
+                  {snapshot.outcome === 'datagrid'
+                    ? 'The research swarm researches and checks the sources, then the grid swarm builds the spreadsheet from them, every result a formula and every row with its source, and checks it.'
+                    : made
+                      ? "The research swarm researches and checks the sources, then the build swarm has OpenCode build it on Ren's workspace computer, checks it and lists it under Applications."
+                      : 'The research swarm researches and checks the sources, the data analysis graph builds the charts, the writing swarm writes the report and the deck, and the production graph publishes the PDF and the Slidev deck.'}
                 </p>
 
                 {snapshot.active_node_path.length > 0 && (

@@ -5,7 +5,8 @@
  * - Idle (`sessionId === null` and no selected run): centered hero + `.ron-field` composer +
  *   depth selector + 4 one-click starter briefs.
  * - Active / Completed run: two full-width tabs, `Formation` (the agent graph, or the stage list)
- *   and `Report Studio`, which a build outcome's run names after what it makes (Web App, Website, Mobile App).
+ *   and `Report Studio`, which a run that writes no report names after what it makes (DataGrid, Web App, Website,
+ *   Mobile App).
  * - Polls `/deep-research/runs` every 5s while mounted so async runs launched by Ren or any
  *   specialist/issue/live agent via `deep_research_start` surface automatically.
  */
@@ -17,7 +18,7 @@ import {
   DeepResearchHero,
   DeepResearchReportStudio,
   DeepResearchRunsRail,
-  builtOutcome,
+  madeOutcome,
 } from '@/components/deep-research'
 import { useElementWidth } from '@/hooks/useElementWidth'
 import { DEFAULT_SQUAD_OUTCOME, emptyDeepResearchSnapshot } from '@/lib/deep-research-api'
@@ -100,14 +101,16 @@ export function DeepResearchPage({ sessionId = null }: { sessionId?: string | nu
       }))
     : null
 
-  // What a build outcome's run makes: its Studio tab carries that name and shows the app OpenCode built.
-  const made = builtOutcome(activeSnapshot?.outcome)
+  // What a run that writes no report makes: its Studio tab carries that name and shows the spreadsheet, or the
+  // app OpenCode built.
+  const made = madeOutcome(activeSnapshot?.outcome)
 
-  // Switch to the Studio tab when the final report, the artifacts or the app are ready.
+  // Switch to the Studio tab when the final report, the spreadsheet, the artifacts or the app are ready.
   const hasStudioOutput = Boolean(
     activeSnapshot &&
       (activeSnapshot.report_markdown.trim() ||
         activeSnapshot.slidev_markdown.trim() ||
+        activeSnapshot.grid_json.trim() ||
         activeSnapshot.artifacts?.report_pdf_url ||
         activeSnapshot.artifacts?.slidev_preview_url ||
         activeSnapshot.application),
