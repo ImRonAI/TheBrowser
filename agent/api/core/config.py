@@ -137,7 +137,7 @@ XAI_MODEL = os.getenv("XAI_MODEL", "grok-4.5")
 XAI_DEFAULT_MODEL = XAI_MODEL
 
 # Gemini AI Studio / Mistral defaults from the Strands provider docs.
-GEMINI_DEFAULT_MODEL = os.getenv("GEMINI_MODEL") or "gemini-4-hydrogen"
+GEMINI_DEFAULT_MODEL = os.getenv("GEMINI_MODEL") or "gemini-3.5-flash-lite"
 
 # --- Live Music (Lyria RealTime) for the Live agent's music_* tools (core/live_music.py) ---
 #: ``client.aio.live.music.connect(model=...)`` model resource name (experimental preview model).

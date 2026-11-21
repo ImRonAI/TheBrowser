@@ -371,7 +371,7 @@ def test_mistral_is_the_default_provider_and_nim_builds_the_sdk_openai_model(mon
         panel_agent.build_model("nim", "z-ai/glm-5.3-flash", "medium")
 
 
-def test_gemini_4_hydrogen_is_gemini_default_text_model_and_live_stays_3_8_live(monkeypatch):
+def test_gemini_3_5_flash_lite_is_gemini_default_text_model_and_live_stays_3_8_live(monkeypatch):
     from agent.api.core import config as app_config
     from agent.api.core.gemini_model import RonGeminiModel
     from agent.api.endpoints import bidi
@@ -379,7 +379,7 @@ def test_gemini_4_hydrogen_is_gemini_default_text_model_and_live_stays_3_8_live(
     monkeypatch.setattr(app_config, "GEMINI_API_KEY", "gemini-free-tier-test")
     monkeypatch.setattr(app_config, "NVIDIA_NIM_API_KEY", "nvapi-test")
     monkeypatch.setattr(app_config, "MISTRAL_API_KEY", "mistral-test")
-    assert panel_agent.provider_default_model("gemini") == "gemini-4-hydrogen"
+    assert panel_agent.provider_default_model("gemini") == "gemini-3.5-flash-lite"
     assert panel_agent.default_selection() == ("mistral", app_config.MISTRAL_DEFAULT_MODEL)
     assert bidi.DEFAULT_MODEL == "gemini-3.8-live"
 
