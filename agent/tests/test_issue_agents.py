@@ -104,13 +104,13 @@ class Service:
 
 
 #: Issue-scoped tools every issue agent carries: the private issue tools, the learned-skill
-#: pair (teaching.create_learned_skill_tools) and the native memory search tool exposed by the
-#: per-issue memory_manager ``search_tool_config``. Not shell/browser/delegation.
+#: pair (teaching.create_learned_skill_tools) and the brain's ``search_memory`` and ``memory`` tools from the
+#: memory_manager (dreaming.agent_memory). Not shell/browser/delegation.
 ISSUE_AGENT_TOOLS = {'read_issue', 'update_issue', 'edit_issue', 'create_child', 'read_issue_context', 'link_issue',
                      'save_work_product', 'add_workflow_to_description',
                      # The issue's discussion: read it, and comment as the "Issue agent".
                      'read_comments', 'add_comment',
-                     'list_learned_skills', 'use_skill', 'search_memory',
+                     'list_learned_skills', 'use_skill', 'search_memory', 'memory',
                      # Context intake: links (installed strands_tools); this lead has no catalogued vision, so media
                      # is described by RON_MEDIA_MODEL (media_understanding.media_tools).
                      'http_request', 'understand_media'}
