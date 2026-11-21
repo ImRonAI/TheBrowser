@@ -63,7 +63,7 @@ def hub_url() -> str | None:
     return (os.getenv("REN_HUB_URL") or "").strip().rstrip("/") or None
 
 
-def _hub_token() -> str:
+def hub_token() -> str:
     return os.getenv("REN_HUB_TOKEN", "")
 
 
@@ -243,7 +243,7 @@ async def attach_to_hub(server: FastMCP, url: str, token: str) -> None:
 # --- the phone, for Ren's own agents -------------------------------------------------------------
 
 
-def _hub_http_url(url: str) -> str:
+def hub_http_url(url: str) -> str:
     """The hub's MCP endpoint for its WebSocket base (``wss://host/hub`` -> ``https://host/hub/mcp``)."""
     return re.sub(r"^ws", "http", url, count=1) + MCP_PATH
 
@@ -253,7 +253,7 @@ def hub_server_config() -> dict[str, dict[str, object]]:
     url = hub_url()
     if url is None:
         return {}
-    return {PHONE_SERVER: {"url": _hub_http_url(url), "headers": {"Authorization": f"Bearer {_hub_token()}"}}}
+    return {PHONE_SERVER: {"url": hub_http_url(url), "headers": {"Authorization": f"Bearer {hub_token()}"}}}
 
 
 def hub_client_factory() -> Callable[[], Any]:

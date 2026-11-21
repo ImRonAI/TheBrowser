@@ -223,6 +223,7 @@ def create_build_agent(*, user_id: str, session_id: str, model: Any, side_model_
     from agent.api.core.web_tools import web_tools
     from agent.api.core.build_workspace import BuildWorkspaceGuard, build_agent_prompt, ensure_workspace
     from agent.api.core.deep_research_tools import deep_research_tools
+    from agent.api.core.connections import connection_tools
     from agent.api.core.panel_storage import get_user_session_storage
     from agent.api.core.panel_tools import installed_http_request
     from agent.api.core.threads import ThreadProjection
@@ -257,6 +258,7 @@ def create_build_agent(*, user_id: str, session_id: str, model: Any, side_model_
             *brave_tools(),
             *web_tools(),
             *deep_research_tools(user_id=user_id),
+            *connection_tools(user_id),
         ],
         plugins=consumer_plugins,
         mcp_servers=None,

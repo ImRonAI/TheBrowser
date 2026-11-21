@@ -164,6 +164,7 @@ def build_live_tools(
     from agent.api.core.a2a_tools import a2a_tools
     from agent.api.core.harness_agents import create_harness_tools
     from agent.api.core.music_generation import music_generation_tools
+    from agent.api.core.connections import connection_tools
 
     tools = [
         *host,
@@ -173,6 +174,7 @@ def build_live_tools(
         *create_harness_tools(user_id),
         *music_generation_tools(user_id),
         *deep_research_tools(user_id=user_id),
+        *connection_tools(user_id),
     ]
     return [value for value in tools if gemini_live_declarable(value)]
 

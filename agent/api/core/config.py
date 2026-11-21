@@ -81,6 +81,10 @@ FIRECRAWL_MCP = os.getenv("RON_FIRECRAWL_MCP", "0") == "1"
 FIRECRAWL_MCP_URL = "https://mcp.firecrawl.dev/v2/mcp-oauth"
 FIRECRAWL_OAUTH_DIR = Path(os.getenv("RON_FIRECRAWL_OAUTH_DIR", "~/.ron/firecrawl-oauth")).expanduser()
 OLOSTEP_API_URL = "https://api.olostep.com"
+# The user's own Vercel, Netlify, GitHub, GitLab, Supabase and Bitbucket accounts (``core/connections.py``): their tokens
+# in RON_CONNECTIONS_DIR, and RON_PUBLIC_URL, this server's public https address, where the providers' OAuth returns.
+CONNECTIONS_DIR = Path(os.getenv("RON_CONNECTIONS_DIR", "~/.ron/connections")).expanduser()
+PUBLIC_URL = os.getenv("RON_PUBLIC_URL", f"http://127.0.0.1:{API_PORT}").rstrip("/")
 # Apify: Google Maps places for the Search page, Discover and the agents' ``places_search``, from the Actor
 # RON_APIFY_PLACES_ACTOR (default Apify's Google Maps Scraper).
 APIFY_TOKEN = os.getenv("APIFY_TOKEN")

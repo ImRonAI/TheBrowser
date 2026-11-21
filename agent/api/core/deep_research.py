@@ -818,6 +818,12 @@ def build_deep_research_graph(
     node_ids = frozenset(child["id"] for formation in topology["nodes"] for child in formation["children"])
     from agent.api.core.build_agent import _context_kwargs
 
+    # The user's connected accounts (Vercel, Netlify, GitHub, GitLab, Supabase, Bitbucket): an app or a site the run
+    # builds is pushed and deployed with them.
+    from agent.api.core.connections import connection_tools
+
+    connected = connection_tools(user_id)
+
     def make_agent(spec: AgentSpec, formation_id: str) -> Agent:
         skill = skills[spec["skill"]]
         handoff = handoffs.get(spec["id"])
@@ -871,7 +877,7 @@ def build_deep_research_graph(
                 + MEMORY_PROTOCOL
             ),
             skills=[*SLIDEV_SKILLS] if spec["id"] in SLIDEV_AGENTS else False,
-            tools=[*research_tools(), render_workflow] if spec["id"] == "report_writer" else research_tools(),
+            tools=[*research_tools(), *connected, *([render_workflow] if spec["id"] == "report_writer" else [])],
             plugins=[budget, ContextInjector(budget.reminder, name="deep-research:wrap-up", trigger="everyTurn")],
             builtin_tools={
                 "*": False,

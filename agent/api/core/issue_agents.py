@@ -382,6 +382,7 @@ def create_issue_chat_agent(*, user_id: str, session_id: str, issue_id: str, pro
         consumer_plugins.append(GoalLoop(goal=goal, judge=JudgeConfig(model=side_model_factory("goal-judge")),
                                          preserve_context=True))
     from agent.api.core.deep_research_tools import deep_research_tools
+    from agent.api.core.connections import connection_tools
 
     issue_hooks = [
         IssueAccessGuard(service),
@@ -400,6 +401,7 @@ def create_issue_chat_agent(*, user_id: str, session_id: str, issue_id: str, pro
             *brave_tools(),
             *web_tools(),
             *deep_research_tools(user_id=user_id),
+            *connection_tools(user_id),
             *render_ui_tools(),
             *learned,
             *a2a_tools(),
@@ -559,6 +561,7 @@ class IssueAgentRuntime:
                 from agent.api.core.brave_tools import brave_tools
                 from agent.api.core.web_tools import web_tools
                 from agent.api.core.deep_research_tools import DEEP_RESEARCH_TOOL_NAMES, deep_research_tools
+                from agent.api.core.connections import connection_tools
                 from agent.api.core.media_understanding import media_tools
                 from agent.api.core.panel_tools import installed_http_request
                 # Context intake as the caller (their JWT, refreshed by polling): links with http_request; media seen
@@ -593,7 +596,7 @@ class IssueAgentRuntime:
                 )
                 agent = config_to_agent({"name": "Task Ren", "model": agent_record["model_id"], "prompt": prompt + MEMORY_PROTOCOL, "tools": []},
                     model=model,
-                    tools=[*base_issue_tools, task_subagent, *deep_research_tools(user_id=service.identity.user_id), *a2a_tools()],
+                    tools=[*base_issue_tools, task_subagent, *deep_research_tools(user_id=service.identity.user_id), *connection_tools(service.identity.user_id), *a2a_tools()],
                     description="Private canonical issue assistant",
                     memory_manager={"stores": [get_teaching_service().get_memory_store(service.identity.user_id, agent_scope),
                                                *agent_memory(service.identity.user_id, agent_scope)],
