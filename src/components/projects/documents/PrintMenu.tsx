@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button'
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { documentErrorMessage, exportDocument, type DocumentExportFormat, type ExportedDocument } from '@/lib/project-documents'
+import { documentErrorMessage, exportDocument, saveExported, type DocumentExportFormat } from '@/lib/project-documents'
 import type { ProjectsRequest } from '@/lib/projects-api'
 import { cn } from '@/lib/utils'
 
@@ -16,18 +16,6 @@ const FORMATS = [
 
 const menu = 'z-[120] min-w-[190px] rounded-xl border-surface-200 bg-surface-0 p-1.5 shadow-medium dark:border-surface-700 dark:bg-surface-850 dark:shadow-dark-medium'
 const menuItem = 'gap-2.5 rounded-lg px-2.5 py-2 text-ink focus:bg-surface-100 dark:text-ink-inverse dark:focus:bg-surface-800'
-
-function download(file: ExportedDocument) {
-  const bytes = Uint8Array.from(atob(file.data), (char) => char.charCodeAt(0))
-  const url = URL.createObjectURL(new Blob([bytes], { type: file.media_type }))
-  const link = document.createElement('a')
-  link.href = url
-  link.download = file.filename
-  document.body.appendChild(link)
-  link.click()
-  link.remove()
-  window.setTimeout(() => URL.revokeObjectURL(url), 1000)
-}
 
 /**
  * Print the open page as a PDF, an HTML page or a Word document. `pageId` saves pending edits first and answers the
@@ -47,7 +35,7 @@ export function PrintMenu({ request, pageId, disabled }: {
     setError('')
     try {
       const id = await pageId()
-      if (id) download(await exportDocument(request, id, format))
+      if (id) saveExported(await exportDocument(request, id, format))
     } catch (err) {
       setError(documentErrorMessage(err, 'The page could not be printed.'))
     } finally {

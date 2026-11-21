@@ -4,6 +4,7 @@ import { emptyPanelState, reducePanelEvent, type PanelEvent } from './panel-stre
 import { documentContent, documentRetryMessage, documentRonMessage, embedTabsMarkdown, hasDraft, tabNode, tabsFromFence, unwrapMarkdown, withWorkflowBlocks, workflowFromFence, workflowMarkdown, type DocNode } from './document-ron.ts'
 import { ronSegments, ronSessionId, workflowRonMessage } from './ron-run.ts'
 import { starterWorkflow } from './workflow.ts'
+import { gridMarkdown, type Grid } from './grid.ts'
 import { MarkdownManager } from '@tiptap/markdown'
 import { flattenExtensions, resolveExtensions } from '@tiptap/core'
 import StarterKit from '@tiptap/starter-kit'
@@ -148,6 +149,14 @@ test('an ```embeds fence becomes Embed tabs and reads back as the same fence', (
   assert.deepEqual(tabsFromFence(again.split('\n').slice(1, -1).join('\n')).map((tab) => tab.type), tabList.map((tab) => tab.type))
   assert.equal(embedTabsMarkdown([]), '')
   assert.equal(embedTabsMarkdown([{ type: 'media', attrs: { kind: 'audio', src: 'https://e.com/a.mp3', title: 'Ep' } }]), '```embeds\n[Audio: Ep](https://e.com/a.mp3)\n```')
+})
+
+test('a ```grid fence becomes a spreadsheet; one that holds no grid stays code', () => {
+  const grid: Grid = { title: 'Costs', sheets: [{ name: 'Costs', rows: [['Item', 'Cost'], ['Van', 1500], ['Total', '=SUM(B2:B2)']], formats: { B: '$#,##0' } }] }
+  const doc = withWorkflowBlocks(parse(`Costs:\n\n${gridMarkdown(grid)}\n\n\`\`\`grid\n{"sheets": []}\n\`\`\``), () => 'w1')
+  assert.deepEqual(doc.content?.map((node) => node.type), ['paragraph', 'grid', 'codeBlock'])
+  assert.deepEqual(doc.content?.[1]?.attrs, { grid, display: null, workbook: null })
+  assert.match(documentRonMessage({ target: { kind: 'page', title: 'Costs', projectName: 'R', projectKey: 'R' }, intent: 'x', currentMarkdown: '' }), /A spreadsheet is one ```grid fence holding JSON/)
 })
 
 test('a tab is built only from a link that fits its kind', () => {
