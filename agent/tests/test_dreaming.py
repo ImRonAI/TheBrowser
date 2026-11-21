@@ -493,3 +493,26 @@ def test_the_panels_old_stores_fold_into_the_brain_once() -> None:
         assert await _read("memory/facts/coffee.md") == "# Coffee\nDrinks oat lattes."  # the old store stays
 
     asyncio.run(run())
+
+
+def test_dreams_from_before_review_become_applied_versions_that_undo() -> None:
+    from agent.api.core import migrate_brain
+
+    travel = "memory/brain/panel/travel.md"
+
+    async def run() -> None:
+        storage = panel_storage.get_user_session_storage("u1")
+        await storage.write("memory/dreams/20261115T100000000000.json", json.dumps({travel: None}).encode())
+        await storage.write("memory/dreams/20261116T100000000000.json", json.dumps({travel: "# Travel\nSLC."}).encode())
+        await storage.write(travel, b"# Travel\nOgden.")
+        await migrate_brain.migrate()
+        first = json.loads(await _read("memory/dreams/20261115T100000000000.json") or "{}")
+        assert first == {"status": "applied", "topics": {travel: {"before": None, "after": "# Travel\nSLC."}},
+                         "applied": [travel]}
+        assert json.loads(await _read("memory/dreams-v1/20261116T100000000000.json") or "{}") == {travel: "# Travel\nSLC."}
+        assert await dreaming.undo_dream("u1") == "20261116T100000000000"
+        assert await _read(travel) == "# Travel\nSLC."
+        assert await dreaming.undo_dream("u1") == "20261115T100000000000"
+        assert await _read(travel) is None
+
+    asyncio.run(run())
