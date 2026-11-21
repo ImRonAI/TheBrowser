@@ -20,7 +20,7 @@ import {
   type WheelEvent,
 } from 'react'
 import { motion, useReducedMotion } from 'framer-motion'
-import { ArrowUp, Loader2 } from 'lucide-react'
+import { ArrowUp, FileText, Loader2, Presentation, type LucideIcon } from 'lucide-react'
 import { Suggestions, Suggestion } from '@/components/ai-elements/suggestion'
 import { Marker } from '@/components/brand'
 import { ContextMentionList, ContextPicker } from '@/components/agent-panel/ContextPicker'
@@ -45,10 +45,17 @@ import {
   type DeepResearchSelection,
   type FormationTopology,
   type ResearchDepth,
+  type SquadOutcome,
 } from '@/lib/deep-research-api'
 import { articleDraftKey, useArticleDraftStore } from '@/stores/articleDraftStore'
 import { useAuthStore } from '@/stores/authStore'
 import { cn } from '@/utils/cn'
+
+/** The outcomes a Squad makes, in the order the picker shows them. */
+const OUTCOME_METADATA: readonly { id: SquadOutcome; label: string; icon: LucideIcon; description: string }[] = [
+  { id: 'report', label: 'Report', icon: FileText, description: 'A cited report as a ren Document, printed to PDF from it.' },
+  { id: 'deck', label: 'Slide Deck', icon: Presentation, description: 'A Slidev deck, written from a cited report.' },
+]
 
 const EASE = [0.16, 1, 0.3, 1] as const
 
@@ -160,6 +167,8 @@ export interface DeepResearchHeroProps {
   userId?: string | undefined
   depth: ResearchDepth
   depths: readonly ResearchDepth[]
+  outcome: SquadOutcome
+  outcomes: readonly SquadOutcome[]
   preferredModel: AgentModelSelection
   defaultSelection?: DeepResearchSelection | undefined
   starting: boolean
@@ -168,10 +177,12 @@ export interface DeepResearchHeroProps {
   topology: FormationTopology
   containerWidth: number
   onDepthChange: (depth: ResearchDepth) => void
+  onOutcomeChange: (outcome: SquadOutcome) => void
   onModelChange: (selection: AgentModelSelection) => void
   onSubmit: (params: {
     query: string
     depth: ResearchDepth
+    outcome: SquadOutcome
     context?: string | undefined
     provider?: string | null | undefined
     modelId?: string | null | undefined
@@ -183,6 +194,8 @@ export function DeepResearchHero({
   userId,
   depth,
   depths,
+  outcome,
+  outcomes,
   preferredModel,
   defaultSelection,
   starting,
@@ -191,6 +204,7 @@ export function DeepResearchHero({
   topology: _topology,
   containerWidth,
   onDepthChange,
+  onOutcomeChange,
   onModelChange,
   onSubmit,
 }: DeepResearchHeroProps) {
@@ -322,6 +336,7 @@ export function DeepResearchHero({
     onSubmit({
       query: finalQuery,
       depth,
+      outcome,
       context: contextMarkdown,
       provider: preferredModel.model ? preferredModel.provider || effectiveProvider || null : null,
       modelId: preferredModel.model || null,
@@ -419,8 +434,8 @@ export function DeepResearchHero({
             </span>
           </h1>
           <p className="relative mt-4 max-w-[40rem] font-sans text-[15.5px] leading-relaxed text-ink-secondary dark:text-ink-inverse-secondary">
-            A research swarm, a data analysis graph and a writing swarm, published as a cited PDF report and
-            an interactive Slidev deck.
+            Pick what you want made. A Squad researches it, builds it and checks every claim: a cited report as a
+            ren Document you can print, or a Slidev deck written from it.
           </p>
         </motion.section>
 
@@ -430,7 +445,7 @@ export function DeepResearchHero({
             role="status"
             className="mt-6 w-full rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 font-sans text-[13px] text-rose-700 dark:text-rose-300"
           >
-            Deep Research is currently disabled on the backend.
+            Squad is currently disabled on the backend.
           </div>
         )}
         {displayError && (
@@ -442,8 +457,42 @@ export function DeepResearchHero({
           </div>
         )}
 
+        <motion.div
+          {...rise(0.04)}
+          role="radiogroup"
+          aria-label="Squad outcome"
+          className="mt-8 flex w-full flex-wrap items-center gap-2"
+        >
+          <span className="font-sans text-[13px] font-medium text-ink-secondary dark:text-ink-inverse-secondary">
+            Make
+          </span>
+          {OUTCOME_METADATA.filter((item) => outcomes.includes(item.id)).map((item) => {
+            const selected = outcome === item.id
+            return (
+              <button
+                key={item.id}
+                type="button"
+                role="radio"
+                aria-checked={selected}
+                disabled={busy || !available}
+                onClick={() => onOutcomeChange(item.id)}
+                title={item.description}
+                className={cn(
+                  'inline-flex h-8 items-center gap-1.5 whitespace-nowrap rounded-full border px-3.5 font-sans text-[13px] font-medium transition-colors duration-150',
+                  selected
+                    ? 'border-blurple-600 bg-blurple-600 text-white dark:border-blurple-400 dark:bg-blurple-400 dark:text-ink'
+                    : 'border-surface-200 bg-surface-0 text-ink-secondary hover:text-ink dark:border-surface-700 dark:bg-surface-850 dark:text-ink-inverse-secondary dark:hover:text-ink-inverse',
+                )}
+              >
+                <item.icon className="h-3.5 w-3.5" aria-hidden />
+                {item.label}
+              </button>
+            )
+          })}
+        </motion.div>
+
         {/* Research Prompt Composer with ContextPicker + @ Mentions + Attachment Tray */}
-        <motion.form {...rise(0.06)} onSubmit={handleFormSubmit} className="mt-8 w-full min-w-0">
+        <motion.form {...rise(0.06)} onSubmit={handleFormSubmit} className="mt-3 w-full min-w-0">
           <div
             ref={cardRef}
             className={cn(
@@ -559,8 +608,8 @@ export function DeepResearchHero({
               <button
                 type="submit"
                 disabled={!canLaunch}
-                aria-label="Start Deep Research"
-                title="Start Deep Research"
+                aria-label="Start Squad"
+                title="Start Squad"
                 className={cn(
                   'flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition-colors duration-150 ease-out',
                   canLaunch

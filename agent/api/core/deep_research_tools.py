@@ -5,6 +5,7 @@ Each returns a plain JSON ``dict``. ``deep_research_start`` returns as soon as t
 
 from __future__ import annotations
 
+from typing import Literal
 
 from strands import tool
 from strands.types.tools import AgentTool
@@ -26,9 +27,11 @@ def is_deep_research_tool(name: str) -> bool:
 
 
 DEEP_RESEARCH_DIRECTIVE: str = (
-    "\n\n## Deep Research\n"
-    "- For an investigation that needs many sources, fact checks, charts, a cited PDF report and a Slidev deck, "
-    "call `deep_research_start(query, context=\"\", depth=\"medium\")` (`depth`, fastest to most complete: "
+    "\n\n## Squad\n"
+    "- For an investigation that needs many sources, fact checks and charts, ending in a cited report (a Document "
+    "printed to PDF from it) or a Slidev deck written from that report, call `deep_research_start(query, "
+    "context=\"\", depth=\"medium\", outcome=\"report\")` (`outcome`: `\"report\"` or `\"deck\"`; `depth`, fastest "
+    "to most complete: "
     "`\"fast\"` (a 5 to 8 page report), `\"low\"`, `\"medium\"`, `\"high\"`, `\"xhigh\"` or `\"ultra\"` (30 to 40 "
     "pages)). It runs in the background and returns `session_id` and `ron://research/<session_id>` at once.\n"
     "- `deep_research_status(session_id=...)` says how the run stands and lists its workspace files (omit "
@@ -43,14 +46,17 @@ def deep_research_tools(*, user_id: str = "default") -> list[AgentTool]:
     owner = (user_id or "").strip() or "default"
 
     @tool
-    async def deep_research_start(query: str, context: str = "", depth: str = "medium") -> dict[str, object]:
-        """Start a Deep Research run in the background: research, charts, a cited PDF report and a Slidev deck.
+    async def deep_research_start(
+        query: str, context: str = "", depth: str = "medium", outcome: Literal["report", "deck"] = "report"
+    ) -> dict[str, object]:
+        """Start a Squad run in the background: research, charts and a cited report, or a Slidev deck from it.
 
         Args:
             query: The research question.
             context: Background, constraints or prior findings.
             depth: fastest to most complete: "fast" (a 5 to 8 page report), "low", "medium" (default), "high",
                 "xhigh" or "ultra" (30 to 40 pages).
+            outcome: "report" (a Document, printed to PDF from it) or "deck" (a Slidev deck written from the report).
         """
         from agent.api.core import deep_research
 
@@ -58,7 +64,8 @@ def deep_research_tools(*, user_id: str = "default") -> list[AgentTool]:
         if not query.strip() or chosen is None:
             return {"status": "invalid_argument", "error": f"query is required and depth is one of {list(deep_research.VALID_DEPTHS)}."}
         try:
-            meta = await deep_research.start_run(user_id=owner, query=query.strip(), context=context.strip(), depth=chosen)
+            meta = await deep_research.start_run(user_id=owner, query=query.strip(), context=context.strip(), depth=chosen,
+                                                   outcome=outcome)
         except ValueError as error:
             return {"status": "unavailable", "error": str(error)}
         session_id = meta["session_id"]

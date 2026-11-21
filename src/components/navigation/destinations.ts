@@ -14,7 +14,7 @@ export interface Destination { id: HomeTab; label: string; icon: typeof Compass;
 export const DESTINATIONS: readonly Destination[] = [
   { id: 'home', label: 'Home', icon: Home, hint: 'Search and your favorites' },
   { id: 'discover', label: 'Discover', icon: Compass, hint: 'Stories from your interests' },
-  { id: 'research', label: 'Research', icon: Microscope, hint: 'Multi-agent skill formations', description: 'Multi-agent skill formations' },
+  { id: 'research', label: 'Squad', icon: Microscope, hint: 'Agent teams that make reports and decks', description: 'Agent teams that make reports and decks' },
   { id: 'execute', label: 'Execute', icon: Columns3, hint: 'Projects and issues' },
   { id: 'documents', label: 'Documents', icon: FileText, hint: 'Your pages' },
   { id: 'calendar', label: 'Calendar', icon: Calendar, hint: 'Dates and schedule' },

@@ -111,7 +111,7 @@ export interface ScopeCrumb {
   kind: FormationNodeKind
 }
 
-const rootLabel = (topology: FormationTopology): string => topology.label?.trim() || 'Deep Research'
+const rootLabel = (topology: FormationTopology): string => topology.label?.trim() || 'Squad'
 
 export const isFormation = (node: FormationTopologyNode): boolean =>
   node.kind !== 'agent' && (node.children?.length ?? 0) > 0
